@@ -1,0 +1,10 @@
+<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="24" cy="24" r="20" fill="url(#g)"/>
+  <text x="24" y="24" text-anchor="middle" dominant-baseline="central" fill="white" font-size="28" font-weight="700" font-family="system-ui, -apple-system, sans-serif">T</text>
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+</svg>

@@ -1,0 +1,6 @@
+export { CalendarIcon } from './CalendarIcon'
+export { EditIcon } from './EditIcon'
+export { TrashIcon } from './TrashIcon'
+export { SettingsIcon } from './SettingsIcon'
+export { BellIcon } from './BellIcon'
+export { PlusIcon } from './PlusIcon'
