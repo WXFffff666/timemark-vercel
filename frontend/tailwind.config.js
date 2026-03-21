@@ -26,10 +26,13 @@ export default {
         glow: '0 0 20px rgba(14,165,233,0.3)',
       },
       animation: {
-        'fade-in': 'fadeIn 0.5s ease-out',
-        'slide-up': 'slideUp 0.4s ease-out',
-        'scale-in': 'scaleIn 0.3s ease-out',
+        'fade-in': 'fadeIn 0.3s ease-out',
+        'slide-up': 'slideUp 0.3s ease-out',
+        'scale-in': 'scaleIn 0.2s ease-out',
         shake: 'shake 0.5s ease-in-out',
+        'bounce-subtle': 'bounceSubtle 0.5s ease-out',
+        pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'spin-slow': 'spin 3s linear infinite',
       },
       keyframes: {
         fadeIn: {
@@ -49,6 +52,17 @@ export default {
           '25%': { transform: 'translateX(-4px)' },
           '75%': { transform: 'translateX(4px)' },
         },
+        bounceSubtle: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-4px)' },
+        },
+        pulse: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.5' },
+        },
+      },
+      transitionDuration: {
+        '400': '400ms',
       },
       backdropBlur: {
         xs: '2px',

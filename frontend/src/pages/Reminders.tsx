@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -7,7 +8,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Switch } from '../components/ui/switch';
 import { useToast } from '../hooks/use-toast';
 import { api } from '../lib/api';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Bell, Clock, Calendar } from 'lucide-react';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 }
+};
 
 export default function Reminders() {
   const { toast } = useToast();
@@ -52,78 +66,116 @@ export default function Reminders() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6">
       <div className="container mx-auto max-w-4xl">
-        <div className="flex items-center gap-4 mb-6">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex items-center gap-4 mb-8"
+        >
           <Button
             variant="ghost"
-            size="icon"
             onClick={() => navigate('/dashboard')}
-            className="rounded-full"
+            className="rounded-full hover:bg-white/60"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-3xl font-bold">提醒配置</h1>
-        </div>
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">提醒配置</h1>
+            <p className="text-sm text-gray-500 mt-1">自定义事件提醒的时间和方式</p>
+          </div>
+        </motion.div>
       
-      <Card>
-        <CardHeader>
-          <CardTitle>自动提醒设置</CardTitle>
-          <CardDescription>配置事件提醒的时间和方式</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="enabled">启用自动提醒</Label>
-              <p className="text-sm text-muted-foreground">每天定时检查并发送提醒</p>
-            </div>
-            <Switch
-              id="enabled"
-              checked={config.enabled}
-              onCheckedChange={(checked) => setConfig({ ...config, enabled: checked })}
-            />
-          </div>
-          
-          <div>
-            <Label htmlFor="dailyTime">每日检查时间</Label>
-            <Input
-              id="dailyTime"
-              type="time"
-              value={config.dailyTime}
-              onChange={(e) => setConfig({ ...config, dailyTime: e.target.value })}
-            />
-          </div>
-          
-          <div>
-            <Label>提前提醒天数</Label>
-            <p className="text-sm text-muted-foreground mb-2">在事件发生前多少天发送提醒</p>
-            <div className="flex gap-2">
-              {[1, 3, 7, 14, 30].map((day) => (
-                <Button
-                  key={day}
-                  variant={config.daysBeforeList.includes(day) ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => {
-                    const days = config.daysBeforeList.includes(day)
-                      ? config.daysBeforeList.filter(d => d !== day)
-                      : [...config.daysBeforeList, day].sort((a, b) => a - b);
-                    setConfig({ ...config, daysBeforeList: days });
-                  }}
-                >
-                  {day}天
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.div variants={itemVariants}>
+          <Card className="overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 border-b">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <Bell className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <CardTitle>自动提醒设置</CardTitle>
+                  <CardDescription>配置事件提醒的时间和方式</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-6">
+              <motion.div
+                variants={itemVariants}
+                className="flex items-center justify-between p-4 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Bell className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <Label htmlFor="enabled" className="text-base font-medium cursor-pointer">启用自动提醒</Label>
+                    <p className="text-sm text-muted-foreground">每天定时检查并发送提醒</p>
+                  </div>
+                </div>
+                <Switch
+                  id="enabled"
+                  checked={config.enabled}
+                  onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
+                />
+              </motion.div>
+              
+              <motion.div variants={itemVariants} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-gray-500" />
+                  <Label htmlFor="dailyTime" className="text-sm font-medium">每日检查时间</Label>
+                </div>
+                <Input
+                  id="dailyTime"
+                  type="time"
+                  value={config.dailyTime}
+                  onChange={(e) => setConfig({ ...config, dailyTime: e.target.value })}
+                  className="h-11"
+                />
+              </motion.div>
+              
+              <motion.div variants={itemVariants} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <Label className="text-sm font-medium">提前提醒天数</Label>
+                </div>
+                <p className="text-sm text-muted-foreground">在事件发生前多少天发送提醒</p>
+                <div className="flex flex-wrap gap-2">
+                  {[1, 3, 7, 14, 30].map((day) => (
+                    <motion.div key={day} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                      <Button
+                        variant={config.daysBeforeList.includes(day) ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => {
+                          const days = config.daysBeforeList.includes(day)
+                            ? config.daysBeforeList.filter(d => d !== day)
+                            : [...config.daysBeforeList, day].sort((a, b) => a - b);
+                          setConfig({ ...config, daysBeforeList: days });
+                        }}
+                        className="h-9 px-4"
+                      >
+                        {day}天
+                      </Button>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+              
+              <motion.div variants={itemVariants} className="flex gap-3 pt-4">
+                <Button variant="outline" onClick={() => navigate('/dashboard')} className="flex-1 h-11">
+                  取消
                 </Button>
-              ))}
-            </div>
-          </div>
-          
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate('/dashboard')} className="flex-1">
-              取消
-            </Button>
-            <Button variant="outline" onClick={handleSave} disabled={loading} className="flex-1">
-              {loading ? '保存中...' : '保存设置'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+                <Button onClick={handleSave} disabled={loading} className="flex-1 h-11">
+                  {loading ? '保存中...' : '保存设置'}
+                </Button>
+              </motion.div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </motion.div>
       </div>
     </div>
   );
