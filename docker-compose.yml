@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: timemark
+      POSTGRES_USER: timemark
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-timemark_pass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./docker/seed-db.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timemark"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - timemark
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - timemark
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: timemark
+      DB_USER: timemark
+      DB_PASSWORD: ${DB_PASSWORD:-timemark_pass}
+      REDIS_URL: redis://redis:6379
+      MASTER_KEY: ${MASTER_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+    networks:
+      - timemark
+
+volumes:
+  postgres_data:
+
+networks:
+  timemark:
+    driver: bridge
