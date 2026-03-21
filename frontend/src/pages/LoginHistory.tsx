@@ -154,6 +154,7 @@ export default function LoginHistory() {
           </div>
         )}
       </Card>
+      </div>
     </div>
   );
 }
