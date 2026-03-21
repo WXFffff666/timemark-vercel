@@ -46,10 +46,10 @@ export async function updateEvent(id: string, userId: string, data: Partial<Crea
 
   values.push(id, userId);
   const result = await query(`UPDATE events SET ${updates.join(', ')} WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}`, values);
-  return result.rowCount > 0;
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function deleteEvent(id: string, userId: string): Promise<boolean> {
   const result = await query('DELETE FROM events WHERE id = $1 AND user_id = $2', [id, userId]);
-  return result.rowCount > 0;
+  return (result.rowCount ?? 0) > 0;
 }

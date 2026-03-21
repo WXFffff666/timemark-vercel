@@ -6,7 +6,7 @@ async function init() {
   console.log('🔧 初始化数据库...');
 
   // 检查是否已有用户
-  const result = await db.execute({ sql: 'SELECT id FROM users LIMIT 1', args: [] });
+  const result = await db.query('SELECT id FROM users LIMIT 1');
   
   if (result.rows.length > 0) {
     console.log('✅ 数据库已初始化，已存在用户');
@@ -15,15 +15,15 @@ async function init() {
 
   // 创建默认用户
   const username = 'admin';
-  const password = 'admin123';
+  const password = 'TimeMark@2026';
   const passwordHash = await hashPassword(password);
   const id = randomUUID();
   const createdAt = new Date().toISOString();
 
-  await db.execute({ 
-    sql: 'INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)',
-    args: [id, username, passwordHash, createdAt]
-  });
+  await db.query(
+    'INSERT INTO users (id, username, password_hash, created_at) VALUES ($1, $2, $3, $4)',
+    [id, username, passwordHash, createdAt]
+  );
 
   console.log('✅ 创建默认用户成功');
   console.log(`   用户名: ${username}`);
