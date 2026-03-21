@@ -2,24 +2,24 @@ import { query } from '../db/index.js';
 import { randomUUID } from 'crypto';
 import type { Session } from '@timemark/shared';
 
-export async function createSession(userId: string, deviceFingerprint: string, isTrusted: boolean, rememberMe: boolean = false): Promise<{ session: Session; accessToken: string; refreshToken: string }> {
+export async function createSession(userId: number, deviceFingerprint: string, isTrusted: boolean, rememberMe: boolean = false): Promise<{ session: Session; accessToken: string; refreshToken: string }> {
   const { generateAccessToken, generateRefreshToken } = await import('../utils/jwt.js');
   
-  const id = randomUUID();
   const token = randomUUID();
   const expiresIn = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
   const expiresAt = new Date(Date.now() + expiresIn);
 
-  await query(
-    'INSERT INTO sessions (id, user_id, token, device_fingerprint, is_trusted, expires_at) VALUES ($1, $2, $3, $4, $5, $6)',
-    [id, userId, token, deviceFingerprint, isTrusted, expiresAt]
+  const result = await query(
+    'INSERT INTO sessions (user_id, token, device_fingerprint, is_trusted, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+    [userId, token, deviceFingerprint, isTrusted, expiresAt]
   );
 
-  const accessToken = await generateAccessToken(userId, undefined, rememberMe);
-  const refreshToken = await generateRefreshToken(userId);
+  const id = result.rows[0].id;
+  const accessToken = await generateAccessToken(userId.toString(), undefined, rememberMe);
+  const refreshToken = await generateRefreshToken(userId.toString());
 
   return {
-    session: { id, userId, token, deviceFingerprint, isTrusted, expiresAt: expiresAt.toISOString() },
+    session: { id, userId: userId.toString(), token, deviceFingerprint, isTrusted, expiresAt: expiresAt.toISOString() },
     accessToken,
     refreshToken,
   };
