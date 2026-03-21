@@ -1,6 +1,6 @@
 import type { ApiResponse } from '@timemark/shared';
 
-const API_BASE = import.meta.env.DEV ? 'http://127.0.0.1:8788/api' : '/api';
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3000/api' : '/api';
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('accessToken');
