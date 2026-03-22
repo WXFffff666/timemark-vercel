@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import 'dotenv/config';
@@ -20,6 +21,10 @@ app.route('/api/auth', authRoutes);
 app.route('/api/events', eventRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
+
+// Serve frontend static files
+app.use('/*', serveStatic({ root: './frontend/dist' }));
+app.get('*', serveStatic({ path: './frontend/dist/index.html' }));
 
 const port = parseInt(process.env.PORT || '3000');
 
