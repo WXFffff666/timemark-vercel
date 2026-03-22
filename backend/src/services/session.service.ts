@@ -2,7 +2,7 @@ import { query } from '../db/index.js';
 import { randomUUID } from 'crypto';
 import type { Session } from '@timemark/shared';
 
-export async function createSession(userId: number, deviceFingerprint: string, isTrusted: boolean, rememberMe: boolean = false): Promise<{ session: Session; accessToken: string; refreshToken: string }> {
+export async function createSession(userId: string, deviceFingerprint: string, isTrusted: boolean, rememberMe: boolean = false): Promise<{ session: Session; accessToken: string; refreshToken: string }> {
   const { generateAccessToken, generateRefreshToken } = await import('../utils/jwt.js');
   
   const token = randomUUID();
@@ -15,11 +15,11 @@ export async function createSession(userId: number, deviceFingerprint: string, i
   );
 
   const id = result.rows[0].id;
-  const accessToken = await generateAccessToken(userId.toString(), undefined, rememberMe);
-  const refreshToken = await generateRefreshToken(userId.toString());
+  const accessToken = await generateAccessToken(userId, undefined, rememberMe);
+  const refreshToken = await generateRefreshToken(userId);
 
   return {
-    session: { id, userId: userId.toString(), token, deviceFingerprint, isTrusted, expiresAt: expiresAt.toISOString() },
+    session: { id, userId, token, deviceFingerprint, isTrusted, expiresAt: expiresAt.toISOString() },
     accessToken,
     refreshToken,
   };
