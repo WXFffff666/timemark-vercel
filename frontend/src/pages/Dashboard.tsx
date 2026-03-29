@@ -7,6 +7,7 @@ import { EventCard } from '@/components/events/EventCard';
 import { EventForm } from '@/components/events/EventForm';
 import { PlusIcon, SettingsIcon, BellIcon } from '@/components/icons';
 import { useNavigate } from 'react-router-dom';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import type { Event, CreateEventRequest } from '@timemark/shared';
 
 const containerVariants = {
@@ -56,20 +57,21 @@ export function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
-      <header className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-50 shadow-sm">
+    <div className="min-h-screen">
+      <header className="glass sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-semibold text-foreground">
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
             倒计时提醒系统
           </h1>
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/reminders')}>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <Button variant="ghost" className="w-10 h-10 p-0" onClick={() => navigate('/reminders')}>
               <BellIcon size={20} />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
+            <Button variant="ghost" className="w-10 h-10 p-0" onClick={() => navigate('/settings')}>
               <SettingsIcon size={20} />
             </Button>
-            <span className="text-sm text-muted-foreground">欢迎, {user?.username}</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">欢迎, {user?.username}</span>
             <Button variant="outline" onClick={logout}>退出</Button>
           </div>
         </div>
@@ -77,20 +79,26 @@ export function Dashboard() {
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-xl font-semibold text-foreground">我的事件</h2>
-            <p className="text-sm text-muted-foreground mt-1">共 {events.length} 个事件</p>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">我的事件</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">共 {events.length} 个事件</p>
           </div>
         </div>
         {loading ? (
-          <div className="text-center py-20">
-            <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="glass rounded-2xl p-6 animate-pulse">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-4"></div>
+                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2"></div>
+                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
+              </div>
+            ))}
           </div>
         ) : events.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-xl border">
-            <div className="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
-              <PlusIcon size={32} />
+          <div className="text-center py-20 glass rounded-2xl">
+            <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <PlusIcon size={32} className="text-primary-500" />
             </div>
-            <p className="text-muted-foreground">暂无事件，点击右下角按钮开始添加</p>
+            <p className="text-gray-600 dark:text-gray-400">暂无事件，点击右下角按钮开始添加</p>
           </div>
         ) : (
           <motion.div
@@ -113,7 +121,7 @@ export function Dashboard() {
         whileTap={{ scale: 0.95 }}
       >
         <Button
-          size="lg"
+          variant="gradient"
           className="h-14 w-14 rounded-full shadow-lg"
           onClick={() => { setEditingEvent(undefined); setShowForm(true); }}
         >

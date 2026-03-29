@@ -58,7 +58,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6">
+    <div className="min-h-screen p-6">
       <div className="container mx-auto max-w-4xl">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -68,13 +68,13 @@ export default function Settings() {
           <Button
             variant="ghost"
             onClick={() => navigate('/dashboard')}
-            className="rounded-full hover:bg-white/60"
+            className="rounded-full"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">设置</h1>
-            <p className="text-sm text-gray-500 mt-1">管理您的账户和安全设置</p>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">设置</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">管理您的账户和安全设置</p>
           </div>
         </motion.div>
 
@@ -85,15 +85,15 @@ export default function Settings() {
           className="space-y-6"
         >
           <motion.div variants={itemVariants}>
-            <Card className="overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 border-b">
+            <Card className="glass overflow-hidden">
+              <CardHeader className="border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Lock className="h-5 w-5 text-primary" />
+                  <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-900/20 flex items-center justify-center">
+                    <Lock className="h-5 w-5 text-primary-500" />
                   </div>
                   <div>
-                    <CardTitle>修改密码</CardTitle>
-                    <CardDescription>更新您的账户密码以保护安全</CardDescription>
+                    <CardTitle className="text-gray-900 dark:text-white">修改密码</CardTitle>
+                    <CardDescription className="text-gray-600 dark:text-gray-400">更新您的账户密码以保护安全</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -138,15 +138,15 @@ export default function Settings() {
           </motion.div>
 
           <motion.div variants={itemVariants}>
-            <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-              <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 border-b">
+            <Card className="glass overflow-hidden">
+              <CardHeader className="border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <History className="h-5 w-5 text-purple-600" />
+                  <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
+                    <History className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                   </div>
                   <div>
-                    <CardTitle>登录历史</CardTitle>
-                    <CardDescription>查看最近的登录记录和设备信息</CardDescription>
+                    <CardTitle className="text-gray-900 dark:text-white">登录历史</CardTitle>
+                    <CardDescription className="text-gray-600 dark:text-gray-400">查看最近的登录记录和设备信息</CardDescription>
                   </div>
                 </div>
               </CardHeader>

@@ -84,7 +84,7 @@ export function LoginForm() {
   };
 
   return (
-    <Card className="w-full max-w-md bg-white/90 backdrop-blur-2xl border border-white/60 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.08)]">
+    <Card className="w-full max-w-md glass rounded-2xl">
       <CardHeader className="text-center pb-6 pt-10">
         <motion.div
           initial={{ scale: 0 }}
@@ -94,8 +94,8 @@ export function LoginForm() {
         >
           <LockIcon className="h-20 w-20" />
         </motion.div>
-        <CardTitle className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">倒计时提醒系统</CardTitle>
-        <p className="text-sm text-gray-500 mt-3">请登录您的账户</p>
+        <CardTitle className="text-3xl font-bold text-gray-900 dark:text-white">倒计时提醒系统</CardTitle>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">请登录您的账户</p>
       </CardHeader>
       <CardContent className="px-8 pb-10">
         <motion.form
@@ -107,11 +107,11 @@ export function LoginForm() {
         >
           <motion.div variants={itemVariants}>
             <div className="relative">
-              <User className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
+              <User className="absolute left-4 top-3.5 h-5 w-5 text-gray-400 dark:text-gray-500" />
               <Input
                 type="text"
                 placeholder="用户名"
-                className="pl-12 h-12 bg-white/50 border-gray-200 rounded-xl focus:bg-white transition-colors"
+                className="pl-12 h-12 bg-white/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 rounded-xl focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -120,11 +120,11 @@ export function LoginForm() {
           </motion.div>
           <motion.div variants={itemVariants}>
             <div className="relative">
-              <Lock className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
+              <Lock className="absolute left-4 top-3.5 h-5 w-5 text-gray-400 dark:text-gray-500" />
               <Input
                 type="password"
                 placeholder="密码"
-                className="pl-12 h-12 bg-white/50 border-gray-200 rounded-xl focus:bg-white transition-colors"
+                className="pl-12 h-12 bg-white/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 rounded-xl focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -137,25 +137,25 @@ export function LoginForm() {
                id="rememberMe"
                checked={rememberMe}
                onChange={(e) => setRememberMe(e.target.checked)}
-               className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+               className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary-500 focus:ring-primary-500 cursor-pointer"
              />
-             <label htmlFor="rememberMe" className="text-sm text-gray-600 cursor-pointer select-none">
+             <label htmlFor="rememberMe" className="text-sm text-gray-600 dark:text-gray-400 cursor-pointer select-none">
                保持登录（30天）
              </label>
            </motion.div>
            {error && (
             <motion.p
               variants={itemVariants}
-              className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl border border-red-100"
+              className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-4 py-3 rounded-xl border border-red-100 dark:border-red-800"
             >
               {error}
             </motion.p>
           )}
-          <motion.div variants={itemVariants} className="pt-2">
-            <Button type="submit" className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium shadow-lg hover:shadow-xl transition-all" disabled={loading}>
-              {loading ? '登录中...' : '登录'}
-            </Button>
-          </motion.div>
+           <motion.div variants={itemVariants} className="pt-2">
+             <Button type="submit" variant="gradient" className="w-full h-12 rounded-xl font-medium" disabled={loading}>
+               {loading ? '登录中...' : '登录'}
+             </Button>
+           </motion.div>
           {import.meta.env.MODE === 'development' && (
             <motion.div variants={itemVariants}>
               <Button 
