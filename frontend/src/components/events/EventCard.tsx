@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { CalendarIcon, TrashIcon, EditIcon } from '../icons';
+import { CalendarIcon, TrashIcon, EditIcon, SendIcon } from '../icons';
 import { calculateCountdown } from '@/lib/countdown';
 import { formatLunarDate, getNextLunarOccurrence } from '@/lib/lunar';
 import type { Event } from '@timemark/shared';
@@ -11,9 +11,10 @@ interface EventCardProps {
   event: Event;
   onEdit: (event: Event) => void;
   onDelete: (id: string) => void;
+  onTestSend?: (id: string) => void;
 }
 
-export function EventCard({ event, onEdit, onDelete }: EventCardProps) {
+export function EventCard({ event, onEdit, onDelete, onTestSend }: EventCardProps) {
   const getTargetDate = () => {
     if (event.calendarType === 'lunar' && event.lunarDate) {
       return getNextLunarOccurrence(event.lunarDate);
@@ -56,6 +57,11 @@ export function EventCard({ event, onEdit, onDelete }: EventCardProps) {
           <div className="flex justify-between items-start mb-2">
             <CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100">{event.name}</CardTitle>
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {onTestSend && (
+                <Button variant="ghost" onClick={(e) => { e.stopPropagation(); onTestSend(event.id); }} className="h-8 w-8 p-0 text-blue-500 hover:text-blue-600" title="测试发送">
+                  <SendIcon size={16} />
+                </Button>
+              )}
               <Button variant="ghost" onClick={(e) => { e.stopPropagation(); onEdit(event); }} className="h-8 w-8 p-0">
                 <EditIcon size={16} />
               </Button>

@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Reminders from './pages/Reminders';
 import LoginHistory from './pages/LoginHistory';
+import Channels from './pages/Channels';
 import { useEffect } from 'react';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -24,23 +25,16 @@ function AnimatedRoutes() {
 
   return (
     <AnimatePresence mode="wait">
-      <motion.div
-        key={location.pathname}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        transition={{ duration: 0.3 }}
-      >
-        <Routes location={location}>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/test" element={<TestLoginPage />} />
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="/reminders" element={<ProtectedRoute><Reminders /></ProtectedRoute>} />
-          <Route path="/login-history" element={<ProtectedRoute><LoginHistory /></ProtectedRoute>} />
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-        </Routes>
-      </motion.div>
+      <Routes location={location}>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/test" element={<TestLoginPage />} />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/reminders" element={<ProtectedRoute><Reminders /></ProtectedRoute>} />
+        <Route path="/login-history" element={<ProtectedRoute><LoginHistory /></ProtectedRoute>} />
+        <Route path="/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
+        <Route path="/" element={<Navigate to="/dashboard" />} />
+      </Routes>
     </AnimatePresence>
   );
 }

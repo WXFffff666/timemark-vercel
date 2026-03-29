@@ -6,8 +6,8 @@ const MASTER_KEY = process.env.MASTER_KEY!;
 export async function saveUserConfig(userId: number, config: any): Promise<void> {
   const e = (v: string | undefined) => v ? encrypt(v, MASTER_KEY) : null;
   await query(
-    `INSERT INTO user_configs (user_id, encrypted_resend_key, encrypted_github_token, encrypted_feishu_webhook, encrypted_wecom_webhook, encrypted_dingtalk_webhook, encrypted_dingtalk_secret, encrypted_telegram_bot_token, telegram_chat_id, daily_check_time)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO user_configs (user_id, encrypted_resend_key, encrypted_github_token, encrypted_feishu_webhook, encrypted_wecom_webhook, encrypted_dingtalk_webhook, encrypted_dingtalk_secret, encrypted_telegram_bot_token, telegram_chat_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (user_id) DO UPDATE SET
        encrypted_resend_key = COALESCE(EXCLUDED.encrypted_resend_key, user_configs.encrypted_resend_key),
        encrypted_github_token = COALESCE(EXCLUDED.encrypted_github_token, user_configs.encrypted_github_token),
@@ -16,10 +16,9 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
        encrypted_dingtalk_webhook = COALESCE(EXCLUDED.encrypted_dingtalk_webhook, user_configs.encrypted_dingtalk_webhook),
        encrypted_dingtalk_secret = COALESCE(EXCLUDED.encrypted_dingtalk_secret, user_configs.encrypted_dingtalk_secret),
        encrypted_telegram_bot_token = COALESCE(EXCLUDED.encrypted_telegram_bot_token, user_configs.encrypted_telegram_bot_token),
-       telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, user_configs.telegram_chat_id),
-       daily_check_time = COALESCE(EXCLUDED.daily_check_time, user_configs.daily_check_time)`,
+       telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, user_configs.telegram_chat_id)`,
     [userId, e(config.resend_api_key), e(config.github_token), e(config.feishu_webhook), e(config.wecom_webhook),
-     e(config.dingtalk_webhook), e(config.dingtalk_secret), e(config.telegram_bot_token), config.telegram_chat_id || null, config.daily_check_time || '09:00']
+     e(config.dingtalk_webhook), e(config.dingtalk_secret), e(config.telegram_bot_token), config.telegram_chat_id || null]
   );
 }
 
@@ -37,6 +36,5 @@ export async function getUserConfig(userId: number): Promise<any> {
     dingtalk_secret: d(r.encrypted_dingtalk_secret),
     telegram_bot_token: d(r.encrypted_telegram_bot_token),
     telegram_chat_id: r.telegram_chat_id,
-    daily_check_time: r.daily_check_time,
   };
 }

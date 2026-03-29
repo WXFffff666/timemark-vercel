@@ -87,6 +87,5 @@ CREATE TABLE user_configs (
   encrypted_dingtalk_secret TEXT,
   encrypted_telegram_bot_token TEXT,
   telegram_chat_id VARCHAR(255),
-  daily_check_time TIME DEFAULT '09:00',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

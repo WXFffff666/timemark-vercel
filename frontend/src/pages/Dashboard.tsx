@@ -26,7 +26,7 @@ const itemVariants = {
 export function Dashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent } = useEventStore();
+  const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent, testSendEvent } = useEventStore();
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | undefined>();
 
@@ -53,6 +53,15 @@ export function Dashboard() {
       await deleteEvent(id);
       setShowForm(false);
       setEditingEvent(undefined);
+    }
+  };
+
+  const handleTestSend = async (id: string) => {
+    try {
+      await testSendEvent(id);
+      alert('测试通知已发送！');
+    } catch (error) {
+      alert('发送失败，请检查通知渠道配置');
     }
   };
 
@@ -109,7 +118,7 @@ export function Dashboard() {
           >
             {events.map((event) => (
               <motion.div key={event.id} variants={itemVariants}>
-                <EventCard event={event} onEdit={handleEdit} onDelete={handleDelete} />
+                <EventCard event={event} onEdit={handleEdit} onDelete={handleDelete} onTestSend={handleTestSend} />
               </motion.div>
             ))}
           </motion.div>

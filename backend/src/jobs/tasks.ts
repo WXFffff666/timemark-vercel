@@ -1,5 +1,6 @@
 import { query } from '../db/index.js';
 import { Solar } from 'lunar-javascript';
+import { sendNotifications } from '../services/notifications/index.js';
 
 export async function sendReminders() {
   console.log('[Task] Checking reminders...');
@@ -11,6 +12,18 @@ export async function sendReminders() {
   );
   
   console.log(`[Task] Found ${result.rows.length} events to remind`);
+  
+  for (const event of result.rows) {
+    const channels = event.notification_channels || [];
+    if (channels.length > 0) {
+      try {
+        await sendNotifications(event, event.user_id, channels);
+        console.log(`[Task] Sent notifications for event ${event.id}`);
+      } catch (error) {
+        console.error(`[Task] Failed to send notifications for event ${event.id}:`, error);
+      }
+    }
+  }
 }
 
 export async function githubBackup() {

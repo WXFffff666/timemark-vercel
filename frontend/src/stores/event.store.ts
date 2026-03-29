@@ -9,6 +9,7 @@ interface EventState {
   createEvent: (data: CreateEventRequest) => Promise<void>;
   updateEvent: (id: string, data: Partial<CreateEventRequest>) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
+  testSendEvent: (id: string) => Promise<void>;
 }
 
 export const useEventStore = create<EventState>((set, get) => ({
@@ -38,5 +39,9 @@ export const useEventStore = create<EventState>((set, get) => ({
   deleteEvent: async (id) => {
     await api.delete(`/events/${id}`);
     set({ events: get().events.filter(e => e.id !== id) });
+  },
+
+  testSendEvent: async (id) => {
+    await api.post(`/events/${id}/test-send`, {});
   },
 }));
