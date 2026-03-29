@@ -27,6 +27,32 @@ events.post('/', async (c) => {
   return c.json({ success: true, data: event }, 201);
 });
 
+events.post('/:id/test-send', async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const { sendNotifications } = await import('../services/notifications/index.js');
+  const { query } = await import('../db/index.js');
+  
+  const result = await query('SELECT * FROM events WHERE id = $1 AND user_id = $2', [id, user.id]);
+  if (result.rows.length === 0) {
+    return c.json({ success: false, error: 'Event not found' }, 404);
+  }
+  
+  const event = result.rows[0];
+  const channels = event.notification_channels || [];
+  
+  if (channels.length === 0) {
+    return c.json({ success: false, error: 'No notification channels configured' }, 400);
+  }
+  
+  try {
+    await sendNotifications(event, Number(user.id), channels);
+    return c.json({ success: true, message: 'Test notification sent' });
+  } catch (error) {
+    return c.json({ success: false, error: 'Failed to send notification' }, 500);
+  }
+});
+
 events.put('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
@@ -55,32 +81,6 @@ events.delete('/:id', async (c) => {
   }
 
   return c.json({ success: true });
-});
-
-events.post('/:id/test-send', async (c) => {
-  const user = c.get('user');
-  const id = c.req.param('id');
-  const { sendNotifications } = await import('../services/notifications/index.js');
-  const { query } = await import('../db/index.js');
-  
-  const result = await query('SELECT * FROM events WHERE id = $1 AND user_id = $2', [id, user.id]);
-  if (result.rows.length === 0) {
-    return c.json({ success: false, error: 'Event not found' }, 404);
-  }
-  
-  const event = result.rows[0];
-  const channels = event.notification_channels || [];
-  
-  if (channels.length === 0) {
-    return c.json({ success: false, error: 'No notification channels configured' }, 400);
-  }
-  
-  try {
-    await sendNotifications(event, user.id, channels);
-    return c.json({ success: true, message: 'Test notification sent' });
-  } catch (error) {
-    return c.json({ success: false, error: 'Failed to send notification' }, 500);
-  }
 });
 
 export default events;
