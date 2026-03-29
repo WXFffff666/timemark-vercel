@@ -8,11 +8,15 @@ export interface LunarDate {
   isLeap: boolean;
 }
 
+export type NotificationChannel = 'email' | 'feishu' | 'dingtalk' | 'wecom' | 'telegram';
+
 export interface ReminderConfig {
   enabled: boolean;
   daysBeforeList: number[];
   customMessage?: string;
   emailRecipients: string[];
+  channels?: NotificationChannel[];
+  accountIds?: string[];
 }
 
 export interface Event {
@@ -40,4 +44,28 @@ export interface CreateEventRequest {
   personName?: string;
   birthDate?: string;
   birthDateLunar?: string;
+}
+
+export interface NotificationAccount {
+  id: string;
+  type: 'feishu' | 'dingtalk' | 'wecom' | 'telegram';
+  name: string;
+  webhook?: string;
+  token?: string;
+  chatId?: string;
+}
+
+export interface RelationshipMapping {
+  id: string;
+  fromRelation: string;
+  toRelation: string;
+}
+
+export interface EventTemplate {
+  id: string;
+  eventId: string;
+  reminderId: string;
+  reminderIdentity: string;
+  eventSubject: string;
+  relationshipMappings: RelationshipMapping[];
 }
