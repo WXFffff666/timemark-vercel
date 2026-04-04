@@ -47,7 +47,7 @@ async function queryNtpServer(hostname: string): Promise<number | null> {
       return null;
     }
     
-    const data = await response.json();
+    const data = await response.json() as { datetime: string };
     return new Date(data.datetime).getTime();
   } catch (error) {
     console.log(`[NTP] Failed to query ${hostname}:`, error);
@@ -68,7 +68,7 @@ async function getTimeFromWorldTimeAPI(): Promise<number | null> {
       return null;
     }
     
-    const data = await response.json();
+    const data = await response.json() as { datetime: string };
     return new Date(data.datetime).getTime();
   } catch (error) {
     console.log('[NTP] WorldTimeAPI failed:', error);

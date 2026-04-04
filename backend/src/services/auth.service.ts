@@ -13,51 +13,32 @@ export async function createUser(username: string, password: string): Promise<Us
 
   await query('INSERT INTO users (id, username, password_hash) VALUES ($1, $2, $3)', [id, username, passwordHash]);
 
-  return { id, username, totpSecret: null, createdAt: new Date().toISOString() };
+  return { id, username, createdAt: new Date().toISOString() };
 }
 
 export async function getUserByUsername(username: string): Promise<User | null> {
-  const result = await query('SELECT id, username, totp_secret, created_at FROM users WHERE username = $1', [username]);
+  const result = await query('SELECT id, username, created_at FROM users WHERE username = $1', [username]);
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as any;
-  return { id: row.id, username: row.username, totpSecret: row.totp_secret, createdAt: row.created_at };
+  return { id: row.id, username: row.username, createdAt: row.created_at };
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const result = await query('SELECT id, username, totp_secret, created_at FROM users WHERE id = $1', [id]);
+  const result = await query('SELECT id, username, created_at FROM users WHERE id = $1', [id]);
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as any;
-  return { id: row.id, username: row.username, totpSecret: row.totp_secret, createdAt: row.created_at };
+  return { id: row.id, username: row.username, createdAt: row.created_at };
 }
 
 export async function verifyUserPassword(username: string, password: string): Promise<User | null> {
-  const result = await query('SELECT id, username, password_hash, totp_secret, created_at FROM users WHERE username = $1', [username]);
+  const result = await query('SELECT id, username, password_hash, created_at FROM users WHERE username = $1', [username]);
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as any;
   
   const valid = await verifyPassword(password, row.password_hash);
   if (!valid) return null;
   
-  return { id: row.id, username: row.username, totpSecret: row.totp_secret, createdAt: row.created_at };
-}
-
-export async function updateTOTPSecret(userId: string, secret: string): Promise<void> {
-  await query('UPDATE users SET totp_secret = $1 WHERE id = $2', [secret, userId]);
-}
-
-export async function createLoginLog(userIdOrUsername: string, ip: string, userAgent: string, fingerprint: string, success: boolean, reason?: string): Promise<void> {
-  try {
-    const id = randomUUID();
-    const userId = success ? userIdOrUsername : null;
-    const username = success ? null : userIdOrUsername;
-    
-    await query(
-      'INSERT INTO login_logs (id, user_id, username, ip_address, user_agent, device_fingerprint, success, failure_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [id, userId, username, ip, userAgent, fingerprint, success, reason || null]
-    );
-  } catch (error) {
-    console.error('[createLoginLog] Failed to log login attempt:', error);
-  }
+  return { id: row.id, username: row.username, createdAt: row.created_at };
 }
 
 export async function trackLoginFailure(params: { username: string; ip: string }): Promise<{ shouldLock: boolean; failureCount: number }> {

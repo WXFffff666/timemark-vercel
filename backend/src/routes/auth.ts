@@ -1,9 +1,8 @@
 import { Hono } from 'hono';
-import { verifyUserPassword, updateTOTPSecret, createLoginLog, trackLoginFailure } from '../services/auth.service.js';
-import { createSession, deleteSession, getSessionByToken } from '../services/session.service.js';
-import { generateTOTPSecret, generateQRCode, verifyTOTP } from '../utils/totp.js';
+import { verifyUserPassword, createLoginLog, trackLoginFailure } from '../services/auth.service.js';
+import { createSession, deleteSession } from '../services/session.service.js';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
-import { loginSchema, verify2FASchema, changePasswordSchema } from '@timemark/shared';
+import { loginSchema, changePasswordSchema } from '@timemark/shared';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { sendSecurityAlert } from '../services/alert.service.js';
 import { hashPassword } from '../utils/password.js';
@@ -46,69 +45,15 @@ auth.post('/login', async (c) => {
 
     await createLoginLog(user.id, ip, userAgent, '', true);
 
-    if (user.totpSecret) {
-      const tempToken = await generateAccessToken(user.id, undefined, false);
-      return c.json({ success: true, data: { requiresTOTP: true, tempToken } });
-    }
-
     const { accessToken, refreshToken } = await createSession(user.id, deviceFingerprint || '', false, rememberMe);
-    return c.json({ success: true, data: { requiresTOTP: false, accessToken, refreshToken, user } });
+    return c.json({ success: true, data: { accessToken, refreshToken, user } });
   } catch (error: any) {
     console.error('[Login Error]', error);
     return c.json({ success: false, error: error.message || 'Login failed' }, 500);
   }
 });
 
-auth.post('/verify-2fa', async (c) => {
-  const body = await c.req.json();
-  const parsed = verify2FASchema.safeParse(body);
-
-  if (!parsed.success) {
-    return c.json({ success: false, error: 'Invalid input' }, 400);
-  }
-
-  const { tempToken, totpCode, trustDevice, rememberMe = false } = parsed.data;
-  const payload = await import('../utils/jwt.js').then(m => m.verifyToken(tempToken));
-
-  if (!payload) {
-    return c.json({ success: false, error: 'Invalid token' }, 401);
-  }
-
-  const { getUserById } = await import('../services/auth.service.js');
-  const user = await getUserById(payload.userId);
-  if (!user || !user.totpSecret) {
-    return c.json({ success: false, error: 'User not found' }, 401);
-  }
-
-  const valid = verifyTOTP(user.totpSecret, totpCode);
-  if (!valid) {
-    return c.json({ success: false, error: 'Invalid 2FA code' }, 401);
-  }
-
-  const { accessToken, refreshToken } = await createSession(user.id, '', false, rememberMe);
-  return c.json({ success: true, data: { accessToken, refreshToken, user } });
-});
-
-auth.post('/setup-2fa', authMiddleware, async (c) => {
-  const user = c.get('user');
-  const secret = generateTOTPSecret();
-  const qrCode = await generateQRCode(secret, user.username);
-
-  return c.json({ success: true, data: { secret, qrCode } });
-});
-
-auth.post('/confirm-2fa', authMiddleware, async (c) => {
-  const user = c.get('user');
-  const { totpCode, secret } = await c.req.json();
-
-  const valid = verifyTOTP(secret, totpCode);
-  if (!valid) {
-    return c.json({ success: false, error: 'Invalid code' }, 400);
-  }
-
-  await updateTOTPSecret(user.id, secret);
-  return c.json({ success: true, data: { message: '2FA enabled' } });
-});
+// 2FA endpoints removed - not needed for local deployment
 
 auth.post('/verify-device', authMiddleware, async (c) => {
   const user = c.get('user');

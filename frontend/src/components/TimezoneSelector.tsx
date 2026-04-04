@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from '../ui/button';
+import { Button } from './ui/button';
 import { useTimezone, TIMEZONES } from '../RealtimeClock';
 import { Globe, X } from 'lucide-react';
 

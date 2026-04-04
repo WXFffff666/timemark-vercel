@@ -1,7 +1,6 @@
 export interface User {
   id: string;
   username: string;
-  totpSecret: string | null;
   createdAt: string;
 }
 
@@ -22,18 +21,7 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  requiresTOTP: boolean;
-  tempToken?: string;
-  accessToken?: string;
-  refreshToken?: string;
-  user?: User;
-  trusted?: boolean;
-}
-
-export interface Verify2FARequest {
-  tempToken: string;
-  totpCode: string;
-  trustDevice: boolean;
-  deviceFingerprint?: string;
-  rememberMe?: boolean;
+  accessToken: string;
+  refreshToken: string;
+  user: User;
 }

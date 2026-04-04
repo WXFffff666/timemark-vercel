@@ -8,7 +8,7 @@ export function TestLoginPage() {
 
   useEffect(() => {
     // 测试环境自动登录
-    authStore.user = { id: 'test', username: 'test', totpSecret: null, createdAt: new Date().toISOString() };
+    authStore.user = { id: 'test', username: 'test', createdAt: new Date().toISOString() };
     authStore.isAuthenticated = true;
     localStorage.setItem('accessToken', 'test-token');
     navigate('/dashboard');

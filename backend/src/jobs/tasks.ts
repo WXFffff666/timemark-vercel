@@ -56,17 +56,17 @@ export async function sendReminders() {
   const allEvents = await query('SELECT * FROM events');
   
   // 筛选需要提醒的事件
-  const eventsToRemind = [];
+  const eventsToRemind: Array<{ id: number; user_id: number; name: string; date: string; lunar_date: any; calendar_type: string; notification_channels: string[] }> = [];
   
   for (const event of allEvents.rows) {
     const calendarType = event.calendar_type;
-    let targetDate: Date | null = null;
+    let eventTargetDate: Date | null = null;
     
     if (calendarType === 'gregorian') {
       // 公历事件：直接比较日期
       const eventDate = event.date;
       if (eventDate === today || eventDate === tomorrow || eventDate === dayAfterTomorrow) {
-        targetDate = new Date(eventDate);
+        eventTargetDate = new Date(eventDate);
       }
     } else if (calendarType === 'lunar' && event.lunar_date) {
       // 农历事件：转换为公历日期后比较
@@ -77,8 +77,6 @@ export async function sendReminders() {
         
         if (lunarData && lunarData.year && lunarData.month && lunarData.day) {
           const month = lunarData.isLeap ? -lunarData.month : lunarData.month;
-          const lunarDate = Lunar.fromYmd(lunarData.year, month, lunarData.day);
-          const solar = lunarDate.getSolar();
           
           // 计算今年和明年的农历日期对应的公历日期
           const currentYear = now.getFullYear();
@@ -90,7 +88,7 @@ export async function sendReminders() {
             const tryDateStr = tryDate.toISOString().split('T')[0];
             
             if (tryDateStr === today || tryDateStr === tomorrow || tryDateStr === dayAfterTomorrow) {
-              targetDate = tryDate;
+              eventTargetDate = tryDate;
               break;
             }
           }
@@ -100,8 +98,8 @@ export async function sendReminders() {
       }
     }
     
-    if (targetDate) {
-      eventsToRemind.push(event);
+    if (eventTargetDate) {
+      eventsToRemind.push({ ...event, targetDate: eventTargetDate });
     }
   }
   
@@ -122,10 +120,12 @@ export async function sendReminders() {
         console.log(`[Task] Sent notifications for event ${event.id}`);
         
         // 记录事件触发日志
-        await recordEventTrigger(event.id, event.user_id, 'scheduled', targetDate!);
+        const triggerDate = 'targetDate' in event ? (event as any).targetDate : new Date(event.date);
+        await recordEventTrigger(event.id, event.user_id, 'scheduled', triggerDate);
       } catch (error) {
         console.error(`[Task] Failed to send notifications for event ${event.id}:`, error);
-        await recordEventTrigger(event.id, event.user_id, 'scheduled', targetDate!, 'failed', String(error));
+        const triggerDate2 = 'targetDate' in event ? (event as any).targetDate : new Date(event.date);
+        await recordEventTrigger(event.id, event.user_id, 'scheduled', triggerDate2, 'failed', String(error));
       }
     }
   }

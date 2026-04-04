@@ -42,7 +42,7 @@ export interface ReminderConfig {
   daysBeforeList: number[];
   customMessage?: string;
   emailRecipients: string[];
-  channels?: NotificationChannel[];
+  channels?: NotificationChannel[] | string[];
   accountIds?: string[];
   reminderTime?: string; // 自定义提醒时间 HH:mm
 }
