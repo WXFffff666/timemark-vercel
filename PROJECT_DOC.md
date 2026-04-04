@@ -5,9 +5,20 @@
 TimeMark Docker 是一个智能事件提醒系统，支持：
 - 公历/农历生日提醒
 - 多渠道通知 (27个渠道)
-- 关系映射
+- 关系映射 (如"我妈"→"妻子")
 - TOTP 双因素认证
 - JWT 会话管理
+- 时区切换
+- 安全告警邮件
+
+## 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 后端 | Hono, TypeScript, PostgreSQL, Redis, lunar-javascript |
+| 前端 | React, TypeScript, TailwindCSS, Framer Motion |
+| 认证 | JWT, TOTP |
+| 通知 | Resend (邮件), 各平台 Webhook/Bot API |
 
 ## 项目结构
 
@@ -210,15 +221,46 @@ timemark-docker/
 | 生日年龄显示 | ✅ | frontend/src/components/events/EventCard.tsx |
 | 通知账户管理 | ✅ | frontend/src/components/settings/AccountSettings.tsx |
 | 关系映射 UI | ✅ | frontend/src/components/settings/RelationshipSettings.tsx |
+| 时区切换 | ✅ | frontend/src/context/timezone.tsx |
+| NTP 时间同步 | ✅ | backend/src/utils/ntp.ts |
+| Docker CPU 限制 | ✅ | docker-compose.yml |
+| .dockerignore | ✅ | 项目根目录 |
 
-## 技术栈
+## 下次开发注意事项
 
-- **后端**: Hono, TypeScript, PostgreSQL, Redis, lunar-javascript
-- **前端**: React, TypeScript, TailwindCSS, Framer Motion
-- **认证**: JWT, TOTP
-- **通知**: Resend (邮件), 各平台 Webhook/Bot API
+1. **添加新渠道**:
+   - 后端: 在 `backend/src/services/notifications/index.ts` 添加条件判断
+   - 前端: 在 `frontend/src/pages/Channels.tsx` 添加配置输入框
+   - 状态: 在 `channelStatus` 中添加检测逻辑
 
-## 配置说明
+2. **数据库变更**:
+   - 修改 `docker/init-db.sql`
+   - 需要重建数据库容器
+
+3. **前端组件**:
+   - UI 组件在 `frontend/src/components/ui/`
+   - 页面组件在 `frontend/src/pages/`
+   - 使用 `api.ts` 中的 `api.get/post/delete` 方法
+
+4. **后端服务**:
+   - 业务逻辑在 `services/`
+   - 定时任务在 `jobs/`
+   - 队列在 `queue/`
+
+## 快速开始
+
+```bash
+# 克隆项目
+git clone https://github.com/WXFffff666/timemark-docker.git
+cd timemark-docker
+
+# 启动服务
+docker-compose up -d
+
+# 访问
+# 前端: http://localhost:5173
+# 后端: http://localhost:3000
+```
 
 ### Docker 环境变量
 
