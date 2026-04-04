@@ -1,14 +1,14 @@
-import { sendFeishuNotification } from './feishu.service';
-import { sendWeComNotification } from './wecom.service';
-import { sendDingTalkNotification } from './dingtalk.service';
-import { sendTelegramNotification } from './telegram.service';
-import { sendDiscordNotification } from './discord.service';
-import { sendSlackNotification } from './slack.service';
-import { sendWxPusherNotification } from './wxpusher.service';
-import { sendQmsgNotification } from './qmsg.service';
-import { sendGenericWebhookNotification } from './generic-webhook.service';
-import { sendEmailNotification } from './email.service';
-import { getUserConfig, getRelationshipMappings } from '../config.service';
+import { sendFeishuNotification } from './feishu.service.js';
+import { sendWeComNotification } from './wecom.service.js';
+import { sendDingTalkNotification } from './dingtalk.service.js';
+import { sendTelegramNotification } from './telegram.service.js';
+import { sendDiscordNotification } from './discord.service.js';
+import { sendSlackNotification } from './slack.service.js';
+import { sendWxPusherNotification } from './wxpusher.service.js';
+import { sendQmsgNotification } from './qmsg.service.js';
+import { sendGenericWebhookNotification } from './generic-webhook.service.js';
+import { sendEmailNotification } from './email.service.js';
+import { getUserConfig, getRelationshipMappings, getNotificationAccounts } from '../config.service.js';
 
 const genericWebhookChannels = new Set([
   'whatsapp',
@@ -30,6 +30,57 @@ const genericWebhookChannels = new Set([
   'zalo_personal',
   'network_chat',
 ]);
+
+// 渠道类型到通知账户类型的映射
+const channelToAccountType: Record<string, string> = {
+  'feishu': 'feishu',
+  'wecom': 'wecom',
+  'dingtalk': 'dingtalk',
+  'telegram': 'telegram',
+  'discord': 'discord',
+  'slack': 'slack',
+  'wechat': 'wxpusher',
+  'qq': 'qmsg',
+  'email': 'email',
+};
+
+/**
+ * 根据账户类型获取通知配置
+ */
+function getChannelConfigFromAccount(
+  account: any,
+  channel: string
+): { webhook?: string; token?: string; secret?: string; chat_id?: string } | null {
+  // 直接使用账户的字段（notification_accounts 表的字段已经是明文存储的）
+  switch (channel) {
+    case 'feishu':
+      return account.webhook ? { webhook: account.webhook } : null;
+    case 'wecom':
+      return account.webhook ? { webhook: account.webhook } : null;
+    case 'dingtalk':
+      return (account.webhook && account.secret)
+        ? { webhook: account.webhook, secret: account.secret }
+        : null;
+    case 'telegram':
+      return (account.token && account.chat_id)
+        ? { token: account.token, chat_id: account.chat_id }
+        : null;
+    case 'discord':
+      return account.webhook ? { webhook: account.webhook } : null;
+    case 'slack':
+      return account.webhook ? { webhook: account.webhook } : null;
+    case 'wechat':
+      return (account.token && account.chat_id)
+        ? { token: account.token, chat_id: account.chat_id }
+        : null;
+    case 'qq':
+      return (account.token && account.chat_id)
+        ? { token: account.token, chat_id: account.chat_id }
+        : null;
+    default:
+      return null;
+  }
+}
 
 /**
  * 应用关系映射转换事件名称
@@ -76,40 +127,146 @@ export async function sendNotifications(event: any, userId: number, channels: st
   
   // 获取关系映射
   const mappings = await getRelationshipMappings(userId, event.id);
-
-  await Promise.allSettled(channels.map(async (ch) => {
+  
+  // 获取事件绑定的通知账户ID
+  const boundAccountIds: number[] = (() => {
+    const raw = event.notification_account_ids;
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.filter((id): id is number => typeof id === 'number');
     try {
-      if (ch === 'feishu' && config?.feishu_webhook) await sendFeishuNotification(event, config.feishu_webhook);
-      else if (ch === 'wecom' && config?.wecom_webhook) await sendWeComNotification(event, config.wecom_webhook);
-      else if (ch === 'dingtalk' && config?.dingtalk_webhook && config?.dingtalk_secret)
-        await sendDingTalkNotification(event, config.dingtalk_webhook, config.dingtalk_secret);
-      else if (ch === 'telegram' && config?.telegram_bot_token && config?.telegram_chat_id)
-        await sendTelegramNotification(event, config.telegram_bot_token, config.telegram_chat_id);
-      else if (ch === 'discord' && config?.discord_webhook)
-        await sendDiscordNotification(event, config.discord_webhook);
-      else if (ch === 'slack' && config?.slack_webhook)
-        await sendSlackNotification(event, config.slack_webhook);
-      else if (ch === 'wechat' && config?.wxpusher_app_token && config?.wxpusher_uid)
-        await sendWxPusherNotification(event, config.wxpusher_app_token, config.wxpusher_uid);
-      else if (ch === 'qq' && config?.qmsg_key)
-        await sendQmsgNotification(event, config.qmsg_key, config.qmsg_qq);
-      else if (ch === 'email' && config?.resend_api_key && config?.reminder_emails?.length > 0) {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : [];
+    } catch {
+      return [];
+    }
+  })();
+  
+  // 获取用户所有通知账户
+  const allAccounts = await getNotificationAccounts(userId);
+  
+  // 构建账户ID到账户的映射
+  const accountsMap = new Map<number, any>();
+  for (const account of allAccounts) {
+    accountsMap.set(account.id, account);
+  }
+  
+  // 为每个渠道准备配置（优先使用绑定的账户，否则使用全局配置）
+  const channelConfigs: Record<string, any> = {};
+  
+  for (const ch of channels) {
+    // 查找该渠道绑定的账户
+    let accountConfig: any = null;
+    
+    if (boundAccountIds.length > 0) {
+      // 找到第一个匹配渠道类型的已绑定账户
+      const accountType = channelToAccountType[ch];
+      for (const accountId of boundAccountIds) {
+        const account = accountsMap.get(accountId);
+        if (account && account.type === accountType && account.is_active) {
+          accountConfig = getChannelConfigFromAccount(account, ch);
+          if (accountConfig) break;
+        }
+      }
+    }
+    
+    // 如果找到了账户配置，使用它；否则使用全局配置
+    if (accountConfig) {
+      channelConfigs[ch] = accountConfig;
+    } else {
+      // 使用全局配置
+      const globalConfig: any = {};
+      switch (ch) {
+        case 'feishu':
+          if (config?.feishu_webhook) globalConfig.webhook = config.feishu_webhook;
+          break;
+        case 'wecom':
+          if (config?.wecom_webhook) globalConfig.webhook = config.wecom_webhook;
+          break;
+        case 'dingtalk':
+          if (config?.dingtalk_webhook && config?.dingtalk_secret) {
+            globalConfig.webhook = config.dingtalk_webhook;
+            globalConfig.secret = config.dingtalk_secret;
+          }
+          break;
+        case 'telegram':
+          if (config?.telegram_bot_token && config?.telegram_chat_id) {
+            globalConfig.token = config.telegram_bot_token;
+            globalConfig.chat_id = config.telegram_chat_id;
+          }
+          break;
+        case 'discord':
+          if (config?.discord_webhook) globalConfig.webhook = config.discord_webhook;
+          break;
+        case 'slack':
+          if (config?.slack_webhook) globalConfig.webhook = config.slack_webhook;
+          break;
+        case 'wechat':
+          if (config?.wxpusher_app_token && config?.wxpusher_uid) {
+            globalConfig.token = config.wxpusher_app_token;
+            globalConfig.chat_id = config.wxpusher_uid;
+          }
+          break;
+        case 'qq':
+          if (config?.qmsg_key) {
+            globalConfig.token = config.qmsg_key;
+            globalConfig.chat_id = config.qmsg_qq;
+          }
+          break;
+        case 'email':
+          if (config?.resend_api_key && config?.reminder_emails?.length > 0) {
+            globalConfig.apiKey = config.resend_api_key;
+            globalConfig.emails = config.reminder_emails;
+          }
+          break;
+        default:
+          if (genericWebhookChannels.has(ch) && channelWebhooks[ch]) {
+            globalConfig.webhook = channelWebhooks[ch];
+          }
+      }
+      
+      if (Object.keys(globalConfig).length > 0) {
+        channelConfigs[ch] = globalConfig;
+      }
+    }
+  }
+  
+  // 发送通知
+  await Promise.allSettled(channels.map(async (ch) => {
+    const chConfig = channelConfigs[ch];
+    if (!chConfig) return;
+    
+    try {
+      if (ch === 'feishu' && chConfig.webhook) await sendFeishuNotification(event, chConfig.webhook);
+      else if (ch === 'wecom' && chConfig.webhook) await sendWeComNotification(event, chConfig.webhook);
+      else if (ch === 'dingtalk' && chConfig.webhook && chConfig.secret)
+        await sendDingTalkNotification(event, chConfig.webhook, chConfig.secret);
+      else if (ch === 'telegram' && chConfig.token && chConfig.chat_id)
+        await sendTelegramNotification(event, chConfig.token, chConfig.chat_id);
+      else if (ch === 'discord' && chConfig.webhook)
+        await sendDiscordNotification(event, chConfig.webhook);
+      else if (ch === 'slack' && chConfig.webhook)
+        await sendSlackNotification(event, chConfig.webhook);
+      else if (ch === 'wechat' && chConfig.token && chConfig.chat_id)
+        await sendWxPusherNotification(event, chConfig.token, chConfig.chat_id);
+      else if (ch === 'qq' && chConfig.token)
+        await sendQmsgNotification(event, chConfig.token, chConfig.chat_id);
+      else if (ch === 'email' && chConfig.apiKey && chConfig.emails?.length > 0) {
         // 为每个收件人单独发送邮件，应用不同的关系映射
-        await Promise.allSettled(config.reminder_emails.map(async (email: string) => {
+        await Promise.allSettled(chConfig.emails.map(async (email: string) => {
           const mappedEvent = {
             ...event,
             name: applyRelationshipMapping(event.name, mappings, email)
           };
           await sendEmailNotification(
             mappedEvent,
-            config.resend_api_key,
+            chConfig.apiKey,
             'TimeMark <noreply@timemark.app>',
             email
           );
         }));
       }
-      else if (genericWebhookChannels.has(ch) && typeof channelWebhooks[ch] === 'string' && channelWebhooks[ch])
-        await sendGenericWebhookNotification(event, channelWebhooks[ch], ch);
+      else if (genericWebhookChannels.has(ch) && chConfig.webhook)
+        await sendGenericWebhookNotification(event, chConfig.webhook, ch);
     } catch (e) {
       console.error(`Failed ${ch}:`, e);
     }

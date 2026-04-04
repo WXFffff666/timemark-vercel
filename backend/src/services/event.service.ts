@@ -6,10 +6,11 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
   const id = randomUUID();
   
   await query(
-    `INSERT INTO events (id, user_id, name, type, date, calendar_type, lunar_date, reminder_config) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO events (id, user_id, name, type, date, calendar_type, lunar_date, reminder_config, relationship_mapping_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [id, userId, data.name, data.type, data.date, data.calendarType, 
       data.lunarDate ? JSON.stringify(data.lunarDate) : null, 
-      JSON.stringify(data.reminderConfig)]
+      JSON.stringify(data.reminderConfig),
+      data.relationshipMappingId || null]
   );
 
   return { id, userId, ...data, createdAt: new Date().toISOString() };
@@ -26,6 +27,7 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
     calendarType: row.calendar_type,
     lunarDate: row.lunar_date ? JSON.parse(row.lunar_date) : undefined,
     reminderConfig: JSON.parse(row.reminder_config),
+    relationshipMappingId: row.relationship_mapping_id?.toString(),
     createdAt: row.created_at,
   }));
 }
@@ -41,6 +43,7 @@ export async function updateEvent(id: string, userId: string, data: Partial<Crea
   if (data.calendarType) { updates.push(`calendar_type = $${paramIndex++}`); values.push(data.calendarType); }
   if (data.lunarDate) { updates.push(`lunar_date = $${paramIndex++}`); values.push(JSON.stringify(data.lunarDate)); }
   if (data.reminderConfig) { updates.push(`reminder_config = $${paramIndex++}`); values.push(JSON.stringify(data.reminderConfig)); }
+  if (data.relationshipMappingId !== undefined) { updates.push(`relationship_mapping_id = $${paramIndex++}`); values.push(data.relationshipMappingId || null); }
 
   if (updates.length === 0) return false;
 

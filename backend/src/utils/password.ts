@@ -1,9 +1,10 @@
-import { hash, verify } from '@node-rs/argon2';
+import pkg from 'bcryptjs';
+const { hashSync, compareSync } = pkg;
 
-export async function hashPassword(password: string): Promise<string> {
-  return hash(password);
+export function hashPassword(password: string): string {
+  return hashSync(password, 10);
 }
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return verify(hash, password);
+export function verifyPassword(password: string, hash: string): boolean {
+  return compareSync(password, hash);
 }

@@ -23,6 +23,21 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_token ON sessions(token);
 CREATE INDEX idx_sessions_expires ON sessions(expires_at);
 
+-- relationship_mappings 表 - 关系映射（如"我妈"→"妻子"）
+CREATE TABLE relationship_mappings (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  event_id INTEGER,
+  from_relation VARCHAR(100) NOT NULL,
+  to_relation VARCHAR(100) NOT NULL,
+  recipient_email VARCHAR(255),
+  recipient_type VARCHAR(50),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_relationship_mappings_event ON relationship_mappings(event_id);
+CREATE INDEX idx_relationship_mappings_user ON relationship_mappings(user_id);
+
 -- events 表
 CREATE TABLE events (
   id SERIAL PRIMARY KEY,
@@ -38,6 +53,8 @@ CREATE TABLE events (
   reminder_time TIME DEFAULT '09:00',
   reminder_days_before JSON DEFAULT '[1, 3, 7]',
   notification_channels JSON DEFAULT '[]',
+  notification_account_ids JSON DEFAULT '[]',
+  relationship_mapping_id INTEGER,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_events_user_date ON events(user_id, date);
@@ -55,14 +72,17 @@ CREATE INDEX idx_email_logs_sent_at ON email_logs(sent_at);
 
 -- login_logs 表
 CREATE TABLE login_logs (
-  id SERIAL PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  ip VARCHAR(45),
+  username TEXT,
+  ip_address VARCHAR(45),
+  user_agent TEXT,
   device_fingerprint TEXT,
   success BOOLEAN NOT NULL,
-  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  failure_reason TEXT,
+  login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_login_logs_timestamp ON login_logs(timestamp);
+CREATE INDEX idx_login_logs_timestamp ON login_logs(login_time);
 
 -- login_attempts 表
 CREATE TABLE login_attempts (
@@ -95,6 +115,9 @@ CREATE TABLE user_configs (
   encrypted_channel_webhooks TEXT,
   telegram_chat_id VARCHAR(255),
   reminder_emails TEXT,
+  reminders_enabled BOOLEAN DEFAULT TRUE,
+  daily_check_time TIME DEFAULT '08:00:00',
+  days_before_list INTEGER[] DEFAULT ARRAY[1,3,7],
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -130,18 +153,3 @@ CREATE TABLE event_trigger_logs (
 CREATE INDEX idx_trigger_logs_event ON event_trigger_logs(event_id);
 CREATE INDEX idx_trigger_logs_user ON event_trigger_logs(user_id);
 CREATE INDEX idx_trigger_logs_date ON event_trigger_logs(trigger_date);
-
--- relationship_mappings 表 - 关系映射（如"我妈"→"妻子"）
-CREATE TABLE relationship_mappings (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
-  from_relation VARCHAR(100) NOT NULL,    -- 原始称呼（如"我爸"、"我妈"）
-  to_relation VARCHAR(100) NOT NULL,      -- 转换后称呼（如"丈夫"、"妻子"）
-  recipient_email VARCHAR(255),          -- 收件人邮箱（可选，用于邮件区分）
-  recipient_type VARCHAR(50),             -- 收件人类型（如"me"、"father"、"mother"）
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX idx_relationship_mappings_event ON relationship_mappings(event_id);
-CREATE INDEX idx_relationship_mappings_user ON relationship_mappings(user_id);

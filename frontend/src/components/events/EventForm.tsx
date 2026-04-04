@@ -3,8 +3,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Select } from '../ui/select';
 import { X, Plus, ChevronLeft } from 'lucide-react';
 import { solarToLunar } from '@/lib/lunar';
+import { api } from '@/lib/api';
 import type { Event, CreateEventRequest, NotificationChannel } from '@timemark/shared';
 
 interface EventFormProps {
@@ -18,6 +20,15 @@ interface BirthdayData {
   personName?: string;
   birthDate?: string;
   birthDateLunar?: string;
+}
+
+interface RelationshipMapping {
+  id: string;
+  eventId: string;
+  fromRelation: string;
+  toRelation: string;
+  recipientEmail?: string;
+  recipientType?: string;
 }
 
 type FormStep = 'type' | 'details' | 'reminder' | 'notification';
@@ -44,6 +55,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   const [inputDay, setInputDay] = useState<string>('');
   const [emailInput, setEmailInput] = useState<string>('');
   const [selectedChannels, setSelectedChannels] = useState<NotificationChannel[]>([]);
+  const [relationshipMappings, setRelationshipMappings] = useState<RelationshipMapping[]>([]);
+  const [selectedMappingId, setSelectedMappingId] = useState<string>('');
 
   useEffect(() => {
     if (open) {
@@ -70,6 +83,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         });
         setReminderDays(event.reminderConfig?.daysBeforeList || []);
         setSelectedChannels(event.reminderConfig?.channels || []);
+        setSelectedMappingId(event.relationshipMappingId || '');
       } else {
         setStep('type');
         setFormData({
@@ -90,9 +104,23 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         setReminderDays([]);
         setSelectedChannels([]);
         setEmailInput('');
+        setSelectedMappingId('');
       }
     }
   }, [event, open]);
+
+  // 加载关系映射列表
+  useEffect(() => {
+    const loadMappings = async () => {
+      try {
+        const data = await api.get<RelationshipMapping[]>('/config/relationships');
+        setRelationshipMappings(data);
+      } catch (error) {
+        console.error('Failed to load relationship mappings:', error);
+      }
+    };
+    loadMappings();
+  }, []);
 
   const addReminderDay = (day: number) => {
     if (day < 0) return;
@@ -150,6 +178,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         birthDate: birthdayData.birthDate,
         birthDateLunar: birthdayData.birthDateLunar,
       }),
+      ...(selectedMappingId && { relationshipMappingId: selectedMappingId }),
     };
     await onSubmit(updatedFormData);
     onClose();
@@ -264,15 +293,53 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   </div>
                 </>
               ) : (
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">日期</label>
-                  <Input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="h-11"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">日期</label>
+                    <Input
+                      type="date"
+                      value={formData.date}
+                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                      className="h-11"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">日历类型</label>
+                    <Select
+                      value={formData.calendarType}
+                      onChange={(e) => setFormData({ ...formData, calendarType: e.target.value as 'gregorian' | 'lunar' | 'both' })}
+                      className="h-11"
+                    >
+                      <option value="gregorian">公历</option>
+                      <option value="lunar">农历</option>
+                      <option value="both">双历</option>
+                    </Select>
+                  </div>
+
+                  {formData.calendarType !== 'gregorian' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">农历日期</label>
+                      <Input
+                        type="text"
+                        value={formData.lunarDate ? `${formData.lunarDate.year}-${formData.lunarDate.month}-${formData.lunarDate.day}` : ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val) {
+                            const parts = val.split('-').map(Number);
+                            if (parts.length === 3) {
+                              setFormData({ ...formData, lunarDate: { year: parts[0], month: parts[1], day: parts[2], leap: false } });
+                            }
+                          } else {
+                            setFormData({ ...formData, lunarDate: undefined });
+                          }
+                        }}
+                        placeholder="格式: 2026-1-15"
+                        className="h-11"
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               <Button type="button" onClick={() => setStep('reminder')} disabled={!canProceed()} className="w-full h-11">
@@ -390,6 +457,27 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   ))}
                 </div>
               </div>
+
+              {relationshipMappings.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">关系映射</label>
+                  <Select
+                    value={selectedMappingId}
+                    onChange={(e) => setSelectedMappingId(e.target.value)}
+                    className="h-10"
+                  >
+                    <option value="">不映射（使用原始称呼）</option>
+                    {relationshipMappings.map(mapping => (
+                      <option key={mapping.id} value={mapping.id}>
+                        {mapping.fromRelation} → {mapping.toRelation}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    选择后，发送通知时将应用该称呼转换
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-11">取消</Button>

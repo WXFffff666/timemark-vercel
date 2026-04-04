@@ -8,12 +8,9 @@
 *.swp
 *.swo
 
-# Build artifacts
-dist
-build
-
-# Dependencies (installed via pnpm)
-node_modules
+# Build artifacts (we need dist and node_modules)
+# dist
+# node_modules
 
 # Test files
 coverage
@@ -32,20 +29,6 @@ docs/
 docker-compose*.yml
 Dockerfile
 .dockerignore
-
-# Frontend dev
-frontend/node_modules
-frontend/.vite
-frontend/dist
-
-# Backend dev
-backend/node_modules
-backend/dist
-backend/data
-
-# Shared
-shared/node_modules
-shared/dist
 
 # Environment
 .env

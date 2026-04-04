@@ -1,11 +1,11 @@
 -- 创建默认管理员账户
 INSERT INTO users (username, password_hash, totp_secret)
-VALUES ('admin', '$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdA$xvJQQqZ8yH5K5pN8vL9mJ8wQ7vN5pL8mJ9wQ8vN6pM', NULL)
+VALUES ('admin', '$2a$10$MRqDgkKqsxdy/aEhSUsoy.Y5x.9fN5pItImBgQAK/.uWczeQ8rOeS', NULL)
 ON CONFLICT (username) DO NOTHING;
 
 -- 创建测试用户
 INSERT INTO users (username, password_hash, totp_secret)
-VALUES ('testuser', '$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdA$xvJQQqZ8yH5K5pN8vL9mJ8wQ7vN5pL8mJ9wQ8vN6pM', NULL)
+VALUES ('testuser', '$2a$10$MRqDgkKqsxdy/aEhSUsoy.Y5x.9fN5pItImBgQAK/.uWczeQ8rOeS', NULL)
 ON CONFLICT (username) DO NOTHING;
 
 -- 创建测试事件

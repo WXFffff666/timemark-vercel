@@ -49,11 +49,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     
     if (rememberMe) {
       localStorage.setItem('accessToken', response.accessToken);
+      localStorage.setItem('refreshToken', response.refreshToken);
       if (response.sessionId) {
         localStorage.setItem(SESSION_ID_KEY, response.sessionId);
       }
     } else {
       sessionStorage.setItem('accessToken', response.accessToken);
+      sessionStorage.setItem('refreshToken', response.refreshToken);
     }
     set({ user: response.user, isAuthenticated: true });
   },
@@ -64,7 +66,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       await api.post('/auth/logout', { sessionId });
     } finally {
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
       sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('refreshToken');
       localStorage.removeItem(SESSION_ID_KEY);
       set({ user: null, isAuthenticated: false });
     }
@@ -72,16 +76,41 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   checkAuth: async () => {
     const sessionId = localStorage.getItem(SESSION_ID_KEY);
-    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    const accessToken = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    const refreshToken = localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken');
     
-    if (token) {
+    if (accessToken) {
       try {
         const user = await api.get<User>('/auth/session');
         set({ user, isAuthenticated: true });
         return;
-      } catch {
+      } catch (error: any) {
+        // Token expired, try to refresh
+        if (refreshToken && (error.message?.includes('401') || error.message?.includes('expired'))) {
+          try {
+            const refreshResponse = await api.post<any>('/auth/refresh', { refreshToken });
+            
+            // Store new access token
+            if (sessionId) {
+              localStorage.setItem('accessToken', refreshResponse.accessToken);
+            } else {
+              sessionStorage.setItem('accessToken', refreshResponse.accessToken);
+            }
+            
+            // Re-verify with new token
+            const user = await api.get<User>('/auth/session');
+            set({ user, isAuthenticated: true });
+            return;
+          } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError);
+          }
+        }
+        
+        // Clear invalid tokens
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
         sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('refreshToken');
         localStorage.removeItem(SESSION_ID_KEY);
       }
     }

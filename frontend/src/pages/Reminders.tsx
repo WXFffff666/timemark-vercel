@@ -38,7 +38,7 @@ export default function Reminders() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const response = await api.get('/settings/reminders');
+        const response = await api.get('/config/reminders');
         if (response.success && response.data) {
           setConfig(response.data);
         }
@@ -52,7 +52,7 @@ export default function Reminders() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const response = await api.post('/settings/reminders', config);
+      const response = await api.post('/config/reminders', config);
       console.log('✓ Settings saved:', response);
       toast({ title: '✓ 提醒设置已保存', description: `每日检查时间: ${config.dailyTime}` });
     } catch (error: any) {

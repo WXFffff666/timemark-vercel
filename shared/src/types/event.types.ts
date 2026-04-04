@@ -59,6 +59,7 @@ export interface Event {
   personName?: string;
   birthDate?: string;
   birthDateLunar?: string;
+  relationshipMappingId?: string;
   createdAt: string;
 }
 
@@ -72,6 +73,7 @@ export interface CreateEventRequest {
   personName?: string;
   birthDate?: string;
   birthDateLunar?: string;
+  relationshipMappingId?: string;
 }
 
 export interface NotificationAccount {

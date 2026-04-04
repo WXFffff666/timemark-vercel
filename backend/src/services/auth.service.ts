@@ -44,11 +44,22 @@ export async function verifyUserPassword(username: string, password: string): Pr
 export async function createLoginLog(userIdOrUsername: string, ip: string, userAgent: string, fingerprint: string, success: boolean, reason?: string): Promise<void> {
   try {
     const id = randomUUID();
-    const userId = success ? userIdOrUsername : null;
-    const username = success ? null : userIdOrUsername;
+    let userId: number | null = null;
+    let username: string | null = null;
+
+    if (success) {
+      // 成功登录时 userIdOrUsername 是 user.id (UUID)，需要查询获取数字 ID
+      const userResult = await query('SELECT id FROM users WHERE id = $1', [userIdOrUsername]);
+      if (userResult.rows.length > 0) {
+        userId = userResult.rows[0].id;
+      }
+    } else {
+      // 失败时记录用户名
+      username = userIdOrUsername;
+    }
     
     await query(
-      'INSERT INTO login_logs (id, user_id, username, ip_address, user_agent, device_fingerprint, success, failure_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      'INSERT INTO login_logs (id, user_id, username, ip_address, user_agent, device_fingerprint, success, failure_reason, login_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())',
       [id, userId, username, ip, userAgent, fingerprint, success, reason || null]
     );
   } catch (error) {

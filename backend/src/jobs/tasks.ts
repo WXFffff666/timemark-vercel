@@ -56,7 +56,7 @@ export async function sendReminders() {
   const allEvents = await query('SELECT * FROM events');
   
   // 筛选需要提醒的事件
-  const eventsToRemind: Array<{ id: number; user_id: number; name: string; date: string; lunar_date: any; calendar_type: string; notification_channels: string[] }> = [];
+  const eventsToRemind: Array<{ id: number; user_id: number; name: string; date: string; lunar_date: any; calendar_type: string; notification_channels: string[]; notification_account_ids: any }> = [];
   
   for (const event of allEvents.rows) {
     const calendarType = event.calendar_type;

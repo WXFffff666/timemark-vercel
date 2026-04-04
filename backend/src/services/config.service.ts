@@ -1,5 +1,5 @@
-import { query } from '../db';
-import { encrypt, decrypt } from '../../../shared/src/crypto';
+import { query } from '../db/index.js';
+import { encrypt, decrypt } from '@timemark/shared/crypto';
 
 const MASTER_KEY = process.env.MASTER_KEY!;
 
@@ -277,4 +277,62 @@ export async function deleteRelationshipMapping(id: number, userId: number): Pro
     [id, userId]
   );
   return (result.rowCount ?? 0) > 0;
+}
+
+// ============ 提醒设置管理 ============
+
+export interface ReminderSettings {
+  enabled: boolean;
+  dailyTime: string;
+  daysBeforeList: number[];
+  emailAddresses: string[];
+}
+
+export async function getReminderSettings(userId: number): Promise<ReminderSettings | null> {
+  const result = await query(
+    `SELECT reminders_enabled, daily_check_time, days_before_list, reminder_emails 
+     FROM user_configs WHERE user_id = $1`,
+    [userId]
+  );
+  
+  if (result.rows.length === 0) {
+    // 返回默认值
+    return {
+      enabled: true,
+      dailyTime: '08:00:00',
+      daysBeforeList: [1, 3, 7],
+      emailAddresses: [],
+    };
+  }
+  
+  const r = result.rows[0];
+  return {
+    enabled: r.reminders_enabled !== false,
+    dailyTime: r.daily_check_time || '08:00:00',
+    daysBeforeList: r.days_before_list || [1, 3, 7],
+    emailAddresses: (() => {
+      const raw = r.reminder_emails;
+      if (!raw) return [];
+      try { return JSON.parse(raw); } catch { return []; }
+    })(),
+  };
+}
+
+export async function saveReminderSettings(userId: number, settings: Partial<ReminderSettings>): Promise<void> {
+  await query(
+    `INSERT INTO user_configs (user_id, reminders_enabled, daily_check_time, days_before_list, reminder_emails)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (user_id) DO UPDATE SET
+       reminders_enabled = COALESCE(EXCLUDED.reminders_enabled, user_configs.reminders_enabled),
+       daily_check_time = COALESCE(EXCLUDED.daily_check_time, user_configs.daily_check_time),
+       days_before_list = COALESCE(EXCLUDED.days_before_list, user_configs.days_before_list),
+       reminder_emails = COALESCE(EXCLUDED.reminder_emails, user_configs.reminder_emails)`,
+    [
+      userId,
+      settings.enabled !== undefined ? settings.enabled : true,
+      settings.dailyTime || '08:00:00',
+      settings.daysBeforeList ? JSON.stringify(settings.daysBeforeList) : null,
+      settings.emailAddresses ? JSON.stringify(settings.emailAddresses) : null,
+    ]
+  );
 }

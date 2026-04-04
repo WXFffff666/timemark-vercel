@@ -1,0 +1,940 @@
+# TimeMark Docker - 完整UI代码提取
+
+## 项目路径
+D:\works\timemark-docker\frontend\src
+
+========================================================================
+FILE: frontend/src/App.tsx
+========================================================================
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useAuthStore } from './stores/auth.store';
+import { LoginPage } from './pages/Login';
+import { Dashboard } from './pages/Dashboard';
+import Settings from './pages/Settings';
+import Reminders from './pages/Reminders';
+import LoginHistory from './pages/LoginHistory';
+import Channels from './pages/Channels';
+import { useEffect } from 'react';
+import { TimezoneProvider } from './components/RealtimeClock';
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+}
+
+function AnimatedRoutes() {
+  const location = useLocation();
+  const checkAuth = useAuthStore((state) => state.checkAuth);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location}>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/reminders" element={<ProtectedRoute><Reminders /></ProtectedRoute>} />
+        <Route path="/login-history" element={<ProtectedRoute><LoginHistory /></ProtectedRoute>} />
+        <Route path="/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
+        <Route path="/" element={<Navigate to="/dashboard" />} />
+      </Routes>
+    </AnimatePresence>
+  );
+}
+
+function App() {
+  useEffect(() => {
+    const theme = localStorage.getItem('theme');
+    if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+  }, []);
+
+  return (
+    <BrowserRouter>
+      <TimezoneProvider>
+        <AnimatedRoutes />
+      </TimezoneProvider>
+    </BrowserRouter>
+  );
+}
+
+export default App;
+
+========================================================================
+FILE: frontend/src/pages/Login.tsx
+========================================================================
+import { useAuthStore } from '@/stores/auth.store';
+import { LoginForm } from '@/components/auth/LoginForm';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+export function LoginPage() {
+  const { isAuthenticated } = useAuthStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="animate-fade-in">
+        <LoginForm />
+      </div>
+    </div>
+  );
+}
+
+========================================================================
+FILE: frontend/src/pages/Dashboard.tsx
+========================================================================
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { useAuthStore } from '@/stores/auth.store';
+import { useEventStore } from '@/stores/event.store';
+import { Button } from '@/components/ui/button';
+import { EventCard } from '@/components/events/EventCard';
+import { EventForm } from '@/components/events/EventForm';
+import { PlusIcon, SettingsIcon, BellIcon } from '@/components/icons';
+import { useNavigate } from 'react-router-dom';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { RealtimeClock } from '@/components/RealtimeClock';
+import { TimezoneSelector } from '@/components/TimezoneSelector';
+import type { Event, CreateEventRequest } from '@timemark/shared';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 }
+};
+
+export function Dashboard() {
+  const navigate = useNavigate();
+  const { user, logout } = useAuthStore();
+  const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent, deleteEventsBatch, testSendEvent } = useEventStore();
+  const [showForm, setShowForm] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<Event | undefined>();
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
+
+  const handleSubmit = async (data: CreateEventRequest) => {
+    if (editingEvent) {
+      await updateEvent(editingEvent.id, data);
+    } else {
+      await createEvent(data);
+    }
+    setEditingEvent(undefined);
+  };
+
+  const handleEdit = (event: Event) => {
+    setEditingEvent(event);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('确定删除此事件？')) {
+      await deleteEvent(id);
+      setShowForm(false);
+      setEditingEvent(undefined);
+    }
+  };
+
+  const handleTestSend = async (id: string) => {
+    try {
+      await testSendEvent(id);
+      alert('测试通知已发送！');
+    } catch (error) {
+      alert('发送失败，请检查通知渠道配置');
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (confirm(`确定批量删除 ${selectedIds.length} 个事件？`)) {
+      await deleteEventsBatch(selectedIds);
+      setSelectedIds([]);
+      setBatchMode(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen">
+      <header className="glass sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+            倒计时提醒系统
+          </h1>
+          <div className="flex items-center gap-3">
+            <RealtimeClock />
+            <TimezoneSelector />
+            <ThemeToggle />
+            <Button variant="ghost" className="w-10 h-10 p-0" onClick={() => navigate('/reminders')}>
+              <BellIcon size={20} />
+            </Button>
+            <Button variant="ghost" className="w-10 h-10 p-0" onClick={() => navigate('/settings')}>
+              <SettingsIcon size={20} />
+            </Button>
+            <span className="text-sm text-gray-600 dark:text-gray-400">欢迎, {user?.username}</span>
+            <Button variant="outline" onClick={logout}>退出</Button>
+          </div>
+        </div>
+      </header>
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">我的事件</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">共 {events.length} 个事件</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => { setBatchMode(!batchMode); setSelectedIds([]); }}>
+              {batchMode ? '取消批量' : '批量删除'}
+            </Button>
+            {batchMode && (
+              <Button variant="destructive" onClick={handleBatchDelete} disabled={selectedIds.length === 0}>
+                删除已选 ({selectedIds.length})
+              </Button>
+            )}
+          </div>
+        </div>
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="glass rounded-2xl p-6 animate-pulse">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-4"></div>
+                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2"></div>
+                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
+              </div>
+            ))}
+          </div>
+        ) : events.length === 0 ? (
+          <div className="text-center py-20 glass rounded-2xl">
+            <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <PlusIcon size={32} className="text-primary-500" />
+            </div>
+            <p className="text-gray-600 dark:text-gray-400">暂无事件，点击右下角按钮开始添加</p>
+          </div>
+        ) : (
+          <motion.div
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            {events.map((event) => (
+              <motion.div key={event.id} variants={itemVariants}>
+                <EventCard
+                  event={event}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onTestSend={handleTestSend}
+                  selectable={batchMode}
+                  selected={selectedIds.includes(event.id)}
+                  onSelectToggle={(id, checked) => {
+                    setSelectedIds((prev) => checked ? [...prev, id] : prev.filter((item) => item !== id));
+                  }}
+                />
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </main>
+      <motion.div
+        className="fixed bottom-8 right-8 z-40"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+      >
+        <Button
+          variant="gradient"
+          className="h-14 w-14 rounded-full shadow-lg"
+          onClick={() => { setEditingEvent(undefined); setShowForm(true); }}
+        >
+          <PlusIcon size={24} />
+        </Button>
+      </motion.div>
+      <EventForm
+        open={showForm}
+        onClose={() => { setShowForm(false); setEditingEvent(undefined); }}
+        onSubmit={handleSubmit}
+        event={editingEvent}
+      />
+    </div>
+  );
+}
+
+========================================================================
+FILE: frontend/src/components/auth/LoginForm.tsx
+========================================================================
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { useAuthStore } from '@/stores/auth.store';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Lock, User } from 'lucide-react';
+import { LockIcon } from '@/components/icons/LockIcon';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 }
+};
+
+export function LoginForm() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const login = useAuthStore((state) => state.login);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
+    
+    if (trimmedUsername.length < 3) {
+      setError('用户名至少3个字符');
+      return;
+    }
+    
+    if (trimmedPassword.length < 6) {
+      setError('密码至少6个字符');
+      return;
+    }
+    
+    setLoading(true);
+
+    try {
+      await login(trimmedUsername, trimmedPassword, rememberMe);
+    } catch (err: any) {
+      const message = err.message || '登录失败';
+      if (message.includes('429') || message.includes('Too many') || message.includes('锁定')) {
+        const match = message.match(/(\d+)\s*秒/);
+        if (match) {
+          const seconds = parseInt(match[1]);
+          setLockoutSeconds(seconds);
+          const timer = setInterval(() => {
+            setLockoutSeconds(prev => {
+              if (prev <= 1) {
+                clearInterval(timer);
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+        }
+        setError(message);
+      } else if (message.includes('401') || message.includes('Invalid')) {
+        setError('用户名或密码错误');
+      } else {
+        setError(message);
+      }
+      } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card className="w-full max-w-md glass rounded-2xl">
+      <CardHeader className="text-center pb-6 pt-10">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          className="mx-auto w-20 h-20 flex items-center justify-center mb-6"
+        >
+          <LockIcon className="h-20 w-20" />
+        </motion.div>
+        <CardTitle className="text-3xl font-bold text-gray-900 dark:text-white">倒计时提醒系统</CardTitle>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">请登录您的账户</p>
+      </CardHeader>
+      <CardContent className="px-8 pb-10">
+        <motion.form
+          onSubmit={handleSubmit}
+          className="space-y-5"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.div variants={itemVariants}>
+            <div className="relative">
+              <User className="absolute left-4 top-3.5 h-5 w-5 text-gray-400 dark:text-gray-500" />
+              <Input
+                type="text"
+                placeholder="用户名"
+                className="pl-12 h-12 bg-white/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 rounded-xl focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+          </motion.div>
+          <motion.div variants={itemVariants}>
+            <div className="relative">
+              <Lock className="absolute left-4 top-3.5 h-5 w-5 text-gray-400 dark:text-gray-500" />
+              <Input
+                type="password"
+                placeholder="密码"
+                className="pl-12 h-12 bg-white/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 rounded-xl focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+           </motion.div>
+           <motion.div variants={itemVariants} className="flex items-center gap-2 pt-1">
+             <input
+               type="checkbox"
+               id="rememberMe"
+               checked={rememberMe}
+               onChange={(e) => setRememberMe(e.target.checked)}
+               className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary-500 focus:ring-primary-500 cursor-pointer"
+             />
+             <label htmlFor="rememberMe" className="text-sm text-gray-600 dark:text-gray-400 cursor-pointer select-none">
+               保持登录（30天）
+             </label>
+           </motion.div>
+           {error && (
+            <motion.p
+              variants={itemVariants}
+              className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-4 py-3 rounded-xl border border-red-100 dark:border-red-800"
+            >
+              {error}
+            </motion.p>
+          )}
+            <motion.div variants={itemVariants} className="pt-2">
+              <Button type="submit" variant="gradient" className="w-full h-12 rounded-xl font-medium" disabled={loading}>
+                {loading ? '登录中...' : '登录'}
+              </Button>
+            </motion.div>
+        </motion.form>
+      </CardContent>
+    </Card>
+  );
+}
+
+========================================================================
+FILE: frontend/src/components/ui/button.tsx
+========================================================================
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center whitespace-nowrap rounded-xl text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+        gradient: "bg-gradient-to-r from-primary-500 to-purple-500 text-white hover:opacity-90",
+      },
+      size: {
+        default: "h-11 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-12 rounded-xl px-8",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }
+
+========================================================================
+FILE: frontend/src/components/ui/input.tsx
+========================================================================
+import * as React from "react"
+import { cn } from "@/lib/utils"
+
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        className={cn(
+          "flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          className
+        )}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Input.displayName = "Input"
+
+export { Input }
+
+========================================================================
+FILE: frontend/src/components/ui/card.tsx
+========================================================================
+import * as React from "react"
+import { cn } from "@/lib/utils"
+
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-2xl border bg-card text-card-foreground shadow-sm",
+      className
+    )}
+    {...props}
+  />
+))
+Card.displayName = "Card"
+
+const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+))
+CardHeader.displayName = "CardHeader"
+
+const CardTitle = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn(
+      "text-2xl font-semibold leading-none tracking-tight",
+      className
+    )}
+    {...props}
+  />
+))
+CardTitle.displayName = "CardTitle"
+
+const CardDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <p
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+CardDescription.displayName = "CardDescription"
+
+const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+))
+CardContent.displayName = "CardContent"
+
+export { Card, CardHeader, CardTitle, CardDescription, CardContent }
+
+========================================================================
+FILE: frontend/src/components/ui/select.tsx
+========================================================================
+import * as React from "react"
+import { cn } from "@/lib/utils"
+
+export interface SelectProps
+  extends React.SelectHTMLAttributes<HTMLSelectElement> {}
+
+const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
+  ({ className, children, ...props }, ref) => {
+    return (
+      <select
+        className={cn(
+          "flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          className
+        )}
+        ref={ref}
+        {...props}
+      >
+        {children}
+      </select>
+    )
+  }
+)
+Select.displayName = "Select"
+
+export { Select }
+
+========================================================================
+FILE: frontend/src/components/ui/dialog.tsx
+========================================================================
+import * as React from "react"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { X } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+const Dialog = DialogPrimitive.Root
+const DialogTrigger = DialogPrimitive.Trigger
+const DialogPortal = DialogPrimitive.Portal
+const DialogClose = DialogPrimitive.Close
+
+const DialogOverlay = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Overlay>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Overlay
+    ref={ref}
+    className={cn(
+      "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      className
+    )}
+    {...props}
+  />
+))
+DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
+
+const DialogContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+>(({ className, children, ...props }, ref) => (
+  <DialogPortal>
+    <DialogOverlay />
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cn(
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-2xl",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+        <X className="h-4 w-4" />
+        <span className="sr-only">Close</span>
+      </DialogPrimitive.Close>
+    </DialogPrimitive.Content>
+  </DialogPortal>
+))
+DialogContent.displayName = DialogPrimitive.Content.displayName
+
+const DialogHeader = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      "flex flex-col space-y-1.5 text-center sm:text-left",
+      className
+    )}
+    {...props}
+  />
+)
+DialogHeader.displayName = "DialogHeader"
+
+const DialogTitle = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className={cn(
+      "text-lg font-semibold leading-none tracking-tight",
+      className
+    )}
+    {...props}
+  />
+))
+DialogTitle.displayName = DialogPrimitive.Title.displayName
+
+export {
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogClose,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+}
+
+========================================================================
+FILE: frontend/src/components/ui/switch.tsx
+========================================================================
+import * as React from "react"
+import * as SwitchPrimitives from "@radix-ui/react-switch"
+import { cn } from "@/lib/utils"
+
+const Switch = React.forwardRef<
+  React.ElementRef<typeof SwitchPrimitives.Root>,
+  React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
+>(({ className, ...props }, ref) => (
+  <SwitchPrimitives.Root
+    className={cn(
+      "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input",
+      className
+    )}
+    {...props}
+    ref={ref}
+  >
+    <SwitchPrimitives.Thumb
+      className={cn(
+        "pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+      )}
+    />
+  </SwitchPrimitives.Root>
+))
+Switch.displayName = SwitchPrimitives.Root.displayName
+
+export { Switch }
+
+========================================================================
+FILE: frontend/src/components/ui/badge.tsx
+========================================================================
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "@/lib/utils"
+
+const badgeVariants = cva(
+  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  {
+    variants: {
+      variant: {
+        default:
+          "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
+        secondary:
+          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        destructive:
+          "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
+        outline: "text-foreground",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+export interface BadgeProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof badgeVariants> {}
+
+function Badge({ className, variant, ...props }: BadgeProps) {
+  return (
+    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+  )
+}
+
+export { Badge, badgeVariants }
+
+========================================================================
+FILE: frontend/tailwind.config.js
+========================================================================
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  darkMode: ["class"],
+  content: [
+    "./src/**/*.{ts,tsx}",
+  ],
+  theme: {
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: {
+        "2xl": "1400px",
+      },
+    },
+    extend: {
+      colors: {
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+      keyframes: {
+        "accordion-down": {
+          from: { height: 0 },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: 0 },
+        },
+        "fade-in": {
+          from: { opacity: 0 },
+          to: { opacity: 1 },
+        },
+      },
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-in": "fade-in 0.3s ease-out",
+      },
+    },
+  },
+  plugins: [require("tailwindcss-animate")],
+}
+
+========================================================================
+FILE: frontend/src/index.css
+========================================================================
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 262.1 83.3% 57.8%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 262.1 83.3% 57.8%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 263.4 70% 50.4%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 263.4 70% 50.4%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.glass {
+  @apply bg-white/70 dark:bg-gray-900/70 backdrop-blur-lg border border-gray-200 dark:border-gray-700;
+}
+
+.primary-500 {
+  @apply hsl(var(--primary));
+}

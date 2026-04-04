@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { getUserConfig, saveUserConfig, getNotificationAccounts, createNotificationAccount, updateNotificationAccount, deleteNotificationAccount, getRelationshipMappings, createRelationshipMapping, updateRelationshipMapping, deleteRelationshipMapping } from '../services/config.service.js';
+import { getUserConfig, saveUserConfig, getNotificationAccounts, createNotificationAccount, updateNotificationAccount, deleteNotificationAccount, getRelationshipMappings, createRelationshipMapping, updateRelationshipMapping, deleteRelationshipMapping, getReminderSettings, saveReminderSettings } from '../services/config.service.js';
 import type { User } from '@timemark/shared';
 
 const config = new Hono<{ Variables: { user: User } }>();
@@ -144,6 +144,28 @@ config.delete('/relationships/:id', async (c) => {
   if (!deleted) {
     return c.json({ success: false, error: 'Mapping not found' }, 404);
   }
+  
+  return c.json({ success: true });
+});
+
+// ============ 提醒设置 ============
+
+config.get('/reminders', async (c) => {
+  const user = c.get('user');
+  const settings = await getReminderSettings(Number(user.id));
+  return c.json({ success: true, data: settings });
+});
+
+config.post('/reminders', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  
+  await saveReminderSettings(Number(user.id), {
+    enabled: body.enabled,
+    dailyTime: body.dailyTime,
+    daysBeforeList: body.daysBeforeList,
+    emailAddresses: body.emailAddresses,
+  });
   
   return c.json({ success: true });
 });
