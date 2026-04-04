@@ -38,10 +38,32 @@ export function AccountSettings() {
 
   const getTypeLabel = (type: string) => {
     const labels = {
-      feishu: '🚀 飞书',
-      dingtalk: '💼 钉钉',
+      feishu: '🚀 Feishu',
+      dingtalk: '💼 DingTalk',
       wecom: '💬 企业微信',
       telegram: '✈️ Telegram',
+      slack: '💬 Slack',
+      discord: '🎮 Discord',
+      google_chat: '💼 Google Chat',
+      microsoft_teams: '👥 Microsoft Teams',
+      mattermost: '🧩 Mattermost',
+      matrix: '🔷 Matrix',
+      line: '🟩 LINE',
+      nextcloud_talk: '☁️ Nextcloud Talk',
+      irc: '🧵 IRC',
+      signal: '🔒 Signal',
+      whatsapp: '🟢 WhatsApp',
+      imessage: '💙 iMessage',
+      bluebubbles: '🔵 BlueBubbles',
+      nostr: '⚡ Nostr',
+      synology_chat: '🗂️ Synology Chat',
+      tlon: '🌐 Tlon',
+      twitch: '🟣 Twitch',
+      zalo: '🇻🇳 Zalo',
+      zalo_personal: '🇻🇳 Zalo Personal',
+      wechat: '🟢 微信(WxPusher)',
+      qq: '🐧 QQ(Qmsg)',
+      network_chat: '🌍 网络聊天',
     };
     return labels[type as keyof typeof labels] || type;
   };
@@ -67,10 +89,32 @@ export function AccountSettings() {
                 onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
                 className="h-10"
               >
-                <option value="feishu">飞书</option>
-                <option value="dingtalk">钉钉</option>
+                <option value="feishu">Feishu</option>
+                <option value="dingtalk">DingTalk</option>
                 <option value="wecom">企业微信</option>
                 <option value="telegram">Telegram</option>
+                <option value="slack">Slack</option>
+                <option value="discord">Discord</option>
+                <option value="google_chat">Google Chat</option>
+                <option value="microsoft_teams">Microsoft Teams</option>
+                <option value="mattermost">Mattermost</option>
+                <option value="matrix">Matrix</option>
+                <option value="line">LINE</option>
+                <option value="nextcloud_talk">Nextcloud Talk</option>
+                <option value="irc">IRC</option>
+                <option value="signal">Signal</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="imessage">iMessage</option>
+                <option value="bluebubbles">BlueBubbles</option>
+                <option value="nostr">Nostr</option>
+                <option value="synology_chat">Synology Chat</option>
+                <option value="tlon">Tlon</option>
+                <option value="twitch">Twitch</option>
+                <option value="zalo">Zalo</option>
+                <option value="zalo_personal">Zalo Personal</option>
+                <option value="wechat">微信(WxPusher)</option>
+                <option value="qq">QQ(Qmsg)</option>
+                <option value="network_chat">网络聊天</option>
               </Select>
             </div>
             <div>

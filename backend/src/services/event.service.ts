@@ -53,3 +53,13 @@ export async function deleteEvent(id: string, userId: string): Promise<boolean> 
   const result = await query('DELETE FROM events WHERE id = $1 AND user_id = $2', [id, userId]);
   return (result.rowCount ?? 0) > 0;
 }
+
+export async function deleteEventsByIds(ids: string[], userId: string): Promise<number> {
+  if (ids.length === 0) return 0;
+
+  const result = await query(
+    'DELETE FROM events WHERE user_id = $1 AND id::text = ANY($2::text[])',
+    [userId, ids]
+  );
+  return result.rowCount ?? 0;
+}

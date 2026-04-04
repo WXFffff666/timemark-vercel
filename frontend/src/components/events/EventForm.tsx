@@ -348,11 +348,33 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { value: 'email' as const, label: '📧 邮件' },
-                    { value: 'feishu' as const, label: '🚀 飞书' },
-                    { value: 'dingtalk' as const, label: '💼 钉钉' },
+                    { value: 'feishu' as const, label: '🚀 Feishu' },
+                    { value: 'dingtalk' as const, label: '💼 DingTalk' },
                     { value: 'wecom' as const, label: '💬 企业微信' },
                     { value: 'telegram' as const, label: '✈️ Telegram' },
-                  ].map(channel => (
+                    { value: 'slack' as const, label: '💬 Slack' },
+                    { value: 'discord' as const, label: '🎮 Discord' },
+                    { value: 'google_chat' as const, label: '💼 Google Chat' },
+                    { value: 'microsoft_teams' as const, label: '👥 Microsoft Teams' },
+                    { value: 'mattermost' as const, label: '🧩 Mattermost' },
+                    { value: 'matrix' as const, label: '🔷 Matrix' },
+                    { value: 'line' as const, label: '🟩 LINE' },
+                    { value: 'nextcloud_talk' as const, label: '☁️ Nextcloud Talk' },
+                    { value: 'irc' as const, label: '🧵 IRC' },
+                    { value: 'signal' as const, label: '🔒 Signal' },
+                    { value: 'whatsapp' as const, label: '🟢 WhatsApp' },
+                    { value: 'imessage' as const, label: '💙 iMessage' },
+                    { value: 'bluebubbles' as const, label: '🔵 BlueBubbles' },
+                    { value: 'nostr' as const, label: '⚡ Nostr' },
+                    { value: 'synology_chat' as const, label: '🗂️ Synology Chat' },
+                    { value: 'tlon' as const, label: '🌐 Tlon' },
+                    { value: 'twitch' as const, label: '🟣 Twitch' },
+                    { value: 'zalo' as const, label: '🇻🇳 Zalo' },
+                    { value: 'zalo_personal' as const, label: '🇻🇳 Zalo Personal' },
+                    { value: 'wechat' as const, label: '🟢 微信(WxPusher)' },
+                    { value: 'qq' as const, label: '🐧 QQ(Qmsg)' },
+                    { value: 'network_chat' as const, label: '🌍 网络聊天' },
+                                    ].map(channel => (
                     <button
                       key={channel.value}
                       type="button"
