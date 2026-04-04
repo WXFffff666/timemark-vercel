@@ -41,6 +41,21 @@ export async function verifyUserPassword(username: string, password: string): Pr
   return { id: row.id, username: row.username, createdAt: row.created_at };
 }
 
+export async function createLoginLog(userIdOrUsername: string, ip: string, userAgent: string, fingerprint: string, success: boolean, reason?: string): Promise<void> {
+  try {
+    const id = randomUUID();
+    const userId = success ? userIdOrUsername : null;
+    const username = success ? null : userIdOrUsername;
+    
+    await query(
+      'INSERT INTO login_logs (id, user_id, username, ip_address, user_agent, device_fingerprint, success, failure_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, userId, username, ip, userAgent, fingerprint, success, reason || null]
+    );
+  } catch (error) {
+    console.error('[createLoginLog] Failed to log login attempt:', error);
+  }
+}
+
 export async function trackLoginFailure(params: { username: string; ip: string }): Promise<{ shouldLock: boolean; failureCount: number }> {
   const windowStart = new Date(Date.now() - 15 * 60 * 1000);
   
