@@ -7,7 +7,8 @@ import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { useToast } from '../hooks/use-toast';
 import { api } from '../lib/api';
-import { ArrowLeft, History, Lock, Shield } from 'lucide-react';
+import { ArrowLeft, History, Lock, Shield, Users } from 'lucide-react';
+import { RelationshipSettings } from '../components/settings/RelationshipSettings';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -157,6 +158,10 @@ export default function Settings() {
                 </Button>
               </CardContent>
             </Card>
+          </motion.div>
+
+          <motion.div variants={itemVariants}>
+            <RelationshipSettings />
           </motion.div>
         </motion.div>
       </div>

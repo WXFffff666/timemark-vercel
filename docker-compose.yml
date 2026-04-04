@@ -44,6 +44,7 @@ services:
       REDIS_URL: redis://redis:6379
       MASTER_KEY: ${MASTER_KEY}
       JWT_SECRET: ${JWT_SECRET}
+      TZ: Asia/Shanghai
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,7 +53,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: '0.1'
           memory: 512M
     networks:
       - timemark

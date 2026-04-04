@@ -9,6 +9,7 @@ import { PlusIcon, SettingsIcon, BellIcon } from '@/components/icons';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { RealtimeClock } from '@/components/RealtimeClock';
+import { TimezoneSelector } from '@/components/TimezoneSelector';
 import type { Event, CreateEventRequest } from '@timemark/shared';
 
 const containerVariants = {
@@ -86,6 +87,7 @@ export function Dashboard() {
           </h1>
           <div className="flex items-center gap-3">
             <RealtimeClock />
+            <TimezoneSelector />
             <ThemeToggle />
             <Button variant="ghost" className="w-10 h-10 p-0" onClick={() => navigate('/reminders')}>
               <BellIcon size={20} />

@@ -9,6 +9,7 @@ import Reminders from './pages/Reminders';
 import LoginHistory from './pages/LoginHistory';
 import Channels from './pages/Channels';
 import { useEffect } from 'react';
+import { TimezoneProvider } from './components/RealtimeClock';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -49,7 +50,9 @@ function App() {
 
   return (
     <BrowserRouter>
-      <AnimatedRoutes />
+      <TimezoneProvider>
+        <AnimatedRoutes />
+      </TimezoneProvider>
     </BrowserRouter>
   );
 }

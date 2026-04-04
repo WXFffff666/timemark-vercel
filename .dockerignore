@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Build artifacts
+dist
+build
+
+# Dependencies (installed via pnpm)
+node_modules
+
+# Test files
+coverage
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Frontend dev
+frontend/node_modules
+frontend/.vite
+frontend/dist
+
+# Backend dev
+backend/node_modules
+backend/dist
+backend/data
+
+# Shared
+shared/node_modules
+shared/dist
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

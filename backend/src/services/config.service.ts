@@ -22,9 +22,10 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
       encrypted_qmsg_key,
       encrypted_qmsg_qq,
       encrypted_channel_webhooks,
-      telegram_chat_id
+      telegram_chat_id,
+      reminder_emails
     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
      ON CONFLICT (user_id) DO UPDATE SET
        encrypted_resend_key = COALESCE(EXCLUDED.encrypted_resend_key, user_configs.encrypted_resend_key),
        encrypted_github_token = COALESCE(EXCLUDED.encrypted_github_token, user_configs.encrypted_github_token),
@@ -40,7 +41,8 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
        encrypted_qmsg_key = COALESCE(EXCLUDED.encrypted_qmsg_key, user_configs.encrypted_qmsg_key),
        encrypted_qmsg_qq = COALESCE(EXCLUDED.encrypted_qmsg_qq, user_configs.encrypted_qmsg_qq),
        encrypted_channel_webhooks = COALESCE(EXCLUDED.encrypted_channel_webhooks, user_configs.encrypted_channel_webhooks),
-       telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, user_configs.telegram_chat_id)`,
+       telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, user_configs.telegram_chat_id),
+       reminder_emails = COALESCE(EXCLUDED.reminder_emails, user_configs.reminder_emails)`,
     [
       userId,
       e(config.resend_api_key),
@@ -58,6 +60,7 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
       e(config.qmsg_qq),
       e(config.channel_webhooks ? JSON.stringify(config.channel_webhooks) : undefined),
       config.telegram_chat_id || null,
+      config.reminder_emails ? JSON.stringify(config.reminder_emails) : null,
     ]
   );
 }
@@ -87,5 +90,191 @@ export async function getUserConfig(userId: number): Promise<any> {
       try { return JSON.parse(raw); } catch { return {}; }
     })(),
     telegram_chat_id: r.telegram_chat_id,
+    reminder_emails: (() => {
+      const raw = r.reminder_emails;
+      if (!raw) return [];
+      try { return JSON.parse(raw); } catch { return []; }
+    })(),
   };
+}
+
+// ============ 通知账户管理（支持多账号绑定）============
+
+export interface NotificationAccount {
+  id: number;
+  user_id: number;
+  type: string;
+  name: string;
+  webhook: string | null;
+  token: string | null;
+  secret: string | null;
+  chat_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getNotificationAccounts(userId: number): Promise<NotificationAccount[]> {
+  const result = await query(
+    'SELECT * FROM notification_accounts WHERE user_id = $1 ORDER BY created_at DESC',
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function createNotificationAccount(
+  userId: number,
+  data: { type: string; name: string; webhook?: string; token?: string; secret?: string; chat_id?: string }
+): Promise<NotificationAccount> {
+  const result = await query(
+    `INSERT INTO notification_accounts (user_id, type, name, webhook, token, secret, chat_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [userId, data.type, data.name, data.webhook || null, data.token || null, data.secret || null, data.chat_id || null]
+  );
+  return result.rows[0];
+}
+
+export async function updateNotificationAccount(
+  id: number,
+  userId: number,
+  data: Partial<{ name: string; webhook: string; token: string; secret: string; chat_id: string; is_active: boolean }>
+): Promise<NotificationAccount | null> {
+  const updates: string[] = ['updated_at = CURRENT_TIMESTAMP'];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    updates.push(`name = $${paramIndex++}`);
+    values.push(data.name);
+  }
+  if (data.webhook !== undefined) {
+    updates.push(`webhook = $${paramIndex++}`);
+    values.push(data.webhook);
+  }
+  if (data.token !== undefined) {
+    updates.push(`token = $${paramIndex++}`);
+    values.push(data.token);
+  }
+  if (data.secret !== undefined) {
+    updates.push(`secret = $${paramIndex++}`);
+    values.push(data.secret);
+  }
+  if (data.chat_id !== undefined) {
+    updates.push(`chat_id = $${paramIndex++}`);
+    values.push(data.chat_id);
+  }
+  if (data.is_active !== undefined) {
+    updates.push(`is_active = $${paramIndex++}`);
+    values.push(data.is_active);
+  }
+
+  if (updates.length === 1) return null;
+
+  values.push(id, userId);
+  const result = await query(
+    `UPDATE notification_accounts SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex} RETURNING *`,
+    values
+  );
+  return result.rows[0] || null;
+}
+
+export async function deleteNotificationAccount(id: number, userId: number): Promise<boolean> {
+  const result = await query(
+    'DELETE FROM notification_accounts WHERE id = $1 AND user_id = $2',
+    [id, userId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+// ============ 关系映射管理 ============
+
+export interface RelationshipMapping {
+  id: number;
+  user_id: number;
+  event_id: number;
+  from_relation: string;
+  to_relation: string;
+  recipient_email?: string;
+  recipient_type?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getRelationshipMappings(userId: number, eventId?: number): Promise<RelationshipMapping[]> {
+  if (eventId) {
+    const result = await query(
+      'SELECT * FROM relationship_mappings WHERE user_id = $1 AND event_id = $2 ORDER BY created_at DESC',
+      [userId, eventId]
+    );
+    return result.rows;
+  }
+  const result = await query(
+    'SELECT * FROM relationship_mappings WHERE user_id = $1 ORDER BY created_at DESC',
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function createRelationshipMapping(
+  userId: number,
+  data: {
+    event_id: number;
+    from_relation: string;
+    to_relation: string;
+    recipient_email?: string;
+    recipient_type?: string;
+  }
+): Promise<RelationshipMapping> {
+  const result = await query(
+    `INSERT INTO relationship_mappings (user_id, event_id, from_relation, to_relation, recipient_email, recipient_type)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [userId, data.event_id, data.from_relation, data.to_relation, data.recipient_email || null, data.recipient_type || null]
+  );
+  return result.rows[0];
+}
+
+export async function updateRelationshipMapping(
+  id: number,
+  userId: number,
+  data: Partial<{ from_relation: string; to_relation: string; recipient_email: string; recipient_type: string }>
+): Promise<RelationshipMapping | null> {
+  const updates: string[] = ['updated_at = CURRENT_TIMESTAMP'];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (data.from_relation !== undefined) {
+    updates.push(`from_relation = $${paramIndex++}`);
+    values.push(data.from_relation);
+  }
+  if (data.to_relation !== undefined) {
+    updates.push(`to_relation = $${paramIndex++}`);
+    values.push(data.to_relation);
+  }
+  if (data.recipient_email !== undefined) {
+    updates.push(`recipient_email = $${paramIndex++}`);
+    values.push(data.recipient_email);
+  }
+  if (data.recipient_type !== undefined) {
+    updates.push(`recipient_type = $${paramIndex++}`);
+    values.push(data.recipient_type);
+  }
+
+  if (updates.length === 1) return null;
+
+  values.push(id, userId);
+  const result = await query(
+    `UPDATE relationship_mappings SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex} RETURNING *`,
+    values
+  );
+  return result.rows[0] || null;
+}
+
+export async function deleteRelationshipMapping(id: number, userId: number): Promise<boolean> {
+  const result = await query(
+    'DELETE FROM relationship_mappings WHERE id = $1 AND user_id = $2',
+    [id, userId]
+  );
+  return (result.rowCount ?? 0) > 0;
 }

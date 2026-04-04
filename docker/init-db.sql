@@ -94,5 +94,54 @@ CREATE TABLE user_configs (
   encrypted_qmsg_qq TEXT,
   encrypted_channel_webhooks TEXT,
   telegram_chat_id VARCHAR(255),
+  reminder_emails TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- notification_accounts 表 - 通知账户管理（支持多账号绑定）
+CREATE TABLE notification_accounts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  webhook TEXT,
+  token TEXT,
+  secret TEXT,
+  chat_id VARCHAR(255),
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_notification_accounts_user ON notification_accounts(user_id);
+
+-- event_trigger_logs 表 - 事件触发日志
+CREATE TABLE event_trigger_logs (
+  id SERIAL PRIMARY KEY,
+  event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  trigger_type VARCHAR(50) NOT NULL,
+  trigger_date DATE NOT NULL,
+  scheduled_date DATE,
+  status VARCHAR(20) NOT NULL,
+  channels JSON,
+  error_message TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_trigger_logs_event ON event_trigger_logs(event_id);
+CREATE INDEX idx_trigger_logs_user ON event_trigger_logs(user_id);
+CREATE INDEX idx_trigger_logs_date ON event_trigger_logs(trigger_date);
+
+-- relationship_mappings 表 - 关系映射（如"我妈"→"妻子"）
+CREATE TABLE relationship_mappings (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+  from_relation VARCHAR(100) NOT NULL,    -- 原始称呼（如"我爸"、"我妈"）
+  to_relation VARCHAR(100) NOT NULL,      -- 转换后称呼（如"丈夫"、"妻子"）
+  recipient_email VARCHAR(255),          -- 收件人邮箱（可选，用于邮件区分）
+  recipient_type VARCHAR(50),             -- 收件人类型（如"me"、"father"、"mother"）
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_relationship_mappings_event ON relationship_mappings(event_id);
+CREATE INDEX idx_relationship_mappings_user ON relationship_mappings(user_id);

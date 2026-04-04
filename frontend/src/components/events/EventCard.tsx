@@ -27,8 +27,19 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable = fa
     return new Date(Date.UTC(year, month - 1, day));
   };
   
+  // 计算生日年龄
+  const getAge = (): number | null => {
+    if (event.type !== 'birthday' || !event.birthDate) return null;
+    
+    const birthYear = new Date(event.birthDate).getFullYear();
+    const targetDate = getTargetDate();
+    const currentYear = targetDate.getFullYear();
+    return currentYear - birthYear;
+  };
+  
   const targetDate = getTargetDate();
   const [countdown, setCountdown] = useState(calculateCountdown(targetDate));
+  const age = getAge();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -95,9 +106,19 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable = fa
                 <CalendarIcon size={16} className="text-primary-600 dark:text-primary-400" />
               </div>
               <div className="flex flex-col">
-                <span className="font-medium text-gray-900 dark:text-gray-100">{targetDate.toLocaleDateString('zh-CN')}</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
+                  {targetDate.toLocaleDateString('zh-CN')}
+                  {age !== null && (
+                    <span className="ml-2 text-xs text-pink-500 font-semibold">
+                      (将满{age + 1}岁)
+                    </span>
+                  )}
+                </span>
                 {event.calendarType === 'lunar' && event.lunarDate && (
                   <span className="text-xs text-gray-500 dark:text-gray-400">{formatLunarDate(event.lunarDate)}</span>
+                )}
+                {event.calendarType === 'both' && event.lunarDate && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">双日历</span>
                 )}
               </div>
             </div>

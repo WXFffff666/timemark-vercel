@@ -1,5 +1,5 @@
 export type EventType = 'birthday' | 'exam' | 'anniversary' | 'holiday' | 'other';
-export type CalendarType = 'gregorian' | 'lunar';
+export type CalendarType = 'gregorian' | 'lunar' | 'both';
 
 export interface LunarDate {
   year: number;
@@ -44,6 +44,7 @@ export interface ReminderConfig {
   emailRecipients: string[];
   channels?: NotificationChannel[];
   accountIds?: string[];
+  reminderTime?: string; // 自定义提醒时间 HH:mm
 }
 
 export interface Event {
@@ -84,8 +85,11 @@ export interface NotificationAccount {
 
 export interface RelationshipMapping {
   id: string;
+  eventId: string;
   fromRelation: string;
   toRelation: string;
+  recipientEmail?: string;
+  recipientType?: string;
 }
 
 export interface EventTemplate {

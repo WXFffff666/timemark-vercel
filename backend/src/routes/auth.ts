@@ -1,11 +1,13 @@
 import { Hono } from 'hono';
 import { verifyUserPassword, updateTOTPSecret, createLoginLog, trackLoginFailure } from '../services/auth.service.js';
-import { createSession, deleteSession } from '../services/session.service.js';
+import { createSession, deleteSession, getSessionByToken } from '../services/session.service.js';
 import { generateTOTPSecret, generateQRCode, verifyTOTP } from '../utils/totp.js';
-import { generateAccessToken } from '../utils/jwt.js';
-import { loginSchema, verify2FASchema } from '@timemark/shared';
+import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
+import { loginSchema, verify2FASchema, changePasswordSchema } from '@timemark/shared';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { sendSecurityAlert } from '../services/alert.service.js';
+import { hashPassword } from '../utils/password.js';
+import { query } from '../db/index.js';
 
 const auth = new Hono();
 
@@ -130,6 +132,73 @@ auth.post('/logout', authMiddleware, async (c) => {
     deleteSession(token);
   }
   return c.json({ success: true });
+});
+
+auth.post('/change-password', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.json();
+    const parsed = changePasswordSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return c.json({ success: false, error: 'Invalid input', details: parsed.error }, 400);
+    }
+
+    const { currentPassword, newPassword } = parsed.data;
+
+    // Verify current password
+    const userWithPassword = await verifyUserPassword(user.username, currentPassword);
+    if (!userWithPassword) {
+      return c.json({ success: false, error: 'Current password is incorrect' }, 401);
+    }
+
+    // Validate new password strength
+    if (newPassword.length < 8) {
+      return c.json({ success: false, error: 'New password must be at least 8 characters' }, 400);
+    }
+
+    // Hash new password and update
+    const newPasswordHash = await hashPassword(newPassword);
+    await query('UPDATE users SET password_hash = $1 WHERE id = $2', [newPasswordHash, user.id]);
+
+    return c.json({ success: true, message: 'Password changed successfully' });
+  } catch (error: any) {
+    console.error('[Change Password Error]', error);
+    return c.json({ success: false, error: error.message || 'Failed to change password' }, 500);
+  }
+});
+
+auth.post('/refresh', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { refreshToken } = body;
+
+    if (!refreshToken) {
+      return c.json({ success: false, error: 'Refresh token is required' }, 400);
+    }
+
+    // Verify refresh token
+    const payload = await verifyToken(refreshToken);
+    if (!payload) {
+      return c.json({ success: false, error: 'Invalid or expired refresh token' }, 401);
+    }
+
+    // Get user and create new access token
+    const { getUserById } = await import('../services/auth.service.js');
+    const user = await getUserById(payload.userId);
+    
+    if (!user) {
+      return c.json({ success: false, error: 'User not found' }, 401);
+    }
+
+    // Generate new access token
+    const accessToken = await generateAccessToken(user.id, undefined, false);
+
+    return c.json({ success: true, data: { accessToken, user } });
+  } catch (error: any) {
+    console.error('[Refresh Token Error]', error);
+    return c.json({ success: false, error: error.message || 'Failed to refresh token' }, 500);
+  }
 });
 
 export default auth;

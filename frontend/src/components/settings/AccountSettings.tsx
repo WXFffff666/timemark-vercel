@@ -1,39 +1,79 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select } from '../ui/select';
 import { Badge } from '../ui/badge';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Loader2 } from 'lucide-react';
+import { api } from '../../lib/api';
 import type { NotificationAccount } from '@timemark/shared';
 
+interface NotificationAccountResponse {
+  id: number;
+  user_id: number;
+  type: string;
+  name: string;
+  webhook: string | null;
+  token: string | null;
+  secret: string | null;
+  chat_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export function AccountSettings() {
-  const [accounts, setAccounts] = useState<NotificationAccount[]>([]);
+  const [accounts, setAccounts] = useState<NotificationAccountResponse[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState<Partial<NotificationAccount>>({
+  const [formData, setFormData] = useState<Partial<NotificationAccountResponse>>({
     type: 'feishu',
     name: '',
   });
 
-  const addAccount = () => {
-    if (!formData.name || !formData.type) return;
-    
-    const newAccount: NotificationAccount = {
-      id: Date.now().toString(),
-      type: formData.type as any,
-      name: formData.name,
-      webhook: formData.webhook,
-      token: formData.token,
-      chatId: formData.chatId,
-    };
-    
-    setAccounts([...accounts, newAccount]);
-    setFormData({ type: 'feishu', name: '' });
-    setShowForm(false);
+  useEffect(() => {
+    loadAccounts();
+  }, []);
+
+  const loadAccounts = async () => {
+    try {
+      const data = await api.get<NotificationAccountResponse[]>('/config/accounts');
+      setAccounts(data);
+    } catch (error) {
+      console.error('Failed to load accounts:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const deleteAccount = (id: string) => {
-    setAccounts(accounts.filter(a => a.id !== id));
+  const addAccount = async () => {
+    if (!formData.name || !formData.type) return;
+    
+    try {
+      const newAccount = await api.post<NotificationAccountResponse>('/config/accounts', {
+        type: formData.type,
+        name: formData.name,
+        webhook: formData.webhook,
+        token: formData.token,
+        secret: formData.secret,
+        chatId: formData.chat_id,
+      });
+      
+      setAccounts([...accounts, newAccount]);
+      setFormData({ type: 'feishu', name: '' });
+      setShowForm(false);
+    } catch (error) {
+      console.error('Failed to add account:', error);
+    }
+  };
+
+  const deleteAccount = async (id: number) => {
+    try {
+      await api.delete(`/config/accounts/${id}`);
+      setAccounts(accounts.filter(a => a.id !== id));
+    } catch (error) {
+      console.error('Failed to delete account:', error);
+    }
   };
 
   const getTypeLabel = (type: string) => {
@@ -86,7 +126,7 @@ export function AccountSettings() {
               <label className="block text-sm font-medium mb-1.5">账户类型</label>
               <Select
                 value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                 className="h-10"
               >
                 <option value="feishu">Feishu</option>
@@ -143,7 +183,11 @@ export function AccountSettings() {
         )}
 
         <div className="space-y-2">
-          {accounts.length === 0 ? (
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+          ) : accounts.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">暂无账户，点击上方按钮添加</p>
           ) : (
             accounts.map(account => (
@@ -151,6 +195,7 @@ export function AccountSettings() {
                 <div className="flex items-center gap-3">
                   <Badge variant="secondary">{getTypeLabel(account.type)}</Badge>
                   <span className="font-medium">{account.name}</span>
+                  {!account.is_active && <Badge variant="destructive">已禁用</Badge>}
                 </div>
                 <Button size="sm" variant="ghost" onClick={() => deleteAccount(account.id)} className="text-red-500 hover:text-red-600">
                   <Trash2 className="w-4 h-4" />
