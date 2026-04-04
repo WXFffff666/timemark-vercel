@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuthStore } from './stores/auth.store';
 import { LoginPage } from './pages/Login';
-import { TestLoginPage } from './pages/TestLogin';
 import { Dashboard } from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Reminders from './pages/Reminders';
@@ -28,7 +27,6 @@ function AnimatedRoutes() {
     <AnimatePresence mode="wait">
       <Routes location={location}>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/test" element={<TestLoginPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/reminders" element={<ProtectedRoute><Reminders /></ProtectedRoute>} />

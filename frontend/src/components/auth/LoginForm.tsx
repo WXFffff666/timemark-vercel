@@ -73,14 +73,9 @@ export function LoginForm() {
       } else {
         setError(message);
       }
-    } finally {
+      } finally {
       setLoading(false);
     }
-  };
-
-  const handleDevSkipLogin = () => {
-    // Dev-only: skip authentication
-    window.location.href = '/dashboard';
   };
 
   return (
@@ -151,23 +146,11 @@ export function LoginForm() {
               {error}
             </motion.p>
           )}
-           <motion.div variants={itemVariants} className="pt-2">
-             <Button type="submit" variant="gradient" className="w-full h-12 rounded-xl font-medium" disabled={loading}>
-               {loading ? '登录中...' : '登录'}
-             </Button>
-           </motion.div>
-          {import.meta.env.MODE === 'development' && (
-            <motion.div variants={itemVariants}>
-              <Button 
-                type="button" 
-                variant="ghost" 
-                className="w-full h-10 text-xs text-gray-400 hover:text-gray-600" 
-                onClick={handleDevSkipLogin}
-              >
-                [DEV] 跳过登录
+            <motion.div variants={itemVariants} className="pt-2">
+              <Button type="submit" variant="gradient" className="w-full h-12 rounded-xl font-medium" disabled={loading}>
+                {loading ? '登录中...' : '登录'}
               </Button>
             </motion.div>
-          )}
         </motion.form>
       </CardContent>
     </Card>
