@@ -8,6 +8,7 @@ import { EventForm } from '@/components/events/EventForm';
 import { PlusIcon, SettingsIcon, BellIcon } from '@/components/icons';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { RealtimeClock } from '@/components/RealtimeClock';
 import type { Event, CreateEventRequest } from '@timemark/shared';
 
 const containerVariants = {
@@ -26,9 +27,11 @@ const itemVariants = {
 export function Dashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent, testSendEvent } = useEventStore();
+  const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent, deleteEventsBatch, testSendEvent } = useEventStore();
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | undefined>();
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   useEffect(() => {
     fetchEvents();
@@ -65,6 +68,15 @@ export function Dashboard() {
     }
   };
 
+  const handleBatchDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (confirm(`确定批量删除 ${selectedIds.length} 个事件？`)) {
+      await deleteEventsBatch(selectedIds);
+      setSelectedIds([]);
+      setBatchMode(false);
+    }
+  };
+
   return (
     <div className="min-h-screen">
       <header className="glass sticky top-0 z-50">
@@ -73,6 +85,7 @@ export function Dashboard() {
             倒计时提醒系统
           </h1>
           <div className="flex items-center gap-3">
+            <RealtimeClock />
             <ThemeToggle />
             <Button variant="ghost" className="w-10 h-10 p-0" onClick={() => navigate('/reminders')}>
               <BellIcon size={20} />
@@ -90,6 +103,16 @@ export function Dashboard() {
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">我的事件</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">共 {events.length} 个事件</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => { setBatchMode(!batchMode); setSelectedIds([]); }}>
+              {batchMode ? '取消批量' : '批量删除'}
+            </Button>
+            {batchMode && (
+              <Button variant="destructive" onClick={handleBatchDelete} disabled={selectedIds.length === 0}>
+                删除已选 ({selectedIds.length})
+              </Button>
+            )}
           </div>
         </div>
         {loading ? (
@@ -118,7 +141,17 @@ export function Dashboard() {
           >
             {events.map((event) => (
               <motion.div key={event.id} variants={itemVariants}>
-                <EventCard event={event} onEdit={handleEdit} onDelete={handleDelete} onTestSend={handleTestSend} />
+                <EventCard
+                  event={event}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onTestSend={handleTestSend}
+                  selectable={batchMode}
+                  selected={selectedIds.includes(event.id)}
+                  onSelectToggle={(id, checked) => {
+                    setSelectedIds((prev) => checked ? [...prev, id] : prev.filter((item) => item !== id));
+                  }}
+                />
               </motion.div>
             ))}
           </motion.div>

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { createEvent, getEventsByUserId, updateEvent, deleteEvent } from '../services/event.service.js';
+import { createEvent, getEventsByUserId, updateEvent, deleteEvent, deleteEventsByIds } from '../services/event.service.js';
 import { createEventSchema, updateEventSchema } from '@timemark/shared';
 import type { User } from '@timemark/shared';
 
@@ -69,6 +69,19 @@ events.put('/:id', async (c) => {
   }
 
   return c.json({ success: true });
+});
+
+events.delete('/batch', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  const ids = Array.isArray(body?.ids) ? body.ids.filter((item: unknown) => typeof item === 'string') : [];
+
+  if (ids.length === 0) {
+    return c.json({ success: false, error: 'Invalid ids' }, 400);
+  }
+
+  const deleted = await deleteEventsByIds(ids, user.id);
+  return c.json({ success: true, data: { deleted } });
 });
 
 events.delete('/:id', async (c) => {

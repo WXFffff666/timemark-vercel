@@ -12,9 +12,12 @@ interface EventCardProps {
   onEdit: (event: Event) => void;
   onDelete: (id: string) => void;
   onTestSend?: (id: string) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectToggle?: (id: string, selected: boolean) => void;
 }
 
-export function EventCard({ event, onEdit, onDelete, onTestSend }: EventCardProps) {
+export function EventCard({ event, onEdit, onDelete, onTestSend, selectable = false, selected = false, onSelectToggle }: EventCardProps) {
   const getTargetDate = () => {
     if (event.calendarType === 'lunar' && event.lunarDate) {
       return getNextLunarOccurrence(event.lunarDate);
@@ -55,7 +58,18 @@ export function EventCard({ event, onEdit, onDelete, onTestSend }: EventCardProp
       <Card onClick={() => onEdit(event)} className="group glass rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden">
         <CardHeader className="pb-3">
           <div className="flex justify-between items-start mb-2">
-            <CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100">{event.name}</CardTitle>
+            <div className="flex items-center gap-2">
+              {selectable && (
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => onSelectToggle?.(event.id, e.target.checked)}
+                  className="h-4 w-4"
+                />
+              )}
+              <CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100">{event.name}</CardTitle>
+            </div>
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               {onTestSend && (
                 <Button variant="ghost" onClick={(e) => { e.stopPropagation(); onTestSend(event.id); }} className="h-8 w-8 p-0 text-blue-500 hover:text-blue-600" title="测试发送">

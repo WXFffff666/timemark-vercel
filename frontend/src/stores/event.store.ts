@@ -9,6 +9,7 @@ interface EventState {
   createEvent: (data: CreateEventRequest) => Promise<void>;
   updateEvent: (id: string, data: Partial<CreateEventRequest>) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
+  deleteEventsBatch: (ids: string[]) => Promise<number>;
   testSendEvent: (id: string) => Promise<void>;
 }
 
@@ -39,6 +40,12 @@ export const useEventStore = create<EventState>((set, get) => ({
   deleteEvent: async (id) => {
     await api.delete(`/events/${id}`);
     set({ events: get().events.filter(e => e.id !== id) });
+  },
+
+  deleteEventsBatch: async (ids) => {
+    const result = await api.delete<{ deleted: number }>('/events/batch', { ids });
+    set({ events: get().events.filter(e => !ids.includes(e.id)) });
+    return result.deleted;
   },
 
   testSendEvent: async (id) => {

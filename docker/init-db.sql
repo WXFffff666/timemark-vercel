@@ -86,6 +86,13 @@ CREATE TABLE user_configs (
   encrypted_dingtalk_webhook TEXT,
   encrypted_dingtalk_secret TEXT,
   encrypted_telegram_bot_token TEXT,
+  encrypted_discord_webhook TEXT,
+  encrypted_slack_webhook TEXT,
+  encrypted_wxpusher_app_token TEXT,
+  encrypted_wxpusher_uid TEXT,
+  encrypted_qmsg_key TEXT,
+  encrypted_qmsg_qq TEXT,
+  encrypted_channel_webhooks TEXT,
   telegram_chat_id VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
