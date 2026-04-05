@@ -1,14 +1,16 @@
 import { query } from '../db/index.js';
-import { randomUUID } from 'crypto';
 import type { Event, CreateEventRequest } from '@timemark/shared';
 
 export async function createEvent(userId: string, data: CreateEventRequest): Promise<Event> {
-  const id = randomUUID();
+  console.log('[createEvent] Received userId:', userId, 'type:', typeof userId);
   
-  // Convert userId from UUID string to integer
+  // Convert userId from string to integer
   const numericUserId = parseInt(userId, 10);
+  console.log('[createEvent] Parsed numericUserId:', numericUserId, 'isNaN:', isNaN(numericUserId));
+  
   if (isNaN(numericUserId)) {
-    throw new Error('Invalid user ID');
+    console.error('[createEvent] ERROR: Invalid user ID - received:', userId);
+    throw new Error('Invalid user ID: ' + userId);
   }
   
   // Ensure reminderConfig has required fields with defaults
@@ -23,15 +25,27 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
     ? { ...defaultConfig, ...data.reminderConfig }
     : defaultConfig;
   
-  await query(
-    `INSERT INTO events (id, user_id, name, type, date, calendar_type, lunar_date, reminder_config, relationship_mapping_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [id, numericUserId, data.name, data.type, data.date, data.calendarType, 
-      data.lunarDate ? JSON.stringify(data.lunarDate) : null, 
-      JSON.stringify(reminderConfig),
-      data.relationshipMappingId || null]
-  );
-
-  return { id, userId, ...data, reminderConfig, createdAt: new Date().toISOString() };
+  console.log('[createEvent] About to insert with user_id:', numericUserId);
+  
+  try {
+    // Don't specify id - let the database auto-increment (SERIAL)
+    await query(
+      `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, relationship_mapping_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [numericUserId, data.name, data.type, data.date, data.calendarType, 
+        data.lunarDate ? JSON.stringify(data.lunarDate) : null, 
+        JSON.stringify(reminderConfig),
+        data.relationshipMappingId || null]
+    );
+    // Get the created event's id
+    const result = await query('SELECT lastval() as id');
+    const eventId = result.rows[0].id;
+    console.log('[createEvent] Insert successful! Event ID:', eventId);
+    
+    return { id: eventId, userId, ...data, reminderConfig, createdAt: new Date().toISOString() };
+  } catch (insertError) {
+    console.error('[createEvent] INSERT ERROR:', insertError);
+    throw insertError;
+  }
 }
 
 export async function getEventsByUserId(userId: string): Promise<Event[]> {
