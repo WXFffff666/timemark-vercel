@@ -33,7 +33,18 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
   return result.rows.map((row: any) => {
     let reminderConfig: any = {};
     try {
-      reminderConfig = row.reminder_config ? JSON.parse(row.reminder_config) : {};
+      // pg JSON column may return as string or already parsed object
+      const rawConfig = row.reminder_config;
+      if (rawConfig === null || rawConfig === undefined) {
+        reminderConfig = {};
+      } else if (typeof rawConfig === 'object') {
+        reminderConfig = rawConfig;
+      } else if (typeof rawConfig === 'string') {
+        reminderConfig = JSON.parse(rawConfig);
+      } else {
+        console.warn('Unknown reminder_config type:', typeof rawConfig, rawConfig);
+        reminderConfig = {};
+      }
     } catch (e) {
       console.error('Failed to parse reminder_config:', e, row.reminder_config);
       reminderConfig = {};
