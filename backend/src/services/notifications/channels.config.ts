@@ -507,12 +507,11 @@ const pluginChannels: ChannelTemplate[] = [
   {
     id: 'wechat_personal',
     name: '微信个人号',
-    description: '微信个人号消息推送（需安装插件并扫码）',
+    description: '微信个人号消息推送（扫码登录）',
     icon: 'Smartphone',
     configMethod: 'plugin',
-    isBuiltIn: false,
+    isBuiltIn: true,
     pluginPackage: 'wechaty',
-    pluginInstallCommand: 'npm install wechaty',
     fields: [
       {
         name: 'session_data',
@@ -527,12 +526,11 @@ const pluginChannels: ChannelTemplate[] = [
   {
     id: 'whatsapp',
     name: 'WhatsApp',
-    description: 'WhatsApp 消息推送（需安装插件并扫码）',
+    description: 'WhatsApp 消息推送（扫码配对）',
     icon: 'Phone',
     configMethod: 'plugin',
-    isBuiltIn: false,
+    isBuiltIn: true,
     pluginPackage: '@whiskeysockets/baileys',
-    pluginInstallCommand: 'npm install @whiskeysockets/baileys',
     fields: [
       {
         name: 'session_data',
@@ -547,7 +545,7 @@ const pluginChannels: ChannelTemplate[] = [
   {
     id: 'qq_bot',
     name: 'QQ Bot',
-    description: 'QQ 机器人消息推送（需安装插件）',
+    description: 'QQ 机器人消息推送（Docker环境不可用）',
     icon: 'MessageCircle',
     configMethod: 'plugin',
     isBuiltIn: false,
