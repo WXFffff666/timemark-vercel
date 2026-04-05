@@ -6,7 +6,12 @@ import { getBlessing } from '../../../../shared/src/blessings.js';
  * https://developers.line.biz/en/docs/messaging-api/overview/
  */
 export async function sendLINENotification(event: any, token: string, userId: string): Promise<void> {
-  const blessing = getBlessing(event.type);
+  const blessing = getBlessing(
+    event.type,
+    event.reminderConfig?.customMessage,
+    event.personName,
+    event.reminderRecipientName
+  );
   
   const message = `📅 ${event.name}\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
   

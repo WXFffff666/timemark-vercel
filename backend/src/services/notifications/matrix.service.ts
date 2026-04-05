@@ -11,7 +11,12 @@ export async function sendMatrixNotification(
   accessToken: string, 
   roomId: string
 ): Promise<void> {
-  const blessing = getBlessing(event.type);
+  const blessing = getBlessing(
+    event.type,
+    event.reminderConfig?.customMessage,
+    event.personName,
+    event.reminderRecipientName
+  );
   
   const message = `📅 **${event.name}**\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
   

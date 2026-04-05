@@ -193,15 +193,18 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
     setLoading(true);
     try {
-      // Convert date to YYYY-MM-DD string for PostgreSQL
+      // Convert date to YYYY-MM-DD string for PostgreSQL (use local time, not UTC)
       const targetDate = new Date(formData.date);
       if (isNaN(targetDate.getTime())) {
         alert('无效的日期格式');
         return;
       }
       
-      // Format as YYYY-MM-DD for PostgreSQL
-      const dateStr = targetDate.toISOString().split('T')[0];
+      // Format as YYYY-MM-DD using local time
+      const year = targetDate.getFullYear();
+      const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+      const day = String(targetDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
       
       const submissionData: CreateEventRequest = {
         ...formData,

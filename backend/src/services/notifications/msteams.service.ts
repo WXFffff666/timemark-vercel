@@ -10,7 +10,12 @@ export async function sendMicrosoftTeamsNotification(
   botToken: string, 
   conversationId: string
 ): Promise<void> {
-  const blessing = getBlessing(event.type);
+  const blessing = getBlessing(
+    event.type,
+    event.reminderConfig?.customMessage,
+    event.personName,
+    event.reminderRecipientName
+  );
   
   const message = {
     type: 'message',

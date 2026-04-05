@@ -8,7 +8,14 @@ export async function sendEmailNotification(
   toEmail: string
 ): Promise<void> {
   const resend = new Resend(apiKey);
-  const blessing = getBlessing(event.type);
+  
+  // 智能匹配祝福语：根据被提醒人(personName)和提醒人(reminderRecipientName)自动适配
+  const blessing = getBlessing(
+    event.type, 
+    event.reminderConfig?.customMessage,
+    event.personName,           // 被提醒人/事件所有者（妈妈）
+    event.reminderRecipientName // 提醒人/接收通知的人（我）
+  );
 
   const html = `
 <!DOCTYPE html>
