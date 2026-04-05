@@ -134,13 +134,18 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   useEffect(() => {
     if (event && open) {
-      // Safe date parsing
+      // Safe date parsing - handle both string and Date formats
       let safeDate = '';
       if (event.date) {
         const date = new Date(event.date);
         if (!isNaN(date.getTime())) {
-          const tzOffset = date.getTimezoneOffset() * 60000;
-          safeDate = (new Date(date.getTime() - tzOffset)).toISOString().slice(0, 16);
+          // Format as YYYY-MM-DDTHH:mm for input[type="datetime-local"]
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          const hours = String(date.getHours()).padStart(2, '0');
+          const minutes = String(date.getMinutes()).padStart(2, '0');
+          safeDate = `${year}-${month}-${day}T${hours}:${minutes}`;
         }
       }
       
