@@ -67,9 +67,13 @@ export interface Event {
   calendarType: CalendarType;
   lunarDate?: LunarDate;
   reminderConfig: ReminderConfig;
+  // 被提醒人（生日/事件所有者）
   personName?: string;
   birthDate?: string;
   birthDateLunar?: string;
+  // 提醒人（接收通知的人）- 用于关系映射
+  reminderRecipientName?: string;
+  reminderRecipientEmail?: string;
   relationshipMappingId?: string;
   createdAt: string;
 }
@@ -84,6 +88,8 @@ export interface CreateEventRequest {
   personName?: string;
   birthDate?: string;
   birthDateLunar?: string;
+  reminderRecipientName?: string;
+  reminderRecipientEmail?: string;
   relationshipMappingId?: string;
 }
 
@@ -102,9 +108,13 @@ export interface NotificationAccount {
 export interface RelationshipMapping {
   id: string;
   eventId: string;
+  // 被提醒人（事件所有者）的称呼，如"我爸"、"我妈"
   fromRelation: string;
+  // 提醒人（接收通知者）的称呼，如"妻子"、"母亲"
   toRelation: string;
+  // 提醒人邮箱
   recipientEmail?: string;
+  // 提醒人类型：father, mother, wife, husband, self, other 等
   recipientType?: string;
 }
 

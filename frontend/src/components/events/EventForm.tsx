@@ -109,6 +109,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   });
 
   const [newEmail, setNewEmail] = useState('');
+  const [customTime, setCustomTime] = useState('');
 
   useEffect(() => {
     if (event && open) {
@@ -132,6 +133,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         personName: event.personName,
         birthDate: event.birthDate,
         birthDateLunar: event.birthDateLunar,
+        reminderRecipientName: event.reminderRecipientName,
+        reminderRecipientEmail: event.reminderRecipientEmail,
       });
     } else if (open) {
       setFormData({
@@ -259,6 +262,37 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   const handleCalendarTypeChange = (calendarType: CalendarType) => {
     setFormData({ ...formData, calendarType });
+  };
+
+  // 添加自定义提醒时间
+  const addCustomTime = () => {
+    if (!customTime) return;
+    const timePattern = /^([01]?[0-9]|2[0-3]):([0-5][0-9])$/;
+    if (!timePattern.test(customTime)) {
+      alert('请输入正确的时间格式，如 09:00');
+      return;
+    }
+    const currentTimes = formData.reminderConfig.reminderTimes || [];
+    if (currentTimes.includes(customTime)) {
+      alert('该时间已存在');
+      return;
+    }
+    setFormData({
+      ...formData,
+      reminderConfig: { ...formData.reminderConfig, reminderTimes: [...currentTimes, customTime].sort() }
+    });
+    setCustomTime('');
+  };
+
+  // 移除提醒时间
+  const removeReminderTime = (time: string) => {
+    setFormData({
+      ...formData,
+      reminderConfig: {
+        ...formData.reminderConfig,
+        reminderTimes: (formData.reminderConfig.reminderTimes || []).filter(t => t !== time)
+      }
+    });
   };
 
   const containerVariants = {
@@ -411,18 +445,48 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
             </motion.div>
           )}
 
-          {/* 姓名/备注（可选） */}
-          <motion.div variants={itemVariants} className="space-y-2.5">
+          {/* 关联人员 - 拆分为被提醒人和提醒人 */}
+          <motion.div variants={itemVariants} className="space-y-3">
             <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
               <Users size={16} className="text-primary-500" />
               关联人员（可选）
             </label>
-            <Input
-              placeholder="例如：张三"
-              value={formData.personName || ''}
-              onChange={(e) => setFormData({ ...formData, personName: e.target.value })}
-              className="h-12"
-            />
+            
+            {/* 被提醒人 - 生日/事件所有者 */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <span className="text-xs text-slate-500 dark:text-slate-400">被提醒人（事件所有者）</span>
+                <Input
+                  placeholder="例如：我爸、妈妈、李四"
+                  value={formData.personName || ''}
+                  onChange={(e) => setFormData({ ...formData, personName: e.target.value })}
+                  className="h-10"
+                />
+              </div>
+              
+              {/* 提醒人 - 接收通知的人 */}
+              <div className="space-y-1.5">
+                <span className="text-xs text-slate-500 dark:text-slate-400">提醒人（接收通知者）</span>
+                <Input
+                  placeholder="例如：我、妻子、王五"
+                  value={formData.reminderRecipientName || ''}
+                  onChange={(e) => setFormData({ ...formData, reminderRecipientName: e.target.value })}
+                  className="h-10"
+                />
+              </div>
+            </div>
+            
+            {/* 提醒人邮箱（可选） */}
+            <div className="space-y-1.5">
+              <span className="text-xs text-slate-500 dark:text-slate-400">提醒人邮箱（可选）</span>
+              <Input
+                type="email"
+                placeholder="提醒人专属邮箱，不填则使用默认邮箱"
+                value={formData.reminderRecipientEmail || ''}
+                onChange={(e) => setFormData({ ...formData, reminderRecipientEmail: e.target.value })}
+                className="h-10"
+              />
+            </div>
           </motion.div>
 
           {/* 备注描述 */}
@@ -466,9 +530,11 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-4 pl-2 border-l-2 border-primary-500/30"
                 >
-                  {/* 提醒时间（可多选） */}
+                  {/* 提醒时间（可多选 - 预设 + 自定义） */}
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">提醒时间（可多选）</label>
+                    
+                    {/* 预设时间选项 */}
                     <div className="flex gap-2 flex-wrap">
                       {reminderTimes.map((time) => (
                         <button
@@ -494,9 +560,36 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                         </button>
                       ))}
                     </div>
+                    
+                    {/* 自定义时间输入 */}
+                    <div className="flex gap-2 items-center mt-2">
+                      <Input
+                        type="time"
+                        value={customTime}
+                        onChange={(e) => setCustomTime(e.target.value)}
+                        className="h-9 w-32"
+                      />
+                      <Button type="button" variant="secondary" size="sm" onClick={addCustomTime} className="h-9 px-3">
+                        <Plus size={16} />
+                        添加
+                      </Button>
+                    </div>
+                    
+                    {/* 已选择的时间列表 */}
                     {formData.reminderConfig.reminderTimes && formData.reminderConfig.reminderTimes.length > 0 && (
-                      <div className="text-xs text-slate-400 mt-1">
-                        已选择: {formData.reminderConfig.reminderTimes.join(', ')}
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {formData.reminderConfig.reminderTimes.map((time) => (
+                          <Badge key={time} variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                            {time}
+                            <button
+                              type="button"
+                              onClick={() => removeReminderTime(time)}
+                              className="ml-1 hover:text-red-500"
+                            >
+                              <X size={12} />
+                            </button>
+                          </Badge>
+                        ))}
                       </div>
                     )}
                   </div>

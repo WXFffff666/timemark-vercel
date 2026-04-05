@@ -31,9 +31,14 @@ export const createEventSchema = z.object({
     isLeap: z.boolean(),
   }).optional(),
   reminderConfig: reminderConfigSchema,
+  // 被提醒人（生日/事件所有者）
   personName: z.string().optional(),
   birthDate: z.string().optional(),
   birthDateLunar: z.string().optional(),
+  // 提醒人（接收通知的人）- 用于关系映射
+  reminderRecipientName: z.string().optional(),
+  reminderRecipientEmail: z.string().email().optional(),
+  relationshipMappingId: z.string().optional(),
 });
 
 export const updateEventSchema = createEventSchema.partial();
