@@ -179,17 +179,17 @@ export default function Channels() {
     const lastState = newStack[newStack.length - 1];
     setModalBackStack(newStack);
     
-    if (lastState === 'template') {
+    if (lastState === 'main' || lastState === undefined) {
+      // Go back to main list - close all modals
+      setShowConfigModal(false);
+      setShowTemplateModal(false);
+      setShowQrModal(false);
+    } else if (lastState === 'template') {
       setShowConfigModal(false);
       setShowTemplateModal(true);
     } else if (lastState === 'qr') {
       setShowQrModal(false);
       setShowConfigModal(true);
-    } else {
-      // Close all modals and go to main
-      setShowConfigModal(false);
-      setShowTemplateModal(false);
-      setShowQrModal(false);
     }
   };
 
