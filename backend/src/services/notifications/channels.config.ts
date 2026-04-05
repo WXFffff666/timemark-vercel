@@ -505,26 +505,6 @@ const tokenChannels: ChannelTemplate[] = [
 
 const pluginChannels: ChannelTemplate[] = [
   {
-    id: 'wechat_official',
-    name: '微信公众号',
-    description: '微信服务号/订阅号模板消息（需安装插件）',
-    icon: 'MessageCircle',
-    configMethod: 'plugin',
-    isBuiltIn: false,
-    pluginPackage: '@tencent-weixin/openclaw-weixin',
-    pluginInstallCommand: 'npm install @tencent-weixin/openclaw-weixin',
-    fields: [
-      {
-        name: 'session_data',
-        label: '认证会话',
-        type: 'textarea',
-        required: false,
-        description: '扫码授权后自动填充的会话数据'
-      }
-    ],
-    docsUrl: 'https://developers.weixin.qq.com/doc/offiaccount/Getting_Started/Overview.html'
-  },
-  {
     id: 'wechat_personal',
     name: '微信个人号',
     description: '微信个人号消息推送（需安装插件并扫码）',
@@ -532,7 +512,7 @@ const pluginChannels: ChannelTemplate[] = [
     configMethod: 'plugin',
     isBuiltIn: false,
     pluginPackage: 'wechaty',
-    pluginInstallCommand: 'npm install wechaty wechaty-puppet-wechat',
+    pluginInstallCommand: 'npm install wechaty',
     fields: [
       {
         name: 'session_data',
@@ -551,7 +531,7 @@ const pluginChannels: ChannelTemplate[] = [
     icon: 'Phone',
     configMethod: 'plugin',
     isBuiltIn: false,
-    pluginPackage: 'baileys',
+    pluginPackage: '@whiskeysockets/baileys',
     pluginInstallCommand: 'npm install @whiskeysockets/baileys',
     fields: [
       {
@@ -598,7 +578,7 @@ const pluginChannels: ChannelTemplate[] = [
     description: 'Signal 消息推送（需安装 signal-cli）',
     icon: 'Shield',
     configMethod: 'plugin',
-    isBuiltIn: false,
+    isBuiltIn: true,
     pluginPackage: 'signal-cli',
     pluginInstallCommand: '# 需安装 signal-cli 命令行工具',
     fields: [
@@ -626,7 +606,7 @@ const pluginChannels: ChannelTemplate[] = [
     description: 'iMessage 消息推送（需 macOS 设备）',
     icon: 'MessageSquare',
     configMethod: 'plugin',
-    isBuiltIn: false,
+    isBuiltIn: true,
     pluginPackage: 'imessage-exporter',
     pluginInstallCommand: '# 仅支持 macOS',
     fields: [
@@ -638,6 +618,33 @@ const pluginChannels: ChannelTemplate[] = [
         description: 'macOS 设备配置信息'
       }
     ]
+  },
+  {
+    id: 'zalo',
+    name: 'Zalo',
+    description: 'Zalo 消息推送（越南版微信）',
+    icon: 'MessageCircle',
+    configMethod: 'plugin',
+    isBuiltIn: true,
+    pluginPackage: 'zalo-messenger',
+    pluginInstallCommand: 'npm install axios',
+    fields: [
+      {
+        name: 'token',
+        label: 'Access Token',
+        type: 'password',
+        required: true,
+        description: 'Zalo OA 后台获取的 Access Token'
+      },
+      {
+        name: 'session_data',
+        label: '认证会话',
+        type: 'textarea',
+        required: false,
+        description: '扫码登录后自动填充的会话数据'
+      }
+    ],
+    docsUrl: 'https://developers.zalo.com/'
   }
 ];
 

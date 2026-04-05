@@ -21,6 +21,14 @@ import { sendMicrosoftTeamsNotification } from './msteams.service.js';
 import { sendNextcloudTalkNotification } from './nextcloudtalk.service.js';
 import { sendNostrNotification } from './nostr.service.js';
 
+// Plugin channel services
+import { sendNotification as sendWechatNotification } from './wechaty.service.js';
+import { sendNotification as sendWhatsappNotification } from './whatsapp.service.js';
+import { sendNotification as sendQQNotification } from './qqbot.service.js';
+import { sendNotification as sendSignalNotification } from './signal.service.js';
+import { sendNotification as sendZaloNotification } from './zalo.service.js';
+import { sendNotification as sendBlueBubblesNotification } from './bluebubbles.service.js';
+
 import { getUserConfig, getRelationshipMappings, getNotificationAccounts, getEventTemplate } from '../config.service.js';
 
 // 通用 Webhook 渠道（通过配置文件中的 channel_webhooks 字段配置）
@@ -69,6 +77,10 @@ const channelToAccountType: Record<string, string> = {
   'whatsapp': 'whatsapp',
   'signal': 'signal',
   'zalo': 'zalo',
+  // Plugin channels
+  'wechat_personal': 'wechat_personal',
+  'qq_bot': 'qq_bot',
+  'imessage': 'imessage',
 };
 
 /**
@@ -77,7 +89,7 @@ const channelToAccountType: Record<string, string> = {
 function getChannelConfigFromAccount(
   account: any,
   channel: string
-): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string } | null {
+): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string } | null {
   // 直接使用账户的字段
   switch (channel) {
     // Webhook-based channels
@@ -123,6 +135,18 @@ function getChannelConfigFromAccount(
     case 'msteams':
       return (account.token && account.chat_id)
         ? { token: account.token, chat_id: account.chat_id }
+        : null;
+    
+    // Plugin-based channels
+    case 'wechat_personal':
+    case 'whatsapp':
+    case 'qq_bot':
+    case 'signal':
+      return (account.session_data || account.token)
+        ? { 
+            sessionData: account.session_data || account.token,
+            toUser: account.chat_id 
+          }
         : null;
     
     default:
@@ -315,6 +339,31 @@ export async function sendNotifications(event: any, userId: number, channels: st
       }
       else if (genericWebhookChannels.has(ch) && chConfig.webhook)
         await sendGenericWebhookNotification(event, chConfig.webhook, ch);
+      // Plugin-based channels
+      else if (ch === 'wechat_personal' && chConfig.sessionData) {
+        const toUser = chConfig.toUser || event.personName || 'me';
+        await sendWechatNotification(event, chConfig.sessionData, toUser);
+      }
+      else if (ch === 'whatsapp' && chConfig.sessionData) {
+        const toUser = chConfig.toUser || event.personName || '';
+        await sendWhatsappNotification(event, chConfig.sessionData, toUser);
+      }
+      else if (ch === 'qq_bot' && chConfig.sessionData) {
+        const toUser = chConfig.toUser || event.personName || '';
+        await sendQQNotification(event, chConfig.sessionData, toUser);
+      }
+      else if (ch === 'signal' && chConfig.sessionData) {
+        const toUser = chConfig.toUser || event.personName || '';
+        await sendSignalNotification(event, chConfig.sessionData, toUser);
+      }
+      else if (ch === 'zalo' && chConfig.sessionData) {
+        const toUser = chConfig.toUser || event.personName || '';
+        await sendZaloNotification(event, chConfig.sessionData, toUser);
+      }
+      else if (ch === 'imessage' && chConfig.sessionData) {
+        const toUser = chConfig.toUser || event.personName || '';
+        await sendBlueBubblesNotification(event, chConfig.sessionData, toUser);
+      }
     } catch (e) {
       console.error(`Failed ${ch}:`, e);
     }

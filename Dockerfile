@@ -1,5 +1,5 @@
 FROM node:20-alpine
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init git openssh-client
 WORKDIR /app
 ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
@@ -16,11 +16,10 @@ COPY shared/dist ./shared/dist
 COPY backend/dist ./backend/dist
 COPY frontend/dist ./frontend/dist
 
-# Enable corepack and install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# Install dependencies
-RUN pnpm install --frozen-lockfile || pnpm install
+# Copy node_modules (pre-installed locally to avoid git SSH dependencies)
+COPY backend/node_modules ./backend/node_modules
+COPY shared/node_modules ./shared/node_modules
+COPY node_modules ./node_modules
 
 EXPOSE 3000
 

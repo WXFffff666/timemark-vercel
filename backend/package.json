@@ -22,7 +22,11 @@
     "pg": "^8.11.3",
     "qrcode": "^1.5.3",
     "resend": "^3.2.0",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "wechaty": "^1.20.2",
+    "baileys": "^6.10.0",
+    "oicq": "^2.3.1",
+    "@tencent-weixin/openclaw-weixin": "^1.0.0"
   },
   "devDependencies": {
     "@types/bull": "^4.10.0",

@@ -78,6 +78,9 @@ export default function Channels() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ConfigMethod>('webhook');
   
+  // Modal navigation state - track the flow: list -> template -> config -> qr
+  const [modalBackStack, setModalBackStack] = useState<string[]>([]);
+  
   // Modals state
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -86,6 +89,11 @@ export default function Channels() {
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [configForm, setConfigForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+
+  // QR code state for plugins
+  const [qrCodeData, setQrCodeData] = useState<string>('');
+  const [qrSessionId, setQrSessionId] = useState<string>('');
+  const [authStatus, setAuthStatus] = useState<string>('pending');
 
   useEffect(() => {
     fetchData();
@@ -147,11 +155,13 @@ export default function Channels() {
   };
 
   const openTemplateModal = () => {
+    setModalBackStack(['main']);
     setShowTemplateModal(true);
   };
 
   const selectTemplate = (template: ChannelTemplate) => {
     setSelectedTemplate(template);
+    setModalBackStack([...modalBackStack, 'template']);
     setShowTemplateModal(false);
     
     // Initialize form with empty values
@@ -162,6 +172,29 @@ export default function Channels() {
     setConfigForm(initialForm);
     setShowConfigModal(true);
   };
+
+  // Handle going back in modal navigation
+  const goBackInModal = () => {
+    const newStack = modalBackStack.slice(0, -1);
+    const lastState = newStack[newStack.length - 1];
+    setModalBackStack(newStack);
+    
+    if (lastState === 'template') {
+      setShowConfigModal(false);
+      setShowTemplateModal(true);
+    } else if (lastState === 'qr') {
+      setShowQrModal(false);
+      setShowConfigModal(true);
+    } else {
+      // Close all modals and go to main
+      setShowConfigModal(false);
+      setShowTemplateModal(false);
+      setShowQrModal(false);
+    }
+  };
+
+  // Check if we can go back
+  const canGoBack = modalBackStack.length > 1;
 
   const openEditModal = (account: Account) => {
     const template = templates.find(t => t.id === account.type);
@@ -569,22 +602,40 @@ export default function Channels() {
       </Dialog>
 
       {/* Config Modal */}
-      <Dialog open={showConfigModal} onOpenChange={setShowConfigModal}>
+      <Dialog open={showConfigModal} onOpenChange={(open) => {
+        // Only allow closing via back button, not backdrop click
+        if (!open && canGoBack) {
+          goBackInModal();
+        } else if (!open) {
+          setShowConfigModal(false);
+          setModalBackStack([]);
+        }
+      }}>
         <DialogContent className="glass-panel rounded-[2rem]">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-              {selectedTemplate && (
-                <>
-                  <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-xl text-primary-600 dark:text-primary-400">
-                    {(() => {
+            <div className="flex items-center gap-3">
+              {canGoBack && (
+                <button 
+                  onClick={goBackInModal}
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <ArrowLeft size={24} className="text-slate-600 dark:text-slate-400" />
+                </button>
+              )}
+              <div className="flex items-center gap-3 flex-1">
+                <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-xl text-primary-600 dark:text-primary-400">
+                  {selectedTemplate && (
+                    (() => {
                       const Icon = getTemplateIcon(selectedTemplate.icon);
                       return <Icon size={24} />;
-                    })()}
-                  </div>
-                  {selectedAccount ? '编辑' : '配置'} {selectedTemplate.name}
-                </>
-              )}
-            </DialogTitle>
+                    })()
+                  )}
+                </div>
+                <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white">
+                  {selectedTemplate ? (selectedAccount ? '编辑' : '配置') + ' ' + selectedTemplate.name : ''}
+                </DialogTitle>
+              </div>
+            </div>
           </DialogHeader>
 
           {selectedTemplate?.configMethod === 'plugin' && !selectedTemplate.isBuiltIn && (
@@ -695,31 +746,61 @@ export default function Channels() {
       </Dialog>
 
       {/* QR Code Modal for Plugin Auth */}
-      <Dialog open={showQrModal} onOpenChange={setShowQrModal}>
+      <Dialog open={showQrModal} onOpenChange={(open) => {
+        if (!open && canGoBack) {
+          goBackInModal();
+        } else if (!open) {
+          setShowQrModal(false);
+          setModalBackStack([]);
+        }
+      }}>
         <DialogContent className="glass-panel rounded-[2rem] max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-              <div className="p-2 bg-purple-50 dark:bg-purple-900/30 rounded-xl text-purple-600 dark:text-purple-400">
-                <QrCode size={24} />
-              </div>
-              扫码授权
-            </DialogTitle>
+            <div className="flex items-center gap-3">
+              {canGoBack && (
+                <button 
+                  onClick={goBackInModal}
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <ArrowLeft size={24} className="text-slate-600 dark:text-slate-400" />
+                </button>
+              )}
+              <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                <div className="p-2 bg-purple-50 dark:bg-purple-900/30 rounded-xl text-purple-600 dark:text-purple-400">
+                  <QrCode size={24} />
+                </div>
+                扫码授权
+              </DialogTitle>
+            </div>
           </DialogHeader>
           
           <div className="text-center py-8">
-            <div className="w-48 h-48 mx-auto mb-6 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center">
-              <div className="text-center p-4">
-                <QrCode className="w-12 h-12 mx-auto mb-2 text-slate-400" />
-                <p className="text-sm text-slate-500">QR Code Placeholder</p>
-              </div>
+            <div className="w-48 h-48 mx-auto mb-6 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center overflow-hidden">
+              {qrCodeData ? (
+                <img src={qrCodeData} alt="QR Code" className="w-full h-full object-contain" />
+              ) : (
+                <div className="text-center p-4">
+                  <Loader2 className="w-12 h-12 mx-auto mb-2 text-slate-400 animate-spin" />
+                  <p className="text-sm text-slate-500">加载中...</p>
+                </div>
+              )}
             </div>
             <p className="text-slate-600 dark:text-slate-300 mb-2">
               请使用 {selectedTemplate?.name} 扫描二维码
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              扫码后将自动完成授权并启用此渠道
+              {authStatus === 'authenticating' ? '正在验证...' : '扫码后将自动完成授权并启用此渠道'}
             </p>
           </div>
+
+          {authStatus === 'authenticating' && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 mb-4">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                <span className="text-sm text-blue-700 dark:text-blue-300">等待扫码验证...</span>
+              </div>
+            </div>
+          )}
 
           <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 mb-4">
             <div className="flex items-start gap-2">

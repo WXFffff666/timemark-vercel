@@ -10,8 +10,9 @@
   "scripts": {
     "dev:frontend": "pnpm --filter frontend dev",
     "dev:backend": "pnpm --filter backend dev",
+    "build:shared": "pnpm --filter @timemark/shared build",
     "build:frontend": "pnpm --filter frontend build",
     "build:backend": "pnpm --filter backend build",
-    "build": "pnpm build:frontend && pnpm build:backend"
+    "build": "pnpm build:shared && pnpm build:frontend && pnpm build:backend"
   }
 }
