@@ -1,40 +1,35 @@
-import { motion } from 'framer-motion';
-import { Moon, Sun } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
+import { Button } from './ui/button';
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 
 export function ThemeToggle() {
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('theme') === 'dark' || 
-        (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    }
-    return false;
-  });
+  const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
-    if (isDark) {
+    setIsDark(document.documentElement.classList.contains('dark'));
+  },[]);
+
+  const toggleTheme = () => {
+    const newDark = !isDark;
+    setIsDark(newDark);
+    if (newDark) {
       document.documentElement.classList.add('dark');
       localStorage.setItem('theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     }
-  }, [isDark]);
+  };
 
   return (
-    <motion.button
-      onClick={() => setIsDark(!isDark)}
-      className="p-2 rounded-lg glass hover:shadow-glow transition-all"
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-    >
-      <motion.div
-        initial={false}
-        animate={{ rotate: isDark ? 180 : 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        {isDark ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+    <Button variant="ghost" size="icon" onClick={toggleTheme} className="relative rounded-full overflow-hidden hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+      <motion.div initial={false} animate={{ rotate: isDark ? 180 : 0, scale: isDark ? 0 : 1, opacity: isDark ? 0 : 1 }} transition={{ duration: 0.3, ease: 'easeInOut' }} className="absolute">
+        <Sun className="h-5 w-5 text-orange-500" />
       </motion.div>
-    </motion.button>
+      <motion.div initial={false} animate={{ rotate: isDark ? 0 : -180, scale: isDark ? 1 : 0, opacity: isDark ? 1 : 0 }} transition={{ duration: 0.3, ease: 'easeInOut' }} className="absolute">
+        <Moon className="h-5 w-5 text-blue-400" />
+      </motion.div>
+    </Button>
   );
 }

@@ -1,0 +1,12 @@
+feat: refactor UI with VisionOS/Win11/HyperOS design fusion
+
+- Add glassmorphism design system with HSL color tokens
+- Create mesh gradient backgrounds with blob-spin animations
+- Implement VisionOS-style glass panels with backdrop blur
+- Add HyperOS Alive interactive feedback on clickable elements
+- Create complete UI component library (button, input, card, dialog, switch, select, badge)
+- Add composite components (ThemeToggle, RealtimeClock, TimezoneSelector)
+- Refactor all page components with new design system
+- Extract complete UI code to docs/ui-components-complete.txt
+- Add required dependencies (tailwindcss-animate, radix-ui)
+- Rebuild and deploy Docker container

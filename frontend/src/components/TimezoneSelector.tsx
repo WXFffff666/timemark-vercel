@@ -1,62 +1,25 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from './ui/button';
-import { useTimezone, TIMEZONES } from './RealtimeClock';
-import { Globe, X } from 'lucide-react';
+import { useTimezone } from './RealtimeClock';
+import { Globe, ChevronDown } from 'lucide-react';
 
 export function TimezoneSelector() {
   const { timezone, setTimezone } = useTimezone();
-  const [isOpen, setIsOpen] = useState(false);
-
-  const currentTz = TIMEZONES.find(tz => tz.value === timezone);
-
   return (
-    <div className="relative">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
+    <div className="relative group flex items-center">
+      <Globe className="absolute left-3 w-4 h-4 text-gray-400 group-hover:text-primary-500 transition-colors pointer-events-none z-10" />
+      <select
+        value={timezone}
+        onChange={(e) => setTimezone(e.target.value)}
+        className="appearance-none bg-white/40 dark:bg-black/30 hover:bg-white/60 dark:hover:bg-black/50 text-sm font-semibold text-gray-700 dark:text-gray-300 pl-9 pr-8 py-2 rounded-xl border border-white/20 dark:border-white/5 shadow-inner backdrop-blur-md transition-all duration-300 cursor-pointer outline-none focus:ring-2 focus:ring-primary-500/50 active:scale-95"
       >
-        <Globe size={14} />
-        <span className="hidden sm:inline">{currentTz?.label.split(' ')[0] || '时区'}</span>
-      </Button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute right-0 top-full mt-2 w-64 glass rounded-lg shadow-lg z-50 overflow-hidden"
-          >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-              <span className="text-sm font-medium">选择时区</span>
-              <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">
-                <X size={14} />
-              </button>
-            </div>
-            <div className="max-h-64 overflow-y-auto py-2">
-              {TIMEZONES.map((tz) => (
-                <button
-                  key={tz.value}
-                  onClick={() => {
-                    setTimezone(tz.value);
-                    setIsOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${
-                    timezone === tz.value 
-                      ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400' 
-                      : 'text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {tz.label}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <option value="Asia/Shanghai">北京时间 (UTC+8)</option>
+        <option value="UTC">世界标准时间 (UTC)</option>
+        <option value="America/New_York">纽约时间 (EST)</option>
+        <option value="Europe/London">伦敦时间 (GMT)</option>
+        <option value="Asia/Tokyo">东京时间 (UTC+9)</option>
+      </select>
+      <div className="absolute right-3 pointer-events-none">
+        <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-primary-500 transition-colors" />
+      </div>
     </div>
   );
 }

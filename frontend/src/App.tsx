@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { useAuthStore } from './stores/auth.store';
 import { LoginPage } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -15,6 +15,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
 }
 
+function MeshBackground() {
+  return (
+    <div className="mesh-bg-container pointer-events-none">
+      <div className="mesh-blob-1 animate-blob-spin"></div>
+      <div className="mesh-blob-2 animate-blob-spin-slow"></div>
+    </div>
+  );
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
   const checkAuth = useAuthStore((state) => state.checkAuth);
@@ -25,7 +34,7 @@ function AnimatedRoutes() {
 
   return (
     <AnimatePresence mode="wait">
-      <Routes location={location}>
+      <Routes location={location} key={location.pathname}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
@@ -44,12 +53,15 @@ function App() {
     if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     }
-  }, []);
+  },[]);
 
   return (
     <BrowserRouter>
       <TimezoneProvider>
-        <AnimatedRoutes />
+        <MeshBackground />
+        <div className="relative z-10 min-h-screen">
+          <AnimatedRoutes />
+        </div>
       </TimezoneProvider>
     </BrowserRouter>
   );

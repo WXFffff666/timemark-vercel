@@ -1,133 +1,80 @@
-import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
-import { CalendarIcon, TrashIcon, EditIcon, SendIcon } from '../icons';
-import { calculateCountdown } from '@/lib/countdown';
-import { formatLunarDate, getNextLunarOccurrence } from '@/lib/lunar';
-import type { Event } from '@timemark/shared';
+import { Clock, Calendar, Edit2, Trash2, Send, CheckCircle2, Circle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { useEffect, useState } from 'react';
 
-interface EventCardProps {
-  event: Event;
-  onEdit: (event: Event) => void;
-  onDelete: (id: string) => void;
-  onTestSend?: (id: string) => void;
-  selectable?: boolean;
-  selected?: boolean;
-  onSelectToggle?: (id: string, selected: boolean) => void;
-}
+interface Event { id: string; title: string; targetTime: string; description?: string; timezone?: string; status?: string; }
+interface EventCardProps { event: Event; onEdit: (e: Event) => void; onDelete: (id: string) => void; onTestSend: (id: string) => void; selectable?: boolean; selected?: boolean; onSelectToggle?: (id: string, c: boolean) => void; }
 
-export function EventCard({ event, onEdit, onDelete, onTestSend, selectable = false, selected = false, onSelectToggle }: EventCardProps) {
-  const getTargetDate = () => {
-    if (event.calendarType === 'lunar' && event.lunarDate) {
-      return getNextLunarOccurrence(event.lunarDate);
-    }
-    // Parse date as UTC to avoid timezone issues
-    const [year, month, day] = event.date.split('-').map(Number);
-    return new Date(Date.UTC(year, month - 1, day));
-  };
-  
-  // 计算生日年龄
-  const getAge = (): number | null => {
-    if (event.type !== 'birthday' || !event.birthDate) return null;
-    
-    const birthYear = new Date(event.birthDate).getFullYear();
-    const targetDate = getTargetDate();
-    const currentYear = targetDate.getFullYear();
-    return currentYear - birthYear;
-  };
-  
-  const targetDate = getTargetDate();
-  const [countdown, setCountdown] = useState(calculateCountdown(targetDate));
-  const age = getAge();
+export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, selected, onSelectToggle }: EventCardProps) {
+  const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
+  const [isPast, setIsPast] = useState(false);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown(calculateCountdown(getTargetDate()));
-    }, 60000);
-    return () => clearInterval(timer);
-  }, [event.date, event.calendarType, event.lunarDate]);
-
-  const getTypeColor = (type: string) => {
-    const colors = {
-      birthday: 'bg-pink-500 text-white',
-      exam: 'bg-blue-500 text-white',
-      anniversary: 'bg-purple-500 text-white',
-      holiday: 'bg-green-500 text-white',
-      other: 'bg-gray-500 text-white',
+    const calculateTimeLeft = () => {
+      const difference = new Date(event.targetTime).getTime() - new Date().getTime();
+      if (difference > 0) {
+        setTimeLeft({
+          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+          hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+          minutes: Math.floor((difference / 1000 / 60) % 60),
+          seconds: Math.floor((difference / 1000) % 60),
+        });
+        setIsPast(false);
+      } else {
+        setTimeLeft(null);
+        setIsPast(true);
+      }
     };
-    return colors[type as keyof typeof colors] || colors.other;
-  };
+    calculateTimeLeft();
+    const timer = setInterval(calculateTimeLeft, 1000);
+    return () => clearInterval(timer);
+  }, [event.targetTime]);
 
   return (
-    <motion.div
-      whileHover={{ y: -4, scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      style={{ willChange: 'transform' }}
-    >
-      <Card onClick={() => onEdit(event)} className="group glass rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden">
-        <CardHeader className="pb-3">
-          <div className="flex justify-between items-start mb-2">
-            <div className="flex items-center gap-2">
-              {selectable && (
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => onSelectToggle?.(event.id, e.target.checked)}
-                  className="h-4 w-4"
-                />
-              )}
-              <CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100">{event.name}</CardTitle>
-            </div>
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              {onTestSend && (
-                <Button variant="ghost" onClick={(e) => { e.stopPropagation(); onTestSend(event.id); }} className="h-8 w-8 p-0 text-blue-500 hover:text-blue-600" title="测试发送">
-                  <SendIcon size={16} />
-                </Button>
-              )}
-              <Button variant="ghost" onClick={(e) => { e.stopPropagation(); onEdit(event); }} className="h-8 w-8 p-0">
-                <EditIcon size={16} />
-              </Button>
-              <Button variant="ghost" onClick={(e) => { e.stopPropagation(); onDelete(event.id); }} className="h-8 w-8 p-0 text-red-500 hover:text-red-600">
-                <TrashIcon size={16} />
-              </Button>
-            </div>
+    <div className={`relative group glass-panel rounded-3xl p-6 transition-all duration-300 overflow-hidden ${selected ? 'ring-2 ring-primary-500 shadow-xl shadow-primary-500/20' : 'ring-1 ring-white/20 dark:ring-white/10 hover:shadow-2xl hover:border-white/40'}`} onClick={() => selectable && onSelectToggle && onSelectToggle(event.id, !selected)}>
+      <div className="absolute -right-16 -bottom-16 w-48 h-48 bg-gradient-to-br from-primary-500/20 to-purple-500/20 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700 pointer-events-none"></div>
+      <div className="flex justify-between items-start mb-4 relative z-10">
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            {selectable && (
+              <motion.div initial={false} animate={{ scale: selected ? 1.1 : 1 }} className="cursor-pointer">
+                {selected ? <CheckCircle2 className="text-primary-500 drop-shadow-md" size={24} /> : <Circle className="text-gray-400 dark:text-gray-500" size={24} />}
+              </motion.div>
+            )}
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight line-clamp-1">{event.title}</h3>
           </div>
-          <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${getTypeColor(event.type)}`}>
-            {event.type}
-          </span>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <div className="w-8 h-8 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                <CalendarIcon size={16} className="text-primary-600 dark:text-primary-400" />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-medium text-gray-900 dark:text-gray-100">
-                  {targetDate.toLocaleDateString('zh-CN')}
-                  {age !== null && (
-                    <span className="ml-2 text-xs text-pink-500 font-semibold">
-                      (将满{age + 1}岁)
-                    </span>
-                  )}
-                </span>
-                {event.calendarType === 'lunar' && event.lunarDate && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400">{formatLunarDate(event.lunarDate)}</span>
-                )}
-                {event.calendarType === 'both' && event.lunarDate && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400">双日历</span>
-                )}
-              </div>
-            </div>
-            <div className="text-2xl font-semibold text-primary-600 dark:text-primary-400">
-              {countdown.isPast ? '已过期' : `${countdown.days}天 ${countdown.hours}小时`}
-            </div>
+          <div className="flex items-center gap-2 mt-2 text-sm text-gray-500 dark:text-gray-400 font-medium">
+            <Calendar size={14} /> <span>{new Date(event.targetTime).toLocaleString()}</span>
+            {event.timezone && <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">{event.timezone}</Badge>}
           </div>
-        </CardContent>
-      </Card>
-    </motion.div>
+        </div>
+      </div>
+      {event.description && <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 line-clamp-2 relative z-10">{event.description}</p>}
+      <div className="mb-8 relative z-10">
+        {isPast ? (
+          <div className="flex items-center justify-center py-6 bg-red-500/10 dark:bg-red-900/20 rounded-2xl border border-red-500/20 backdrop-blur-sm">
+            <span className="text-xl font-bold text-red-600 dark:text-red-400 flex items-center gap-2"><Clock size={24} /> 目标时间已过</span>
+          </div>
+        ) : timeLeft ? (
+          <div className="grid grid-cols-4 gap-3">
+            {[{ l: '天', v: timeLeft.days }, { l: '时', v: timeLeft.hours }, { l: '分', v: timeLeft.minutes }, { l: '秒', v: timeLeft.seconds }].map((item, idx) => (
+              <div key={idx} className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/50 dark:bg-black/30 shadow-inner border border-white/40 dark:border-white/5">
+                <span className="text-2xl font-extrabold bg-clip-text text-transparent bg-gradient-to-b from-gray-900 to-gray-600 dark:from-white dark:to-gray-400 tabular-nums tracking-tighter">{item.v.toString().padStart(2, '0')}</span>
+                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-1">{item.l}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      {!selectable && (
+        <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-200/50 dark:border-gray-700/50 relative z-10">
+          <Button variant="ghost" size="sm" className="hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-600 rounded-xl" onClick={(e) => { e.stopPropagation(); onTestSend(event.id); }}><Send size={16} className="mr-1.5" /> 测试发送</Button>
+          <Button variant="ghost" size="sm" className="hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 rounded-xl" onClick={(e) => { e.stopPropagation(); onEdit(event); }}><Edit2 size={16} className="mr-1.5" /> 编辑</Button>
+          <Button variant="ghost" size="sm" className="hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 rounded-xl" onClick={(e) => { e.stopPropagation(); onDelete(event.id); }}><Trash2 size={16} className="mr-1.5" /> 删除</Button>
+        </div>
+      )}
+    </div>
   );
 }

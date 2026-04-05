@@ -1,170 +1,86 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { useToast } from '../hooks/use-toast';
-import { api } from '../lib/api';
-import { ArrowLeft, History, Lock, Shield, Users } from 'lucide-react';
-import { RelationshipSettings } from '../components/settings/RelationshipSettings';
+import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { useNavigate } from 'react-router-dom';
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 }
-  }
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 }
-};
+const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
+const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
 
 export default function Settings() {
-  const { toast } = useToast();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-
-  const handleChangePassword = async () => {
-    if (passwordForm.newPassword.length < 8) {
-      toast({ title: '新密码至少需要8个字符', variant: 'destructive' });
-      return;
-    }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      toast({ title: '两次输入的密码不一致', variant: 'destructive' });
-      return;
-    }
-    setLoading(true);
-    try {
-      await api.post('/auth/change-password', {
-        currentPassword: passwordForm.currentPassword,
-        newPassword: passwordForm.newPassword,
-      });
-      toast({ title: '密码修改成功' });
-      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (error: any) {
-      toast({ title: '修改失败', description: error.message, variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen p-6">
-      <div className="container mx-auto max-w-4xl">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-4 mb-8"
-        >
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/dashboard')}
-            className="rounded-full"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
+      <header className="sticky top-4 z-50 px-4 max-w-4xl mx-auto">
+        <div className="glass-panel rounded-full px-6 py-4 flex items-center gap-4 ring-1 ring-white/20 dark:ring-white/10">
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">设置</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">管理您的账户和安全设置</p>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">系统设置</h1>
           </div>
-        </motion.div>
-
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="space-y-6"
-        >
-          <motion.div variants={itemVariants}>
-            <Card className="glass overflow-hidden">
-              <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-900/20 flex items-center justify-center">
-                    <Lock className="h-5 w-5 text-primary-500" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-gray-900 dark:text-white">修改密码</CardTitle>
-                    <CardDescription className="text-gray-600 dark:text-gray-400">更新您的账户密码以保护安全</CardDescription>
-                  </div>
+        </div>
+      </header>
+      <main className="max-w-4xl mx-auto px-6 py-8 mt-4">
+        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-8">
+          <motion.section variants={itemVariants}>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 px-2">个人信息</h2>
+            <div className="glass-panel rounded-3xl p-2">
+              <div className="flex items-center justify-between p-4 hover:bg-white/50 dark:hover:bg-white/5 rounded-2xl alive-interactive">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-primary-400 to-purple-500 flex items-center justify-center text-white shadow-inner"><User size={28} /></div>
+                  <div><h3 className="text-base font-bold text-gray-900 dark:text-white">Admin</h3><p className="text-sm text-gray-500">admin@timemark.app</p></div>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4 pt-6">
-                <div className="space-y-2">
-                  <Label htmlFor="currentPassword" className="text-sm font-medium">当前密码</Label>
-                  <Input
-                    id="currentPassword"
-                    type="password"
-                    value={passwordForm.currentPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                    className="h-11"
-                  />
+                <ChevronRight className="text-gray-400" />
+              </div>
+            </div>
+          </motion.section>
+          <motion.section variants={itemVariants}>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 px-2">外观与通知</h2>
+            <div className="glass-panel rounded-3xl p-2 space-y-1">
+              <div className="flex items-center justify-between p-4 rounded-2xl">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center"><Smartphone size={20} /></div>
+                  <div><h3 className="text-base font-bold text-gray-900 dark:text-white">深色模式</h3><p className="text-sm text-gray-500">手动切换系统主题</p></div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="newPassword" className="text-sm font-medium">新密码</Label>
-                  <Input
-                    id="newPassword"
-                    type="password"
-                    value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                    placeholder="至少8个字符"
-                    className="h-11"
-                  />
+                <ThemeToggle />
+              </div>
+              <div className="h-px bg-gray-200/50 dark:bg-gray-700/50 mx-4"></div>
+              <div className="flex items-center justify-between p-4 rounded-2xl">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 flex items-center justify-center"><Bell size={20} /></div>
+                  <div><h3 className="text-base font-bold text-gray-900 dark:text-white">应用内提醒声音</h3><p className="text-sm text-gray-500">倒计时结束时播放提示音</p></div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-sm font-medium">确认新密码</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={passwordForm.confirmPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                    className="h-11"
-                  />
+                <Switch defaultChecked />
+              </div>
+            </div>
+          </motion.section>
+          <motion.section variants={itemVariants}>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 px-2">安全与数据</h2>
+            <div className="glass-panel rounded-3xl p-2 space-y-1">
+              <div className="flex items-center justify-between p-4 hover:bg-white/50 dark:hover:bg-white/5 rounded-2xl alive-interactive">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 text-green-600 flex items-center justify-center"><Shield size={20} /></div>
+                  <div><h3 className="text-base font-bold text-gray-900 dark:text-white">修改密码</h3><p className="text-sm text-gray-500">定期更新密码保护账户安全</p></div>
                 </div>
-                <Button onClick={handleChangePassword} disabled={loading} className="w-full h-11 mt-2">
-                  <Shield className="h-4 w-4 mr-2" />
-                  {loading ? '修改中...' : '修改密码'}
-                </Button>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div variants={itemVariants}>
-            <Card className="glass overflow-hidden">
-              <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
-                    <History className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-gray-900 dark:text-white">登录历史</CardTitle>
-                    <CardDescription className="text-gray-600 dark:text-gray-400">查看最近的登录记录和设备信息</CardDescription>
-                  </div>
+                <ChevronRight className="text-gray-400" />
+              </div>
+              <div className="h-px bg-gray-200/50 dark:bg-gray-700/50 mx-4"></div>
+              <div className="flex items-center justify-between p-4 hover:bg-white/50 dark:hover:bg-white/5 rounded-2xl alive-interactive" onClick={() => navigate('/login-history')}>
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center"><HardDrive size={20} /></div>
+                  <div><h3 className="text-base font-bold text-gray-900 dark:text-white">登录日志</h3><p className="text-sm text-gray-500">查看近期登录历史与安全</p></div>
                 </div>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <Button onClick={() => navigate('/login-history')} variant="outline" className="w-full h-11">
-                  <History className="h-4 w-4 mr-2" />
-                  查看登录历史
-                </Button>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div variants={itemVariants}>
-            <RelationshipSettings />
+                <ChevronRight className="text-gray-400" />
+              </div>
+            </div>
+          </motion.section>
+          <motion.div variants={itemVariants} className="pt-6">
+            <Button variant="destructive" className="w-full h-14 rounded-2xl text-base font-bold shadow-lg shadow-red-500/20">
+              退出登录
+            </Button>
           </motion.div>
         </motion.div>
-      </div>
-    </div>
+      </main>
+    </motion.div>
   );
 }

@@ -1,182 +1,54 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Switch } from '../components/ui/switch';
-import { useToast } from '../hooks/use-toast';
-import { api } from '../lib/api';
-import { ArrowLeft, Bell, Clock, Calendar } from 'lucide-react';
+import { Bell, CheckCircle2, AlertCircle, Clock, ArrowLeft } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 }
-  }
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 }
-};
+const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
+const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
 
 export default function Reminders() {
-  const { toast } = useToast();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  
-  const [config, setConfig] = useState({
-    enabled: true,
-    dailyTime: '09:00',
-    daysBeforeList: [1, 3, 7, 30],
-    emailAddresses: ['1127251096@qq.com', 'wxf200707@gmail.com'],
-  });
-
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const response = await api.get('/config/reminders');
-        if (response.success && response.data) {
-          setConfig(response.data);
-        }
-      } catch (error) {
-        console.error('Failed to load settings:', error);
-      }
-    };
-    loadSettings();
-  }, []);
-
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      const response = await api.post('/config/reminders', config);
-      console.log('✓ Settings saved:', response);
-      toast({ title: '✓ 提醒设置已保存', description: `每日检查时间: ${config.dailyTime}` });
-    } catch (error: any) {
-      console.error('✗ Save failed:', error);
-      toast({ title: '✗ 保存失败', description: error.message, variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const reminders =[
+    { id: 1, title: '周年纪念日', time: '10分钟前', status: 'success', channel: '微信公众号' },
+    { id: 2, title: '服务器续费', time: '2小时前', status: 'success', channel: 'Email' },
+    { id: 3, title: 'API证书过期', time: '昨天 14:00', status: 'failed', channel: 'Webhook' },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6">
-      <div className="container mx-auto max-w-4xl">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-4 mb-8"
-        >
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/dashboard')}
-            className="rounded-full hover:bg-white/60"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">提醒配置</h1>
-            <p className="text-sm text-gray-500 mt-1">自定义事件提醒的时间和方式</p>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
+      <header className="sticky top-4 z-50 px-4 max-w-4xl mx-auto">
+        <div className="glass-panel rounded-full px-6 py-4 flex justify-between items-center ring-1 ring-white/20 dark:ring-white/10">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
+            <div><h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">提醒记录</h1></div>
           </div>
-        </motion.div>
-      
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        <motion.div variants={itemVariants}>
-          <Card className="overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 border-b">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <Bell className="h-5 w-5 text-blue-600" />
+          <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-500 flex items-center justify-center"><Bell size={20} /></div>
+        </div>
+      </header>
+      <main className="max-w-4xl mx-auto px-6 py-8 mt-4">
+        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-4">
+          {reminders.map((r) => (
+            <motion.div key={r.id} variants={itemVariants} className="glass-panel rounded-3xl p-6 flex items-center justify-between hover:shadow-xl transition-all">
+              <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${r.status === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-500' : 'bg-red-100 dark:bg-red-900/30 text-red-500'}`}>
+                  {r.status === 'success' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
                 </div>
                 <div>
-                  <CardTitle>自动提醒设置</CardTitle>
-                  <CardDescription>配置事件提醒的时间和方式</CardDescription>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    {r.title} <Badge variant={r.status === 'success' ? 'success' : 'destructive'} className="scale-90">{r.status === 'success' ? '成功' : '失败'}</Badge>
+                  </h3>
+                  <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    <span className="flex items-center gap-1"><Clock size={14} /> {r.time}</span>
+                    <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+                    <span>渠道: {r.channel}</span>
+                  </div>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-6 pt-6">
-              <motion.div
-                variants={itemVariants}
-                className="flex items-center justify-between p-4 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Bell className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <Label htmlFor="enabled" className="text-base font-medium cursor-pointer">启用自动提醒</Label>
-                    <p className="text-sm text-muted-foreground">每天定时检查并发送提醒</p>
-                  </div>
-                </div>
-                <Switch
-                  id="enabled"
-                  checked={config.enabled}
-                  onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
-                />
-              </motion.div>
-              
-              <motion.div variants={itemVariants} className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-gray-500" />
-                  <Label htmlFor="dailyTime" className="text-sm font-medium">每日检查时间</Label>
-                </div>
-                <Input
-                  id="dailyTime"
-                  type="time"
-                  value={config.dailyTime}
-                  onChange={(e) => setConfig({ ...config, dailyTime: e.target.value })}
-                  className="h-11"
-                />
-              </motion.div>
-              
-              <motion.div variants={itemVariants} className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-gray-500" />
-                  <Label className="text-sm font-medium">提前提醒天数</Label>
-                </div>
-                <p className="text-sm text-muted-foreground">在事件发生前多少天发送提醒</p>
-                <div className="flex flex-wrap gap-2">
-                  {[1, 3, 7, 14, 30].map((day) => (
-                    <motion.div key={day} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                      <Button
-                        variant={config.daysBeforeList.includes(day) ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => {
-                          const days = config.daysBeforeList.includes(day)
-                            ? config.daysBeforeList.filter(d => d !== day)
-                            : [...config.daysBeforeList, day].sort((a, b) => a - b);
-                          setConfig({ ...config, daysBeforeList: days });
-                        }}
-                        className="h-9 px-4"
-                      >
-                        {day}天
-                      </Button>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-              
-              <motion.div variants={itemVariants} className="flex gap-3 pt-4">
-                <Button variant="outline" onClick={() => navigate('/dashboard')} className="flex-1 h-11">
-                  取消
-                </Button>
-                <Button onClick={handleSave} disabled={loading} className="flex-1 h-11">
-                  {loading ? '保存中...' : '保存设置'}
-                </Button>
-              </motion.div>
-            </CardContent>
-          </Card>
+            </motion.div>
+          ))}
         </motion.div>
-      </motion.div>
-      </div>
-    </div>
+      </main>
+    </motion.div>
   );
 }

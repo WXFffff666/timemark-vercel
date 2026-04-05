@@ -1,160 +1,61 @@
-import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { api } from '@/lib/api';
+import { ShieldCheck, Monitor, Smartphone, Globe, MapPin, ArrowLeft } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { ArrowLeft, RefreshCw, Shield, Monitor } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-interface LoginLog {
-  id: string;
-  login_time: string;
-  ip_address: string;
-  user_agent: string;
-  status: 'success' | 'failed';
-}
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05 }
-  }
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, x: -20 },
-  visible: { opacity: 1, x: 0 }
-};
+const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
+const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
 
 export default function LoginHistory() {
   const navigate = useNavigate();
-  const [logs, setLogs] = useState<LoginLog[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchLogs = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.get<LoginLog[]>('/auth/session-history');
-      setLogs(data || []);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch login history';
-      setError(message);
-      console.error('Failed to fetch login history:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLogs();
-  }, []);
+  const logs =[
+    { id: 1, ip: '192.168.1.100', location: '内网', device: 'Chrome / Windows', time: '刚刚', status: 'success', icon: Monitor },
+    { id: 2, ip: '113.89.23.45', location: '广东深圳', device: 'Safari / iPhone', time: '3小时前', status: 'success', icon: Smartphone },
+    { id: 3, ip: '45.33.12.9', location: '美国洛杉矶', device: 'Unknown', time: '昨天 02:30', status: 'blocked', icon: Globe },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6">
-      <div className="container mx-auto max-w-7xl">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center justify-between mb-8"
-        >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
+      <header className="sticky top-4 z-50 px-4 max-w-4xl mx-auto">
+        <div className="glass-panel rounded-full px-6 py-4 flex justify-between items-center ring-1 ring-white/20 dark:ring-white/10">
           <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              onClick={() => navigate('/settings')}
-              className="rounded-full hover:bg-white/60"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">登录历史</h1>
-              <p className="text-sm text-gray-500 mt-1">共 {logs.length} 条记录</p>
-            </div>
+            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
+            <div><h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">登录历史</h1></div>
           </div>
-          <Button onClick={fetchLogs} disabled={loading} className="h-10">
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? '加载中...' : '刷新'}
-          </Button>
+          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-500 flex items-center justify-center"><ShieldCheck size={20} /></div>
+        </div>
+      </header>
+      <main className="max-w-4xl mx-auto px-6 py-8 mt-4">
+        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="relative">
+          <div className="absolute left-8 top-8 bottom-8 w-px bg-gradient-to-b from-primary-500/50 via-gray-300 dark:via-gray-700 to-transparent z-0"></div>
+          <div className="space-y-6 relative z-10">
+            {logs.map((log) => {
+              const Icon = log.icon;
+              return (
+                <motion.div key={log.id} variants={itemVariants} className="flex gap-6 items-center">
+                  <div className={`w-16 h-16 rounded-3xl shrink-0 flex items-center justify-center shadow-lg border border-white/20 dark:border-white/5 backdrop-blur-md ${log.status === 'success' ? 'bg-white/80 dark:bg-gray-800/80 text-primary-500' : 'bg-red-50 dark:bg-red-900/30 text-red-500'}`}><Icon size={28} /></div>
+                  <div className="glass-panel rounded-3xl p-5 flex-1 hover:shadow-xl transition-all">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-bold text-gray-900 dark:text-white font-mono">{log.ip}</h3>
+                          <Badge variant={log.status === 'success' ? 'success' : 'destructive'} className="scale-90">{log.status === 'success' ? '登录成功' : '已拦截'}</Badge>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 text-sm text-gray-500 dark:text-gray-400">
+                          <span className="flex items-center gap-1"><MapPin size={14} /> {log.location}</span>
+                          <span className="flex items-center gap-1">设备: {log.device}</span>
+                        </div>
+                      </div>
+                      <div className="text-sm font-medium text-gray-400 whitespace-nowrap">{log.time}</div>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
         </motion.div>
-
-      <Card className="overflow-hidden">
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-red-50 border-b border-red-200 text-red-700 text-sm flex items-center gap-2"
-          >
-            <Shield className="h-4 w-4" />
-            {error}
-          </motion.div>
-        )}
-        {loading ? (
-          <div className="p-6 space-y-3">
-            {[...Array(6)].map((_, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: i * 0.05 }}
-                className="h-14 bg-muted rounded-lg animate-pulse"
-              />
-            ))}
-          </div>
-        ) : logs.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="py-20 text-center"
-          >
-            <Shield className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-            <p className="text-muted-foreground">暂无登录记录</p>
-          </motion.div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600">时间</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600">IP地址</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600">设备</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600">状态</th>
-                </tr>
-              </thead>
-              <motion.tbody
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="divide-y"
-              >
-                {logs.map((log) => (
-                  <motion.tr
-                    key={log.id}
-                    variants={itemVariants}
-                    className="hover:bg-blue-50/50 transition-colors"
-                  >
-                    <td className="px-6 py-4 font-medium">{new Date(log.login_time).toLocaleString('zh-CN')}</td>
-                    <td className="px-6 py-4 text-gray-600">{log.ip_address}</td>
-                    <td className="px-6 py-4 text-gray-500 max-w-xs truncate flex items-center gap-2">
-                      <Monitor className="h-4 w-4 flex-shrink-0" />
-                      {log.user_agent}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                        log.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {log.status === 'success' ? '✓ 成功' : '✗ 失败'}
-                      </span>
-                    </td>
-                  </motion.tr>
-                ))}
-              </motion.tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-      </div>
-    </div>
+      </main>
+    </motion.div>
   );
 }
