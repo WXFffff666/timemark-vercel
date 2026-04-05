@@ -7,7 +7,7 @@ export const reminderConfigSchema = z.object({
   emailRecipients: z.array(z.string().email()),
   channels: z.array(z.string()).optional(),
   accountIds: z.array(z.string()).optional(),
-  reminderTime: z.string().optional(), // 自定义提醒时间 HH:mm
+  reminderTimes: z.array(z.string()).optional(), // 多选提醒时间 HH:mm 数组
 });
 
 export const createEventSchema = z.object({

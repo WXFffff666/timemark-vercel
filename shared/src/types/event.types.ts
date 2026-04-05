@@ -55,7 +55,7 @@ export interface ReminderConfig {
   emailRecipients: string[];
   channels?: NotificationChannel[] | string[];
   accountIds?: string[];
-  reminderTime?: string; // 自定义提醒时间 HH:mm
+  reminderTimes?: string[]; // 多选提醒时间 HH:mm 数组
 }
 
 export interface Event {

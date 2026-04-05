@@ -94,7 +94,7 @@ const defaultReminderConfig: ReminderConfig = {
   enabled: true,
   daysBeforeList: [1, 3],
   emailRecipients: [],
-  reminderTime: '09:00',
+  reminderTimes: ['09:00'],
   channels: [],
 };
 
@@ -466,20 +466,26 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-4 pl-2 border-l-2 border-primary-500/30"
                 >
-                  {/* 提醒时间 */}
+                  {/* 提醒时间（可多选） */}
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">提醒时间</label>
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">提醒时间（可多选）</label>
                     <div className="flex gap-2 flex-wrap">
                       {reminderTimes.map((time) => (
                         <button
                           key={time}
                           type="button"
-                          onClick={() => setFormData({
-                            ...formData,
-                            reminderConfig: { ...formData.reminderConfig, reminderTime: time }
-                          })}
+                          onClick={() => {
+                            const currentTimes = formData.reminderConfig.reminderTimes || [];
+                            const newTimes = currentTimes.includes(time)
+                              ? currentTimes.filter(t => t !== time)
+                              : [...currentTimes, time];
+                            setFormData({
+                              ...formData,
+                              reminderConfig: { ...formData.reminderConfig, reminderTimes: newTimes }
+                            });
+                          }}
                           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${
-                            formData.reminderConfig.reminderTime === time
+                            formData.reminderConfig.reminderTimes?.includes(time)
                               ? 'bg-primary-500 text-white'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                           }`}
@@ -488,6 +494,11 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                         </button>
                       ))}
                     </div>
+                    {formData.reminderConfig.reminderTimes && formData.reminderConfig.reminderTimes.length > 0 && (
+                      <div className="text-xs text-slate-400 mt-1">
+                        已选择: {formData.reminderConfig.reminderTimes.join(', ')}
+                      </div>
+                    )}
                   </div>
 
                   {/* 提前天数 */}
