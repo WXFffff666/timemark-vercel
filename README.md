@@ -6,18 +6,36 @@
 
 ## 项目简介
 
-TimeMark Docker 是一款功能强大的智能事件提醒系统，专为管理生日、纪念日等重要事件而设计。系统支持公历和农历双重日历，多渠道实时通知，关系映射，以及企业级安全特性。
+TimeMark Docker 是一款功能强大的智能事件提醒系统，专为管理生日、纪念日等重要事件而设计。系统支持公历和农历双重日历转换，多渠道实时通知，关系映射，以及企业级安全特性。
 
 ### 核心特性
 
 | 特性 | 说明 |
 |------|------|
-| 农历支持 | 支持公历/农历双重日历，智能转换，支持闰月 |
-| 27个通知渠道 | 覆盖国内外主流通讯平台 |
-| 关系映射 | 自定义称呼转换，如"我妈"转换为"妻子" |
-| 企业级安全 | TOTP双因素认证，JWT会话管理，安全告警邮件 |
-| 时区切换 | 支持全球时区，自动NTP时间同步 |
-| 触发日志 | 完整的事件触发记录和日志追踪 |
+| 🌙 农历支持 | 基于 lunar-javascript 库，精准转换，支持闰月 |
+| 🔔 27个通知渠道 | 覆盖国内外主流通讯平台（邮件、飞书、钉钉、Telegram等） |
+| 👥 关系映射 | 自定义称呼转换，如"我爸"→"妻子" |
+| 🔐 企业级安全 | TOTP双因素认证，JWT会话管理，安全告警邮件 |
+| 🌍 时区切换 | 支持全球时区，自动NTP时间同步 |
+| 📝 触发日志 | 完整的事件触发记录和日志追踪 |
+
+---
+
+## 最近更新 (2025-04)
+
+### v1.1.0 新增功能
+
+- **提醒时间多选**: 支持预设时间快速选择，也可自定义添加多个提醒时间
+- **关联人员拆分**: 将"关联人员"拆分为"被提醒人"和"提醒人"两个字段
+- **农历转换修复**: 前端现已使用 lunar-javascript 库进行准确的公历/农历转换
+- **双日历模式**: 支持选择公历、农历或双历显示
+
+### 更新日志
+
+| 版本 | 日期 | 更新内容 |
+|------|------|----------|
+| v1.1.0 | 2025-04 | 提醒时间多选、关联人员拆分、农历转换修复 |
+| v1.0.0 | 2025-01 | 初始版本，基础功能完成 |
 
 ---
 
@@ -52,7 +70,7 @@ docker-compose up -d
 - 用户名: admin
 - 密码: TimeMark@2026
 
-注意：首次登录后请立即修改密码
+> ⚠️ 首次登录后请立即修改密码
 
 ---
 
@@ -67,7 +85,7 @@ docker-compose up -d
 | birthday | 生日 | 家人、朋友生日 |
 | anniversary | 纪念日 | 结婚纪念日、恋爱纪念日 |
 | holiday | 节日 | 春节、中秋节、元旦 |
-| custom | 自定义 | 任意重要日期 |
+| other | 自定义 | 任意重要日期 |
 
 #### 日历类型
 
@@ -75,14 +93,16 @@ docker-compose up -d
 - 农历(lunar): 仅使用农历日期  
 - 双历(both): 公历农历都显示
 
+> 🔄 农历转换基于 lunar-javascript 库，支持精确转换及闰月处理
+
 #### 提醒配置
 
 每个事件支持灵活的提醒配置：
 
-- 提醒时间：可设置具体的提醒时间（如09:00）
-- 提前天数：支持提前1/3/7/14/30天提醒
-- 通知渠道：可选择多个通知渠道
-- 邮件列表：支持邮件提醒，可设置多个收件人
+- **提醒时间**: 预设时间快速选择 + 自定义时间添加，可多选
+- **提前天数**: 支持提前1/3/7/14/30天提醒
+- **通知渠道**: 可选择多个通知渠道
+- **邮件列表**: 支持邮件提醒，可设置多个收件人
 
 ---
 
@@ -92,15 +112,15 @@ docker-compose up -d
 
 | 渠道 | 图标 | 配置要求 | 适用场景 |
 |------|------|----------|----------|
-| 邮件(Resend) | 邮件 | Resend API Key | 正式邮件通知，支持HTML模板 |
-| 飞书 | 飞书 | Webhook URL | 飞书群聊卡片消息 |
-| 企业微信 | 企业微信 | Webhook URL | 企业微信群聊Markdown消息 |
-| 钉钉 | 钉钉 | Webhook + Secret | 钉钉群聊，需HMAC-SHA256签名 |
-| Telegram | 电报 | Bot Token + Chat ID | Telegram机器人，支持Markdown |
-| Slack | Slack | Webhook URL | Slack频道，支持Blocks格式 |
-| Discord | 游戏 | Webhook URL | Discord频道Embed消息 |
-| 微信(WxPusher) | 微信 | AppToken + UID | 微信公众号通知 |
-| QQ(Qmsg) | QQ | Key | QQ机器人通知 |
+| 邮件(Resend) | 📧 | Resend API Key | 正式邮件通知，支持HTML模板 |
+| 飞书 | 📱 | Webhook URL | 飞书群聊卡片消息 |
+| 企业微信 | 💬 | Webhook URL | 企业微信群聊Markdown消息 |
+| 钉钉 | 🔔 | Webhook + Secret | 钉钉群聊，需HMAC-SHA256签名 |
+| Telegram | ✈️ | Bot Token + Chat ID | Telegram机器人，支持Markdown |
+| Slack | 💼 | Webhook URL | Slack频道，支持Blocks格式 |
+| Discord | 🎮 | Webhook URL | Discord频道Embed消息 |
+| 微信(WxPusher) | 💚 | AppToken + UID | 微信公众号通知 |
+| QQ(Qmsg) | 🐧 | Key | QQ机器人通知 |
 
 #### Webhook桥接渠道（18个）
 
@@ -110,17 +130,27 @@ WhatsApp、Google Chat、Signal、iMessage、BlueBubbles、IRC、Microsoft Teams
 
 ---
 
+### 关联人员功能
+
+关联人员模块拆分为两个独立字段：
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| 被提醒人 | 事件所有者/生日主角 | 我爸、妈妈、李四 |
+| 提醒人 | 接收通知的人 | 我、妻子、王五 |
+| 提醒人邮箱 | 提醒人专属邮箱（可选） | me@example.com |
+
 ### 关系映射功能
 
 关系映射允许你为不同的收件人设置不同的称呼转换，解决了"给爸爸发妈妈的消息时称呼不适配"的问题。
 
-使用场景：
+**使用场景**：
 - 你添加了"妈妈生日"事件，称呼为"我妈"
 - 给爸爸发送时，转换为"妻子"
 - 给妈妈发送时，保持"我妈"
 - 给外人发送时，可转换为"母亲"
 
-映射示例：
+**映射示例**：
 
 | 原始称呼 | 转换后 | 适用收件人类型 |
 |----------|--------|----------------|
@@ -136,8 +166,8 @@ WhatsApp、Google Chat、Signal、iMessage、BlueBubbles、IRC、Microsoft Teams
 
 #### TOTP双因素认证
 
-- 支持Google Authenticator
-- 支持Microsoft Authenticator
+- 支持 Google Authenticator
+- 支持 Microsoft Authenticator
 - 支持任何兼容TOTP的应用（如1Password、Authy等）
 - 启用后登录需额外验证动态验证码
 
@@ -176,7 +206,7 @@ WhatsApp、Google Chat、Signal、iMessage、BlueBubbles、IRC、Microsoft Teams
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | React 18, TypeScript, TailwindCSS, Framer Motion |
+| 前端 | React 18, TypeScript, TailwindCSS, Framer Motion, lunar-javascript |
 | 后端 | Hono, TypeScript, lunar-javascript |
 | 数据库 | PostgreSQL 15, Redis 7 |
 | 认证 | JWT, TOTP |
@@ -206,6 +236,21 @@ pnpm dev
 # 构建生产版本
 pnpm build
 ```
+
+### 农历转换测试
+
+项目包含农历转换测试脚本，可验证转换准确性：
+
+```bash
+cd backend
+node test-lunar.cjs
+```
+
+测试覆盖：
+- 公历→农历转换（26个测试用例）
+- 农历→公历转换（30个测试用例）
+- 闰月处理验证
+- 春节、元宵、端午、中秋等传统节日
 
 ---
 
@@ -244,42 +289,43 @@ ALERT_EMAILS=admin@example.com,support@example.com
 
 ## API接口文档
 
-### 认证接口 (/auth)
+### 认证接口 (/api/auth)
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /auth/login | 用户登录 |
-| POST | /auth/verify-2fa | 验证TOTP验证码 |
-| POST | /auth/setup-2fa | 获取TOTP密钥和二维码 |
-| POST | /auth/confirm-2fa | 确认并启用双因素认证 |
-| POST | /auth/verify-device | 验证设备信任状态 |
-| POST | /auth/logout | 用户登出 |
-| POST | /auth/change-password | 修改密码 |
-| POST | /auth/refresh | 刷新AccessToken |
+| POST | /api/auth/login | 用户登录 |
+| POST | /api/auth/verify-2fa | 验证TOTP验证码 |
+| POST | /api/auth/setup-2fa | 获取TOTP密钥和二维码 |
+| POST | /api/auth/confirm-2fa | 确认并启用双因素认证 |
+| POST | /api/auth/verify-device | 验证设备信任状态 |
+| POST | /api/auth/logout | 用户登出 |
+| POST | /api/auth/change-password | 修改密码 |
+| POST | /api/auth/refresh | 刷新AccessToken |
 
-### 事件接口 (/events)
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /events | 获取当前用户所有事件 |
-| POST | /events | 创建新事件 |
-| PUT | /events/:id | 更新事件 |
-| DELETE | /events/:id | 删除事件 |
-
-### 配置接口 (/config)
+### 事件接口 (/api/events)
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | /config | 获取用户配置 |
-| POST | /config | 保存用户配置 |
-| GET | /config/accounts | 获取通知账户列表 |
-| POST | /config/accounts | 创建通知账户 |
-| PUT | /config/accounts/:id | 更新通知账户 |
-| DELETE | /config/accounts/:id | 删除通知账户 |
-| GET | /config/relationships | 获取关系映射列表 |
-| POST | /config/relationships | 创建关系映射 |
-| PUT | /config/relationships/:id | 更新关系映射 |
-| DELETE | /config/relationships/:id | 删除关系映射 |
+| GET | /api/events | 获取当前用户所有事件 |
+| POST | /api/events | 创建新事件 |
+| PUT | /api/events/:id | 更新事件 |
+| DELETE | /api/events/:id | 删除事件 |
+| POST | /api/events/:id/test-send | 发送测试通知 |
+
+### 配置接口 (/api/config)
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/config | 获取用户配置 |
+| POST | /api/config | 保存用户配置 |
+| GET | /api/config/accounts | 获取通知账户列表 |
+| POST | /api/config/accounts | 创建通知账户 |
+| PUT | /api/config/accounts/:id | 更新通知账户 |
+| DELETE | /api/config/accounts/:id | 删除通知账户 |
+| GET | /api/config/relationships | 获取关系映射列表 |
+| POST | /api/config/relationships | 创建关系映射 |
+| PUT | /api/config/relationships/:id | 更新关系映射 |
+| DELETE | /api/config/relationships/:id | 删除关系映射 |
 
 ---
 
@@ -288,9 +334,9 @@ ALERT_EMAILS=admin@example.com,support@example.com
 欢迎提交Issue和Pull Request！
 
 1. Fork本仓库
-2. 创建特性分支 git checkout -b feature/功能名称
-3. 提交更改 git commit -m 'Add xxx功能'
-4. 推送分支 git push origin feature/功能名称
+2. 创建特性分支 `git checkout -b feature/功能名称`
+3. 提交更改 `git commit -m 'Add xxx功能'`
+4. 推送分支 `git push origin feature/功能名称`
 5. 开启Pull Request
 
 ---

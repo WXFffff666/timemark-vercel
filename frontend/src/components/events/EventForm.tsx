@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { CalendarClock, Type, AlignLeft, Globe, Bell, Mail, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Lunar, Solar } from 'lunar-javascript';
 import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate } from '@timemark/shared';
 
 interface EventFormProps {
@@ -38,17 +39,23 @@ const reminderTimes = [
   '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'
 ];
 
-// Helper to convert between calendar types
+// 使用 lunar-javascript 转换农历/公历
 const convertToLunar = (gregorianDate: string): { year: number; month: number; day: number; isLeap: boolean } | null => {
   try {
     const date = new Date(gregorianDate);
     if (isNaN(date.getTime())) return null;
-    // Simplified lunar conversion - in production would use lunar-calendar library
+    
+    const solar = Solar.fromDate(date);
+    const lunar = solar.getLunar();
+    
+    const month = lunar.getMonth();
+    const isLeap = month < 0; // 闰月为负数
+    
     return {
-      year: date.getFullYear(),
-      month: date.getMonth() + 1,
-      day: date.getDate(),
-      isLeap: false
+      year: lunar.getYear(),
+      month: Math.abs(month),
+      day: lunar.getDay(),
+      isLeap
     };
   } catch {
     return null;
@@ -57,9 +64,12 @@ const convertToLunar = (gregorianDate: string): { year: number; month: number; d
 
 const convertToGregorian = (lunarDate: { year: number; month: number; day: number; isLeap: boolean }): string | null => {
   try {
-    // Simplified conversion - in production would use lunar-calendar library
-    const date = new Date(lunarDate.year, lunarDate.month - 1, lunarDate.day);
-    return date.toISOString().split('T')[0];
+    const { year, month, day, isLeap } = lunarDate;
+    // 闰月用负数表示
+    const lunar = Lunar.fromYmd(year, isLeap ? -month : month, day);
+    const solar = lunar.getSolar();
+    
+    return `${solar.getYear()}-${String(solar.getMonth()).padStart(2, '0')}-${String(solar.getDay()).padStart(2, '0')}`;
   } catch {
     return null;
   }
