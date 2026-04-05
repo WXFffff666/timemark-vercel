@@ -34,14 +34,28 @@ const calendarTypes: { value: CalendarType; label: string }[] = [
 const reminderDays = [1, 3, 7, 14, 30];
 
 const notificationChannels = [
+  // Email (mandatory)
   { value: 'email', label: '邮件', icon: '📧' },
+  // Webhook channels
   { value: 'feishu', label: '飞书', icon: '📱' },
   { value: 'dingtalk', label: '钉钉', icon: '🔔' },
   { value: 'wecom', label: '企业微信', icon: '💬' },
-  { value: 'telegram', label: 'Telegram', icon: '✈️' },
   { value: 'discord', label: 'Discord', icon: '🎮' },
   { value: 'slack', label: 'Slack', icon: '💼' },
+  { value: 'googlechat', label: 'Google Chat', icon: '🔵' },
+  // Token-based channels
+  { value: 'telegram', label: 'Telegram', icon: '✈️' },
+  { value: 'line', label: 'LINE', icon: '🟢' },
+  { value: 'matrix', label: 'Matrix', icon: '⚡' },
+  { value: 'mattermost', label: 'Mattermost', icon: '🧱' },
+  { value: 'msteams', label: 'MS Teams', icon: '📊' },
+  // Plugin-based channels
   { value: 'wechat', label: '微信', icon: '💚' },
+  { value: 'whatsapp', label: 'WhatsApp', icon: '📲' },
+  { value: 'qqbot', label: 'QQ', icon: '🐧' },
+  { value: 'signal', label: 'Signal', icon: '🔒' },
+  { value: 'zalo', label: 'Zalo', icon: '💌' },
+  { value: 'nostr', label: 'Nostr', icon: '🕸️' },
 ];
 
 const defaultReminderConfig: ReminderConfig = {

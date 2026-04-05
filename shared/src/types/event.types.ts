@@ -9,33 +9,44 @@ export interface LunarDate {
 }
 
 export type NotificationChannel =
+  // Email (mandatory)
   | 'email'
+  // Webhook channels
   | 'feishu'
   | 'dingtalk'
   | 'wecom'
-  | 'telegram'
   | 'discord'
   | 'slack'
+  | 'googlechat'
+  | 'irc'
+  | 'synologychat'
+  | 'twitch'
+  // Token-based channels
+  | 'telegram'
+  | 'line'
+  | 'matrix'
+  | 'mattermost'
+  | 'msteams'
+  | 'nextcloudtalk'
+  | 'wxpusher'
+  | 'qmsg'
+  // Legacy/other channels
   | 'wechat'
   | 'qq'
   | 'whatsapp'
-  | 'google_chat'
   | 'signal'
   | 'imessage'
   | 'bluebubbles'
-  | 'irc'
   | 'microsoft_teams'
-  | 'matrix'
-  | 'line'
-  | 'mattermost'
-  | 'nextcloud_talk'
   | 'nostr'
-  | 'synology_chat'
   | 'tlon'
-  | 'twitch'
   | 'zalo'
   | 'zalo_personal'
-  | 'network_chat';
+  | 'network_chat'
+  | 'google_chat'
+  | 'synology_chat'
+  | 'nextcloud_talk'
+  | 'qqbot';
 
 export interface ReminderConfig {
   enabled: boolean;
@@ -83,6 +94,9 @@ export interface NotificationAccount {
   webhook?: string;
   token?: string;
   chatId?: string;
+  configMethod?: 'webhook' | 'token' | 'plugin';
+  sessionData?: any;
+  pluginPackage?: string;
 }
 
 export interface RelationshipMapping {

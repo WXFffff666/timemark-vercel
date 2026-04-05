@@ -8,27 +8,40 @@ import { sendWxPusherNotification } from './wxpusher.service.js';
 import { sendQmsgNotification } from './qmsg.service.js';
 import { sendGenericWebhookNotification } from './generic-webhook.service.js';
 import { sendEmailNotification } from './email.service.js';
+// New webhook-based channels
+import { sendGoogleChatNotification } from './googlechat.service.js';
+import { sendIRCNotification } from './irc.service.js';
+import { sendSynologyChatNotification } from './synologychat.service.js';
+import { sendTwitchNotification } from './twitch.service.js';
+// New token-based channels
+import { sendLINENotification } from './line.service.js';
+import { sendMatrixNotification } from './matrix.service.js';
+import { sendMattermostNotification } from './mattermost.service.js';
+import { sendMicrosoftTeamsNotification } from './msteams.service.js';
+import { sendNextcloudTalkNotification } from './nextcloudtalk.service.js';
+import { sendNostrNotification } from './nostr.service.js';
+
 import { getUserConfig, getRelationshipMappings, getNotificationAccounts } from '../config.service.js';
 
+// 通用 Webhook 渠道（通过配置文件中的 channel_webhooks 字段配置）
 const genericWebhookChannels = new Set([
   'whatsapp',
-  'google_chat',
   'signal',
   'imessage',
   'bluebubbles',
-  'irc',
-  'microsoft_teams',
-  'matrix',
-  'line',
-  'mattermost',
-  'nextcloud_talk',
-  'nostr',
-  'synology_chat',
-  'tlon',
-  'twitch',
   'zalo',
   'zalo_personal',
   'network_chat',
+  'nextcloudtalk',
+  'nostr',
+  'irc',
+  'synologychat',
+  'twitch',
+  'matrix',
+  'mattermost',
+  'msteams',
+  'line',
+  'googlechat',
 ]);
 
 // 渠道类型到通知账户类型的映射
@@ -42,6 +55,20 @@ const channelToAccountType: Record<string, string> = {
   'wechat': 'wxpusher',
   'qq': 'qmsg',
   'email': 'email',
+  // New mappings
+  'googlechat': 'googlechat',
+  'line': 'line',
+  'matrix': 'matrix',
+  'mattermost': 'mattermost',
+  'msteams': 'msteams',
+  'nextcloudtalk': 'nextcloudtalk',
+  'nostr': 'nostr',
+  'irc': 'irc',
+  'synologychat': 'synologychat',
+  'twitch': 'twitch',
+  'whatsapp': 'whatsapp',
+  'signal': 'signal',
+  'zalo': 'zalo',
 };
 
 /**
@@ -50,33 +77,54 @@ const channelToAccountType: Record<string, string> = {
 function getChannelConfigFromAccount(
   account: any,
   channel: string
-): { webhook?: string; token?: string; secret?: string; chat_id?: string } | null {
-  // 直接使用账户的字段（notification_accounts 表的字段已经是明文存储的）
+): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string } | null {
+  // 直接使用账户的字段
   switch (channel) {
+    // Webhook-based channels
     case 'feishu':
-      return account.webhook ? { webhook: account.webhook } : null;
     case 'wecom':
+    case 'discord':
+    case 'slack':
+    case 'googlechat':
+    case 'irc':
+    case 'synologychat':
+    case 'twitch':
       return account.webhook ? { webhook: account.webhook } : null;
+    
     case 'dingtalk':
       return (account.webhook && account.secret)
         ? { webhook: account.webhook, secret: account.secret }
-        : null;
+        : account.webhook ? { webhook: account.webhook } : null;
+    
+    // Token-based channels
     case 'telegram':
       return (account.token && account.chat_id)
         ? { token: account.token, chat_id: account.chat_id }
         : null;
-    case 'discord':
-      return account.webhook ? { webhook: account.webhook } : null;
-    case 'slack':
-      return account.webhook ? { webhook: account.webhook } : null;
-    case 'wechat':
+    
+    case 'line':
+    case 'wxpusher':
+    case 'qmsg':
       return (account.token && account.chat_id)
         ? { token: account.token, chat_id: account.chat_id }
         : null;
-    case 'qq':
+    
+    case 'matrix':
+      return (account.webhook && account.token && account.chat_id)
+        ? { webhook: account.webhook, token: account.token, chat_id: account.chat_id, server_url: account.webhook }
+        : null;
+    
+    case 'mattermost':
+    case 'nextcloud_talk':
+      return (account.webhook && account.token && account.chat_id)
+        ? { webhook: account.webhook, token: account.token, chat_id: account.chat_id, server_url: account.webhook }
+        : null;
+    
+    case 'msteams':
       return (account.token && account.chat_id)
         ? { token: account.token, chat_id: account.chat_id }
         : null;
+    
     default:
       return null;
   }

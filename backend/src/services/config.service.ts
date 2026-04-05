@@ -110,6 +110,9 @@ export interface NotificationAccount {
   secret: string | null;
   chat_id: string | null;
   is_active: boolean;
+  config_method: 'webhook' | 'token' | 'plugin';
+  session_data: any | null;
+  plugin_package: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -124,13 +127,34 @@ export async function getNotificationAccounts(userId: number): Promise<Notificat
 
 export async function createNotificationAccount(
   userId: number,
-  data: { type: string; name: string; webhook?: string; token?: string; secret?: string; chat_id?: string }
+  data: { 
+    type: string; 
+    name: string; 
+    webhook?: string; 
+    token?: string; 
+    secret?: string; 
+    chat_id?: string;
+    config_method?: 'webhook' | 'token' | 'plugin';
+    session_data?: any;
+    plugin_package?: string;
+  }
 ): Promise<NotificationAccount> {
   const result = await query(
-    `INSERT INTO notification_accounts (user_id, type, name, webhook, token, secret, chat_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO notification_accounts (user_id, type, name, webhook, token, secret, chat_id, config_method, session_data, plugin_package)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
-    [userId, data.type, data.name, data.webhook || null, data.token || null, data.secret || null, data.chat_id || null]
+    [
+      userId, 
+      data.type, 
+      data.name, 
+      data.webhook || null, 
+      data.token || null, 
+      data.secret || null, 
+      data.chat_id || null,
+      data.config_method || 'webhook',
+      data.session_data ? JSON.stringify(data.session_data) : null,
+      data.plugin_package || null
+    ]
   );
   return result.rows[0];
 }
@@ -138,7 +162,17 @@ export async function createNotificationAccount(
 export async function updateNotificationAccount(
   id: number,
   userId: number,
-  data: Partial<{ name: string; webhook: string; token: string; secret: string; chat_id: string; is_active: boolean }>
+  data: Partial<{ 
+    name: string; 
+    webhook: string; 
+    token: string; 
+    secret: string; 
+    chat_id: string; 
+    is_active: boolean;
+    config_method: 'webhook' | 'token' | 'plugin';
+    session_data: any;
+    plugin_package: string;
+  }>
 ): Promise<NotificationAccount | null> {
   const updates: string[] = ['updated_at = CURRENT_TIMESTAMP'];
   const values: any[] = [];
@@ -167,6 +201,18 @@ export async function updateNotificationAccount(
   if (data.is_active !== undefined) {
     updates.push(`is_active = $${paramIndex++}`);
     values.push(data.is_active);
+  }
+  if (data.config_method !== undefined) {
+    updates.push(`config_method = $${paramIndex++}`);
+    values.push(data.config_method);
+  }
+  if (data.session_data !== undefined) {
+    updates.push(`session_data = $${paramIndex++}`);
+    values.push(data.session_data ? JSON.stringify(data.session_data) : null);
+  }
+  if (data.plugin_package !== undefined) {
+    updates.push(`plugin_package = $${paramIndex++}`);
+    values.push(data.plugin_package);
   }
 
   if (updates.length === 1) return null;

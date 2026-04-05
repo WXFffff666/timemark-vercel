@@ -7,6 +7,7 @@ import 'dotenv/config';
 import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
 import configRoutes from './routes/config.js';
+import channelsRoutes from './routes/channels.js';
 import { startScheduler, stopScheduler } from './queue/scheduler.js';
 import './queue/processors.js';
 
@@ -21,6 +22,7 @@ app.use('*', cors({
 app.route('/api/auth', authRoutes);
 app.route('/api/events', eventRoutes);
 app.route('/api/config', configRoutes);
+app.route('/api/channels', channelsRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 

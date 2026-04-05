@@ -132,10 +132,17 @@ CREATE TABLE notification_accounts (
   secret TEXT,
   chat_id VARCHAR(255),
   is_active BOOLEAN DEFAULT TRUE,
+  -- 渠道配置方式: webhook | token | plugin
+  config_method VARCHAR(20) DEFAULT 'webhook',
+  -- 插件渠道的会话数据（JSON格式）
+  session_data JSON,
+  -- 插件渠道需要的npm包名
+  plugin_package VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_notification_accounts_user ON notification_accounts(user_id);
+CREATE INDEX idx_notification_accounts_type ON notification_accounts(type);
 
 -- event_trigger_logs 表 - 事件触发日志
 CREATE TABLE event_trigger_logs (

@@ -44,6 +44,9 @@ config.post('/accounts', async (c) => {
     token: body.token,
     secret: body.secret,
     chat_id: body.chatId,
+    config_method: body.configMethod || 'webhook',
+    session_data: body.sessionData,
+    plugin_package: body.pluginPackage,
   });
   
   return c.json({ success: true, data: account }, 201);
@@ -61,6 +64,9 @@ config.put('/accounts/:id', async (c) => {
     secret: body.secret,
     chat_id: body.chatId,
     is_active: body.isActive,
+    config_method: body.configMethod,
+    session_data: body.sessionData,
+    plugin_package: body.pluginPackage,
   });
   
   if (!account) {
