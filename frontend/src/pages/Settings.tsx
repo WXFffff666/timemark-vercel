@@ -23,6 +23,12 @@ export default function Settings() {
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   
+  // Original user data for reset
+  const [originalProfile, setOriginalProfile] = useState({
+    username: user?.username || '',
+    email: 'admin@timemark.app',
+  });
+  
   // Form states
   const [profileForm, setProfileForm] = useState({
     username: user?.username || '',
@@ -47,13 +53,38 @@ export default function Settings() {
 
   const handleSaveProfile = async () => {
     try {
-      // In a real app, this would call the API
-      // await api.put('/user/profile', profileForm);
+      await api.put('/user/profile', {
+        username: profileForm.username,
+        email: profileForm.email,
+      });
+      
+      // Update local user state
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser) {
+        useAuthStore.getState().setUser({
+          ...currentUser,
+          username: profileForm.username,
+        });
+      }
+      
+      // Update original profile for future resets
+      setOriginalProfile(profileForm);
+      
       alert('个人信息保存成功');
       setShowProfileModal(false);
     } catch (error) {
       console.error('Failed to save profile:', error);
-      alert('保存失败');
+      alert('保存失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    }
+  };
+  
+  // Handle modal close - reset form to original values
+  const handleCloseProfileModal = (open: boolean) => {
+    setShowProfileModal(open);
+    if (!open) {
+      // Reset form to original values when closing
+      setProfileForm(originalProfile);
+      setAvatarUrl(user?.avatarUrl || '');
     }
   };
 
@@ -247,7 +278,7 @@ export default function Settings() {
       </main>
 
       {/* 编辑资料弹窗 */}
-      <Dialog open={showProfileModal} onOpenChange={setShowProfileModal}>
+      <Dialog open={showProfileModal} onOpenChange={handleCloseProfileModal}>
         <DialogContent className="glass-panel rounded-[2.5rem]">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
@@ -304,7 +335,7 @@ export default function Settings() {
               />
             </div>
             <div className="pt-4 flex gap-3">
-              <Button variant="secondary" className="flex-1 h-12 rounded-2xl font-bold" onClick={() => setShowProfileModal(false)}>取消</Button>
+              <Button variant="secondary" className="flex-1 h-12 rounded-2xl font-bold" onClick={() => handleCloseProfileModal(false)}>取消</Button>
               <Button variant="vision" className="flex-1 h-12 rounded-2xl font-bold shadow-lg shadow-primary-500/30" onClick={handleSaveProfile}>保存修改</Button>
             </div>
           </div>

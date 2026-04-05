@@ -13,7 +13,9 @@
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-switch": "^1.0.3",
+    "@radix-ui/react-tabs": "^1.1.13",
     "@timemark/shared": "workspace:*",
+    "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^3.3.1",
     "framer-motion": "^12.36.0",
@@ -25,8 +27,7 @@
     "react-router-dom": "^6.22.0",
     "tailwind-merge": "^2.2.1",
     "zod": "^3.22.4",
-    "zustand": "^4.5.0",
-    "class-variance-authority": "^0.7.0"
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

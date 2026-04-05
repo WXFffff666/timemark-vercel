@@ -21,7 +21,7 @@ import { sendMicrosoftTeamsNotification } from './msteams.service.js';
 import { sendNextcloudTalkNotification } from './nextcloudtalk.service.js';
 import { sendNostrNotification } from './nostr.service.js';
 
-import { getUserConfig, getRelationshipMappings, getNotificationAccounts } from '../config.service.js';
+import { getUserConfig, getRelationshipMappings, getNotificationAccounts, getEventTemplate } from '../config.service.js';
 
 // 通用 Webhook 渠道（通过配置文件中的 channel_webhooks 字段配置）
 const genericWebhookChannels = new Set([

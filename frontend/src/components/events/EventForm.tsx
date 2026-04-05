@@ -85,19 +85,27 @@ const notificationChannels = [
   { value: 'discord', label: 'Discord', icon: '🎮' },
   { value: 'slack', label: 'Slack', icon: '💼' },
   { value: 'googlechat', label: 'Google Chat', icon: '🔵' },
+  { value: 'irc', label: 'IRC', icon: '💻' },
+  { value: 'synologychat', label: '群晖 Chat', icon: '🖥️' },
+  { value: 'twitch', label: 'Twitch', icon: '📺' },
   // Token-based channels
   { value: 'telegram', label: 'Telegram', icon: '✈️' },
   { value: 'line', label: 'LINE', icon: '🟢' },
   { value: 'matrix', label: 'Matrix', icon: '⚡' },
   { value: 'mattermost', label: 'Mattermost', icon: '🧱' },
   { value: 'msteams', label: 'MS Teams', icon: '📊' },
+  { value: 'nextcloud_talk', label: 'Nextcloud Talk', icon: '☁️' },
+  { value: 'nostr', label: 'Nostr', icon: '🕸️' },
+  { value: 'wxpusher', label: 'WxPusher', icon: '💚' },
+  { value: 'qmsg', label: 'Qmsg', icon: '🐧' },
   // Plugin-based channels
-  { value: 'wechat', label: '微信', icon: '💚' },
+  { value: 'wechat_official', label: '微信公众号', icon: '📣' },
+  { value: 'wechat_personal', label: '微信个人号', icon: '💬' },
   { value: 'whatsapp', label: 'WhatsApp', icon: '📲' },
-  { value: 'qqbot', label: 'QQ', icon: '🐧' },
+  { value: 'qqbot', label: 'QQ Bot', icon: '🐧' },
   { value: 'signal', label: 'Signal', icon: '🔒' },
   { value: 'zalo', label: 'Zalo', icon: '💌' },
-  { value: 'nostr', label: 'Nostr', icon: '🕸️' },
+  { value: 'imessage', label: 'iMessage', icon: '🍎' },
 ];
 
 const defaultReminderConfig: ReminderConfig = {

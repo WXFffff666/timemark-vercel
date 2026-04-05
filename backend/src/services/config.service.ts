@@ -382,3 +382,55 @@ export async function saveReminderSettings(userId: number, settings: Partial<Rem
     ]
   );
 }
+
+// ============ 事件模板管理 ============
+
+export interface EventTemplate {
+  id: number;
+  user_id: number;
+  event_type: string;
+  template_content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getEventTemplates(userId: number): Promise<EventTemplate[]> {
+  const result = await query(
+    'SELECT * FROM event_templates WHERE user_id = $1 ORDER BY event_type',
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function getEventTemplate(userId: number, eventType: string): Promise<EventTemplate | null> {
+  const result = await query(
+    'SELECT * FROM event_templates WHERE user_id = $1 AND event_type = $2',
+    [userId, eventType]
+  );
+  return result.rows[0] || null;
+}
+
+export async function saveEventTemplate(
+  userId: number,
+  eventType: string,
+  templateContent: string
+): Promise<EventTemplate> {
+  const result = await query(
+    `INSERT INTO event_templates (user_id, event_type, template_content)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (user_id, event_type) DO UPDATE SET
+       template_content = EXCLUDED.template_content,
+       updated_at = CURRENT_TIMESTAMP
+     RETURNING *`,
+    [userId, eventType, templateContent]
+  );
+  return result.rows[0];
+}
+
+export async function deleteEventTemplate(userId: number, eventType: string): Promise<boolean> {
+  const result = await query(
+    'DELETE FROM event_templates WHERE user_id = $1 AND event_type = $2',
+    [userId, eventType]
+  );
+  return (result.rowCount ?? 0) > 0;
+}

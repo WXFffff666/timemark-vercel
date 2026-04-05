@@ -161,3 +161,16 @@ CREATE TABLE event_trigger_logs (
 CREATE INDEX idx_trigger_logs_event ON event_trigger_logs(event_id);
 CREATE INDEX idx_trigger_logs_user ON event_trigger_logs(user_id);
 CREATE INDEX idx_trigger_logs_date ON event_trigger_logs(trigger_date);
+
+-- event_templates 表 - 用户自定义事件模板
+CREATE TABLE event_templates (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  event_type VARCHAR(50) NOT NULL,
+  template_content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, event_type)
+);
+CREATE INDEX idx_event_templates_user ON event_templates(user_id);
+CREATE INDEX idx_event_templates_type ON event_templates(event_type);

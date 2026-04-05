@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { getUserConfig, saveUserConfig, getNotificationAccounts, createNotificationAccount, updateNotificationAccount, deleteNotificationAccount, getRelationshipMappings, createRelationshipMapping, updateRelationshipMapping, deleteRelationshipMapping, getReminderSettings, saveReminderSettings } from '../services/config.service.js';
+import { getUserConfig, saveUserConfig, getNotificationAccounts, createNotificationAccount, updateNotificationAccount, deleteNotificationAccount, getRelationshipMappings, createRelationshipMapping, updateRelationshipMapping, deleteRelationshipMapping, getReminderSettings, saveReminderSettings, getEventTemplates, getEventTemplate, saveEventTemplate, deleteEventTemplate } from '../services/config.service.js';
 import type { User } from '@timemark/shared';
 
 const config = new Hono<{ Variables: { user: User } }>();
@@ -172,6 +172,52 @@ config.post('/reminders', async (c) => {
     daysBeforeList: body.daysBeforeList,
     emailAddresses: body.emailAddresses,
   });
+  
+  return c.json({ success: true });
+});
+
+// ============ 事件模板管理 ============
+
+config.get('/templates', async (c) => {
+  const user = c.get('user');
+  const templates = await getEventTemplates(Number(user.id));
+  return c.json({ success: true, data: templates });
+});
+
+config.get('/templates/:type', async (c) => {
+  const user = c.get('user');
+  const type = c.req.param('type');
+  
+  const template = await getEventTemplate(Number(user.id), type);
+  return c.json({ success: true, data: template });
+});
+
+config.post('/templates', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  
+  if (!body.event_type || !body.template_content) {
+    return c.json({ success: false, error: 'event_type and template_content are required' }, 400);
+  }
+  
+  const template = await saveEventTemplate(
+    Number(user.id),
+    body.event_type,
+    body.template_content
+  );
+  
+  return c.json({ success: true, data: template }, 201);
+});
+
+config.delete('/templates/:type', async (c) => {
+  const user = c.get('user');
+  const type = c.req.param('type');
+  
+  const deleted = await deleteEventTemplate(Number(user.id), type);
+  
+  if (!deleted) {
+    return c.json({ success: false, error: 'Template not found' }, 404);
+  }
   
   return c.json({ success: true });
 });
