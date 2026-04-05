@@ -605,7 +605,6 @@ const pluginChannels: ChannelTemplate[] = [
     configMethod: 'plugin',
     isBuiltIn: true,
     pluginPackage: 'imessage-exporter',
-    pluginInstallCommand: '# 仅支持 macOS',
     fields: [
       {
         name: 'session_data',
@@ -614,7 +613,8 @@ const pluginChannels: ChannelTemplate[] = [
         required: false,
         description: 'macOS 设备配置信息'
       }
-    ]
+    ],
+    docsUrl: 'https://bluebubbles.app/'
   },
   {
     id: 'zalo',

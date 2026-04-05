@@ -500,7 +500,13 @@ export default function Channels() {
       </main>
 
       {/* Template Selection Modal */}
-      <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
+      <Dialog open={showTemplateModal} onOpenChange={(open) => {
+        if (!open && modalBackStack.length > 0) {
+          goBackInModal();
+        } else {
+          setShowTemplateModal(open);
+        }
+      }}>
         <DialogContent className="glass-panel rounded-[2rem] max-w-4xl max-h-[85vh] overflow-hidden p-0">
           <div className="p-6 border-b border-slate-200/60 dark:border-slate-700/50">
             <DialogHeader>
@@ -604,11 +610,16 @@ export default function Channels() {
       {/* Config Modal */}
       <Dialog open={showConfigModal} onOpenChange={(open) => {
         // Only allow closing via back button, not backdrop click
-        if (!open && canGoBack) {
-          goBackInModal();
-        } else if (!open) {
-          setShowConfigModal(false);
-          setModalBackStack([]);
+        if (!open) {
+          // If there's history, go back; otherwise just close config but keep template modal open
+          if (modalBackStack.length > 1) {
+            goBackInModal();
+          } else {
+            // At the first level (config), close config and go back to template selection
+            setShowConfigModal(false);
+            setShowTemplateModal(true);
+            setModalBackStack(['main', 'template']);
+          }
         }
       }}>
         <DialogContent className="glass-panel rounded-[2rem]">
