@@ -19,6 +19,8 @@ export interface WechatySessionData {
 export async function startAuth(): Promise<{ qrcode: string; sessionId: string }> {
   const sessionId = `wechaty_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   
+  console.log(`[WeChaty] Starting auth for session ${sessionId}`);
+  
   return new Promise((resolve, reject) => {
     const bot: Wechaty = WechatyBuilder.build({
       name: `timemark-${sessionId}`,
@@ -28,6 +30,7 @@ export async function startAuth(): Promise<{ qrcode: string; sessionId: string }
 
     bot
       .on('scan', async (qrcode: string, status: ScanStatus) => {
+        console.log(`[WeChaty] Scan event: status=${status}, qrcode length=${qrcode?.length}`);
         if (status === ScanStatus.Waiting || status === ScanStatus.Timeout) {
           // Generate QR code data URL
           const qrDataUrl = await QRCode.toDataURL(qrcode, {
@@ -46,6 +49,7 @@ export async function startAuth(): Promise<{ qrcode: string; sessionId: string }
           authStatus.set(sessionId, { authenticated: false });
           
           // Return the QR code immediately
+          console.log(`[WeChaty] QR code generated successfully for session ${sessionId}`);
           resolve({ qrcode: qrDataUrl, sessionId });
         }
       })
