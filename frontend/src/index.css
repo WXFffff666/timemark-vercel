@@ -4,12 +4,13 @@
 
 @layer base {
   :root {
-    --background: 220 20% 97%;
-    --foreground: 222.2 84% 4.9%;
+    /* 改进浅色模式：降低背景饱和度，使用更沉稳的灰白底色，彻底解决过曝问题 */
+    --background: 210 20% 98%;
+    --foreground: 222.2 84% 9%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 222.2 84% 9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 222.2 84% 9%;
     --primary: 262.1 83.3% 57.8%;
     --primary-foreground: 210 40% 98%;
     --primary-50: 262.1 83.3% 95%;
@@ -19,7 +20,7 @@
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 56.9%;
+    --muted-foreground: 215.4 16.3% 46.9%; /* 加深浅色模式下的次要文本以增强对比度 */
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
@@ -28,12 +29,14 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 262.1 83.3% 57.8%;
     --radius: 1rem;
-    --mesh-color-1: #e0c3fc;
-    --mesh-color-2: #8ec5fc;
-    --mesh-color-3: #f3f4f6;
+    /* 浅色模式网格渐变底色：极致柔和，类似 Apple MacOS 默认壁纸质感 */
+    --mesh-color-1: #e2e8f0;
+    --mesh-color-2: #dbeafe;
+    --mesh-color-3: #f8fafc;
   }
 
   .dark {
+    /* 深色模式：保持深邃的太空黑与微微的星空蓝 */
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
     --card: 222.2 84% 4.9%;
@@ -57,9 +60,10 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 263.4 70% 50.4%;
-    --mesh-color-1: #1a0b2e;
-    --mesh-color-2: #0b1a30;
-    --mesh-color-3: #050505;
+    /* 深色模式网格渐变底色 */
+    --mesh-color-1: #1e1b4b;
+    --mesh-color-2: #0f172a;
+    --mesh-color-3: #020617;
   }
 }
 
@@ -68,24 +72,37 @@
   body { @apply bg-background text-foreground overflow-x-hidden; scroll-behavior: smooth; }
 }
 
-/* Fluent Design / VisionOS Glassmorphism */
-.glass { @apply bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-white/30 dark:border-white/10 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]; }
-.glass-panel { @apply bg-white/60 dark:bg-gray-900/60 backdrop-blur-2xl border border-white/50 dark:border-gray-700/50 shadow-xl; }
+/* 
+ * 国际大厂融合 UI 设计系统 (Apple VisionOS + Windows 11 Fluent + Xiaomi HyperOS) 
+ * 采用 J4125 极低功耗硬件加速策略，杜绝复杂渲染
+ */
 
-/* Xiaomi HyperOS Alive Interaction */
-.alive-interactive { @apply transition-all duration-300 active:scale-[0.97] cursor-pointer; }
+/* 基础玻璃层：用于小组件、悬浮条 */
+.glass {
+  @apply bg-white/70 dark:bg-[#1c1c1e]/70 backdrop-blur-xl border border-white/80 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)];
+}
 
-/* J4125 Friendly CSS Mesh Gradient */
+/* 主面板玻璃层：用于卡片、弹窗。浅色模式使用 bg-white/85 确保文字绝对清晰不泛白过曝 */
+.glass-panel {
+  @apply bg-white/85 dark:bg-[#2c2c2e]/60 backdrop-blur-3xl border border-white dark:border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.4)];
+}
+
+/* Xiaomi HyperOS Alive Interaction - 弹簧物理交互反馈 */
+.alive-interactive {
+  @apply transition-all duration-300 active:scale-[0.97] cursor-pointer;
+}
+
+/* 硬件加速纯 CSS Mesh Gradient 背景 */
 .mesh-bg-container {
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; overflow: hidden; background-color: var(--mesh-color-3);
 }
 .mesh-blob-1 {
   position: absolute; top: -10%; left: -10%; width: 60vw; height: 60vw;
   background: radial-gradient(circle, var(--mesh-color-1) 0%, transparent 70%);
-  opacity: 0.6; filter: blur(80px); transform-origin: center; will-change: transform;
+  opacity: 0.8; filter: blur(100px); transform-origin: center; will-change: transform;
 }
 .mesh-blob-2 {
   position: absolute; bottom: -20%; right: -10%; width: 70vw; height: 70vw;
   background: radial-gradient(circle, var(--mesh-color-2) 0%, transparent 70%);
-  opacity: 0.5; filter: blur(100px); transform-origin: center; will-change: transform;
+  opacity: 0.7; filter: blur(120px); transform-origin: center; will-change: transform;
 }

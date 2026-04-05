@@ -15,13 +15,13 @@ export function LoginPage() {
   }, [isAuthenticated, navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-6">
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: -20 }}
         transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-        className="w-full max-w-md"
+        className="w-full max-w-[420px]"
       >
         <LoginForm />
       </motion.div>

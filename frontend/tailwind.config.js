@@ -70,8 +70,8 @@ module.exports = {
         },
         "blob-spin": {
           "0%": { transform: "rotate(0deg) scale(1)" },
-          "33%": { transform: "rotate(120deg) scale(1.1)" },
-          "66%": { transform: "rotate(240deg) scale(0.9)" },
+          "33%": { transform: "rotate(120deg) scale(1.05)" },
+          "66%": { transform: "rotate(240deg) scale(0.95)" },
           "100%": { transform: "rotate(360deg) scale(1)" }
         }
       },
@@ -79,10 +79,10 @@ module.exports = {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.3s ease-out",
-        "blob-spin": "blob-spin 25s linear infinite",
-        "blob-spin-slow": "blob-spin 30s linear infinite reverse",
+        "blob-spin": "blob-spin 30s linear infinite",
+        "blob-spin-slow": "blob-spin 40s linear infinite reverse",
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins:[require("tailwindcss-animate")],
 }

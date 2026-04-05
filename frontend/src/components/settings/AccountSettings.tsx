@@ -121,7 +121,7 @@ export function AccountSettings() {
       </CardHeader>
       <CardContent className="space-y-4">
         {showForm && (
-          <div className="p-4 rounded-lg glass border border-gray-200 dark:border-gray-700 space-y-3">
+          <div className="p-4 rounded-lg glass border border-slate-200 dark:border-slate-700 space-y-3">
             <div>
               <label className="block text-sm font-medium mb-1.5">账户类型</label>
               <Select
@@ -191,7 +191,7 @@ export function AccountSettings() {
             <p className="text-sm text-muted-foreground text-center py-8">暂无账户，点击上方按钮添加</p>
           ) : (
             accounts.map(account => (
-              <div key={account.id} className="flex items-center justify-between p-3 rounded-lg glass border border-gray-200 dark:border-gray-700">
+              <div key={account.id} className="flex items-center justify-between p-3 rounded-lg glass border border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-3">
                   <Badge variant="secondary">{getTypeLabel(account.type)}</Badge>
                   <span className="font-medium">{account.name}</span>

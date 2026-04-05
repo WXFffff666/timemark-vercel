@@ -1,7 +1,6 @@
-export { CalendarIcon } from './CalendarIcon'
-export { EditIcon } from './EditIcon'
-export { TrashIcon } from './TrashIcon'
-export { SettingsIcon } from './SettingsIcon'
-export { BellIcon } from './BellIcon'
-export { PlusIcon } from './PlusIcon'
-export { SendIcon } from './SendIcon'
+import { Settings, Bell, Plus, Lock } from 'lucide-react';
+
+export const SettingsIcon = Settings;
+export const BellIcon = Bell;
+export const PlusIcon = Plus;
+export const LockIcon = Lock;

@@ -133,7 +133,7 @@ export function RelationshipSettings() {
       </CardHeader>
       <CardContent className="space-y-4">
         {showForm && (
-          <div className="p-4 rounded-lg glass border border-gray-200 dark:border-gray-700 space-y-3">
+          <div className="p-4 rounded-lg glass border border-slate-200 dark:border-slate-700 space-y-3">
             <div>
               <label className="block text-sm font-medium mb-1.5">选择事件</label>
               <Select
@@ -210,7 +210,7 @@ export function RelationshipSettings() {
             </p>
           ) : (
             mappings.map(mapping => (
-              <div key={mapping.id} className="flex items-center justify-between p-3 rounded-lg glass border border-gray-200 dark:border-gray-700">
+              <div key={mapping.id} className="flex items-center justify-between p-3 rounded-lg glass border border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-3">
                   <span className="font-medium">{mapping.from_relation}</span>
                   <span className="text-muted-foreground">→</span>

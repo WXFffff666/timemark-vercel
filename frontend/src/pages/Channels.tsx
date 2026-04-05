@@ -36,8 +36,8 @@ export default function Channels() {
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
             <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">通知渠道管理</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">配置您的提醒接收方式</p>
+              <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">通知渠道管理</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">配置您的提醒接收方式</p>
             </div>
           </div>
           <Button variant="vision" className="shadow-lg shadow-primary-500/25 hidden sm:flex">添加自定义渠道</Button>
@@ -55,15 +55,15 @@ export default function Channels() {
                   {channel.status === 'error' && <div className="absolute -right-20 -top-20 w-40 h-40 bg-red-500/10 rounded-full blur-3xl pointer-events-none"></div>}
                   <div className="flex justify-between items-start mb-6 relative z-10">
                     <div className="flex items-center gap-4">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${channel.enabled ? 'bg-gradient-to-br from-primary-400 to-primary-600 text-white' : 'bg-gray-200 dark:bg-gray-800 text-gray-500'}`}><Icon size={28} /></div>
-                      <div><h3 className="text-xl font-bold text-gray-900 dark:text-white">{channel.name}</h3><div className="mt-1.5">{getStatusDisplay(channel.status)}</div></div>
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${channel.enabled ? 'bg-gradient-to-br from-primary-400 to-primary-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-500'}`}><Icon size={28} /></div>
+                      <div><h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{channel.name}</h3><div className="mt-1.5">{getStatusDisplay(channel.status)}</div></div>
                     </div>
                     <Switch checked={channel.enabled} onCheckedChange={() => toggleChannel(channel.id)} />
                   </div>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm mb-6">{channel.description}</p>
+                  <p className="text-slate-600 dark:text-slate-400 text-sm mb-6">{channel.description}</p>
                   {channel.status === 'error' && channel.errorMessage && <div className="mb-6 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 text-sm text-red-600 dark:text-red-400">{channel.errorMessage}</div>}
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200/50 dark:border-gray-700/50">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">{channel.lastSync ? `最后同步: ${channel.lastSync}` : '尚未建立连接'}</div>
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-200/50 dark:border-slate-700/50">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{channel.lastSync ? `最后同步: ${channel.lastSync}` : '尚未建立连接'}</div>
                     <div className="flex gap-2">
                       <Button variant="ghost" size="sm" className="rounded-lg">配置</Button>
                       {channel.status === 'connected' ? <Button variant="outline" size="sm" className="rounded-lg border-red-200 text-red-600 hover:bg-red-50">断开</Button> : <Button variant="default" size="sm" className="rounded-lg">去授权</Button>}

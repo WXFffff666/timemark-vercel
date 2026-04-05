@@ -45,15 +45,15 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-6 mt-4">
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2"><Type size={16} /> 事件名称</label>
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2"><Type size={16} /> 事件名称</label>
             <Input required placeholder="例如：产品发布会 / 纪念日" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2"><CalendarClock size={16} /> 目标时间</label>
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2"><CalendarClock size={16} /> 目标时间</label>
             <Input required type="datetime-local" value={formData.targetTime} onChange={e => setFormData({ ...formData, targetTime: e.target.value })} />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2"><Globe size={16} /> 时区</label>
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2"><Globe size={16} /> 时区</label>
             <Select value={formData.timezone} onChange={e => setFormData({ ...formData, timezone: e.target.value })}>
               <option value="Asia/Shanghai">中国标准时间 (Asia/Shanghai)</option>
               <option value="UTC">协调世界时 (UTC)</option>
@@ -61,8 +61,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
             </Select>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2"><AlignLeft size={16} /> 备注描述</label>
-            <textarea placeholder="添加详细信息..." value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="flex min-h-[100px] w-full rounded-2xl border border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/20 px-4 py-3 text-sm backdrop-blur-md transition-all placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50 focus-visible:bg-white/80 dark:focus-visible:bg-gray-900/80 shadow-inner resize-none" />
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2"><AlignLeft size={16} /> 备注描述</label>
+            <textarea placeholder="添加详细信息..." value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="flex min-h-[100px] w-full rounded-2xl border border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/20 px-4 py-3 text-sm backdrop-blur-md transition-all placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50 focus-visible:bg-white/80 dark:focus-visible:bg-slate-900/80 shadow-inner resize-none" />
           </div>
           <div className="pt-4 flex gap-3">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>取消</Button>

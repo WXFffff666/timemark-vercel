@@ -10,7 +10,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { RealtimeClock } from '@/components/RealtimeClock';
 import { TimezoneSelector } from '@/components/TimezoneSelector';
 import type { Event, CreateEventRequest } from '@timemark/shared';
-import { Settings as SettingsIcon, Bell as BellIcon, Plus as PlusIcon } from 'lucide-react';
+import { Settings, Bell, Plus } from 'lucide-react';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, scale: 0.95, y: 10 }, visible: { opacity: 1, scale: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 25 } } };
@@ -48,27 +48,27 @@ export function Dashboard() {
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary-500 to-purple-500 flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-xl">T</span>
             </div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white hidden md:block tracking-tight">TimeMark</h1>
+            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 hidden md:block tracking-tight">TimeMark</h1>
           </div>
           <div className="flex items-center gap-2 md:gap-4">
             <div className="hidden md:flex items-center gap-3 bg-white/30 dark:bg-black/30 backdrop-blur-md rounded-full px-4 py-1.5 shadow-inner">
               <RealtimeClock />
-              <div className="w-px h-4 bg-gray-300 dark:bg-gray-600"></div>
+              <div className="w-px h-4 bg-slate-300 dark:bg-slate-600"></div>
               <TimezoneSelector />
             </div>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/channels')}>
-                <BellIcon size={20} className="text-gray-600 dark:text-gray-300" />
+                <Bell size={20} className="text-slate-600 dark:text-slate-300" />
               </Button>
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/settings')}>
-                <SettingsIcon size={20} className="text-gray-600 dark:text-gray-300" />
+                <Settings size={20} className="text-slate-600 dark:text-slate-300" />
               </Button>
               <ThemeToggle />
             </div>
-            <div className="h-8 w-px bg-gray-300 dark:bg-gray-700 hidden sm:block"></div>
+            <div className="h-8 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block"></div>
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:block">{user?.username}</span>
-              <Button variant="outline" size="sm" className="rounded-full border-gray-300/50 dark:border-gray-600/50" onClick={logout}>退出</Button>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300 hidden sm:block">{user?.username}</span>
+              <Button variant="outline" size="sm" className="rounded-full border-slate-300/50 dark:border-slate-600/50" onClick={logout}>退出</Button>
             </div>
           </div>
         </div>
@@ -77,8 +77,8 @@ export function Dashboard() {
       <main className="max-w-7xl mx-auto px-6 py-8 mt-4">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">我的倒计时</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 font-medium">共有 {events.length} 个正在追踪的事件</p>
+            <h2 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">我的倒计时</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 font-medium">共有 {events.length} 个正在追踪的事件</p>
           </div>
           <div className="flex items-center gap-3 glass px-2 py-2 rounded-2xl ring-1 ring-white/20">
             <Button variant={batchMode ? "secondary" : "ghost"} className="rounded-xl transition-all" onClick={() => { setBatchMode(!batchMode); setSelectedIds([]); }}>
@@ -100,19 +100,19 @@ export function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="glass rounded-3xl p-6 animate-pulse h-48">
-                <div className="h-5 bg-gray-300/50 dark:bg-gray-700/50 rounded-full w-2/3 mb-6"></div>
-                <div className="h-12 bg-gray-300/50 dark:bg-gray-700/50 rounded-2xl w-full mb-4"></div>
-                <div className="h-4 bg-gray-300/50 dark:bg-gray-700/50 rounded-full w-1/3"></div>
+                <div className="h-5 bg-slate-300/50 dark:bg-slate-700/50 rounded-full w-2/3 mb-6"></div>
+                <div className="h-12 bg-slate-300/50 dark:bg-slate-700/50 rounded-2xl w-full mb-4"></div>
+                <div className="h-4 bg-slate-300/50 dark:bg-slate-700/50 rounded-full w-1/3"></div>
               </div>
             ))}
           </div>
         ) : events.length === 0 ? (
           <div className="text-center py-24 glass-panel rounded-3xl ring-1 ring-white/20">
             <div className="w-20 h-20 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
-              <PlusIcon size={40} className="text-primary-500" />
+              <Plus size={40} className="text-primary-500" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">暂无倒计时事件</h3>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">点击右下角的按钮创建一个新的重要时刻</p>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">暂无倒计时事件</h3>
+            <p className="text-slate-500 dark:text-slate-400 mb-6">点击右下角的按钮创建一个新的重要时刻</p>
             <Button variant="vision" onClick={() => { setEditingEvent(undefined); setShowForm(true); }}>立即创建</Button>
           </div>
         ) : (
@@ -128,7 +128,7 @@ export function Dashboard() {
 
       <motion.div className="fixed bottom-10 right-10 z-40" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
         <Button variant="vision" className="h-16 w-16 rounded-[1.5rem] shadow-2xl shadow-primary-500/30 flex items-center justify-center p-0" onClick={() => { setEditingEvent(undefined); setShowForm(true); }}>
-          <PlusIcon size={28} />
+          <Plus size={28} />
         </Button>
       </motion.div>
       

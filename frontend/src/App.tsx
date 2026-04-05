@@ -59,7 +59,7 @@ function App() {
     <BrowserRouter>
       <TimezoneProvider>
         <MeshBackground />
-        <div className="relative z-10 min-h-screen">
+        <div className="relative z-10 min-h-screen text-slate-900 dark:text-slate-100">
           <AnimatedRoutes />
         </div>
       </TimezoneProvider>

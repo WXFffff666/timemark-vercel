@@ -21,7 +21,7 @@ export default function Reminders() {
         <div className="glass-panel rounded-full px-6 py-4 flex justify-between items-center ring-1 ring-white/20 dark:ring-white/10">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
-            <div><h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">提醒记录</h1></div>
+            <div><h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">提醒记录</h1></div>
           </div>
           <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-500 flex items-center justify-center"><Bell size={20} /></div>
         </div>
@@ -35,12 +35,12 @@ export default function Reminders() {
                   {r.status === 'success' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                     {r.title} <Badge variant={r.status === 'success' ? 'success' : 'destructive'} className="scale-90">{r.status === 'success' ? '成功' : '失败'}</Badge>
                   </h3>
-                  <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  <div className="flex items-center gap-3 mt-1 text-sm text-slate-500 dark:text-slate-400">
                     <span className="flex items-center gap-1"><Clock size={14} /> {r.time}</span>
-                    <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+                    <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
                     <span>渠道: {r.channel}</span>
                   </div>
                 </div>

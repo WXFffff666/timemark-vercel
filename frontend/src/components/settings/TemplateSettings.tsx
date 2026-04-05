@@ -44,7 +44,7 @@ export function TemplateSettings() {
       </CardHeader>
       <CardContent className="space-y-4">
         {showForm && (
-          <div className="p-4 rounded-lg glass border border-gray-200 dark:border-gray-700 space-y-3">
+          <div className="p-4 rounded-lg glass border border-slate-200 dark:border-slate-700 space-y-3">
             <div>
               <label className="block text-sm font-medium mb-1.5">事件对象关系</label>
               <Input
@@ -75,7 +75,7 @@ export function TemplateSettings() {
             <p className="text-sm text-muted-foreground text-center py-8">暂无映射，点击上方按钮添加</p>
           ) : (
             mappings.map(mapping => (
-              <div key={mapping.id} className="flex items-center justify-between p-3 rounded-lg glass border border-gray-200 dark:border-gray-700">
+              <div key={mapping.id} className="flex items-center justify-between p-3 rounded-lg glass border border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">{mapping.fromRelation}</Badge>
                   <span className="text-muted-foreground">→</span>
