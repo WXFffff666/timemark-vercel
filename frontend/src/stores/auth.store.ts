@@ -74,6 +74,7 @@ async function getEnhancedFingerprint(): Promise<string> {
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
+  setUser: (user: User | null) => void;
   login: (username: string, password: string, rememberMe?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -82,6 +83,8 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
+
+  setUser: (user) => set({ user }),
 
   login: async (username, password, rememberMe = false) => {
     const fingerprint = await getEnhancedFingerprint();

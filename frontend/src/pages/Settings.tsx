@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut } from 'lucide-react';
+import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -20,6 +20,8 @@ export default function Settings() {
   // Modal states
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   
   // Form states
   const [profileForm, setProfileForm] = useState({
@@ -52,6 +54,37 @@ export default function Settings() {
     } catch (error) {
       console.error('Failed to save profile:', error);
       alert('保存失败');
+    }
+  };
+
+  const handleAvatarUrlChange = async (url: string) => {
+    setAvatarUrl(url);
+    
+    // Don't update if empty
+    if (!url.trim()) return;
+    
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch {
+      return; // Invalid URL, don't upload yet
+    }
+    
+    setUploadingAvatar(true);
+    try {
+      await api.post('/auth/avatar', { avatarUrl: url });
+      // Update local user state
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser) {
+        useAuthStore.getState().setUser({
+          ...currentUser,
+          avatarUrl: url
+        });
+      }
+    } catch (error) {
+      console.error('Failed to update avatar:', error);
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -108,9 +141,17 @@ export default function Settings() {
                 onClick={() => setShowProfileModal(true)}
               >
                 <div className="flex items-center gap-5">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-primary-500 to-indigo-600 flex items-center justify-center text-white shadow-inner">
-                    <span className="text-2xl font-bold">{user?.username?.charAt(0).toUpperCase() || 'A'}</span>
-                  </div>
+                  {user?.avatarUrl ? (
+                    <img 
+                      src={user.avatarUrl} 
+                      alt={user?.username}
+                      className="w-16 h-16 rounded-full object-cover shadow-inner"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-primary-500 to-indigo-600 flex items-center justify-center text-white shadow-inner">
+                      <span className="text-2xl font-bold">{user?.username?.charAt(0).toUpperCase() || 'A'}</span>
+                    </div>
+                  )}
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">{user?.username || 'Admin'}</h3>
                     <p className="text-sm text-slate-500 font-medium">点击修改资料</p>
@@ -218,9 +259,32 @@ export default function Settings() {
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div className="flex justify-center mb-6">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-primary-500 to-indigo-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg cursor-pointer alive-interactive hover:opacity-90">
-                {user?.username?.charAt(0).toUpperCase() || 'A'}
+              <div className="relative">
+                {avatarUrl ? (
+                  <img 
+                    src={avatarUrl} 
+                    alt="Avatar preview"
+                    className="w-20 h-20 rounded-full object-cover shadow-lg"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-primary-500 to-indigo-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+                    {user?.username?.charAt(0).toUpperCase() || 'A'}
+                  </div>
+                )}
+                <div className="absolute bottom-0 right-0 p-1.5 bg-primary-500 rounded-full text-white shadow-lg">
+                  <Camera size={14} />
+                </div>
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">头像链接</label>
+              <Input 
+                placeholder="https://example.com/avatar.jpg"
+                value={avatarUrl}
+                onChange={(e) => handleAvatarUrlChange(e.target.value)}
+                className="h-12"
+              />
+              <p className="text-xs text-slate-500 mt-1">输入图片链接即可更新头像</p>
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">用户名</label>

@@ -94,16 +94,16 @@ export default function Channels() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch templates
-      const templatesRes = await api.get<{ data: ChannelTemplate[] }>('/channels/templates');
-      if (templatesRes.data) {
-        setTemplates(templatesRes.data);
+      // Fetch templates - api already returns data.data, so result is ChannelTemplate[]
+      const templatesRes = await api.get<ChannelTemplate[]>('/channels/templates');
+      if (templatesRes) {
+        setTemplates(templatesRes);
       }
 
-      // Fetch accounts
-      const accountsRes = await api.get<{ data: Account[] }>('/config/accounts');
-      if (accountsRes.data) {
-        setAccounts(accountsRes.data);
+      // Fetch accounts - api already returns data.data, so result is Account[]
+      const accountsRes = await api.get<Account[]>('/config/accounts');
+      if (accountsRes) {
+        setAccounts(accountsRes);
       }
     } catch (error) {
       console.error('Failed to fetch data:', error);

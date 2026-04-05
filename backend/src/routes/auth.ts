@@ -181,3 +181,36 @@ auth.delete('/login-history', authMiddleware, async (c) => {
     return c.json({ success: false, error: 'Failed to clear logs' }, 500);
   }
 });
+
+// ============ Avatar upload endpoint ============
+
+auth.post('/avatar', authMiddleware, async (c) => {
+  const user = c.get('user');
+  try {
+    const body = await c.req.json();
+    const { avatarUrl } = body;
+    
+    if (!avatarUrl) {
+      return c.json({ success: false, error: 'avatarUrl is required' }, 400);
+    }
+    
+    // Validate URL format
+    try {
+      new URL(avatarUrl);
+    } catch {
+      return c.json({ success: false, error: 'Invalid avatar URL format' }, 400);
+    }
+    
+    const numericId = parseInt(user.id, 10);
+    if (isNaN(numericId)) {
+      return c.json({ success: false, error: 'Invalid user ID' }, 400);
+    }
+    
+    await query('UPDATE users SET avatar_url = $1 WHERE id = $2', [avatarUrl, numericId]);
+    
+    return c.json({ success: true, data: { avatarUrl } });
+  } catch (error: any) {
+    console.error('[Update Avatar Error]', error);
+    return c.json({ success: false, error: error.message || 'Failed to update avatar' }, 500);
+  }
+});

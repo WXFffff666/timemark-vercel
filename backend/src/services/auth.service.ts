@@ -17,10 +17,10 @@ export async function createUser(username: string, password: string): Promise<Us
 }
 
 export async function getUserByUsername(username: string): Promise<User | null> {
-  const result = await query('SELECT id, username, created_at FROM users WHERE username = $1', [username]);
+  const result = await query('SELECT id, username, avatar_url, created_at FROM users WHERE username = $1', [username]);
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as any;
-  return { id: row.id, username: row.username, createdAt: row.created_at };
+  return { id: row.id.toString(), username: row.username, avatarUrl: row.avatar_url, createdAt: row.created_at };
 }
 
 export async function getUserById(id: string): Promise<User | null> {
@@ -28,21 +28,21 @@ export async function getUserById(id: string): Promise<User | null> {
   const numericId = parseInt(id, 10);
   if (isNaN(numericId)) return null;
   
-  const result = await query('SELECT id, username, created_at FROM users WHERE id = $1', [numericId]);
+  const result = await query('SELECT id, username, avatar_url, created_at FROM users WHERE id = $1', [numericId]);
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as any;
-  return { id: row.id.toString(), username: row.username, createdAt: row.created_at };
+  return { id: row.id.toString(), username: row.username, avatarUrl: row.avatar_url, createdAt: row.created_at };
 }
 
 export async function verifyUserPassword(username: string, password: string): Promise<User | null> {
-  const result = await query('SELECT id, username, password_hash, created_at FROM users WHERE username = $1', [username]);
+  const result = await query('SELECT id, username, password_hash, avatar_url, created_at FROM users WHERE username = $1', [username]);
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as any;
   
   const valid = await verifyPassword(password, row.password_hash);
   if (!valid) return null;
   
-  return { id: row.id, username: row.username, createdAt: row.created_at };
+  return { id: row.id, username: row.username, avatarUrl: row.avatar_url, createdAt: row.created_at };
 }
 
 export async function createLoginLog(userIdOrUsername: string, ip: string, userAgent: string, fingerprint: string, success: boolean, reason?: string): Promise<void> {

@@ -7,6 +7,7 @@ CREATE TABLE users (
   username VARCHAR(255) UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   totp_secret TEXT,
+  avatar_url TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
