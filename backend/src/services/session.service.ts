@@ -9,9 +9,15 @@ export async function createSession(userId: string, deviceFingerprint: string, i
   const expiresIn = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
   const expiresAt = new Date(Date.now() + expiresIn);
 
+  // Convert userId string to integer for database
+  const numericUserId = parseInt(userId, 10);
+  if (isNaN(numericUserId)) {
+    throw new Error('Invalid user ID');
+  }
+
   const result = await query(
     'INSERT INTO sessions (user_id, token, device_fingerprint, is_trusted, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-    [userId, token, deviceFingerprint, isTrusted, expiresAt]
+    [numericUserId, token, deviceFingerprint, isTrusted, expiresAt]
   );
 
   const id = result.rows[0].id;

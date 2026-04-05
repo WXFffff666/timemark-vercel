@@ -8,12 +8,16 @@ export async function createUser(username: string, password: string): Promise<Us
   const existing = await query('SELECT id FROM users WHERE username = $1', [username]);
   if (existing.rows.length > 0) throw new Error('Username already exists');
 
-  const id = randomUUID();
   const passwordHash = await hashPassword(password);
 
-  await query('INSERT INTO users (id, username, password_hash) VALUES ($1, $2, $3)', [id, username, passwordHash]);
+  // Don't specify id - let the database auto-increment
+  await query('INSERT INTO users (username, password_hash) VALUES ($1, $2)', [username, passwordHash]);
 
-  return { id, username, createdAt: new Date().toISOString() };
+  // Get the created user to return
+  const result = await query('SELECT id, username, created_at FROM users WHERE username = $1', [username]);
+  const row = result.rows[0] as any;
+  
+  return { id: row.id.toString(), username: row.username, createdAt: row.created_at };
 }
 
 export async function getUserByUsername(username: string): Promise<User | null> {
@@ -42,7 +46,7 @@ export async function verifyUserPassword(username: string, password: string): Pr
   const valid = await verifyPassword(password, row.password_hash);
   if (!valid) return null;
   
-  return { id: row.id, username: row.username, avatarUrl: row.avatar_url, createdAt: row.created_at };
+  return { id: row.id.toString(), username: row.username, avatarUrl: row.avatar_url, createdAt: row.created_at };
 }
 
 export async function createLoginLog(userIdOrUsername: string, ip: string, userAgent: string, fingerprint: string, success: boolean, reason?: string): Promise<void> {
@@ -52,10 +56,13 @@ export async function createLoginLog(userIdOrUsername: string, ip: string, userA
     let username: string | null = null;
 
     if (success) {
-      // 成功登录时 userIdOrUsername 是 user.id (UUID)，需要查询获取数字 ID
-      const userResult = await query('SELECT id FROM users WHERE id = $1', [userIdOrUsername]);
-      if (userResult.rows.length > 0) {
-        userId = userResult.rows[0].id;
+      // 成功登录时 userIdOrUsername 是 user.id (字符串格式，如 "1")
+      const numericId = parseInt(userIdOrUsername, 10);
+      if (!isNaN(numericId)) {
+        const userResult = await query('SELECT id FROM users WHERE id = $1', [numericId]);
+        if (userResult.rows.length > 0) {
+          userId = userResult.rows[0].id;
+        }
       }
     } else {
       // 失败时记录用户名
