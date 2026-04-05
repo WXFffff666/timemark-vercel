@@ -573,7 +573,7 @@ export default function Channels() {
                               <h3 className="font-semibold text-slate-900 dark:text-white">
                                 {template.name}
                               </h3>
-                              {!template.isBuiltIn && (
+                              {template.configMethod === 'plugin' && !template.isBuiltIn && !template.pluginPackage?.startsWith('@') && (
                                 <Badge variant="outline" className="text-xs">
                                   <Puzzle size={10} className="mr-1" />
                                   需安装
