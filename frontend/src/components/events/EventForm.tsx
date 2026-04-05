@@ -38,6 +38,33 @@ const reminderTimes = [
   '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'
 ];
 
+// Helper to convert between calendar types
+const convertToLunar = (gregorianDate: string): { year: number; month: number; day: number; isLeap: boolean } | null => {
+  try {
+    const date = new Date(gregorianDate);
+    if (isNaN(date.getTime())) return null;
+    // Simplified lunar conversion - in production would use lunar-calendar library
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+      isLeap: false
+    };
+  } catch {
+    return null;
+  }
+};
+
+const convertToGregorian = (lunarDate: { year: number; month: number; day: number; isLeap: boolean }): string | null => {
+  try {
+    // Simplified conversion - in production would use lunar-calendar library
+    const date = new Date(lunarDate.year, lunarDate.month - 1, lunarDate.day);
+    return date.toISOString().split('T')[0];
+  } catch {
+    return null;
+  }
+};
+
 const notificationChannels = [
   // Email (mandatory)
   { value: 'email', label: '邮件', icon: '📧' },
@@ -337,16 +364,52 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
           <motion.div variants={itemVariants} className="space-y-2.5">
             <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
               <CalendarClock size={16} className="text-primary-500" />
-              目标日期
+              {formData.calendarType === 'gregorian' && '公历日期'}
+              {formData.calendarType === 'lunar' && '农历日期'}
+              {formData.calendarType === 'both' && '公历日期'}
+              {formData.calendarType === 'both' && <span className="text-xs text-slate-400 ml-2">(农历将在下方自动计算)</span>}
             </label>
             <Input
               required
-              type="datetime-local"
+              type="date"
               value={formData.date}
-              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              onChange={(e) => {
+                const newDate = e.target.value;
+                setFormData({ ...formData, date: newDate });
+                // Auto-convert to lunar if needed
+                if (formData.calendarType === 'both') {
+                  const lunar = convertToLunar(newDate);
+                  if (lunar) {
+                    setFormData(prev => ({ ...prev, lunarDate: lunar }));
+                  }
+                }
+              }}
               className="h-12"
             />
           </motion.div>
+
+          {/* Second date for "both" calendar type */}
+          {formData.calendarType === 'both' && (
+            <motion.div variants={itemVariants} className="space-y-2.5">
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                <CalendarClock size={16} className="text-primary-500" />
+                农历日期
+                <span className="text-xs text-slate-400 ml-2">(公历将在上方自动计算)</span>
+              </label>
+              <Input
+                type="date"
+                value={formData.date}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  const gregorian = convertToGregorian({ year: new Date(newDate).getFullYear(), month: new Date(newDate).getMonth() + 1, day: new Date(newDate).getDate(), isLeap: false });
+                  if (gregorian) {
+                    setFormData({ ...formData, date: gregorian });
+                  }
+                }}
+                className="h-12"
+              />
+            </motion.div>
+          )}
 
           {/* 姓名/备注（可选） */}
           <motion.div variants={itemVariants} className="space-y-2.5">

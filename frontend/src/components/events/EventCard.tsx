@@ -103,7 +103,7 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
   }, [event.date]);
 
   return (
-    <div className={`relative group glass-panel rounded-[2.5rem] p-6 transition-all duration-300 overflow-hidden ${selected ? 'ring-2 ring-primary-500 shadow-xl shadow-primary-500/20' : 'ring-1 ring-black/5 dark:ring-white/10 hover:shadow-2xl hover:border-white/40 dark:hover:border-white/20'}`} onClick={() => selectable && onSelectToggle && onSelectToggle(event.id, !selected)}>
+    <div className={`relative group glass-panel rounded-[2.5rem] p-6 overflow-hidden h-full ${selected ? 'ring-2 ring-primary-500 shadow-xl shadow-primary-500/20' : 'ring-1 ring-black/5 dark:ring-white/10'}`} onClick={() => selectable && onSelectToggle && onSelectToggle(event.id, !selected)}>
       <div className="absolute -right-16 -bottom-16 w-48 h-48 bg-gradient-to-br from-primary-500/20 to-purple-500/20 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700 pointer-events-none"></div>
       
       {/* Header with event type */}
