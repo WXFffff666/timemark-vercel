@@ -21,6 +21,7 @@ export function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[LoginForm] Submit clicked, loading:', loading);
     setError('');
     const trimmedUsername = username.trim();
     const trimmedPassword = password.trim();
@@ -28,9 +29,21 @@ export function LoginForm() {
     if (trimmedPassword.length < 6) return setError('密码至少6个字符');
     
     setLoading(true);
+    
+    // Add timeout to prevent stuck in loading state
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+      setError('登录超时，请重试');
+    }, 10000);
+    
     try {
+      console.log('[LoginForm] Calling login function...');
       await login(trimmedUsername, trimmedPassword, rememberMe);
+      console.log('[LoginForm] Login successful!');
+      clearTimeout(timeoutId);
     } catch (err: any) {
+      console.error('[LoginForm] Login error:', err);
+      clearTimeout(timeoutId);
       const message = err.message || '登录失败';
       if (message.includes('429') || message.includes('锁定')) {
         const match = message.match(/(\d+)\s*秒/);
