@@ -161,16 +161,21 @@ export default function Channels() {
 
   const selectTemplate = (template: ChannelTemplate) => {
     setSelectedTemplate(template);
-    setModalBackStack([...modalBackStack, 'template']);
+    // 先关闭模板弹窗，稍后打开配置弹窗
     setShowTemplateModal(false);
     
-    // Initialize form with empty values
+    // 初始化表单
     const initialForm: Record<string, string> = { name: '' };
     template.fields.forEach(field => {
       initialForm[field.name] = '';
     });
     setConfigForm(initialForm);
-    setShowConfigModal(true);
+    
+    // 延迟设置 back stack 和打开 config modal，确保状态正确更新
+    setTimeout(() => {
+      setModalBackStack([...modalBackStack, 'template', 'config']);
+      setShowConfigModal(true);
+    }, 0);
   };
 
   // Handle going back in modal navigation
@@ -678,17 +683,9 @@ export default function Channels() {
 
       {/* Config Modal */}
       <Dialog open={showConfigModal} onOpenChange={(open) => {
-        // Only allow closing via back button, not backdrop click
+        // 点击遮罩层/旁边区域时也返回上一级，而不是直接关闭
         if (!open) {
-          // If there's history, go back; otherwise just close config but keep template modal open
-          if (modalBackStack.length > 1) {
-            goBackInModal();
-          } else {
-            // At the first level (config), close config and go back to template selection
-            setShowConfigModal(false);
-            setShowTemplateModal(true);
-            setModalBackStack(['main', 'template']);
-          }
+          goBackInModal();
         }
       }}>
         <DialogContent className="glass-panel rounded-[2rem]">
@@ -832,11 +829,10 @@ export default function Channels() {
 
       {/* QR Code Modal for Plugin Auth */}
       <Dialog open={showQrModal} onOpenChange={(open) => {
-        // 点击遮罩层/旁边区域时直接关闭
+        // 点击遮罩层/旁边区域时返回上一级，而不是直接关闭
         if (!open) {
           setShowQrModal(false);
           setShowConfigModal(true);
-          setModalBackStack(['main', 'template', 'config']);
         }
       }}>
         <DialogContent className="glass-panel rounded-[2rem] max-w-md">
