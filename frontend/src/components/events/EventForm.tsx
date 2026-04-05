@@ -3,72 +3,483 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { CalendarClock, Type, AlignLeft, Globe } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { CalendarClock, Type, AlignLeft, Globe, Bell, Mail, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate } from '@timemark/shared';
 
-interface EventFormProps { open: boolean; onClose: () => void; onSubmit: (data: any) => Promise<void>; event?: any; }
+interface EventFormProps {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (data: CreateEventRequest) => Promise<void>;
+  event?: Event;
+}
+
+const eventTypes: { value: EventType; label: string; icon: React.ReactNode; color: string }[] = [
+  { value: 'birthday', label: '生日', icon: <Heart size={18} />, color: 'bg-pink-500' },
+  { value: 'exam', label: '考试', icon: <GraduationCap size={18} />, color: 'bg-blue-500' },
+  { value: 'anniversary', label: '纪念日', icon: <Heart size={18} />, color: 'bg-rose-500' },
+  { value: 'holiday', label: '节日', icon: <PartyPopper size={18} />, color: 'bg-yellow-500' },
+  { value: 'other', label: '其他', icon: <Sparkles size={18} />, color: 'bg-purple-500' },
+];
+
+const calendarTypes: { value: CalendarType; label: string }[] = [
+  { value: 'gregorian', label: '公历' },
+  { value: 'lunar', label: '农历' },
+  { value: 'both', label: '双历' },
+];
+
+const reminderDays = [1, 3, 7, 14, 30];
+
+const notificationChannels = [
+  { value: 'email', label: '邮件', icon: '📧' },
+  { value: 'feishu', label: '飞书', icon: '📱' },
+  { value: 'dingtalk', label: '钉钉', icon: '🔔' },
+  { value: 'wecom', label: '企业微信', icon: '💬' },
+  { value: 'telegram', label: 'Telegram', icon: '✈️' },
+  { value: 'discord', label: 'Discord', icon: '🎮' },
+  { value: 'slack', label: 'Slack', icon: '💼' },
+  { value: 'wechat', label: '微信', icon: '💚' },
+];
+
+const defaultReminderConfig: ReminderConfig = {
+  enabled: true,
+  daysBeforeList: [1, 3],
+  emailRecipients: [],
+  reminderTime: '09:00',
+  channels: [],
+};
 
 export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({ title: '', targetTime: '', description: '', timezone: 'Asia/Shanghai' });
+  const [formData, setFormData] = useState<CreateEventRequest>({
+    name: '',
+    type: 'birthday',
+    date: '',
+    calendarType: 'gregorian',
+    reminderConfig: defaultReminderConfig,
+  });
+
+  const [newEmail, setNewEmail] = useState('');
 
   useEffect(() => {
-    if (event) {
-      const date = new Date(event.targetTime);
-      const tzOffset = date.getTimezoneOffset() * 60000;
-      const localISOTime = (new Date(date.getTime() - tzOffset)).toISOString().slice(0, 16);
-      setFormData({ title: event.title || '', targetTime: localISOTime, description: event.description || '', timezone: event.timezone || 'Asia/Shanghai' });
-    } else {
-      setFormData({ title: '', targetTime: '', description: '', timezone: 'Asia/Shanghai' });
+    if (event && open) {
+      // Safe date parsing
+      let safeDate = '';
+      if (event.date) {
+        const date = new Date(event.date);
+        if (!isNaN(date.getTime())) {
+          const tzOffset = date.getTimezoneOffset() * 60000;
+          safeDate = (new Date(date.getTime() - tzOffset)).toISOString().slice(0, 16);
+        }
+      }
+      
+      setFormData({
+        name: event.name || '',
+        type: event.type || 'other',
+        date: safeDate,
+        calendarType: event.calendarType || 'gregorian',
+        lunarDate: event.lunarDate,
+        reminderConfig: event.reminderConfig || defaultReminderConfig,
+        personName: event.personName,
+        birthDate: event.birthDate,
+        birthDateLunar: event.birthDateLunar,
+      });
+    } else if (open) {
+      setFormData({
+        name: '',
+        type: 'birthday',
+        date: '',
+        calendarType: 'gregorian',
+        reminderConfig: defaultReminderConfig,
+      });
     }
   }, [event, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.name.trim()) {
+      alert('请输入事件名称');
+      return;
+    }
+    
+    if (!formData.date) {
+      alert('请选择日期');
+      return;
+    }
+    
+    // Validate date
+    const targetDate = new Date(formData.date);
+    if (isNaN(targetDate.getTime())) {
+      alert('无效的日期格式');
+      return;
+    }
+
     setLoading(true);
     try {
-      const submissionData = { ...formData, targetTime: new Date(formData.targetTime).toISOString() };
+      // Convert date to ISO string
+      const submissionData: CreateEventRequest = {
+        ...formData,
+        date: targetDate.toISOString(),
+      };
+      
       await onSubmit(submissionData);
       onClose();
-    } catch (error) { alert('保存失败，请检查输入格式'); } finally { setLoading(false); }
+    } catch (error: any) {
+      console.error('Submit error:', error);
+      alert(error.message || '保存失败，请检查输入格式');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addEmail = () => {
+    if (!newEmail.trim()) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      alert('请输入有效的邮箱地址');
+      return;
+    }
+    const currentEmails = formData.reminderConfig.emailRecipients || [];
+    if (currentEmails.includes(newEmail)) {
+      alert('该邮箱已存在');
+      return;
+    }
+    setFormData({
+      ...formData,
+      reminderConfig: {
+        ...formData.reminderConfig,
+        emailRecipients: [...currentEmails, newEmail],
+      },
+    });
+    setNewEmail('');
+  };
+
+  const removeEmail = (email: string) => {
+    setFormData({
+      ...formData,
+      reminderConfig: {
+        ...formData.reminderConfig,
+        emailRecipients: formData.reminderConfig.emailRecipients?.filter(e => e !== email) || [],
+      },
+    });
+  };
+
+  const toggleReminderDay = (day: number) => {
+    const currentDays = formData.reminderConfig.daysBeforeList || [];
+    const newDays = currentDays.includes(day)
+      ? currentDays.filter(d => d !== day)
+      : [...currentDays, day].sort((a, b) => a - b);
+    
+    setFormData({
+      ...formData,
+      reminderConfig: {
+        ...formData.reminderConfig,
+        daysBeforeList: newDays,
+      },
+    });
+  };
+
+  const toggleChannel = (channel: string) => {
+    const currentChannels = formData.reminderConfig.channels || [];
+    const newChannels = currentChannels.includes(channel)
+      ? currentChannels.filter(c => c !== channel)
+      : [...currentChannels, channel];
+    
+    setFormData({
+      ...formData,
+      reminderConfig: {
+        ...formData.reminderConfig,
+        channels: newChannels,
+      },
+    });
+  };
+
+  const handleTypeChange = (type: EventType) => {
+    setFormData({ ...formData, type });
+  };
+
+  const handleCalendarTypeChange = (calendarType: CalendarType) => {
+    setFormData({ ...formData, calendarType });
+  };
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.08 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 15 },
+    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
   };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto glass-panel rounded-[2.5rem]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3 text-2xl">
-            <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-xl text-primary-600 dark:text-primary-400">
+          <DialogTitle className="flex items-center gap-3 text-2xl font-bold text-slate-900 dark:text-white">
+            <div className="p-2.5 bg-primary-50 dark:bg-primary-900/30 rounded-xl text-primary-600 dark:text-primary-400 border border-primary-100 dark:border-primary-800/50">
               <CalendarClock size={24} />
             </div>
-            {event ? '编辑倒计时' : '创建新倒计时'}
+            {event ? '编辑事件' : '创建新事件'}
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6 mt-4">
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2"><Type size={16} /> 事件名称</label>
-            <Input required placeholder="例如：产品发布会 / 纪念日" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2"><CalendarClock size={16} /> 目标时间</label>
-            <Input required type="datetime-local" value={formData.targetTime} onChange={e => setFormData({ ...formData, targetTime: e.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2"><Globe size={16} /> 时区</label>
-            <Select value={formData.timezone} onChange={e => setFormData({ ...formData, timezone: e.target.value })}>
-              <option value="Asia/Shanghai">中国标准时间 (Asia/Shanghai)</option>
-              <option value="UTC">协调世界时 (UTC)</option>
-              <option value="America/New_York">美国东部时间 (America/New_York)</option>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2"><AlignLeft size={16} /> 备注描述</label>
-            <textarea placeholder="添加详细信息..." value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="flex min-h-[100px] w-full rounded-2xl border border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/20 px-4 py-3 text-sm backdrop-blur-md transition-all placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50 focus-visible:bg-white/80 dark:focus-visible:bg-slate-900/80 shadow-inner resize-none" />
-          </div>
-          <div className="pt-4 flex gap-3">
-            <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>取消</Button>
-            <Button type="submit" variant="vision" className="flex-1 shadow-lg shadow-primary-500/25" disabled={loading}>{loading ? '保存中...' : '确认保存'}</Button>
-          </div>
-        </form>
+        
+        <motion.form onSubmit={handleSubmit} className="space-y-6 mt-4" variants={containerVariants} initial="hidden" animate="visible">
+          {/* 事件类型选择 */}
+          <motion.div variants={itemVariants} className="space-y-3">
+            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <Type size={16} className="text-primary-500" />
+              事件类型
+            </label>
+            <div className="grid grid-cols-5 gap-2">
+              {eventTypes.map((type) => (
+                <button
+                  key={type.value}
+                  type="button"
+                  onClick={() => handleTypeChange(type.value)}
+                  className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-all duration-300 alive-interactive ${
+                    formData.type === type.value
+                      ? `${type.color} text-white shadow-lg`
+                      : 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <div className={formData.type === type.value ? 'text-white' : type.color.replace('bg-', 'text-')}>
+                    {type.icon}
+                  </div>
+                  <span className="text-xs font-semibold">{type.label}</span>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* 事件名称 */}
+          <motion.div variants={itemVariants} className="space-y-2.5">
+            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <Calendar size={16} className="text-primary-500" />
+              事件名称
+            </label>
+            <Input
+              required
+              placeholder="例如：妈妈生日 / 结婚纪念日"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="h-12"
+            />
+          </motion.div>
+
+          {/* 日历类型和日期选择 */}
+          <motion.div variants={itemVariants} className="space-y-3">
+            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <Globe size={16} className="text-primary-500" />
+              日历类型
+            </label>
+            <div className="flex gap-2">
+              {calendarTypes.map((cal) => (
+                <button
+                  key={cal.value}
+                  type="button"
+                  onClick={() => handleCalendarTypeChange(cal.value)}
+                  className={`flex-1 py-2.5 px-4 rounded-xl font-semibold text-sm transition-all duration-300 alive-interactive ${
+                    formData.calendarType === cal.value
+                      ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30'
+                      : 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {cal.label}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="space-y-2.5">
+            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <CalendarClock size={16} className="text-primary-500" />
+              目标日期
+            </label>
+            <Input
+              required
+              type="datetime-local"
+              value={formData.date}
+              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              className="h-12"
+            />
+          </motion.div>
+
+          {/* 姓名/备注（可选） */}
+          <motion.div variants={itemVariants} className="space-y-2.5">
+            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <Users size={16} className="text-primary-500" />
+              关联人员（可选）
+            </label>
+            <Input
+              placeholder="例如：张三"
+              value={formData.personName || ''}
+              onChange={(e) => setFormData({ ...formData, personName: e.target.value })}
+              className="h-12"
+            />
+          </motion.div>
+
+          {/* 备注描述 */}
+          <motion.div variants={itemVariants} className="space-y-2.5">
+            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <AlignLeft size={16} className="text-primary-500" />
+              备注描述（可选）
+            </label>
+            <Textarea
+              placeholder="添加详细信息..."
+              value={formData.reminderConfig.customMessage || ''}
+              onChange={(e) => setFormData({
+                ...formData,
+                reminderConfig: { ...formData.reminderConfig, customMessage: e.target.value }
+              })}
+              className="min-h-[80px]"
+            />
+          </motion.div>
+
+          {/* 提醒配置 */}
+          <motion.div variants={itemVariants} className="space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                <Bell size={16} className="text-primary-500" />
+                提醒配置
+              </label>
+              <Switch
+                checked={formData.reminderConfig.enabled}
+                onCheckedChange={(checked) => setFormData({
+                  ...formData,
+                  reminderConfig: { ...formData.reminderConfig, enabled: checked }
+                })}
+              />
+            </div>
+
+            <AnimatePresence>
+              {formData.reminderConfig.enabled && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-4 pl-2 border-l-2 border-primary-500/30"
+                >
+                  {/* 提醒时间 */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">提醒时间</label>
+                    <Input
+                      type="time"
+                      value={formData.reminderConfig.reminderTime || '09:00'}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        reminderConfig: { ...formData.reminderConfig, reminderTime: e.target.value }
+                      })}
+                      className="h-10 w-32"
+                    />
+                  </div>
+
+                  {/* 提前天数 */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">提前提醒天数</label>
+                    <div className="flex flex-wrap gap-2">
+                      {reminderDays.map((day) => (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => toggleReminderDay(day)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${
+                            formData.reminderConfig.daysBeforeList?.includes(day)
+                              ? 'bg-primary-500 text-white'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          {day}天
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 通知渠道选择 */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">通知渠道</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {notificationChannels.map((channel) => (
+                        <button
+                          key={channel.value}
+                          type="button"
+                          onClick={() => toggleChannel(channel.value)}
+                          className={`p-2 rounded-xl text-sm font-medium transition-all duration-300 alive-interactive flex items-center gap-1.5 ${
+                            formData.reminderConfig.channels?.includes(channel.value)
+                              ? 'bg-primary-500/20 text-primary-600 dark:text-primary-400 border border-primary-500/30'
+                              : 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-transparent'
+                          }`}
+                        >
+                          <span>{channel.icon}</span>
+                          <span>{channel.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 邮件收件人 */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                      <Mail size={14} />
+                      邮件收件人
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="email"
+                        placeholder="输入邮箱地址"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
+                        className="h-10 flex-1"
+                      />
+                      <Button type="button" variant="secondary" size="sm" onClick={addEmail} className="h-10 px-4">
+                        <Plus size={16} />
+                      </Button>
+                    </div>
+                    {formData.reminderConfig.emailRecipients && formData.reminderConfig.emailRecipients.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {formData.reminderConfig.emailRecipients.map((email) => (
+                          <Badge key={email} variant="secondary" className="flex items-center gap-1 px-3 py-1">
+                            {email}
+                            <button
+                              type="button"
+                              onClick={() => removeEmail(email)}
+                              className="hover:text-red-500 transition-colors"
+                            >
+                              <X size={14} />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+
+          {/* 提交按钮 */}
+          <motion.div variants={itemVariants} className="pt-4 flex gap-3">
+            <Button type="button" variant="secondary" className="flex-1 h-12 rounded-2xl font-bold" onClick={onClose}>
+              取消
+            </Button>
+            <Button
+              type="submit"
+              variant="vision"
+              className="flex-1 h-12 rounded-2xl font-bold shadow-xl shadow-primary-500/30"
+              disabled={loading}
+            >
+              {loading ? '保存中...' : '确认保存'}
+            </Button>
+          </motion.div>
+        </motion.form>
       </DialogContent>
     </Dialog>
   );

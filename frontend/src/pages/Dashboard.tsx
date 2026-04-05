@@ -126,9 +126,13 @@ export function Dashboard() {
         )}
       </main>
 
-      <motion.div className="fixed bottom-10 right-10 z-40" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-        <Button variant="vision" className="h-16 w-16 rounded-[1.5rem] shadow-2xl shadow-primary-500/30 flex items-center justify-center p-0" onClick={() => { setEditingEvent(undefined); setShowForm(true); }}>
-          <Plus size={28} />
+      <motion.div className="fixed bottom-10 right-10 z-40" whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}>
+        <Button 
+          variant="vision" 
+          className="h-16 w-16 rounded-[1.5rem] shadow-2xl shadow-primary-600/50 flex items-center justify-center p-0 bg-gradient-to-br from-primary-600 to-primary-700 hover:from-primary-500 hover:to-primary-600" 
+          onClick={() => { setEditingEvent(undefined); setShowForm(true); }}
+        >
+          <Plus size={28} className="text-white" />
         </Button>
       </motion.div>
       
