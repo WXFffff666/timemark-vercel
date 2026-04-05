@@ -151,11 +151,23 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (accessToken) {
       try {
         const user = await api.get<User>('/auth/session');
+        // Cache user for offline/fallback
+        localStorage.setItem('cachedUser', JSON.stringify(user));
+        sessionStorage.setItem('cachedUser', JSON.stringify(user));
         set({ user, isAuthenticated: true });
         return;
       } catch (error: any) {
-        // Token expired, try to refresh
-        if (refreshToken && (error.message?.includes('401') || error.message?.includes('expired'))) {
+        // Only clear tokens on specific auth errors, not network errors
+        const errorMsg = error.message || '';
+        const isAuthError = errorMsg.includes('401') || 
+                          errorMsg.includes('403') || 
+                          errorMsg.includes('Token expired') || 
+                          errorMsg.includes('expired') ||
+                          errorMsg.includes('Unauthorized') ||
+                          errorMsg.includes('Invalid');
+        
+        // Token expired or invalid, try to refresh
+        if (refreshToken && isAuthError) {
           try {
             const refreshResponse = await api.post<any>('/auth/refresh', { refreshToken });
             
@@ -172,16 +184,29 @@ export const useAuthStore = create<AuthState>((set) => ({
             return;
           } catch (refreshError) {
             console.error('Token refresh failed:', refreshError);
+            // Only clear tokens if refresh also fails
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem(SESSION_ID_KEY);
+            localStorage.removeItem('timemark_persistent_login');
+            sessionStorage.removeItem('accessToken');
+            sessionStorage.removeItem('refreshToken');
           }
         }
         
-        // Clear invalid tokens
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem(SESSION_ID_KEY);
-        localStorage.removeItem('timemark_persistent_login');
-        sessionStorage.removeItem('accessToken');
-        sessionStorage.removeItem('refreshToken');
+        // For non-auth errors (network issues, server errors), don't clear tokens
+        // Just mark as not authenticated temporarily
+        if (!isAuthError) {
+          // Network error or server error - keep the user logged in
+          // The tokens are still valid, just the request failed
+          const storedUser = localStorage.getItem('cachedUser') || sessionStorage.getItem('cachedUser');
+          if (storedUser) {
+            try {
+              set({ user: JSON.parse(storedUser), isAuthenticated: true });
+              return;
+            } catch {}
+          }
+        }
       }
     }
     
