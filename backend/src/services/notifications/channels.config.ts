@@ -545,12 +545,11 @@ const pluginChannels: ChannelTemplate[] = [
   {
     id: 'qq_bot',
     name: 'QQ Bot',
-    description: 'QQ 机器人消息推送（Docker环境不可用）',
+    description: 'QQ 机器人消息推送（扫码登录）',
     icon: 'MessageCircle',
     configMethod: 'plugin',
-    isBuiltIn: false,
+    isBuiltIn: true,
     pluginPackage: 'oicq',
-    pluginInstallCommand: 'npm install oicq',
     fields: [
       {
         name: 'token',
