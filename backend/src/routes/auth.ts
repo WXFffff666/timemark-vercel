@@ -147,3 +147,37 @@ auth.post('/refresh', async (c) => {
 });
 
 export default auth;
+
+// ============ Session endpoint for checking auth status ============
+
+auth.get('/session', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.json({ success: true, data: user });
+});
+
+// ============ Login history endpoints ============
+
+auth.get('/login-history', authMiddleware, async (c) => {
+  const user = c.get('user');
+  try {
+    const result = await query(
+      'SELECT id, ip_address, username, user_agent, device_fingerprint, success, failure_reason, login_time FROM login_logs WHERE user_id = $1 ORDER BY login_time DESC LIMIT 50',
+      [user.id]
+    );
+    return c.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Failed to fetch login history:', error);
+    return c.json({ success: true, data: [] });
+  }
+});
+
+auth.delete('/login-history', authMiddleware, async (c) => {
+  const user = c.get('user');
+  try {
+    await query('DELETE FROM login_logs WHERE user_id = $1', [user.id]);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error('Failed to clear login history:', error);
+    return c.json({ success: false, error: 'Failed to clear logs' }, 500);
+  }
+});
