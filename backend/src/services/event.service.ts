@@ -5,6 +5,12 @@ import type { Event, CreateEventRequest } from '@timemark/shared';
 export async function createEvent(userId: string, data: CreateEventRequest): Promise<Event> {
   const id = randomUUID();
   
+  // Convert userId from UUID string to integer
+  const numericUserId = parseInt(userId, 10);
+  if (isNaN(numericUserId)) {
+    throw new Error('Invalid user ID');
+  }
+  
   // Ensure reminderConfig has required fields with defaults
   const defaultConfig = {
     enabled: true,
@@ -19,7 +25,7 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
   
   await query(
     `INSERT INTO events (id, user_id, name, type, date, calendar_type, lunar_date, reminder_config, relationship_mapping_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [id, userId, data.name, data.type, data.date, data.calendarType, 
+    [id, numericUserId, data.name, data.type, data.date, data.calendarType, 
       data.lunarDate ? JSON.stringify(data.lunarDate) : null, 
       JSON.stringify(reminderConfig),
       data.relationshipMappingId || null]
@@ -29,7 +35,13 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
 }
 
 export async function getEventsByUserId(userId: string): Promise<Event[]> {
-  const result = await query('SELECT * FROM events WHERE user_id = $1 ORDER BY date ASC', [userId]);
+  // Convert userId from UUID string to integer
+  const numericUserId = parseInt(userId, 10);
+  if (isNaN(numericUserId)) {
+    return [];
+  }
+  
+  const result = await query('SELECT * FROM events WHERE user_id = $1 ORDER BY date ASC', [numericUserId]);
   return result.rows.map((row: any) => {
     let reminderConfig: any = {};
     try {
