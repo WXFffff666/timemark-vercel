@@ -33,6 +33,11 @@ const calendarTypes: { value: CalendarType; label: string }[] = [
 
 const reminderDays = [1, 3, 7, 14, 30];
 
+const reminderTimes = [
+  '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
+  '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'
+];
+
 const notificationChannels = [
   // Email (mandatory)
   { value: 'email', label: '邮件', icon: '📧' },
@@ -302,6 +307,11 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
             <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
               <Globe size={16} className="text-primary-500" />
               日历类型
+              <span className="text-xs font-normal text-slate-400 ml-2">
+                {formData.calendarType === 'gregorian' && '→ 公历日期'}
+                {formData.calendarType === 'lunar' && '→ 农历日期'}
+                {formData.calendarType === 'both' && '→ 公历+农历'}
+              </span>
             </label>
             <div className="flex gap-2">
               {calendarTypes.map((cal) => (
@@ -316,6 +326,9 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   }`}
                 >
                   {cal.label}
+                  {formData.calendarType === cal.value && (
+                    <span className="ml-1 text-xs opacity-80">✓</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -393,15 +406,25 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   {/* 提醒时间 */}
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">提醒时间</label>
-                    <Input
-                      type="time"
-                      value={formData.reminderConfig.reminderTime || '09:00'}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        reminderConfig: { ...formData.reminderConfig, reminderTime: e.target.value }
-                      })}
-                      className="h-10 w-32"
-                    />
+                    <div className="flex gap-2 flex-wrap">
+                      {reminderTimes.map((time) => (
+                        <button
+                          key={time}
+                          type="button"
+                          onClick={() => setFormData({
+                            ...formData,
+                            reminderConfig: { ...formData.reminderConfig, reminderTime: time }
+                          })}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${
+                            formData.reminderConfig.reminderTime === time
+                              ? 'bg-primary-500 text-white'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {time}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* 提前天数 */}

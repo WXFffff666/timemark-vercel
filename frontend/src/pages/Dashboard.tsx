@@ -13,7 +13,7 @@ import type { Event, CreateEventRequest } from '@timemark/shared';
 import { Settings, Bell, Plus } from 'lucide-react';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
-const itemVariants = { hidden: { opacity: 0, scale: 0.95, y: 10 }, visible: { opacity: 1, scale: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 25 } } };
+const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
 
 export function Dashboard() {
   const navigate = useNavigate();
