@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { TimezoneProvider } from './components/RealtimeClock';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isLoading = useAuthStore((state) => state.isLoading);
   
