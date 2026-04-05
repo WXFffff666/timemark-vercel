@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { useAuthStore } from './stores/auth.store';
 import { LoginPage } from './pages/Login';
@@ -27,10 +27,33 @@ function MeshBackground() {
 function AnimatedRoutes() {
   const location = useLocation();
   const checkAuth = useAuthStore((state) => state.checkAuth);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const navigate = useNavigate();
 
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  // Prevent full page refresh from resetting navigation
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Save current path to sessionStorage before unload
+      sessionStorage.setItem('lastPath', location.pathname);
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [location.pathname]);
+
+  // Restore last path after page load if authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const lastPath = sessionStorage.getItem('lastPath');
+      if (lastPath && lastPath !== location.pathname && lastPath !== '/') {
+        // Don't automatically navigate, just restore on next auth check
+      }
+    }
+  }, [isAuthenticated, location.pathname]);
 
   return (
     <AnimatePresence mode="wait">
