@@ -7,7 +7,7 @@ import Settings from './pages/Settings';
 import Reminders from './pages/Reminders';
 import LoginHistory from './pages/LoginHistory';
 import Channels from './pages/Channels';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { TimezoneProvider } from './components/RealtimeClock';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -41,6 +41,7 @@ function AnimatedRoutes() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isLoading = useAuthStore((state) => state.isLoading);
   const navigate = useNavigate();
+  const [hasRestored, setHasRestored] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -55,19 +56,26 @@ function AnimatedRoutes() {
     }
   }, [location.pathname]);
 
-  // Restore last path after auth check completes and user is authenticated
+  // Restore last path ONLY on first auth completion (transition from login)
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
+    if (!isLoading && isAuthenticated && !hasRestored) {
       const lastPath = sessionStorage.getItem('lastPath');
-      // If there's a saved path and user was redirected to login (or is on default route)
-      // restore to the protected page they originally tried to access
-      if (lastPath && (location.pathname === '/login' || location.pathname === '/dashboard' || location.pathname === '/')) {
-        // Clear the lastPath so it won't be reused after redirect
+      // Only restore if coming from /login page (first login after auth check)
+      if (lastPath && location.pathname === '/login') {
+        setHasRestored(true);
         sessionStorage.removeItem('lastPath');
         navigate(lastPath, { replace: true });
+      } else if (location.pathname === '/login' || location.pathname === '/') {
+        // For first-time login or root, go to dashboard (don't restore)
+        setHasRestored(true);
+        // Clear any stale lastPath
+        sessionStorage.removeItem('lastPath');
+      } else {
+        // Already on a protected page, just mark as done
+        setHasRestored(true);
       }
     }
-  }, [isLoading, isAuthenticated, location.pathname, navigate]);
+  }, [isLoading, isAuthenticated, location.pathname, navigate, hasRestored]);
 
   // Show nothing while checking auth
   if (isLoading) {
