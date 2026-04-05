@@ -135,10 +135,19 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
     setLoading(true);
     try {
-      // Convert date to ISO string
+      // Convert date to YYYY-MM-DD string for PostgreSQL
+      const targetDate = new Date(formData.date);
+      if (isNaN(targetDate.getTime())) {
+        alert('无效的日期格式');
+        return;
+      }
+      
+      // Format as YYYY-MM-DD for PostgreSQL
+      const dateStr = targetDate.toISOString().split('T')[0];
+      
       const submissionData: CreateEventRequest = {
         ...formData,
-        date: targetDate.toISOString(),
+        date: dateStr,
       };
       
       await onSubmit(submissionData);
