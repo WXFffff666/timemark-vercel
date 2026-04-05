@@ -37,7 +37,17 @@ export function Dashboard() {
   const handleTestSend = async (id: string) => { try { await testSendEvent(id); alert('测试通知已发送！'); } catch (error) { alert('发送失败，请检查通知渠道配置'); } };
   const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return;
-    if (confirm(`确定批量删除 ${selectedIds.length} 个事件？`)) { await deleteEventsBatch(selectedIds); setSelectedIds([]); setBatchMode(false); }
+    try {
+      if (confirm(`确定批量删除 ${selectedIds.length} 个事件？`)) {
+        const deletedCount = await deleteEventsBatch(selectedIds);
+        alert(`成功删除 ${deletedCount} 个事件`);
+        setSelectedIds([]);
+        setBatchMode(false);
+      }
+    } catch (error) {
+      console.error('Batch delete error:', error);
+      alert('批量删除失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    }
   };
 
   return (

@@ -115,8 +115,11 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     type: 'birthday',
     date: '',
     calendarType: 'gregorian',
+    lunarDate: undefined,
     reminderConfig: defaultReminderConfig,
   });
+
+  const [lunarInputValue, setLunarInputValue] = useState('');
 
   const [newEmail, setNewEmail] = useState('');
   const [customTime, setCustomTime] = useState('');
@@ -152,8 +155,10 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         type: 'birthday',
         date: '',
         calendarType: 'gregorian',
+        lunarDate: undefined,
         reminderConfig: defaultReminderConfig,
       });
+      setLunarInputValue('');
     }
   }, [event, open]);
 
@@ -425,6 +430,9 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   const lunar = convertToLunar(newDate);
                   if (lunar) {
                     setFormData(prev => ({ ...prev, lunarDate: lunar }));
+                    // 更新农历输入框显示
+                    const lunarStr = `${lunar.year}-${String(lunar.month).padStart(2, '0')}-${String(lunar.day).padStart(2, '0')}`;
+                    setLunarInputValue(lunarStr);
                   }
                 }
               }}
@@ -441,17 +449,33 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                 <span className="text-xs text-slate-400 ml-2">(公历将在上方自动计算)</span>
               </label>
               <Input
-                type="date"
-                value={formData.date}
+                type="text"
+                value={lunarInputValue}
+                placeholder="农历日期，格式：YYYY-MM-DD 例如 2007-06-15"
                 onChange={(e) => {
-                  const newDate = e.target.value;
-                  const gregorian = convertToGregorian({ year: new Date(newDate).getFullYear(), month: new Date(newDate).getMonth() + 1, day: new Date(newDate).getDate(), isLeap: false });
-                  if (gregorian) {
-                    setFormData({ ...formData, date: gregorian });
+                  const input = e.target.value;
+                  setLunarInputValue(input);
+                  // 尝试解析为农历日期并转换为公历
+                  const lunarMatch = input.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+                  if (lunarMatch) {
+                    const [, year, month, day] = lunarMatch;
+                    const lunarDate = {
+                      year: parseInt(year),
+                      month: parseInt(month),
+                      day: parseInt(day),
+                      isLeap: false
+                    };
+                    const gregorian = convertToGregorian(lunarDate);
+                    if (gregorian) {
+                      setFormData(prev => ({ ...prev, date: gregorian }));
+                    }
                   }
                 }}
                 className="h-12"
               />
+              <span className="text-xs text-slate-400">
+                提示：输入农历日期（如 2007-06-15 表示农历2007年6月15日），系统会自动转换为公历
+              </span>
             </motion.div>
           )}
 
