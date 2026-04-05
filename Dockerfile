@@ -1,8 +1,10 @@
 FROM node:20-alpine
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init chromium chromium-chromedriver ca-certificates
 WORKDIR /app
 ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy pnpm and package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
