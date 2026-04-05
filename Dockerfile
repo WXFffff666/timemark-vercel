@@ -1,5 +1,5 @@
 FROM node:20-alpine
-RUN apk add --no-cache dumb-init git openssh-client
+RUN apk add --no-cache dumb-init
 WORKDIR /app
 ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
