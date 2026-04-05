@@ -239,6 +239,7 @@ export default function Channels() {
         token: configForm.token || undefined,
         chatId: configForm.chat_id || undefined,
         secret: configForm.secret || undefined,
+        sessionData: configForm.sessionData || undefined,
       };
 
       if (selectedAccount) {
@@ -284,9 +285,78 @@ export default function Channels() {
     }
   };
 
-  const startPluginAuth = (template: ChannelTemplate) => {
+  const startPluginAuth = async (template: ChannelTemplate) => {
     setSelectedTemplate(template);
+    setQrCodeData('');
+    setQrSessionId('');
+    setAuthStatus('pending');
     setShowQrModal(true);
+
+    try {
+      // Call backend to start authentication
+      const body: any = {};
+      
+      // For QQ bot, we need the QQ number from config
+      if (template.id === 'qq_bot' && configForm.token) {
+        body.qqNumber = configForm.token;
+      }
+
+      const result = await api.post<{ qrcode: string; sessionId: string }>(
+        `/channels/plugin/${template.id}/start-auth`,
+        body
+      );
+
+      if (result) {
+        setQrCodeData(result.qrcode);
+        setQrSessionId(result.sessionId);
+        setAuthStatus('authenticating');
+
+        // Start polling to check auth status
+        checkAuthStatus(template.id, result.sessionId);
+      }
+    } catch (error: any) {
+      console.error('Failed to start auth:', error);
+      setAuthStatus('error');
+      // For demo purposes, show a mock QR code if backend fails
+      if (!qrCodeData) {
+        setQrCodeData('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+      }
+    }
+  };
+
+  // Poll for authentication status
+  const checkAuthStatus = async (type: string, sessionId: string) => {
+    const maxAttempts = 120; // 2 minutes
+    let attempts = 0;
+
+    const poll = async () => {
+      if (attempts >= maxAttempts || authStatus === 'authenticated') {
+        return;
+      }
+
+      try {
+        const sessionData = JSON.stringify({ sessionId, authenticated: false });
+        const result = await api.post<{ authenticated: boolean; user?: string }>(
+          `/channels/plugin/${type}/check-auth`,
+          { sessionData }
+        );
+
+        if (result?.authenticated) {
+          setAuthStatus('authenticated');
+          // Save session data to config form
+          setConfigForm({ ...configForm, sessionData: sessionData });
+        } else {
+          attempts++;
+          setTimeout(poll, 2000);
+        }
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+        attempts++;
+        setTimeout(poll, 2000);
+      }
+    };
+
+    poll();
   };
 
   const filteredTemplates = templates.filter(t => t.configMethod === activeTab);
@@ -501,10 +571,9 @@ export default function Channels() {
 
       {/* Template Selection Modal */}
       <Dialog open={showTemplateModal} onOpenChange={(open) => {
-        if (!open && modalBackStack.length > 0) {
-          goBackInModal();
-        } else {
-          setShowTemplateModal(open);
+        // 点击遮罩层/旁边区域时直接关闭
+        if (!open) {
+          setShowTemplateModal(false);
         }
       }}>
         <DialogContent className="glass-panel rounded-[2rem] max-w-4xl max-h-[85vh] overflow-hidden p-0">
@@ -728,10 +797,15 @@ export default function Channels() {
                 variant="secondary"
                 className="flex-1 h-12 rounded-2xl font-bold"
                 onClick={() => {
-                  setShowConfigModal(false);
-                  setSelectedTemplate(null);
-                  setSelectedAccount(null);
-                  setConfigForm({});
+                  // 点击取消返回上一级，而不是直接关闭
+                  if (modalBackStack.length > 1) {
+                    goBackInModal();
+                  } else {
+                    // 如果是第一层，返回到模板选择
+                    setShowConfigModal(false);
+                    setShowTemplateModal(true);
+                    setModalBackStack(['main', 'template']);
+                  }
                 }}
               >
                 取消
@@ -758,11 +832,11 @@ export default function Channels() {
 
       {/* QR Code Modal for Plugin Auth */}
       <Dialog open={showQrModal} onOpenChange={(open) => {
-        if (!open && canGoBack) {
-          goBackInModal();
-        } else if (!open) {
+        // 点击遮罩层/旁边区域时直接关闭
+        if (!open) {
           setShowQrModal(false);
-          setModalBackStack([]);
+          setShowConfigModal(true);
+          setModalBackStack(['main', 'template', 'config']);
         }
       }}>
         <DialogContent className="glass-panel rounded-[2rem] max-w-md">
@@ -800,7 +874,7 @@ export default function Channels() {
               请使用 {selectedTemplate?.name} 扫描二维码
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              {authStatus === 'authenticating' ? '正在验证...' : '扫码后将自动完成授权并启用此渠道'}
+              {authStatus === 'authenticating' ? '正在验证...' : authStatus === 'authenticated' ? '授权成功！' : '扫码后将自动完成授权并启用此渠道'}
             </p>
           </div>
 
@@ -809,6 +883,24 @@ export default function Channels() {
               <div className="flex items-center gap-2">
                 <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
                 <span className="text-sm text-blue-700 dark:text-blue-300">等待扫码验证...</span>
+              </div>
+            </div>
+          )}
+
+          {authStatus === 'authenticated' && (
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 mb-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                <span className="text-sm text-green-700 dark:text-green-300">授权成功！请保存配置。</span>
+              </div>
+            </div>
+          )}
+
+          {authStatus === 'error' && (
+            <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 mb-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                <span className="text-sm text-red-700 dark:text-red-300">认证启动失败，请检查后端服务是否正常运行</span>
               </div>
             </div>
           )}
@@ -827,14 +919,28 @@ export default function Channels() {
             <Button
               variant="secondary"
               className="flex-1 h-12 rounded-2xl font-bold"
-              onClick={() => setShowQrModal(false)}
+              onClick={() => {
+                // 点击稍后授权返回上一级，而不是直接关闭
+                if (modalBackStack.length > 1) {
+                  goBackInModal();
+                } else {
+                  setShowQrModal(false);
+                  setShowConfigModal(true);
+                  setModalBackStack(['main', 'template', 'config']);
+                }
+              }}
             >
               稍后授权
             </Button>
             <Button
               variant="vision"
               className="flex-1 h-12 rounded-2xl font-bold shadow-lg shadow-primary-500/30"
-              onClick={() => setShowQrModal(false)}
+              onClick={() => {
+                // 扫码完成后返回到配置页面
+                setShowQrModal(false);
+                setShowConfigModal(true);
+                setModalBackStack(['main', 'template', 'config']);
+              }}
             >
               我已扫码
             </Button>

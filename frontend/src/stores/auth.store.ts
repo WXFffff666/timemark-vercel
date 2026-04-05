@@ -74,6 +74,7 @@ async function getEnhancedFingerprint(): Promise<string> {
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   setUser: (user: User | null) => void;
   login: (username: string, password: string, rememberMe?: boolean) => Promise<void>;
   logout: () => Promise<void>;
@@ -83,6 +84,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
+  isLoading: true,
 
   setUser: (user) => set({ user }),
 
@@ -112,7 +114,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.removeItem('timemark_persistent_login');
     }
     
-    set({ user: response.user, isAuthenticated: true });
+    set({ user: response.user, isAuthenticated: true, isLoading: false });
   },
 
   logout: async () => {
@@ -127,7 +129,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.removeItem('timemark_persistent_login');
       sessionStorage.removeItem('accessToken');
       sessionStorage.removeItem('refreshToken');
-      set({ user: null, isAuthenticated: false });
+      sessionStorage.removeItem('lastPath'); // Also clear lastPath on logout
+      set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
 
@@ -154,7 +157,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         // Cache user for offline/fallback
         localStorage.setItem('cachedUser', JSON.stringify(user));
         sessionStorage.setItem('cachedUser', JSON.stringify(user));
-        set({ user, isAuthenticated: true });
+        set({ user, isAuthenticated: true, isLoading: false });
         return;
       } catch (error: any) {
         // Only clear tokens on specific auth errors, not network errors
@@ -180,7 +183,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             
             // Re-verify with new token
             const user = await api.get<User>('/auth/session');
-            set({ user, isAuthenticated: true });
+            set({ user, isAuthenticated: true, isLoading: false });
             return;
           } catch (refreshError) {
             console.error('Token refresh failed:', refreshError);
@@ -202,7 +205,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           const storedUser = localStorage.getItem('cachedUser') || sessionStorage.getItem('cachedUser');
           if (storedUser) {
             try {
-              set({ user: JSON.parse(storedUser), isAuthenticated: true });
+              set({ user: JSON.parse(storedUser), isAuthenticated: true, isLoading: false });
               return;
             } catch {}
           }
@@ -210,6 +213,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
     }
     
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, isLoading: false });
   },
 }));

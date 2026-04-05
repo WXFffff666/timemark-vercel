@@ -1,19 +1,31 @@
 import { useAuthStore } from '@/stores/auth.store';
 import { LoginForm } from '@/components/auth/LoginForm';
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 export function LoginPage() {
-  const { isAuthenticated } = useAuthStore();
+  // Note: Redirect logic is now handled in App.tsx's AnimatedRoutes
+  // to properly support "return to last path" functionality
+  
+  // Handle redirect from ProtectedRoute (via `from` state)
+  const location = useLocation();
   const navigate = useNavigate();
-
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/dashboard');
+    // After successful login (isAuthenticated becomes true), redirect to original path
+    if (!isLoading && isAuthenticated) {
+      const from = location.state?.from;
+      if (from?.pathname) {
+        navigate(from.pathname, { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     }
-  }, [isAuthenticated, navigate]);
-
+  }, [isLoading, isAuthenticated, location.state, navigate]);
+  
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <motion.div
