@@ -25,15 +25,19 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
     ? { ...defaultConfig, ...data.reminderConfig }
     : defaultConfig;
   
+  // Extract channels for separate column storage
+  const notificationChannels = reminderConfig.channels || [];
+  
   console.log('[createEvent] About to insert with user_id:', numericUserId);
   
   try {
     // Don't specify id - let the database auto-increment (SERIAL)
     await query(
-      `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, relationship_mapping_id, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, notification_channels, relationship_mapping_id, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [numericUserId, data.name, data.type, data.date, data.calendarType, 
         data.lunarDate ? JSON.stringify(data.lunarDate) : null, 
         JSON.stringify(reminderConfig),
+        JSON.stringify(notificationChannels),
         data.relationshipMappingId || null,
         data.personName || null,
         data.birthDate || null,
@@ -132,7 +136,15 @@ export async function updateEvent(id: string, userId: string, data: any): Promis
   }
   if (data.calendarType) { updates.push(`calendar_type = $${paramIndex++}`); values.push(data.calendarType); }
   if (data.lunarDate) { updates.push(`lunar_date = $${paramIndex++}`); values.push(JSON.stringify(data.lunarDate)); }
-  if (data.reminderConfig) { updates.push(`reminder_config = $${paramIndex++}`); values.push(JSON.stringify(data.reminderConfig)); }
+  if (data.reminderConfig) {
+    // Extract channels from reminderConfig for separate column storage
+    const channels = data.reminderConfig.channels || [];
+    updates.push(`reminder_config = $${paramIndex++}`);
+    values.push(JSON.stringify(data.reminderConfig));
+    // Also update notification_channels column
+    updates.push(`notification_channels = $${paramIndex++}`);
+    values.push(JSON.stringify(channels));
+  }
   if (data.relationshipMappingId !== undefined) { updates.push(`relationship_mapping_id = $${paramIndex++}`); values.push(data.relationshipMappingId || null); }
   if (data.personName !== undefined) { updates.push(`person_name = $${paramIndex++}`); values.push(data.personName || null); }
   if (data.birthDate !== undefined) { updates.push(`birth_date = $${paramIndex++}`); values.push(data.birthDate || null); }
