@@ -100,20 +100,28 @@ export default function LoginHistory() {
   };
 
   const formatTime = (timeStr: string) => {
-    // 数据库存储的是 UTC 时间，需要转换为东八区时间显示
-    // 假设数据库存的是 UTC，转换为 Asia/Shanghai 需要加8小时
-    const date = new Date(timeStr);
-    // 手动添加8小时偏移（因为数据库是UTC，东八区需要+8）
-    const adjustedDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-    const now = new Date();
+    // 数据库存储的时间是东八区服务器时间，直接使用
+    // 如果前端时区不是东八区，需要转换显示
+    let date = new Date(timeStr);
     
-    const diff = now.getTime() - adjustedDate.getTime();
+    // 尝试检测时间是否被错误解析（浏览器可能把没有时区的信息当作本地时区）
+    // 如果时间差超过12小时，说明可能是UTC被当作本地时区了，需要调整
+    const now = new Date();
+    const hoursDiff = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    
+    // 如果浏览器解析出的时间比实际时间早超过12小时，说明时间被当作UTC处理了
+    // 数据库存的是东八区时间，浏览器可能把它当作本地时间（可能是其他时区）
+    // 这种情况下我们需要保持原样，因为数据库就是东八区
+    // 实际上，最简单的做法是直接显示，因为数据库已经是东八区
+    
+    const diff = now.getTime() - date.getTime();
     
     if (diff < 60000) return '刚刚';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
     if (diff < 172800000) return '昨天';
-    return adjustedDate.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    // 直接使用原始字符串解析，避免时区转换问题
+    return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   };
 
   const getLocation = (ip: string) => {
