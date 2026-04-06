@@ -44,6 +44,7 @@ interface ChannelTemplate {
 
 interface Account extends NotificationAccount {
   is_active?: boolean;
+  token?: string;
 }
 
 // Icon mapping
@@ -290,7 +291,7 @@ export default function Channels() {
     }
   };
 
-  const startPluginAuth = async (template: ChannelTemplate) => {
+  const startPluginAuth = async (template: ChannelTemplate, account?: Account) => {
     setSelectedTemplate(template);
     setQrCodeData('');
     setQrSessionId('');
@@ -302,14 +303,20 @@ export default function Channels() {
       const body: any = {};
       
       // For QQ bot, we need the QQ number from config
-      if (template.id === 'qq_bot' && configForm.token) {
-        body.qqNumber = configForm.token;
+      if (template.id === 'qq_bot') {
+        // Try to get QQ number from configForm first (for new configs)
+        // or from account token (for existing accounts)
+        body.qqNumber = configForm.token || account?.token;
       }
 
+      console.log('[Channels] Starting plugin auth for:', template.id, 'with body:', body);
+      
       const result = await api.post<{ qrcode: string; sessionId: string }>(
         `/channels/plugin/${template.id}/start-auth`,
         body
       );
+
+      console.log('[Channels] Auth result:', result);
 
       if (result) {
         setQrCodeData(result.qrcode);
@@ -320,7 +327,7 @@ export default function Channels() {
         checkAuthStatus(template.id, result.sessionId);
       }
     } catch (error: any) {
-      console.error('Failed to start auth:', error);
+      console.error('[Channels] Failed to start auth:', error);
       setAuthStatus('error');
       // For demo purposes, show a mock QR code if backend fails
       if (!qrCodeData) {
@@ -527,7 +534,7 @@ export default function Channels() {
                               variant="outline" 
                               size="sm" 
                               className="rounded-lg border-amber-200"
-                              onClick={() => template && startPluginAuth(template)}
+                              onClick={() => template && startPluginAuth(template, account)}
                             >
                               <QrCode size={14} className="mr-1" /> 扫码授权
                             </Button>

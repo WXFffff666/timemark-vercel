@@ -89,6 +89,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) => set({ user }),
 
   login: async (username, password, rememberMe = false) => {
+    console.log('[AuthStore] Login called');
     const fingerprint = await getEnhancedFingerprint();
     const response = await api.post<any>('/auth/login', { 
       username, 
@@ -96,6 +97,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       deviceFingerprint: fingerprint, 
       rememberMe 
     });
+    
+    console.log('[AuthStore] Login response:', { hasAccessToken: !!response.accessToken, hasUser: !!response.user });
     
     // Store tokens based on rememberMe preference
     if (rememberMe) {
@@ -114,7 +117,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.removeItem('timemark_persistent_login');
     }
     
+    console.log('[AuthStore] Setting isAuthenticated: true');
     set({ user: response.user, isAuthenticated: true, isLoading: false });
+    console.log('[AuthStore] Login complete, isAuthenticated should be true now');
   },
 
   logout: async () => {

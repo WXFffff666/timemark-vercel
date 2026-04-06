@@ -7,7 +7,7 @@ import Settings from './pages/Settings';
 import Reminders from './pages/Reminders';
 import LoginHistory from './pages/LoginHistory';
 import Channels from './pages/Channels';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { TimezoneProvider } from './components/RealtimeClock';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -40,52 +40,18 @@ function AnimatedRoutes() {
   const location = useLocation();
   const checkAuth = useAuthStore((state) => state.checkAuth);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const isLoading = useAuthStore((state) => state.isLoading);
   const navigate = useNavigate();
-  const [hasRestored, setHasRestored] = useState(false);
 
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
 
-  // Save current path whenever location changes
+  // Simple redirect to dashboard when logged in and on login page
   useEffect(() => {
-    // Only save for protected routes
-    const protectedRoutes = ['/dashboard', '/settings', '/reminders', '/login-history', '/channels'];
-    if (protectedRoutes.includes(location.pathname)) {
-      sessionStorage.setItem('lastPath', location.pathname);
+    if (isAuthenticated && location.pathname === '/login') {
+      navigate('/dashboard', { replace: true });
     }
-  }, [location.pathname]);
-
-  // Restore last path ONLY on first auth completion (transition from login)
-  useEffect(() => {
-    if (!isLoading && isAuthenticated && !hasRestored) {
-      const lastPath = sessionStorage.getItem('lastPath');
-      // Only restore if coming from /login page (first login after auth check)
-      if (lastPath && location.pathname === '/login') {
-        setHasRestored(true);
-        sessionStorage.removeItem('lastPath');
-        navigate(lastPath, { replace: true });
-      } else if (location.pathname === '/login' || location.pathname === '/') {
-        // For first-time login or root, go to dashboard (don't restore)
-        setHasRestored(true);
-        // Clear any stale lastPath
-        sessionStorage.removeItem('lastPath');
-      } else {
-        // Already on a protected page, just mark as done
-        setHasRestored(true);
-      }
-    }
-  }, [isLoading, isAuthenticated, location.pathname, navigate, hasRestored]);
-
-  // Show nothing while checking auth
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
+  }, [isAuthenticated, location.pathname, navigate]);
 
   return (
     <AnimatePresence mode="wait">
