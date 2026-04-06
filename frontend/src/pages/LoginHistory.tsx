@@ -100,18 +100,20 @@ export default function LoginHistory() {
   };
 
   const formatTime = (timeStr: string) => {
-    // 数据库存储的是服务器时间 (Asia/Shanghai)，直接解析
+    // 数据库存储的是 UTC 时间，需要转换为东八区时间显示
+    // 假设数据库存的是 UTC，转换为 Asia/Shanghai 需要加8小时
     const date = new Date(timeStr);
+    // 手动添加8小时偏移（因为数据库是UTC，东八区需要+8）
+    const adjustedDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
     const now = new Date();
     
-    // 计算差值（毫秒）
-    const diff = now.getTime() - date.getTime();
+    const diff = now.getTime() - adjustedDate.getTime();
     
     if (diff < 60000) return '刚刚';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
     if (diff < 172800000) return '昨天';
-    return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return adjustedDate.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   };
 
   const getLocation = (ip: string) => {

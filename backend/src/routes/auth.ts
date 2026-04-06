@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { verifyUserPassword, createLoginLog, trackLoginFailure } from '../services/auth.service.js';
+import { verifyUserPassword, createLoginLog, trackLoginFailure, getAccountLockStatus } from '../services/auth.service.js';
 import { createSession, deleteSession } from '../services/session.service.js';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
 import { loginSchema, changePasswordSchema } from '@timemark/shared';
@@ -23,6 +23,20 @@ auth.post('/login', async (c) => {
     }
 
     const { username, password, deviceFingerprint, rememberMe = false } = parsed.data;
+    
+    // 检查账户是否被锁定
+    const lockStatus = await getAccountLockStatus({ username, ip });
+    if (lockStatus.isLocked && lockStatus.lockedUntil) {
+      const remainingMinutes = Math.ceil(lockStatus.remainingSeconds / 60);
+      return c.json({ 
+        success: false, 
+        error: `登录尝试过多，请等待 ${remainingMinutes} 分钟后再试`,
+        code: 'ACCOUNT_LOCKED',
+        lockedUntil: lockStatus.lockedUntil.toISOString(),
+        remainingSeconds: lockStatus.remainingSeconds
+      }, 429);
+    }
+    
     const user = await verifyUserPassword(username, password);
 
     if (!user) {
@@ -160,9 +174,14 @@ auth.get('/session', authMiddleware, async (c) => {
 auth.get('/login-history', authMiddleware, async (c) => {
   const user = c.get('user');
   try {
+    // 显示该用户的所有登录记录（包括成功和失败）
+    // 成功登录有 user_id，失败登录没有 user_id 但有 username
     const result = await query(
-      'SELECT id, ip_address, username, user_agent, device_fingerprint, success, failure_reason, login_time FROM login_logs WHERE user_id = $1 ORDER BY login_time DESC LIMIT 50',
-      [user.id]
+      `SELECT id, ip_address, username, user_agent, device_fingerprint, success, failure_reason, login_time 
+       FROM login_logs 
+       WHERE user_id = $1 OR (user_id IS NULL AND username = $2)
+       ORDER BY login_time DESC LIMIT 50`,
+      [user.id, user.username]
     );
     return c.json({ success: true, data: result.rows });
   } catch (error) {
