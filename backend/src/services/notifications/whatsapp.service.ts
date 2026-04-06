@@ -1,17 +1,16 @@
 import { getBlessing } from '../../../../shared/src/blessings.js';
 import QRCode from 'qrcode';
-import {
-  default as makeWASocket,
-  DisconnectReason,
-  useMultiFileAuthState,
-  WASocket,
-} from 'baileys';
+import * as Baileys from 'baileys';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
 
+const makeWASocket = (Baileys as any).makeWASocket || (Baileys as any).default?.makeWASocket;
+const useMultiFileAuthState = (Baileys as any).useMultiFileAuthState;
+const DisconnectReason = (Baileys as any).DisconnectReason;
+
 // Active socket instances (in-memory only)
-const activeSockets = new Map<string, WASocket>();
+const activeSockets = new Map<string, any>();
 
 interface WhatsAppSession {
   sessionId: string;
@@ -57,7 +56,7 @@ export async function startAuth(): Promise<{ qrcode: string; sessionId: string }
 
       let qrResolved = false;
 
-      sock.ev.on('connection.update', async (update) => {
+      sock.ev.on('connection.update', async (update: any) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr && !qrResolved) {
@@ -153,7 +152,7 @@ export async function checkAuth(sessionData: any): Promise<{ authenticated: bool
       let authenticated = false;
       let userId: string | undefined;
 
-      sock.ev.on('connection.update', async (update) => {
+      sock.ev.on('connection.update', async (update: any) => {
         const { connection } = update;
 
         // Check if we have user info from auth state
@@ -299,7 +298,7 @@ export async function sendNotification(
         browser: ['TimeMark', 'Desktop', '1.0.0'],
       });
 
-      sock.ev.on('connection.update', async (update) => {
+      sock.ev.on('connection.update', async (update: any) => {
         const { connection } = update;
 
         if (connection === 'open') {

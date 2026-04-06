@@ -32,13 +32,47 @@ export const createEventSchema = z.object({
   }).optional(),
   reminderConfig: reminderConfigSchema,
   // 被提醒人（生日/事件所有者）
-  personName: z.string().optional(),
-  birthDate: z.string().optional(),
-  birthDateLunar: z.string().optional(),
+  personName: z.string().optional().nullable(),
+  birthDate: z.string().optional().nullable(),
+  birthDateLunar: z.string().optional().nullable(),
   // 提醒人（接收通知的人）- 用于关系映射
-  reminderRecipientName: z.string().optional(),
-  reminderRecipientEmail: z.string().email().optional(),
+  reminderRecipientName: z.string().optional().nullable(),
+  reminderRecipientEmail: z.string().email().optional().nullable(),
   relationshipMappingId: z.string().optional(),
 });
 
-export const updateEventSchema = createEventSchema.partial();
+export const updateEventSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  type: z.enum(['birthday', 'exam', 'anniversary', 'holiday', 'other']).optional(),
+  date: z.string().optional(),
+  calendarType: z.enum(['gregorian', 'lunar', 'both']).optional(),
+  lunarDate: z.object({
+    year: z.number().int(),
+    month: z.number().int().min(1).max(12),
+    day: z.number().int().min(1).max(30),
+    isLeap: z.boolean(),
+  }).optional(),
+  secondDate: z.string().optional(),
+  secondCalendarType: z.enum(['gregorian', 'lunar']).optional(),
+  secondLunarDate: z.object({
+    year: z.number().int(),
+    month: z.number().int().min(1).max(12),
+    day: z.number().int().min(1).max(30),
+    isLeap: z.boolean(),
+  }).optional(),
+  reminderConfig: z.object({
+    enabled: z.boolean().optional(),
+    daysBeforeList: z.array(z.number().int().min(0)).optional(),
+    customMessage: z.string().optional(),
+    emailRecipients: z.array(z.string().email()).optional(),
+    channels: z.array(z.string()).optional(),
+    accountIds: z.array(z.string()).optional(),
+    reminderTimes: z.array(z.string()).optional(),
+  }).optional(),
+  personName: z.string().optional().nullable(),
+  birthDate: z.string().optional().nullable(),
+  birthDateLunar: z.string().optional().nullable(),
+  reminderRecipientName: z.string().optional().nullable(),
+  reminderRecipientEmail: z.string().email().optional().nullable(),
+  relationshipMappingId: z.string().optional(),
+});

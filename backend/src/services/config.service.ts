@@ -117,12 +117,39 @@ export interface NotificationAccount {
   updated_at: string;
 }
 
-export async function getNotificationAccounts(userId: number): Promise<NotificationAccount[]> {
+// API response type (camelCase)
+interface NotificationAccountAPI {
+  id: string;
+  type: string;
+  name: string;
+  webhook?: string;
+  token?: string;
+  chatId?: string;
+  configMethod?: 'webhook' | 'token' | 'plugin';
+  sessionData?: any;
+  pluginPackage?: string;
+  is_active?: boolean;
+}
+
+export async function getNotificationAccounts(userId: number): Promise<NotificationAccountAPI[]> {
   const result = await query(
     'SELECT * FROM notification_accounts WHERE user_id = $1 ORDER BY created_at DESC',
     [userId]
   );
-  return result.rows;
+  
+  // Map snake_case DB fields to camelCase for API response
+  return result.rows.map((row: any) => ({
+    id: row.id?.toString(),
+    type: row.type,
+    name: row.name,
+    webhook: row.webhook,
+    token: row.token,
+    chatId: row.chat_id,
+    configMethod: row.config_method,
+    sessionData: row.session_data ? JSON.parse(row.session_data) : null,
+    pluginPackage: row.plugin_package,
+    is_active: row.is_active,
+  }));
 }
 
 export async function createNotificationAccount(

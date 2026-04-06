@@ -89,7 +89,7 @@ const channelToAccountType: Record<string, string> = {
 function getChannelConfigFromAccount(
   account: any,
   channel: string
-): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string } | null {
+): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string; fromEmail?: string } | null {
   // 直接使用账户的字段
   switch (channel) {
     // Webhook-based channels
@@ -195,6 +195,7 @@ function applyRelationshipMapping(
 }
 
 export async function sendNotifications(event: any, userId: number, channels: string[]): Promise<void> {
+  console.log('[sendNotifications] Starting with channels:', channels);
   const config = await getUserConfig(userId);
   const channelWebhooks = config?.channel_webhooks || {};
   
@@ -204,6 +205,7 @@ export async function sendNotifications(event: any, userId: number, channels: st
   // 获取事件绑定的通知账户ID
   const boundAccountIds: number[] = (() => {
     const raw = event.notification_account_ids;
+    console.log('[sendNotifications] raw notification_account_ids:', raw, 'type:', typeof raw);
     if (!raw) return [];
     if (Array.isArray(raw)) return raw.filter((id): id is number => typeof id === 'number');
     try {
@@ -213,12 +215,14 @@ export async function sendNotifications(event: any, userId: number, channels: st
       return [];
     }
   })();
+  console.log('[sendNotifications] boundAccountIds:', boundAccountIds);
   
   // 获取用户所有通知账户
   const allAccounts = await getNotificationAccounts(userId);
+  console.log('[sendNotifications] All accounts:', allAccounts.map(a => ({ id: a.id, type: a.type, name: a.name })));
   
   // 构建账户ID到账户的映射
-  const accountsMap = new Map<number, any>();
+  const accountsMap = new Map<string, any>();
   for (const account of allAccounts) {
     accountsMap.set(account.id, account);
   }
@@ -230,11 +234,12 @@ export async function sendNotifications(event: any, userId: number, channels: st
     // 查找该渠道绑定的账户
     let accountConfig: any = null;
     
+    // 如果有绑定的账户ID，使用它们
     if (boundAccountIds.length > 0) {
       // 找到第一个匹配渠道类型的已绑定账户
       const accountType = channelToAccountType[ch];
       for (const accountId of boundAccountIds) {
-        const account = accountsMap.get(accountId);
+        const account = accountsMap.get(String(accountId));
         if (account && account.type === accountType && account.is_active) {
           accountConfig = getChannelConfigFromAccount(account, ch);
           if (accountConfig) break;
@@ -242,10 +247,24 @@ export async function sendNotifications(event: any, userId: number, channels: st
       }
     }
     
+    // 如果没有找到绑定的账户配置，查找该类型的任意活跃账户
+    if (!accountConfig) {
+      const accountType = channelToAccountType[ch];
+      for (const account of allAccounts) {
+        if (account.type === accountType && account.is_active) {
+          accountConfig = getChannelConfigFromAccount(account, ch);
+          console.log('[sendNotifications] Found fallback account for channel:', ch, accountConfig);
+          if (accountConfig) break;
+        }
+      }
+    }
+    
     // 如果找到了账户配置，使用它；否则使用全局配置
     if (accountConfig) {
+      console.log('[sendNotifications] Found accountConfig for channel:', ch, accountConfig);
       channelConfigs[ch] = accountConfig;
     } else {
+      console.log('[sendNotifications] No accountConfig for channel:', ch, '- checking global config');
       // 使用全局配置
       const globalConfig: any = {};
       switch (ch) {
@@ -304,9 +323,14 @@ export async function sendNotifications(event: any, userId: number, channels: st
   }
   
   // 发送通知
+  console.log('[sendNotifications] Final channelConfigs:', JSON.stringify(channelConfigs, null, 2));
   await Promise.allSettled(channels.map(async (ch) => {
     const chConfig = channelConfigs[ch];
-    if (!chConfig) return;
+    console.log('[sendNotifications] Processing channel:', ch, 'config:', chConfig);
+    if (!chConfig) {
+      console.log('[sendNotifications] No config for channel:', ch, '- skipping');
+      return;
+    }
     
     try {
       if (ch === 'feishu' && chConfig.webhook) await sendFeishuNotification(event, chConfig.webhook);
@@ -325,6 +349,7 @@ export async function sendNotifications(event: any, userId: number, channels: st
         await sendQmsgNotification(event, chConfig.token, chConfig.chat_id);
       else if (ch === 'email' && chConfig.token && chConfig.chat_id && chConfig.fromEmail) {
         // 使用账户配置发送邮件
+        console.log('[sendNotifications] Email config found:', { hasToken: !!chConfig.token, hasChatId: !!chConfig.chat_id, hasFromEmail: !!chConfig.fromEmail, token: chConfig.token?.slice(0, 10), fromEmail: chConfig.fromEmail, toEmail: chConfig.chat_id });
         await sendEmailNotification(
           event,
           chConfig.token,  // API Key (token字段)

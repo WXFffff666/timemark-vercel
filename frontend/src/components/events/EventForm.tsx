@@ -134,18 +134,15 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   useEffect(() => {
     if (event && open) {
-      // Safe date parsing - handle both string and Date formats
+      // Safe date parsing - handle both YYYY-MM-DD and YYYY-MM-DDTHH:mm formats
       let safeDate = '';
       if (event.date) {
-        const date = new Date(event.date);
-        if (!isNaN(date.getTime())) {
-          // Format as YYYY-MM-DDTHH:mm for input[type="datetime-local"]
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
-          const hours = String(date.getHours()).padStart(2, '0');
-          const minutes = String(date.getMinutes()).padStart(2, '0');
-          safeDate = `${year}-${month}-${day}T${hours}:${minutes}`;
+        // Extract YYYY-MM-DD directly (handle both YYYY-MM-DD and YYYY-MM-DDTHH:mm formats)
+        const dateStr = event.date.split('T')[0]; // Extract YYYY-MM-DD
+        
+        // Validate it's a valid date format before setting
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          safeDate = dateStr;
         }
       }
       
@@ -162,6 +159,14 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         reminderRecipientName: event.reminderRecipientName,
         reminderRecipientEmail: event.reminderRecipientEmail,
       });
+      
+      // Set lunar input value for "both" calendar type
+      if (event.calendarType === 'both' && event.lunarDate) {
+        const lunar = event.lunarDate as any;
+        setLunarInputValue(`${lunar.year}-${String(lunar.month).padStart(2, '0')}-${String(lunar.day).padStart(2, '0')}`);
+      } else {
+        setLunarInputValue('');
+      }
     } else if (open) {
       setFormData({
         name: '',
@@ -189,8 +194,12 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
       return;
     }
     
-    // Validate date
-    const targetDate = new Date(formData.date);
+    // Validate date - handle both YYYY-MM-DD and YYYY-MM-DDTHH:mm formats
+    let dateToValidate = formData.date;
+    if (formData.date.includes('T')) {
+      dateToValidate = formData.date.split('T')[0];
+    }
+    const targetDate = new Date(dateToValidate);
     if (isNaN(targetDate.getTime())) {
       alert('无效的日期格式');
       return;
@@ -199,17 +208,28 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     setLoading(true);
     try {
       // Convert date to YYYY-MM-DD string for PostgreSQL (use local time, not UTC)
-      const targetDate = new Date(formData.date);
-      if (isNaN(targetDate.getTime())) {
-        alert('无效的日期格式');
-        return;
+      // Handle both YYYY-MM-DD and YYYY-MM-DDTHH:mm formats
+      let dateStr = formData.date;
+      if (formData.date.includes('T')) {
+        const datePart = formData.date.split('T')[0];
+        dateStr = datePart;
       }
       
-      // Format as YYYY-MM-DD using local time
-      const year = targetDate.getFullYear();
-      const month = String(targetDate.getMonth() + 1).padStart(2, '0');
-      const day = String(targetDate.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
+      // If it's already in YYYY-MM-DD format, use it directly
+      // If it's in YYYY-MM-DDTHH:mm format, extract YYYY-MM-DD
+      const dateMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!dateMatch) {
+        // Try to parse as date
+        const targetDate = new Date(formData.date);
+        if (isNaN(targetDate.getTime())) {
+          alert('无效的日期格式');
+          return;
+        }
+        const year = targetDate.getFullYear();
+        const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+        const day = String(targetDate.getDate()).padStart(2, '0');
+        dateStr = `${year}-${month}-${day}`;
+      }
       
       const submissionData: CreateEventRequest = {
         ...formData,

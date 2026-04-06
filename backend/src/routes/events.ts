@@ -39,16 +39,21 @@ events.post('/:id/test-send', async (c) => {
   }
   
   const event = result.rows[0];
+  console.log('[test-send] Event data:', JSON.stringify(event, null, 2));
   const channels = event.notification_channels || [];
-  
+  console.log('[test-send] Channels:', channels);
+
   if (channels.length === 0) {
     return c.json({ success: false, error: 'No notification channels configured' }, 400);
   }
-  
+
   try {
+    console.log('[test-send] Calling sendNotifications with userId:', user.id);
     await sendNotifications(event, Number(user.id), channels);
+    console.log('[test-send] sendNotifications completed');
     return c.json({ success: true, message: 'Test notification sent' });
   } catch (error) {
+    console.error('[test-send] Error:', error);
     return c.json({ success: false, error: 'Failed to send notification' }, 500);
   }
 });
@@ -57,10 +62,12 @@ events.put('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
   const body = await c.req.json();
+  console.log('[PUT /events/:id] Raw body:', JSON.stringify(body));
   const parsed = updateEventSchema.safeParse(body);
 
   if (!parsed.success) {
-    return c.json({ success: false, error: 'Invalid input' }, 400);
+    console.log('[PUT /events/:id] Zod validation failed:', parsed.error.flatten());
+    return c.json({ success: false, error: 'Invalid input', details: parsed.error.flatten() }, 400);
   }
 
   const success = await updateEvent(id, user.id, parsed.data);

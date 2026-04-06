@@ -68,12 +68,12 @@ export interface Event {
   lunarDate?: LunarDate;
   reminderConfig: ReminderConfig;
   // 被提醒人（生日/事件所有者）
-  personName?: string;
-  birthDate?: string;
-  birthDateLunar?: string;
+  personName?: string | null;
+  birthDate?: string | null;
+  birthDateLunar?: string | null;
   // 提醒人（接收通知的人）- 用于关系映射
-  reminderRecipientName?: string;
-  reminderRecipientEmail?: string;
+  reminderRecipientName?: string | null;
+  reminderRecipientEmail?: string | null;
   relationshipMappingId?: string;
   createdAt: string;
 }
@@ -85,11 +85,11 @@ export interface CreateEventRequest {
   calendarType: CalendarType;
   lunarDate?: LunarDate;
   reminderConfig: ReminderConfig;
-  personName?: string;
-  birthDate?: string;
-  birthDateLunar?: string;
-  reminderRecipientName?: string;
-  reminderRecipientEmail?: string;
+  personName?: string | null;
+  birthDate?: string | null;
+  birthDateLunar?: string | null;
+  reminderRecipientName?: string | null;
+  reminderRecipientEmail?: string | null;
   relationshipMappingId?: string;
 }
 

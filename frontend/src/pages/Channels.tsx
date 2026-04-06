@@ -210,14 +210,18 @@ export default function Channels() {
     setSelectedAccount(account);
     
     // Initialize form with account values
+    // Note: API returns chat_id but we need to check both forms
+    const chatId = (account as any).chatId || (account as any).chat_id || '';
     setConfigForm({
       name: account.name || '',
       webhook: account.webhook || '',
       token: account.token || '',
-      chat_id: account.chatId || '',
+      chat_id: chatId,
       secret: (account as any).secret || '',
     });
     
+    // Set modal back stack properly so cancel returns to main, not template
+    setModalBackStack(['main', 'config']);
     setShowConfigModal(true);
   };
 
@@ -237,13 +241,23 @@ export default function Channels() {
 
     setSaving(true);
     try {
+      // For email channel, fromEmail goes to webhook, recipientEmail goes to chatId
+      let webhook = configForm.webhook || undefined;
+      let chatId = configForm.chat_id || undefined;
+      
+      if (selectedTemplate.id === 'email') {
+        // Use fromEmail/recipientEmail from form if available, otherwise fallback to webhook/chat_id
+        webhook = configForm.fromEmail || configForm.webhook || undefined;
+        chatId = configForm.recipientEmail || configForm.chat_id || undefined;
+      }
+      
       const accountData = {
         name: configForm.name,
         type: selectedTemplate.id,
         configMethod: selectedTemplate.configMethod,
-        webhook: configForm.webhook || undefined,
+        webhook: webhook,
         token: configForm.token || undefined,
-        chatId: configForm.chat_id || undefined,
+        chatId: chatId,
         secret: configForm.secret || undefined,
         sessionData: configForm.sessionData || undefined,
       };
@@ -297,6 +311,8 @@ export default function Channels() {
     setQrSessionId('');
     setAuthStatus('pending');
     setShowQrModal(true);
+    // 设置正确的返回栈，确保关闭弹窗时回到主页面
+    setModalBackStack(['main', 'qr']);
 
     try {
       // Call backend to start authentication
@@ -430,7 +446,7 @@ export default function Channels() {
                         <div className="glass-panel rounded-3xl p-6 transition-all duration-300 ring-1 ring-primary-500/30 shadow-lg shadow-primary-500/5">
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-400 to-primary-600 text-white flex items-center justify-center shadow-lg">
+                              <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
                                 <Icon size={24} />
                               </div>
                               <div>
@@ -506,7 +522,7 @@ export default function Channels() {
                         <div className="glass-panel rounded-3xl p-6 transition-all duration-300 ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/5">
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center shadow-lg">
+                              <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
                                 <Icon size={24} />
                               </div>
                               <div>
@@ -838,8 +854,12 @@ export default function Channels() {
       <Dialog open={showQrModal} onOpenChange={(open) => {
         // 点击遮罩层/旁边区域时返回上一级，而不是直接关闭
         if (!open) {
+          // 只有当不是通过"稍后授权"或"我已扫码"按钮关闭时才打开配置弹窗
+          // 检查是否有 account (已有渠道) 或 modalBackStack 状态
+          if (!selectedAccount && modalBackStack[modalBackStack.length - 1] !== 'config') {
+            setShowConfigModal(true);
+          }
           setShowQrModal(false);
-          setShowConfigModal(true);
         }
       }}>
         <DialogContent className="glass-panel rounded-[2rem] max-w-md">
@@ -924,7 +944,11 @@ export default function Channels() {
               className="flex-1 h-12 rounded-2xl font-bold"
               onClick={() => {
                 // 点击稍后授权返回上一级，而不是直接关闭
-                if (modalBackStack.length > 1) {
+                // 如果是已有账户（待授权列表点击），直接关闭即可
+                if (selectedAccount) {
+                  setShowQrModal(false);
+                  setModalBackStack(['main']);
+                } else if (modalBackStack.length > 1) {
                   goBackInModal();
                 } else {
                   setShowQrModal(false);
@@ -940,9 +964,15 @@ export default function Channels() {
               className="flex-1 h-12 rounded-2xl font-bold shadow-lg shadow-primary-500/30"
               onClick={() => {
                 // 扫码完成后返回到配置页面
-                setShowQrModal(false);
-                setShowConfigModal(true);
-                setModalBackStack(['main', 'template', 'config']);
+                // 如果是已有账户（待授权列表点击），直接关闭即可
+                if (selectedAccount) {
+                  setShowQrModal(false);
+                  setModalBackStack(['main']);
+                } else {
+                  setShowQrModal(false);
+                  setShowConfigModal(true);
+                  setModalBackStack(['main', 'template', 'config']);
+                }
               }}
             >
               我已扫码
