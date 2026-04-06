@@ -242,6 +242,41 @@ const webhookChannels: ChannelTemplate[] = [
 
 const tokenChannels: ChannelTemplate[] = [
   {
+    id: 'email',
+    name: '邮件 (Email)',
+    description: '邮件提醒通知（支持 HTML 模板）',
+    icon: 'Mail',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Resend API Key',
+        type: 'password',
+        required: true,
+        placeholder: 're_...',
+        description: '从 Resend 官网获取的 API Key'
+      },
+      {
+        name: 'webhook',
+        label: '发送邮箱',
+        type: 'text',
+        required: true,
+        placeholder: 'onboarding@resend.dev',
+        description: '发件人邮箱地址（需在 Resend 中验证）'
+      },
+      {
+        name: 'chat_id',
+        label: '接收邮箱',
+        type: 'text',
+        required: true,
+        placeholder: 'user@example.com',
+        description: '收件人邮箱地址'
+      }
+    ],
+    docsUrl: 'https://resend.com/docs'
+  },
+  {
     id: 'telegram',
     name: 'Telegram',
     description: 'Telegram Bot 消息推送',

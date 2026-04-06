@@ -117,8 +117,9 @@ function getChannelConfigFromAccount(
     case 'line':
     case 'wxpusher':
     case 'qmsg':
+    case 'email':
       return (account.token && account.chat_id)
-        ? { token: account.token, chat_id: account.chat_id }
+        ? { token: account.token, chat_id: account.chat_id, fromEmail: account.webhook }
         : null;
     
     case 'matrix':
@@ -322,6 +323,15 @@ export async function sendNotifications(event: any, userId: number, channels: st
         await sendWxPusherNotification(event, chConfig.token, chConfig.chat_id);
       else if (ch === 'qq' && chConfig.token)
         await sendQmsgNotification(event, chConfig.token, chConfig.chat_id);
+      else if (ch === 'email' && chConfig.token && chConfig.chat_id && chConfig.fromEmail) {
+        // 使用账户配置发送邮件
+        await sendEmailNotification(
+          event,
+          chConfig.token,  // API Key (token字段)
+          chConfig.fromEmail,  // 发件人邮箱 (webhook字段)
+          chConfig.chat_id  // 收件人邮箱 (chat_id字段)
+        );
+      }
       else if (ch === 'email' && chConfig.apiKey && chConfig.emails?.length > 0) {
         // 为每个收件人单独发送邮件，应用不同的关系映射
         await Promise.allSettled(chConfig.emails.map(async (email: string) => {
