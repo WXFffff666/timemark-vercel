@@ -250,7 +250,9 @@ export async function sendNotifications(event: any, userId: number, channels: st
     // 如果没有找到绑定的账户配置，查找该类型的任意活跃账户
     if (!accountConfig) {
       const accountType = channelToAccountType[ch];
+      console.log('[sendNotifications] Looking for account type:', accountType, 'for channel:', ch);
       for (const account of allAccounts) {
+        console.log('[sendNotifications] Checking account:', account.type, 'is_active:', account.is_active);
         if (account.type === accountType && account.is_active) {
           accountConfig = getChannelConfigFromAccount(account, ch);
           console.log('[sendNotifications] Found fallback account for channel:', ch, accountConfig);
