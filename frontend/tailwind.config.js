@@ -21,6 +21,7 @@ module.exports = {
           50: "hsl(var(--primary-50))",
           100: "hsl(var(--primary-100))",
           500: "hsl(var(--primary-500))",
+          600: "hsl(var(--primary-600))",
           900: "hsl(var(--primary-900))",
         },
         secondary: {

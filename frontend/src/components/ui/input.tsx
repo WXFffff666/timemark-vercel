@@ -3,12 +3,13 @@ import { cn } from "@/lib/utils"
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
 
+// 【输入框优化】：浅色模式下采用不透明的白色加深灰边框，避免与卡片背景融为一体。
 const Input = React.forwardRef<HTMLInputElement, InputProps>(({ className, type, ...props }, ref) => {
   return (
     <input
       type={type}
       className={cn(
-        "flex h-12 w-full rounded-2xl border border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/20 px-4 py-2 text-sm backdrop-blur-md transition-all file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 dark:placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50 focus-visible:bg-white/80 dark:focus-visible:bg-slate-900/80 focus-visible:border-primary-500 disabled:cursor-not-allowed disabled:opacity-50 shadow-inner",
+        "flex h-12 w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white/70 dark:bg-black/30 px-4 py-2 text-sm transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 dark:focus-visible:border-blue-400 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm text-slate-900 dark:text-white",
         className
       )}
       ref={ref}

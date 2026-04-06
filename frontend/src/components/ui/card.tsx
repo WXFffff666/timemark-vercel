@@ -1,8 +1,9 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
+// 卡片采用统一定义的 glass-panel，具有优秀的层次感
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("rounded-[2rem] glass-panel text-card-foreground transition-all duration-300", className)} {...props} />
+  <div ref={ref} className={cn("rounded-[2.5rem] glass-panel text-card-foreground transition-all duration-300", className)} {...props} />
 ))
 Card.displayName = "Card"
 const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
@@ -10,7 +11,7 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 ))
 CardHeader.displayName = "CardHeader"
 const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(({ className, ...props }, ref) => (
-  <h3 ref={ref} className={cn("text-2xl font-bold leading-none tracking-tight", className)} {...props} />
+  <h3 ref={ref} className={cn("text-2xl font-extrabold leading-none tracking-tight text-slate-900 dark:text-white", className)} {...props} />
 ))
 CardTitle.displayName = "CardTitle"
 const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (

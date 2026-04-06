@@ -29,9 +29,28 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function MeshBackground() {
   return (
-    <div className="mesh-bg-container pointer-events-none">
-      <div className="mesh-blob-1 animate-blob-spin"></div>
-      <div className="mesh-blob-2 animate-blob-spin-slow"></div>
+    <div className="fixed inset-0 -z-10 overflow-hidden" style={{ backgroundColor: 'var(--mesh-color-3)' }}>
+      <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="meshGradient1" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="0%" stopColor="var(--mesh-color-1)" stopOpacity="var(--mesh-opacity)" />
+            <stop offset="100%" stopColor="var(--mesh-color-1)" stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id="meshGradient2" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="0%" stopColor="var(--mesh-color-2)" stopOpacity="var(--mesh-opacity)" />
+            <stop offset="100%" stopColor="var(--mesh-color-2)" stopOpacity="0" />
+          </radialGradient>
+          <filter id="blurFilter" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation={80} />
+          </filter>
+        </defs>
+        <g className="animate-blob-spin" style={{ transformOrigin: 'center', animation: 'blob-spin 30s linear infinite' }}>
+          <ellipse cx="20%" cy="20%" rx="35vw" ry="35vw" fill="url(#meshGradient1)" filter="url(#blurFilter)" />
+        </g>
+        <g className="animate-blob-spin-slow" style={{ transformOrigin: 'center', animation: 'blob-spin 40s linear infinite reverse' }}>
+          <ellipse cx="80%" cy="80%" rx="40vw" ry="40vw" fill="url(#meshGradient2)" filter="url(#blurFilter)" />
+        </g>
+      </svg>
     </div>
   );
 }
