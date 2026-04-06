@@ -78,6 +78,59 @@ export async function createLoginLog(userIdOrUsername: string, ip: string, userA
   }
 }
 
+// 获取账户锁定状态
+export async function getAccountLockStatus(params: { username: string; ip: string }): Promise<{ 
+  isLocked: boolean; 
+  lockedUntil: Date | null;
+  failureCount: number;
+  remainingSeconds: number;
+}> {
+  // 检查最近1小时内的失败尝试
+  const windowStart = new Date(Date.now() - 60 * 60 * 1000);
+  
+  const result = await query(
+    `SELECT COUNT(*) as count, MAX(login_time) as last_failure FROM login_logs 
+     WHERE (username = $1 OR ip_address = $2) 
+     AND success = FALSE 
+     AND login_time > $3`,
+    [params.username, params.ip, windowStart]
+  );
+  
+  const count = result.rows.length > 0 ? parseInt(result.rows[0].count) : 0;
+  
+  // 渐进式锁定规则
+  // 5次失败 → 锁定1分钟
+  // 10次失败 → 锁定5分钟
+  // 15次失败 → 锁定15分钟
+  // 20次失败 → 锁定30分钟
+  // 25次以上 → 锁定1小时
+  let lockMinutes = 0;
+  if (count >= 25) lockMinutes = 60;
+  else if (count >= 20) lockMinutes = 30;
+  else if (count >= 15) lockMinutes = 15;
+  else if (count >= 10) lockMinutes = 5;
+  else if (count >= 5) lockMinutes = 1;
+  
+  if (lockMinutes === 0) {
+    return { isLocked: false, lockedUntil: null, failureCount: count, remainingSeconds: 0 };
+  }
+  
+  // 检查最近一次失败后是否已经过了锁定时间
+  const lastFailure = result.rows[0]?.last_failure;
+  if (lastFailure) {
+    const lastFailureTime = new Date(lastFailure);
+    const lockUntil = new Date(lastFailureTime.getTime() + lockMinutes * 60 * 1000);
+    const now = new Date();
+    const remainingSeconds = Math.max(0, Math.floor((lockUntil.getTime() - now.getTime()) / 1000));
+    
+    if (remainingSeconds > 0) {
+      return { isLocked: true, lockedUntil: lockUntil, failureCount: count, remainingSeconds };
+    }
+  }
+  
+  return { isLocked: false, lockedUntil: null, failureCount: count, remainingSeconds: 0 };
+}
+
 export async function trackLoginFailure(params: { username: string; ip: string }): Promise<{ shouldLock: boolean; failureCount: number }> {
   const windowStart = new Date(Date.now() - 15 * 60 * 1000);
   
