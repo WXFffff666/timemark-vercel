@@ -156,15 +156,37 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Check for session ID (persistent login indicator)
     const sessionId = localStorage.getItem(SESSION_ID_KEY);
     
+    // 超时保护：如果 checkAuth 超过 5 秒还没完成，使用缓存用户
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+    );
+    
     if (accessToken) {
       try {
-        const user = await api.get<User>('/auth/session');
+        // 使用 Promise.race 实现超时
+        const user = await Promise.race([
+          api.get<User>('/auth/session'),
+          timeoutPromise
+        ]);
         // Cache user for offline/fallback
         localStorage.setItem('cachedUser', JSON.stringify(user));
         sessionStorage.setItem('cachedUser', JSON.stringify(user));
         set({ user, isAuthenticated: true, isLoading: false });
         return;
       } catch (error: any) {
+        // 检查是否是超时
+        const isTimeout = error.message?.includes('timeout');
+        
+        // 如果是超时，尝试使用缓存用户
+        if (isTimeout) {
+          const storedUser = localStorage.getItem('cachedUser') || sessionStorage.getItem('cachedUser');
+          if (storedUser) {
+            try {
+              set({ user: JSON.parse(storedUser), isAuthenticated: true, isLoading: false });
+              return;
+            } catch {}
+          }
+        }
         // Only clear tokens on specific auth errors, not network errors
         const errorMsg = error.message || '';
         const isAuthError = errorMsg.includes('401') || 
