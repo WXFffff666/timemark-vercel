@@ -85,6 +85,19 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
       reminderConfig = {};
     }
     
+    // Merge notification_channels from separate column into reminderConfig
+    let notificationChannels: string[] = [];
+    try {
+      const rawChannels = row.notification_channels;
+      if (rawChannels) {
+        notificationChannels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : rawChannels;
+      }
+    } catch (e) {
+      console.error('Failed to parse notification_channels:', e);
+    }
+    // Ensure channels is in reminderConfig
+    reminderConfig.channels = notificationChannels;
+    
     return {
       id: row.id,
       userId: row.user_id,
