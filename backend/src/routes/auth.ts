@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { verifyUserPassword, createLoginLog, trackLoginFailure, getAccountLockStatus } from '../services/auth.service.js';
+import { verifyUserPassword, createLoginLog, trackLoginFailure } from '../services/auth.service.js';
 import { createSession, deleteSession } from '../services/session.service.js';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
 import { loginSchema, changePasswordSchema } from '@timemark/shared';
@@ -23,19 +23,6 @@ auth.post('/login', async (c) => {
     }
 
     const { username, password, deviceFingerprint, rememberMe = false } = parsed.data;
-    
-    // 检查账户是否被锁定
-    const lockStatus = await getAccountLockStatus({ username, ip });
-    if (lockStatus.isLocked && lockStatus.lockedUntil) {
-      const remainingMinutes = Math.ceil(lockStatus.remainingSeconds / 60);
-      return c.json({ 
-        success: false, 
-        error: `登录尝试过多，请等待 ${remainingMinutes} 分钟后再试`,
-        code: 'ACCOUNT_LOCKED',
-        lockedUntil: lockStatus.lockedUntil.toISOString(),
-        remainingSeconds: lockStatus.remainingSeconds
-      }, 429);
-    }
     
     const user = await verifyUserPassword(username, password);
 
