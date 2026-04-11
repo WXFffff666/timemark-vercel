@@ -168,16 +168,20 @@ export async function cleanupSessions() {
   console.log('[Task] Cleaning up expired sessions...');
   const result = await query('DELETE FROM sessions WHERE expires_at < NOW()');
   console.log(`[Task] Cleaned up ${result.rowCount ?? 0} expired sessions`);
-}
-
-export async function cleanupEventTriggerLogs() {
-  console.log('[Task] Cleaning up old event trigger logs...');
-  const thirtyDaysAgo = addDays(new Date().toISOString().split('T')[0], -30);
-  const result = await query(
-    'DELETE FROM event_trigger_logs WHERE created_at < $1',
-    [thirtyDaysAgo]
+  
+  // 清理30天前的登录日志
+  console.log('[Task] Cleaning up old login logs...');
+  const loginLogsResult = await query(
+    "DELETE FROM login_logs WHERE login_time < NOW() AT TIME ZONE 'Asia/Shanghai' - INTERVAL '30 days'"
   );
-  console.log(`[Task] Cleaned up ${result.rowCount ?? 0} old event trigger logs`);
+  console.log(`[Task] Cleaned up ${loginLogsResult.rowCount ?? 0} old login logs`);
+  
+  // 清理30天前的事件触发日志
+  console.log('[Task] Cleaning up old event trigger logs...');
+  const triggerResult = await query(
+    "DELETE FROM event_trigger_logs WHERE created_at < NOW() AT TIME ZONE 'Asia/Shanghai' - INTERVAL '30 days'"
+  );
+  console.log(`[Task] Cleaned up ${triggerResult.rowCount ?? 0} old event trigger logs`);
 }
 
 function addDays(dateStr: string, days: number): string {
