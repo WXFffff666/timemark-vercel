@@ -89,6 +89,22 @@ config.delete('/accounts/:id', async (c) => {
   return c.json({ success: true });
 });
 
+// ============ 验证通知账户连接 ============
+
+config.post('/accounts/:id/verify', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  
+  try {
+    const { verifyAccountConnection } = await import('../services/notifications/index.js');
+    const result = await verifyAccountConnection(id);
+    
+    return c.json(result);
+  } catch (error: any) {
+    console.error('[Verify Account] Error:', error);
+    return c.json({ success: false, error: error.message || '验证失败' }, 500);
+  }
+});
+
 // ============ 关系映射管理 ============
 
 config.get('/relationships', async (c) => {

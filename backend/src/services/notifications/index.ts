@@ -406,3 +406,69 @@ export async function sendNotifications(event: any, userId: number, channels: st
     }
   }));
 }
+
+// ============ 验证通知账户连接 ============
+
+export async function verifyAccountConnection(accountId: number): Promise<{ success: boolean; message: string }> {
+  // 查询账户信息
+  const { query } = await import('../db/index.js');
+  const result = await query(
+    'SELECT * FROM notification_accounts WHERE id = $1',
+    [accountId]
+  );
+  
+  if (result.rows.length === 0) {
+    return { success: false, message: '账户不存在' };
+  }
+  
+  const account = result.rows[0];
+  
+  // 根据渠道类型验证连接
+  try {
+    switch (account.type) {
+      case 'webhook':
+        if (account.webhook) {
+          // 测试发送空消息
+          const testRes = await fetch(account.webhook, { method: 'POST', body: JSON.stringify({ text: 'TimeMark connection test' }) });
+          if (testRes.ok || testRes.status === 200) {
+            return { success: true, message: '连接成功' };
+          }
+          return { success: false, message: `连接失败: HTTP ${testRes.status}` };
+        }
+        return { success: false, message: 'Webhook未配置' };
+        
+      case 'telegram':
+        if (account.token) {
+          const { query } = await import('../db/index.js');
+          const { decrypt } = await import('@timemark/shared/crypto.js');
+          const token = decrypt(account.token, process.env.MASTER_KEY || '');
+          const botRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+          if (botRes.ok) {
+            return { success: true, message: 'Bot token有效' };
+          }
+          return { success: false, message: 'Token无效' };
+        }
+        return { success: false, message: 'Token未配置' };
+        
+      case 'feishu':
+      case 'wecom':
+      case 'dingtalk':
+        if (account.webhook) {
+          return { success: true, message: 'Webhook已配置' };
+        }
+        return { success: false, message: 'Webhook未配置' };
+        
+      case 'plugin':
+        // 插件渠道通过sessionData验证
+        if (account.session_data) {
+          return { success: true, message: '会话有效' };
+        }
+        return { success: false, message: '会话已过期，请重新授权' };
+        
+      default:
+        return { success: true, message: '配置已保存' };
+    }
+  } catch (error: any) {
+    return { success: false, message: error.message || '验证失败' };
+  }
+}
