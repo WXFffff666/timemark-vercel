@@ -700,7 +700,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                               : 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-transparent'
                           }`}
                         >
-                          <span>{channel.icon}</span>
+                          <span className="text-base">{channel.icon}</span>
                           <span>{channel.label}</span>
                         </button>
                       ))}

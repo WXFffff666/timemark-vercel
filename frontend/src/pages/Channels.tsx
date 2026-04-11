@@ -812,6 +812,21 @@ export default function Channels() {
               </a>
             )}
 
+            {/* Plugin渠道显示扫码授权按钮 */}
+            {selectedTemplate?.configMethod === 'plugin' && (
+              <div className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-12 rounded-2xl font-bold border-amber-300 text-amber-600 hover:bg-amber-50"
+                  onClick={() => selectedTemplate && startPluginAuth(selectedTemplate, selectedAccount || undefined)}
+                >
+                  <QrCode size={18} className="mr-2" />
+                  {selectedAccount?.sessionData ? '重新扫码授权' : '扫码授权'}
+                </Button>
+              </div>
+            )}
+
             <div className="pt-4 flex gap-3">
               <Button
                 variant="secondary"
