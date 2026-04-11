@@ -101,7 +101,7 @@ export default function LoginHistory() {
 
   const formatTime = (timeStr: string) => {
     // 后端返回的时间格式：2026-04-10T15:11:57.000+08:00
-    // 提取日期时间部分：2026-04-10T15:11:57
+    // 直接提取时间部分显示，不做复杂的时区转换
     const match = timeStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
     if (!match) {
       return timeStr;
@@ -113,14 +113,8 @@ export default function LoginHistory() {
     const hour = parseInt(match[4]);
     const minute = parseInt(match[5]);
     
-    // 创建东八区时间戳（手动计算避免时区问题）
-    // 当前时区偏移
-    const tzOffset = new Date().getTimezoneOffset() * 60 * 1000;
-    const east8 = 8 * 60 * 60 * 1000;
-    // 目标时间的UTC = 东八区时间 - 8小时
-    const targetUtc = Date.UTC(year, month - 1, day, hour, minute) - east8;
-    const targetTime = targetUtc + tzOffset;
-    
+    // 直接用本地时间创建Date对象
+    const targetTime = new Date(year, month - 1, day, hour, minute).getTime();
     const now = Date.now();
     const diff = now - targetTime;
     
