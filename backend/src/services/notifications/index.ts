@@ -407,6 +407,62 @@ export async function sendNotifications(event: any, userId: number, channels: st
   }));
 }
 
+// ============ 发送通知到指定渠道账户 ============
+
+export async function sendNotificationsToChannel(event: any, context: any): Promise<void> {
+  const accountIds = Array.isArray(event.notification_account_ids) 
+    ? event.notification_account_ids 
+    : [];
+  
+  if (accountIds.length === 0) {
+    return;
+  }
+  
+  const { query } = await import('../db/index.js');
+  const accountsResult = await query(
+    'SELECT * FROM notification_accounts WHERE id = ANY($1) AND is_active = true',
+    [accountIds]
+  );
+  
+  for (const account of accountsResult.rows) {
+    try {
+      const config = {
+        webhook: account.webhook,
+        token: account.token,
+        secret: account.secret,
+        chatId: account.chat_id,
+        sessionData: account.session_data,
+        pluginPackage: account.plugin_package,
+        configMethod: account.config_method
+      };
+      
+      // 构造简化的事件对象
+      const simplifiedEvent = {
+        ...event,
+        personName: context?.username || 'System',
+        sendTo: event.personName || 'me'
+      };
+      
+      // 根据渠道类型发送
+      if (config.configMethod === 'plugin' && config.sessionData) {
+        // 插件渠道
+        console.log('[Alert] Plugin channel not supported for alerts yet');
+      } else if (config.webhook) {
+        // Webhook渠道
+        await fetch(config.webhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: `🔒 安全告警：${context?.username} 登录失败 ${context?.failureCount}次，IP: ${context?.ip}`
+          })
+        });
+      }
+    } catch (e) {
+      console.error(`[Alert] Failed for account ${account.id}:`, e);
+    }
+  }
+}
+
 // ============ 验证通知账户连接 ============
 
 export async function verifyAccountConnection(accountId: number): Promise<{ success: boolean; message: string }> {
