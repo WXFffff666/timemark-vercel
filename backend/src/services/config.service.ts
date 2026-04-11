@@ -117,39 +117,12 @@ export interface NotificationAccount {
   updated_at: string;
 }
 
-// API response type (camelCase)
-interface NotificationAccountAPI {
-  id: string;
-  type: string;
-  name: string;
-  webhook?: string;
-  token?: string;
-  chatId?: string;
-  configMethod?: 'webhook' | 'token' | 'plugin';
-  sessionData?: any;
-  pluginPackage?: string;
-  is_active?: boolean;
-}
-
-export async function getNotificationAccounts(userId: number): Promise<NotificationAccountAPI[]> {
+export async function getNotificationAccounts(userId: number): Promise<NotificationAccount[]> {
   const result = await query(
     'SELECT * FROM notification_accounts WHERE user_id = $1 ORDER BY created_at DESC',
     [userId]
   );
-  
-  // Map snake_case DB fields to camelCase for API response
-  return result.rows.map((row: any) => ({
-    id: row.id?.toString(),
-    type: row.type,
-    name: row.name,
-    webhook: row.webhook,
-    token: row.token,
-    chatId: row.chat_id,
-    configMethod: row.config_method,
-    sessionData: row.session_data ? JSON.parse(row.session_data) : null,
-    pluginPackage: row.plugin_package,
-    is_active: row.is_active,
-  }));
+  return result.rows;
 }
 
 export async function createNotificationAccount(
@@ -458,147 +431,6 @@ export async function deleteEventTemplate(userId: number, eventType: string): Pr
   const result = await query(
     'DELETE FROM event_templates WHERE user_id = $1 AND event_type = $2',
     [userId, eventType]
-  );
-  return (result.rowCount ?? 0) > 0;
-}
-
-// ============ 通知账户管理 ============
-
-export interface NotificationAccount {
-  id: number;
-  user_id: number;
-  type: string;
-  name: string;
-  webhook: string | null;
-  token: string | null;
-  secret: string | null;
-  chat_id: string | null;
-  is_active: boolean;
-  config_method: string;
-  session_data: any;
-  plugin_package: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export async function getNotificationAccounts(userId: number): Promise<NotificationAccount[]> {
-  const result = await query(
-    'SELECT id, user_id, type, name, webhook, chat_id, is_active, config_method, plugin_package, created_at, updated_at FROM notification_accounts WHERE user_id = $1 ORDER BY name',
-    [userId]
-  );
-  return result.rows;
-}
-
-export async function createNotificationAccount(
-  userId: number,
-  data: {
-    type: string;
-    name: string;
-    webhook?: string;
-    token?: string;
-    secret?: string;
-    chatId?: string;
-    configMethod?: string;
-    sessionData?: any;
-    pluginPackage?: string;
-  }
-): Promise<NotificationAccount> {
-  const result = await query(
-    `INSERT INTO notification_accounts (user_id, type, name, webhook, token, secret, chat_id, config_method, session_data, plugin_package)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     RETURNING *`,
-    [
-      userId,
-      data.type,
-      data.name,
-      data.webhook || null,
-      data.token ? encrypt(data.token, MASTER_KEY) : null,
-      data.secret ? encrypt(data.secret, MASTER_KEY) : null,
-      data.chatId || null,
-      data.configMethod || 'webhook',
-      data.sessionData ? JSON.stringify(data.sessionData) : null,
-      data.pluginPackage || null,
-    ]
-  );
-  return result.rows[0];
-}
-
-export async function updateNotificationAccount(
-  accountId: number,
-  userId: number,
-  data: {
-    name?: string;
-    webhook?: string;
-    token?: string;
-    secret?: string;
-    chatId?: string;
-    isActive?: boolean;
-    configMethod?: string;
-    sessionData?: any;
-    pluginPackage?: string;
-  }
-): Promise<NotificationAccount | null> {
-  const updates: string[] = [];
-  const values: any[] = [];
-  let paramIndex = 1;
-
-  if (data.name !== undefined) {
-    updates.push(`name = $${paramIndex++}`);
-    values.push(data.name);
-  }
-  if (data.webhook !== undefined) {
-    updates.push(`webhook = $${paramIndex++}`);
-    values.push(data.webhook);
-  }
-  if (data.token !== undefined) {
-    updates.push(`token = $${paramIndex++}`);
-    values.push(data.token ? encrypt(data.token, MASTER_KEY) : null);
-  }
-  if (data.secret !== undefined) {
-    updates.push(`secret = $${paramIndex++}`);
-    values.push(data.secret ? encrypt(data.secret, MASTER_KEY) : null);
-  }
-  if (data.chatId !== undefined) {
-    updates.push(`chat_id = $${paramIndex++}`);
-    values.push(data.chatId);
-  }
-  if (data.isActive !== undefined) {
-    updates.push(`is_active = $${paramIndex++}`);
-    values.push(data.isActive);
-  }
-  if (data.configMethod !== undefined) {
-    updates.push(`config_method = $${paramIndex++}`);
-    values.push(data.configMethod);
-  }
-  if (data.sessionData !== undefined) {
-    updates.push(`session_data = $${paramIndex++}`);
-    values.push(JSON.stringify(data.sessionData));
-  }
-  if (data.pluginPackage !== undefined) {
-    updates.push(`plugin_package = $${paramIndex++}`);
-    values.push(data.pluginPackage);
-  }
-
-  if (updates.length === 0) {
-    return null;
-  }
-
-  updates.push(`updated_at = CURRENT_TIMESTAMP`);
-  values.push(accountId, userId);
-
-  const result = await query(
-    `UPDATE notification_accounts SET ${updates.join(', ')} 
-     WHERE id = $${paramIndex++} AND user_id = $${paramIndex} 
-     RETURNING *`,
-    values
-  );
-  return result.rows[0] || null;
-}
-
-export async function deleteNotificationAccount(accountId: number, userId: number): Promise<boolean> {
-  const result = await query(
-    'DELETE FROM notification_accounts WHERE id = $1 AND user_id = $2',
-    [accountId, userId]
   );
   return (result.rowCount ?? 0) > 0;
 }

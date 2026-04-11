@@ -89,7 +89,7 @@ const channelToAccountType: Record<string, string> = {
 function getChannelConfigFromAccount(
   account: any,
   channel: string
-): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string; fromEmail?: string } | null {
+): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string } | null {
   // 直接使用账户的字段
   switch (channel) {
     // Webhook-based channels
@@ -117,9 +117,8 @@ function getChannelConfigFromAccount(
     case 'line':
     case 'wxpusher':
     case 'qmsg':
-    case 'email':
       return (account.token && account.chat_id)
-        ? { token: account.token, chat_id: account.chat_id, fromEmail: account.webhook }
+        ? { token: account.token, chat_id: account.chat_id }
         : null;
     
     case 'matrix':
@@ -195,7 +194,6 @@ function applyRelationshipMapping(
 }
 
 export async function sendNotifications(event: any, userId: number, channels: string[]): Promise<void> {
-  console.log('[sendNotifications] Starting with channels:', channels);
   const config = await getUserConfig(userId);
   const channelWebhooks = config?.channel_webhooks || {};
   
@@ -205,7 +203,6 @@ export async function sendNotifications(event: any, userId: number, channels: st
   // 获取事件绑定的通知账户ID
   const boundAccountIds: number[] = (() => {
     const raw = event.notification_account_ids;
-    console.log('[sendNotifications] raw notification_account_ids:', raw, 'type:', typeof raw);
     if (!raw) return [];
     if (Array.isArray(raw)) return raw.filter((id): id is number => typeof id === 'number');
     try {
@@ -215,14 +212,12 @@ export async function sendNotifications(event: any, userId: number, channels: st
       return [];
     }
   })();
-  console.log('[sendNotifications] boundAccountIds:', boundAccountIds);
   
   // 获取用户所有通知账户
   const allAccounts = await getNotificationAccounts(userId);
-  console.log('[sendNotifications] All accounts:', allAccounts.map(a => ({ id: a.id, type: a.type, name: a.name })));
   
   // 构建账户ID到账户的映射
-  const accountsMap = new Map<string, any>();
+  const accountsMap = new Map<number, any>();
   for (const account of allAccounts) {
     accountsMap.set(account.id, account);
   }
@@ -234,12 +229,11 @@ export async function sendNotifications(event: any, userId: number, channels: st
     // 查找该渠道绑定的账户
     let accountConfig: any = null;
     
-    // 如果有绑定的账户ID，使用它们
     if (boundAccountIds.length > 0) {
       // 找到第一个匹配渠道类型的已绑定账户
       const accountType = channelToAccountType[ch];
       for (const accountId of boundAccountIds) {
-        const account = accountsMap.get(String(accountId));
+        const account = accountsMap.get(accountId);
         if (account && account.type === accountType && account.is_active) {
           accountConfig = getChannelConfigFromAccount(account, ch);
           if (accountConfig) break;
@@ -247,26 +241,10 @@ export async function sendNotifications(event: any, userId: number, channels: st
       }
     }
     
-    // 如果没有找到绑定的账户配置，查找该类型的任意活跃账户
-    if (!accountConfig) {
-      const accountType = channelToAccountType[ch];
-      console.log('[sendNotifications] Looking for account type:', accountType, 'for channel:', ch);
-      for (const account of allAccounts) {
-        console.log('[sendNotifications] Checking account:', account.type, 'is_active:', account.is_active);
-        if (account.type === accountType && account.is_active) {
-          accountConfig = getChannelConfigFromAccount(account, ch);
-          console.log('[sendNotifications] Found fallback account for channel:', ch, accountConfig);
-          if (accountConfig) break;
-        }
-      }
-    }
-    
     // 如果找到了账户配置，使用它；否则使用全局配置
     if (accountConfig) {
-      console.log('[sendNotifications] Found accountConfig for channel:', ch, accountConfig);
       channelConfigs[ch] = accountConfig;
     } else {
-      console.log('[sendNotifications] No accountConfig for channel:', ch, '- checking global config');
       // 使用全局配置
       const globalConfig: any = {};
       switch (ch) {
@@ -325,14 +303,9 @@ export async function sendNotifications(event: any, userId: number, channels: st
   }
   
   // 发送通知
-  console.log('[sendNotifications] Final channelConfigs:', JSON.stringify(channelConfigs, null, 2));
   await Promise.allSettled(channels.map(async (ch) => {
     const chConfig = channelConfigs[ch];
-    console.log('[sendNotifications] Processing channel:', ch, 'config:', chConfig);
-    if (!chConfig) {
-      console.log('[sendNotifications] No config for channel:', ch, '- skipping');
-      return;
-    }
+    if (!chConfig) return;
     
     try {
       if (ch === 'feishu' && chConfig.webhook) await sendFeishuNotification(event, chConfig.webhook);
@@ -349,16 +322,6 @@ export async function sendNotifications(event: any, userId: number, channels: st
         await sendWxPusherNotification(event, chConfig.token, chConfig.chat_id);
       else if (ch === 'qq' && chConfig.token)
         await sendQmsgNotification(event, chConfig.token, chConfig.chat_id);
-      else if (ch === 'email' && chConfig.token && chConfig.chat_id && chConfig.fromEmail) {
-        // 使用账户配置发送邮件
-        console.log('[sendNotifications] Email config found:', { hasToken: !!chConfig.token, hasChatId: !!chConfig.chat_id, hasFromEmail: !!chConfig.fromEmail, token: chConfig.token?.slice(0, 10), fromEmail: chConfig.fromEmail, toEmail: chConfig.chat_id });
-        await sendEmailNotification(
-          event,
-          chConfig.token,  // API Key (token字段)
-          chConfig.fromEmail,  // 发件人邮箱 (webhook字段)
-          chConfig.chat_id  // 收件人邮箱 (chat_id字段)
-        );
-      }
       else if (ch === 'email' && chConfig.apiKey && chConfig.emails?.length > 0) {
         // 为每个收件人单独发送邮件，应用不同的关系映射
         await Promise.allSettled(chConfig.emails.map(async (email: string) => {
@@ -405,126 +368,4 @@ export async function sendNotifications(event: any, userId: number, channels: st
       console.error(`Failed ${ch}:`, e);
     }
   }));
-}
-
-// ============ 发送通知到指定渠道账户 ============
-
-export async function sendNotificationsToChannel(event: any, context: any): Promise<void> {
-  const accountIds = Array.isArray(event.notification_account_ids) 
-    ? event.notification_account_ids 
-    : [];
-  
-  if (accountIds.length === 0) {
-    return;
-  }
-  
-  const { query } = await import('../db/index.js');
-  const accountsResult = await query(
-    'SELECT * FROM notification_accounts WHERE id = ANY($1) AND is_active = true',
-    [accountIds]
-  );
-  
-  for (const account of accountsResult.rows) {
-    try {
-      const config = {
-        webhook: account.webhook,
-        token: account.token,
-        secret: account.secret,
-        chatId: account.chat_id,
-        sessionData: account.session_data,
-        pluginPackage: account.plugin_package,
-        configMethod: account.config_method
-      };
-      
-      // 构造简化的事件对象
-      const simplifiedEvent = {
-        ...event,
-        personName: context?.username || 'System',
-        sendTo: event.personName || 'me'
-      };
-      
-      // 根据渠道类型发送
-      if (config.configMethod === 'plugin' && config.sessionData) {
-        // 插件渠道
-        console.log('[Alert] Plugin channel not supported for alerts yet');
-      } else if (config.webhook) {
-        // Webhook渠道
-        await fetch(config.webhook, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: `🔒 安全告警：${context?.username} 登录失败 ${context?.failureCount}次，IP: ${context?.ip}`
-          })
-        });
-      }
-    } catch (e) {
-      console.error(`[Alert] Failed for account ${account.id}:`, e);
-    }
-  }
-}
-
-// ============ 验证通知账户连接 ============
-
-export async function verifyAccountConnection(accountId: number): Promise<{ success: boolean; message: string }> {
-  // 查询账户信息
-  const { query } = await import('../db/index.js');
-  const result = await query(
-    'SELECT * FROM notification_accounts WHERE id = $1',
-    [accountId]
-  );
-  
-  if (result.rows.length === 0) {
-    return { success: false, message: '账户不存在' };
-  }
-  
-  const account = result.rows[0];
-  
-  // 根据渠道类型验证连接
-  try {
-    switch (account.type) {
-      case 'webhook':
-        if (account.webhook) {
-          // 测试发送空消息
-          const testRes = await fetch(account.webhook, { method: 'POST', body: JSON.stringify({ text: 'TimeMark connection test' }) });
-          if (testRes.ok || testRes.status === 200) {
-            return { success: true, message: '连接成功' };
-          }
-          return { success: false, message: `连接失败: HTTP ${testRes.status}` };
-        }
-        return { success: false, message: 'Webhook未配置' };
-        
-      case 'telegram':
-        if (account.token) {
-          const { query } = await import('../db/index.js');
-          const { decrypt } = await import('@timemark/shared/crypto.js');
-          const token = decrypt(account.token, process.env.MASTER_KEY || '');
-          const botRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
-          if (botRes.ok) {
-            return { success: true, message: 'Bot token有效' };
-          }
-          return { success: false, message: 'Token无效' };
-        }
-        return { success: false, message: 'Token未配置' };
-        
-      case 'feishu':
-      case 'wecom':
-      case 'dingtalk':
-        if (account.webhook) {
-          return { success: true, message: 'Webhook已配置' };
-        }
-        return { success: false, message: 'Webhook未配置' };
-        
-      case 'plugin':
-        // 插件渠道通过sessionData验证
-        if (account.session_data) {
-          return { success: true, message: '会话有效' };
-        }
-        return { success: false, message: '会话已过期，请重新授权' };
-        
-      default:
-        return { success: true, message: '配置已保存' };
-    }
-  } catch (error: any) {
-    return { success: false, message: error.message || '验证失败' };
-  }
 }
