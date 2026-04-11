@@ -100,28 +100,37 @@ export default function LoginHistory() {
   };
 
   const formatTime = (timeStr: string) => {
-    // 数据库存储的时间是东八区服务器时间，直接使用
-    // 如果前端时区不是东八区，需要转换显示
-    let date = new Date(timeStr);
+    // 后端返回的时间格式：2026-04-10T15:11:57.000+08:00
+    // 提取日期时间部分：2026-04-10T15:11:57
+    const match = timeStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+    if (!match) {
+      return timeStr;
+    }
     
-    // 尝试检测时间是否被错误解析（浏览器可能把没有时区的信息当作本地时区）
-    // 如果时间差超过12小时，说明可能是UTC被当作本地时区了，需要调整
-    const now = new Date();
-    const hoursDiff = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    const year = parseInt(match[1]);
+    const month = parseInt(match[2]);
+    const day = parseInt(match[3]);
+    const hour = parseInt(match[4]);
+    const minute = parseInt(match[5]);
     
-    // 如果浏览器解析出的时间比实际时间早超过12小时，说明时间被当作UTC处理了
-    // 数据库存的是东八区时间，浏览器可能把它当作本地时间（可能是其他时区）
-    // 这种情况下我们需要保持原样，因为数据库就是东八区
-    // 实际上，最简单的做法是直接显示，因为数据库已经是东八区
+    // 创建东八区时间戳（手动计算避免时区问题）
+    // 当前时区偏移
+    const tzOffset = new Date().getTimezoneOffset() * 60 * 1000;
+    const east8 = 8 * 60 * 60 * 1000;
+    // 目标时间的UTC = 东八区时间 - 8小时
+    const targetUtc = Date.UTC(year, month - 1, day, hour, minute) - east8;
+    const targetTime = targetUtc + tzOffset;
     
-    const diff = now.getTime() - date.getTime();
+    const now = Date.now();
+    const diff = now - targetTime;
     
     if (diff < 60000) return '刚刚';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
     if (diff < 172800000) return '昨天';
-    // 直接使用原始字符串解析，避免时区转换问题
-    return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    
+    // 显示完整日期时间
+    return `${year}/${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')} ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   };
 
   const getLocation = (ip: string) => {
