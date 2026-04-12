@@ -18,9 +18,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Convert owner to lowercase
+      - name: Get owner lowercase
         id: owner
-        run: echo "owner=${{ github.repository_owner | lowercase }}" >> $GITHUB_OUTPUT
+        run: |
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "owner=$OWNER_LOWER" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
