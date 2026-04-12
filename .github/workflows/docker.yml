@@ -15,6 +15,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      pull-requests: write
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
 
     steps:
       - name: Checkout code
@@ -47,12 +49,14 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ meta.outputs.tags }}
-          labels: ${{ meta.outputs.labels }}
+          tags: ghcr.io/${{ github.repository.owner }}/timemark:latest
+          labels: |
+            org.opencontainers.image.title=TimeMark
+            org.opencontainers.image.description=智能事件提醒系统
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Output Image URL
         run: |
-          echo "Docker Image: ${{ meta.outputs.tags }}"
-          echo "image_url=${{ meta.outputs.tags }}" >> $GITHUB_OUTPUT
+          echo "Docker Image: ghcr.io/${{ github.repository.owner }}/timemark:latest"
+          echo "image_url=ghcr.io/${{ github.repository.owner }}/timemark:latest" >> $GITHUB_OUTPUT
