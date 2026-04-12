@@ -6,9 +6,6 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
-# 需要设置仓库的可见性为公开才能推送镜像
-# 在 GitHub 仓库设置中将 Package registry 设为公开
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -16,11 +13,27 @@ jobs:
       contents: read
       packages: write
       pull-requests: write
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project
+        run: pnpm build
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -31,18 +44,6 @@ jobs:
           registry: ghcr.io
           username: wxf200707
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository.owner }}/timemark
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=
-            type=raw,value=latest,enable={{ is_default_branch }}
-            type=raw,value=${{ github.ref_name }},prefix=v
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -59,4 +60,3 @@ jobs:
       - name: Output Image URL
         run: |
           echo "Docker Image: ghcr.io/wxf200707/timemark:latest"
-          echo "image_url=ghcr.io/wxf200707/timemark:latest" >> $GITHUB_OUTPUT
