@@ -1,7 +1,7 @@
--- Enable pgcrypto for TDE
+-- Enable pgcrypto for password hashing
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- users 表
+-- users 表 - 只创建管理员账户（初始账号，密码首次登录必须修改）
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   username VARCHAR(255) UNIQUE NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_token ON sessions(token);
 CREATE INDEX idx_sessions_expires ON sessions(expires_at);
 
--- relationship_mappings 表 - 关系映射（如"我妈"→"妻子"）
+-- relationship_mappings 表 - 关系映射（如"我爸"→"妻子"）
 CREATE TABLE relationship_mappings (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -85,7 +85,7 @@ CREATE TABLE login_logs (
 );
 CREATE INDEX idx_login_logs_timestamp ON login_logs(login_time);
 
--- login_attempts 表
+-- login_attempts 表 - 登录失败锁定
 CREATE TABLE login_attempts (
   id SERIAL PRIMARY KEY,
   identifier VARCHAR(255) NOT NULL,
@@ -133,11 +133,8 @@ CREATE TABLE notification_accounts (
   secret TEXT,
   chat_id VARCHAR(255),
   is_active BOOLEAN DEFAULT TRUE,
-  -- 渠道配置方式: webhook | token | plugin
   config_method VARCHAR(20) DEFAULT 'webhook',
-  -- 插件渠道的会话数据（JSON格式）
   session_data JSON,
-  -- 插件渠道需要的npm包名
   plugin_package VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -174,3 +171,11 @@ CREATE TABLE event_templates (
 );
 CREATE INDEX idx_event_templates_user ON event_templates(user_id);
 CREATE INDEX idx_event_templates_type ON event_templates(event_type);
+
+-- ============================================================
+-- 创建默认管理员账户（初始密码必须首次登录后修改）
+-- 密码: TimeMark@2026 (bcrypt hash)
+-- ============================================================
+INSERT INTO users (username, password_hash)
+VALUES ('admin', '$2a$10$MRqDgkKqsxdy/aEhSUsoy.Y5x.9fN5pItImBgQAK/.uWczeQ8rOeS')
+ON CONFLICT (username) DO NOTHING;

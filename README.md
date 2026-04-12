@@ -1,18 +1,46 @@
-# TimeMark Docker
+# TimeMark Docker 🕐
 
 智能事件提醒系统 - 支持生日、纪念日等重要事件的自动化管理
 
+[![Docker Image Size](https://img.shields.io/docker/image-size/wxf200707/timemark)](https://github.com/WXFffff666/timemark-docker/pkgs/container/timemark)
+[![Docker Pulls](https://img.shields.io/docker/pulls/wxf200707/timemark)](https://github.com/WXFffff666/timemark-docker/pkgs/container/timemark)
+
 ---
 
-## 🐳 使用公开镜像（推荐）
+## ⭐ 核心特性
 
-如果你只需要使用TimeMark，而不需要查看源代码，可以使用公开的Docker镜像：
+| 特性 | 说明 |
+|------|------|
+| 🌙 农历支持 | 基于 lunar-javascript 库，精准转换，支持闰月 |
+| 🔔 27+通知渠道 | 覆盖国内外主流通讯平台 |
+| 👥 关系映射 | 自定义称呼转换，如"我爸"→"妻子" |
+| 🔐 企业级安全 | JWT会话管理，安全告警，登录锁定 |
+| 🌍 时区切换 | 支持全球时区，自动NTP时间同步 |
+| 📝 触发日志 | 完整的事件触发记录和日志追踪 |
+
+---
+
+## 🚀 快速部署
+
+### 方式一：使用公开镜像（推荐）
 
 ```bash
-# 快速启动 (需要先创建网络)
-docker network create timemark 2>/dev/null || true
+# 一键启动（需要先安装Docker）
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.public.yml -o docker-compose.yml
 
 # 启动所有服务
+docker-compose up -d
+```
+
+**访问地址**: http://localhost:3000
+
+### 方式二：Docker命令直接启动
+
+```bash
+# 1. 创建网络
+docker network create timemark 2>/dev/null || true
+
+# 2. 启动数据库
 docker run -d \
   --name timemark-postgres \
   --network timemark \
@@ -23,12 +51,13 @@ docker run -d \
   -v postgres_data:/var/lib/postgresql/data \
   postgres:16-alpine
 
+# 3. 启动缓存
 docker run -d \
   --name timemark-redis \
   --network timemark \
-  -e redis-server --maxmemory=256mb --maxmemory-policy=allkeys-lru \
-  redis:7-alpine
+  redis:7-alpine redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
 
+# 4. 启动应用
 docker run -d \
   --name timemark-app \
   --network timemark \
@@ -44,281 +73,178 @@ docker run -d \
   ghcr.io/wxf200707/timemark:latest
 ```
 
-或者使用 docker-compose：
+---
 
-```bash
-# 创建 docker-compose.yml
-cat > docker-compose.yml << 'EOF'
-version: '3.8'
+## 🔐 默认账号
 
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: timemark
-      POSTGRES_USER: timemark
-      POSTGRES_PASSWORD: timemark_pass
-      PGTZ: Asia/Shanghai
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - timemark
+| 账号类型 | 用户名 | 密码 |
+|----------|--------|------|
+| 管理员 | admin | TimeMark@2026 |
 
-  redis:
-    image: redis:7-alpine
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-    networks:
-      - timemark
-
-  app:
-    image: ghcr.io/wxf200707/timemark:latest
-    ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: timemark
-      DB_USER: timemark
-      DB_PASSWORD: timemark_pass
-      REDIS_URL: redis://redis:6379
-      TZ: Asia/Shanghai
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - timemark
-
-networks:
-  timemark:
-
-volumes:
-  postgres_data:
-EOF
-
-# 启动
-docker-compose up -d
-```
-
-**访问地址**: http://localhost:3000
-
-**默认账号**:
-- 用户名: admin  
-- 密码: TimeMark@2026
-
-> ⚠️ 首次登录后请立即修改密码
+> ⚠️ 首次登录后请立即修改默认密码！
 
 ---
 
-## 项目简介
+## 📋 端口说明
 
-TimeMark Docker 是一款功能强大的智能事件提醒系统，专为管理生日、纪念日等重要事件而设计。系统支持公历和农历双重日历转换，多渠道实时通知，关系映射，以及企业级安全特性。
-
-### 核心特性
-
-| 特性 | 说明 |
-|------|------|
-| 🌙 农历支持 | 基于 lunar-javascript 库，精准转换，支持闰月 |
-| 🔔 27+通知渠道 | 覆盖国内外主流通讯平台（邮件、飞书、钉钉、Telegram等） |
-| 👥 关系映射 | 自定义称呼转换，如"我爸"→"妻子" |
-| 🔐 企业级安全 | TOTP双因素认证，JWT会话管理，安全告警邮件 |
-| 🌍 时区切换 | 支持全球时区，自动NTP时间同步 |
-| 📝 触发日志 | 完整的事件触发记录和日志追踪 |
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| 应用 | **3000** | 主应用访问端口（浏览器访问） |
+| PostgreSQL | 5432 | 数据库（容器内部） |
+| Redis | 6379 | 缓存/队列（容器内部） |
 
 ---
 
-## 最近更新 (2026-04)
+## ⚙️ 环境变量
 
-### v1.1.1 修复更新
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| DB_HOST | postgres | 数据库主机名 |
+| DB_PORT | 5432 | 数据库端口 |
+| DB_NAME | timemark | 数据库名称 |
+| DB_USER | timemark | 数据库用户名 |
+| DB_PASSWORD | timemark_pass | 数据库密码 |
+| REDIS_URL | redis://redis:6379 | Redis连接地址 |
+| TZ | Asia/Shanghai | 时区设置 |
+| NODE_ENV | production | 运行环境 |
+| JWT_SECRET | timemark-secret-key | JWT密钥 |
+| MASTER_KEY | - | 主密钥（敏感数据加密）|
+| RESEND_API_KEY | - | 邮件发送API (Resend) |
+| ALERT_EMAILS | - | 安全告警接收邮箱 |
 
-- **插件渠道二维码修复**: 修复 WhatsApp、微信个人号、QQ Bot 等插件渠道的二维码显示问题
-- **UI图标样式优化**: 统一已连接/待授权渠道图标样式，与选择通知渠道保持一致
-- **弹窗导航BUG修复**: 修复从待授权列表点击扫码授权后的返回逻辑
+---
 
-### v1.1.0 新增功能
+## 📢 支持的通知渠道（27个）
 
-- **提醒时间多选**: 支持预设时间快速选择，也可自定义添加多个提醒时间
-- **关联人员拆分**: 将"关联人员"拆分为"被提醒人"和"提醒人"两个字段
-- **农历转换修复**: 前端现已使用 lunar-javascript 库进行准确的公历/农历转换
-- **双日历模式**: 支持选择公历、农历或双历显示
+### 官方直连渠道
 
-### 更新日志
+| 渠道 | 图标 | 配置要求 | 特点 |
+|------|------|----------|------|
+| 邮件 | 📧 | Resend API Key | 正式邮件，支持HTML模板 |
+| 飞书 | 📱 | Webhook URL | 飞书群聊卡片消息 |
+| 企业微信 | 💬 | Webhook URL | 企业微信群聊Markdown |
+| 钉钉 | 🔔 | Webhook + Secret | 钉钉群聊，HMAC签名 |
+| Telegram | ✈️ | Bot Token + Chat ID | Telegram机器人 |
+| Slack | 💼 | Webhook URL | Slack频道 |
+| Discord | 🎮 | Webhook URL | Discord频道 |
+| WxPusher | 💚 | AppToken + UID | 微信公众号推送 |
+| Qmsg | 🐧 | Key | QQ机器人通知 |
 
-| 版本 | 日期 | 更新内容 |
+### Webhook/Token 渠道
+
+| 渠道 | 图标 | 配置要求 |
 |------|------|----------|
-| v1.1.0 | 2025-04 | 提醒时间多选、关联人员拆分、农历转换修复 |
-| v1.0.0 | 2025-01 | 初始版本，基础功能完成 |
+| WhatsApp | 📲 | WhatsApp Business API |
+| Google Chat | 🔵 | Webhook URL |
+| Signal | 🔒 | Signal Service |
+| iMessage | 🍎 | BlueBubbles Server |
+| IRC | 💻 | IRC Server |
+| Microsoft Teams | 📊 | Webhook URL |
+| Matrix | ⚡ | Matrix Server |
+| LINE | 🟢 | LINE Bot |
+| Mattermost | 🧱 | Webhook URL |
+| Nextcloud Talk | ☁️ | Nextcloud Server |
+| Nostr | 🕸️ | Nostr Relay |
+| Synology Chat | 🖥️ | Synology Chat Server |
+| Twitch | 📺 | Twitch EventSub |
+| Zalo | 💌 | Zalo OA |
+| 微信公众号 | 📣 | WxPusher |
+| 微信个人号 | 💬 | Wechaty/Puppet |
+
+### 插件渠道
+
+部分渠道需要额外配置插件服务（如 WhatsApp、微信等需要通过 wechaty 或其他服务）
 
 ---
 
-## 快速开始
-
-### 前置要求
-
-- Docker Engine 20.10+
-- Docker Compose 2.0+
-- 至少 2GB 可用内存
-- 端口 5173, 3000, 5432, 6379 可用
-
-### 一键启动
-
-```bash
-# 1. 克隆项目
-git clone https://github.com/WXFffff666/timemark-docker.git
-cd timemark-docker
-
-# 2. 启动服务（首次启动会自动初始化数据库）
-docker-compose up -d
-
-# 3. 访问应用
-# 前端: http://localhost:5173
-# 后端: http://localhost:3000
-# 数据库: localhost:5432
-# Redis: localhost:6379
-```
-
-### 默认账号
-
-- 用户名: admin
-- 密码: TimeMark@2026
-
-> ⚠️ 首次登录后请立即修改密码
-
----
-
-## 功能详解
+## 📖 功能详解
 
 ### 事件管理
 
 支持四种事件类型：
+- 🎂 **生日** - 家人、朋友生日
+- 💕 **纪念日** - 结婚纪念日、恋爱纪念日
+- 🎉 **节日** - 春节、中秋节、元旦
+- ✨ **其他** - 任意重要日期
 
-| 类型 | 说明 | 示例 |
-|------|------|------|
-| birthday | 生日 | 家人、朋友生日 |
-| anniversary | 纪念日 | 结婚纪念日、恋爱纪念日 |
-| holiday | 节日 | 春节、中秋节、元旦 |
-| other | 自定义 | 任意重要日期 |
+### 日历类型
 
-#### 日历类型
+- **公历** - 仅使用公历日期
+- **农历** - 仅使用农历日期  
+- **双历** - 公历农历都显示
 
-- 公历(gregorian): 仅使用公历日期
-- 农历(lunar): 仅使用农历日期  
-- 双历(both): 公历农历都显示
+### 提醒配置
 
-> 🔄 农历转换基于 lunar-javascript 库，支持精确转换及闰月处理
+- ⏰ **提醒时间**: 预设时间快速选择 + 自定义时间，可多选
+- 📅 **提前天数**: 支持提前1/3/7/14/30天提醒
+- 📢 **通知渠道**: 可选择多个通知渠道，支持多账号
+- 📧 **邮件列表**: 支持邮件提醒，可设置多个收件人
 
-#### 提醒配置
-
-每个事件支持灵活的提醒配置：
-
-- **提醒时间**: 预设时间快速选择 + 自定义时间添加，可多选
-- **提前天数**: 支持提前1/3/7/14/30天提醒
-- **通知渠道**: 可选择多个通知渠道
-- **邮件列表**: 支持邮件提醒，可设置多个收件人
-
----
-
-### 通知渠道（共27个）
-
-#### 官方直连渠道（9个）
-
-| 渠道 | 图标 | 配置要求 | 适用场景 |
-|------|------|----------|----------|
-| 邮件(Resend) | 📧 | Resend API Key | 正式邮件通知，支持HTML模板 |
-| 飞书 | 📱 | Webhook URL | 飞书群聊卡片消息 |
-| 企业微信 | 💬 | Webhook URL | 企业微信群聊Markdown消息 |
-| 钉钉 | 🔔 | Webhook + Secret | 钉钉群聊，需HMAC-SHA256签名 |
-| Telegram | ✈️ | Bot Token + Chat ID | Telegram机器人，支持Markdown |
-| Slack | 💼 | Webhook URL | Slack频道，支持Blocks格式 |
-| Discord | 🎮 | Webhook URL | Discord频道Embed消息 |
-| 微信(WxPusher) | 💚 | AppToken + UID | 微信公众号通知 |
-| QQ(Qmsg) | 🐧 | Key | QQ机器人通知 |
-
-#### Webhook桥接渠道（18个）
-
-可通过配置Webhook URL使用的渠道：
-
-WhatsApp、Google Chat、Signal、iMessage、BlueBubbles、IRC、Microsoft Teams、Matrix、LINE、Mattermost、Nextcloud Talk、Nostr、Synology Chat、Tlon、Twitch、Zalo、Zalo Personal、网络聊天
-
----
-
-### 关联人员功能
-
-关联人员模块拆分为两个独立字段：
+### 关联人员
 
 | 字段 | 说明 | 示例 |
 |------|------|------|
 | 被提醒人 | 事件所有者/生日主角 | 我爸、妈妈、李四 |
 | 提醒人 | 接收通知的人 | 我、妻子、王五 |
-| 提醒人邮箱 | 提醒人专属邮箱（可选） | me@example.com |
+| 提醒人邮箱 | 提醒人专属邮箱 | me@example.com |
 
-### 关系映射功能
+### 关系映射
 
-关系映射允许你为不同的收件人设置不同的称呼转换，解决了"给爸爸发妈妈的消息时称呼不适配"的问题。
+解决"给爸爸发妈妈的消息时称呼不适配"的问题：
 
-**使用场景**：
-- 你添加了"妈妈生日"事件，称呼为"我妈"
-- 给爸爸发送时，转换为"妻子"
-- 给妈妈发送时，保持"我妈"
-- 给外人发送时，可转换为"母亲"
-
-**映射示例**：
-
-| 原始称呼 | 转换后 | 适用收件人类型 |
-|----------|--------|----------------|
+| 原始称呼 | 转换后 | 适用收件人 |
+|----------|--------|------------|
 | 我爸 | 父亲 | father类型 |
 | 我妈 | 妻子 | wife类型 |
 | 老婆 | 妻子 | 通用 |
 | 爷爷 | 外公 | 家庭成员映射 |
-| 老婆 | 夫人 | 正式场合 |
 
 ---
 
-### 安全特性
+## 🔒 安全特性
 
-#### TOTP双因素认证
+### 登录安全
+- **JWT会话管理**: Access Token(15分钟) + Refresh Token(7天)
+- **登录锁定**: 15分钟内5次失败锁定账户
+- **记住我**: 30天免登录
 
-- 支持 Google Authenticator
-- 支持 Microsoft Authenticator
-- 支持任何兼容TOTP的应用（如1Password、Authy等）
-- 启用后登录需额外验证动态验证码
-
-#### JWT会话管理
-
-- Access Token：短期令牌，有效期15分钟
-- Refresh Token：长期令牌，有效期7天
-- 支持设备信任机制
-- 支持"记住我"功能
-
-#### 安全告警
-
-当账户发生以下情况时自动发送邮件告警到管理员邮箱：
+### 安全告警
+当账户发生以下情况时自动发送邮件告警：
 - 5次连续登录失败
 - 新设备登录
 - 密码被修改
 
 ---
 
-## 系统架构
+## 🏗️ 系统架构
 
 ```
-+-------------------+     +-------------------+     +-------------------+
-|       前端        |     |       后端        |     |      数据库       |
-|     (React)       |<--->|      (Hono)       |<--->|   (PostgreSQL)    |
-|     :5173         |     |      :3000        |     |      :5432        |
-+-------------------+     +-------------------+     +-------------------+
-                                |                          |
-                          +-----+-----+              +------+------+
-                          |   Redis    |              |   定时任务   |
-                          |   :6379    |              |    (Cron)   |
-                          +------------+              +-------------+
+┌─────────────────────────────────────────────────────────────┐
+│                      用户访问                              │
+│                   http://localhost:3000                   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                           ▼
+┌─────────────────────┐     ┌─────────────────────┐
+│      前端           │     │       后端          │
+│     React          │◄───►│      Hono          │
+│   (静态资源)       │     │   (Node.js)        │
+└─────────────────────┘     └─────────┬─────────┘
+                                          │
+                    ┌───────────────────┼───────────────────┐
+                    ▼                   ▼                   ▼
+          ┌───────────────┐     ┌───────────────┐     ┌───────────────┐
+          │  PostgreSQL   │     │    Redis     │     │   Cron Job   │
+          │   :5432      │     │   :6379      │     │  (定时任务)   │
+          └───────────────┘     └───────────────┘     └───────────────┘
 ```
 
 ### 技术栈
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | React 18, TypeScript, TailwindCSS, Framer Motion, lunar-javascript |
+| 前端 | React 18, TypeScript, TailwindCSS, Framer Motion |
 | 后端 | Hono, TypeScript, lunar-javascript |
 | 数据库 | PostgreSQL 15, Redis 7 |
 | 认证 | JWT, TOTP |
@@ -326,140 +252,23 @@ WhatsApp、Google Chat、Signal、iMessage、BlueBubbles、IRC、Microsoft Teams
 
 ---
 
-## 本地开发
+## 📝 更新日志
 
-```bash
-# 安装依赖
-pnpm install
-
-# 启动数据库服务
-cd docker && docker-compose up -d postgres redis
-
-# 后端开发
-cd backend
-pnpm install
-pnpm dev
-
-# 前端开发
-cd frontend
-pnpm install
-pnpm dev
-
-# 构建生产版本
-pnpm build
-```
-
-### 农历转换测试
-
-项目包含农历转换测试脚本，可验证转换准确性：
-
-```bash
-cd backend
-node test-lunar.cjs
-```
-
-测试覆盖：
-- 公历→农历转换（26个测试用例）
-- 农历→公历转换（30个测试用例）
-- 闰月处理验证
-- 春节、元宵、端午、中秋等传统节日
+| 版本 | 日期 | 更新内容 |
+|------|------|----------|
+| v1.1.1 | 2026-04 | UI优化、通知渠道修复、登录锁定功能 |
+| v1.1.0 | 2025-04 | 提醒时间多选、关联人员拆分、农历修复 |
+| v1.0.0 | 2025-01 | 初始版本 |
 
 ---
 
-## 环境配置
+## 🤝 支持
 
-### Docker环境变量
-
-```yaml
-# 数据库连接
-DATABASE_URL=postgresql://timemark:password@postgres:5432/timemark
-
-# Redis连接
-REDIS_URL=redis://redis:6379
-
-# JWT密钥（生产环境务必修改）
-JWT_SECRET=your-secret-key-change-in-production
-
-# 时区设置（默认东八区）
-TZ=Asia/Shanghai
-
-# 邮件服务（可选）
-RESEND_API_KEY=re_xxx
-ALERT_EMAILS=admin@example.com,support@example.com
-```
-
-### 端口映射
-
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| 前端 | 5173 | Vite开发服务器 |
-| 后端 | 3000 | API服务 |
-| PostgreSQL | 5432 | 数据库 |
-| Redis | 6379 | 缓存/队列 |
+- 📮 邮箱：wxf200707@gmail.com
+- 🐛 问题反馈：https://github.com/WXFffff666/timemark-docker/issues
 
 ---
 
-## API接口文档
+如果对你有帮助，请点个 Star 支持一下！⭐
 
-### 认证接口 (/api/auth)
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | /api/auth/login | 用户登录 |
-| POST | /api/auth/verify-2fa | 验证TOTP验证码 |
-| POST | /api/auth/setup-2fa | 获取TOTP密钥和二维码 |
-| POST | /api/auth/confirm-2fa | 确认并启用双因素认证 |
-| POST | /api/auth/verify-device | 验证设备信任状态 |
-| POST | /api/auth/logout | 用户登出 |
-| POST | /api/auth/change-password | 修改密码 |
-| POST | /api/auth/refresh | 刷新AccessToken |
-
-### 事件接口 (/api/events)
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /api/events | 获取当前用户所有事件 |
-| POST | /api/events | 创建新事件 |
-| PUT | /api/events/:id | 更新事件 |
-| DELETE | /api/events/:id | 删除事件 |
-| POST | /api/events/:id/test-send | 发送测试通知 |
-
-### 配置接口 (/api/config)
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /api/config | 获取用户配置 |
-| POST | /api/config | 保存用户配置 |
-| GET | /api/config/accounts | 获取通知账户列表 |
-| POST | /api/config/accounts | 创建通知账户 |
-| PUT | /api/config/accounts/:id | 更新通知账户 |
-| DELETE | /api/config/accounts/:id | 删除通知账户 |
-| GET | /api/config/relationships | 获取关系映射列表 |
-| POST | /api/config/relationships | 创建关系映射 |
-| PUT | /api/config/relationships/:id | 更新关系映射 |
-| DELETE | /api/config/relationships/:id | 删除关系映射 |
-
----
-
-## 贡献指南
-
-欢迎提交Issue和Pull Request！
-
-1. Fork本仓库
-2. 创建特性分支 `git checkout -b feature/功能名称`
-3. 提交更改 `git commit -m 'Add xxx功能'`
-4. 推送分支 `git push origin feature/功能名称`
-5. 开启Pull Request
-
----
-
-## 支持
-
-- 问题反馈：https://github.com/WXFffff666/timemark-docker/issues
-- 邮箱：wxf200707@gmail.com
-
----
-
-如果对你有帮助，请点个 Star 支持一下！
-
-Made with love by TimeMark
+Made with ❤️ by TimeMark
