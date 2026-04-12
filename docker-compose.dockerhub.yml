@@ -42,7 +42,7 @@ services:
       - timemark
 
   app:
-    image: xxxxxf666/timemark:latest
+    image: xfffff666/timemark:latest
     container_name: timemark-app
     restart: unless-stopped
     ports:

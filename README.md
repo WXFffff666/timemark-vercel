@@ -9,7 +9,7 @@
 ---
 
 [![Version](https://img.shields.io/badge/Version-1.1.1-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
-[![Docker Pulls](https://img.shields.io/docker/pulls/wfffff666/timemark?style=flat&color=0ea5e9)](https://hub.docker.com/r/xxxxxf666/timemark)
+[![Docker Pulls](https://img.shields.io/docker/pulls/wfffff666/timemark?style=flat&color=0ea5e9)](https://hub.docker.com/r/xfffff666/timemark)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/WXFffff666/timemark-docker?style=flat&color=fcd34d)](https://github.com/WXFffff666/timemark-docker/stargazers)
 
@@ -37,7 +37,7 @@
 
 | 镜像源 | 拉取命令 | 需要认证 | 说明 |
 |--------|----------|:--------:|--------|
-| **Docker Hub** (推荐) | `docker pull xxxxxf666/timemark:latest` | ❌ | 无需登录，全球CDN加速 |
+| **Docker Hub** (推荐) | `docker pull xfffff666/timemark:latest` | ❌ | 无需登录，全球CDN加速 |
 | **GHCR** | `docker pull ghcr.io/wfffff666/timemark:latest` | ⚠️ | 可能需要GitHub登录 |
 
 > 💡 **推荐使用 Docker Hub**，无需任何认证即可拉取。
@@ -90,7 +90,7 @@ services:
     networks: [timemark]
 
   app:
-    image: xxxxxf666/timemark:latest  # 或 ghcr.io/wfffff666/timemark:latest
+    image: xfffff666/timemark:latest  # 或 ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
     restart: unless-stopped
     ports: ["3000:3000"]
