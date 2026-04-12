@@ -4,6 +4,112 @@
 
 ---
 
+## 🐳 使用公开镜像（推荐）
+
+如果你只需要使用TimeMark，而不需要查看源代码，可以使用公开的Docker镜像：
+
+```bash
+# 快速启动 (需要先创建网络)
+docker network create timemark 2>/dev/null || true
+
+# 启动所有服务
+docker run -d \
+  --name timemark-postgres \
+  --network timemark \
+  -e POSTGRES_DB=timemark \
+  -e POSTGRES_USER=timemark \
+  -e POSTGRES_PASSWORD=timemark_pass \
+  -e PGTZ=Asia/Shanghai \
+  -v postgres_data:/var/lib/postgresql/data \
+  postgres:16-alpine
+
+docker run -d \
+  --name timemark-redis \
+  --network timemark \
+  -e redis-server --maxmemory=256mb --maxmemory-policy=allkeys-lru \
+  redis:7-alpine
+
+docker run -d \
+  --name timemark-app \
+  --network timemark \
+  -p 3000:3000 \
+  -e NODE_ENV=production \
+  -e DB_HOST=timemark-postgres \
+  -e DB_PORT=5432 \
+  -e DB_NAME=timemark \
+  -e DB_USER=timemark \
+  -e DB_PASSWORD=timemark_pass \
+  -e REDIS_URL=redis://timemark-redis:6379 \
+  -e TZ=Asia/Shanghai \
+  ghcr.io/wxf200707/timemark:latest
+```
+
+或者使用 docker-compose：
+
+```bash
+# 创建 docker-compose.yml
+cat > docker-compose.yml << 'EOF'
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: timemark
+      POSTGRES_USER: timemark
+      POSTGRES_PASSWORD: timemark_pass
+      PGTZ: Asia/Shanghai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - timemark
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - timemark
+
+  app:
+    image: ghcr.io/wxf200707/timemark:latest
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: timemark
+      DB_USER: timemark
+      DB_PASSWORD: timemark_pass
+      REDIS_URL: redis://redis:6379
+      TZ: Asia/Shanghai
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - timemark
+
+networks:
+  timemark:
+
+volumes:
+  postgres_data:
+EOF
+
+# 启动
+docker-compose up -d
+```
+
+**访问地址**: http://localhost:3000
+
+**默认账号**:
+- 用户名: admin  
+- 密码: TimeMark@2026
+
+> ⚠️ 首次登录后请立即修改密码
+
+---
+
 ## 项目简介
 
 TimeMark Docker 是一款功能强大的智能事件提醒系统，专为管理生日、纪念日等重要事件而设计。系统支持公历和农历双重日历转换，多渠道实时通知，关系映射，以及企业级安全特性。
