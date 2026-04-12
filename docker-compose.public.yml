@@ -1,5 +1,3 @@
-version: '3.8'
-
 # TimeMark 公开镜像部署配置
 # 使用方法: docker-compose -f docker-compose.public.yml up -d
 # 访问地址: http://localhost:3000
