@@ -149,6 +149,12 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   const [accounts, setAccounts] = useState<NotificationAccountResponse[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(false);
 
+  // 账号选择弹窗状态
+  const [accountPickerOpen, setAccountPickerOpen] = useState(false);
+  const [accountPickerChannel, setAccountPickerChannel] = useState<string | null>(null);
+  const [pickerAccounts, setPickerAccounts] = useState<NotificationAccountResponse[]>([]);
+  const [pickerSelectedIds, setPickerSelectedIds] = useState<string[]>([]);
+
   useEffect(() => {
     if (event && open) {
       // Safe date parsing - handle both YYYY-MM-DD and YYYY-MM-DDTHH:mm formats
@@ -196,6 +202,15 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
       setLunarInputValue('');
     }
   }, [event, open]);
+
+  // 加载所有活跃通知账户（用于显示已选账号摘要）
+  useEffect(() => {
+    if (open) {
+      api.get<NotificationAccountResponse[]>('/config/accounts')
+        .then(data => setAccounts(data.filter(a => a.is_active)))
+        .catch(err => console.error('Failed to load accounts:', err));
+    }
+  }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -309,22 +324,36 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     });
   };
 
-  const toggleChannel = (channel: string) => {
+  const toggleChannel = async (channel: string) => {
     const currentChannels = formData.reminderConfig.channels || [];
-    const newChannels = currentChannels.includes(channel)
-      ? currentChannels.filter(c => c !== channel)
-      : [...currentChannels, channel];
-    
-    setFormData({
-      ...formData,
-      reminderConfig: {
-        ...formData.reminderConfig,
-        channels: newChannels,
-      },
-    });
-    
-    if (!currentChannels.includes(channel) && channel !== 'email') {
-      loadAccountsForChannel(channel);
+    const currentAccountIds = formData.reminderConfig.accountIds || [];
+    const isSelected = currentChannels.includes(channel);
+
+    if (isSelected) {
+      // 取消选择该渠道，并移除相关 accountIds
+      const accountType = channelToAccountType[channel];
+      const newAccountIds = accountType
+        ? currentAccountIds.filter(id => !accounts.some(a => String(a.id) === id && a.type === accountType))
+        : currentAccountIds;
+      setFormData({
+        ...formData,
+        reminderConfig: {
+          ...formData.reminderConfig,
+          channels: currentChannels.filter(c => c !== channel),
+          accountIds: newAccountIds,
+        },
+      });
+    } else {
+      setFormData({
+        ...formData,
+        reminderConfig: {
+          ...formData.reminderConfig,
+          channels: [...currentChannels, channel],
+        },
+      });
+      if (channel !== 'email') {
+        await openAccountPicker(channel, currentAccountIds);
+      }
     }
   };
 
@@ -363,15 +392,18 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     wxpusher: 'wxpusher',
   };
 
-  const loadAccountsForChannel = async (channel: string) => {
+  const openAccountPicker = async (channel: string, currentAccountIds: string[]) => {
     const accountType = channelToAccountType[channel];
     if (!accountType) return;
-    
+
     setAccountsLoading(true);
     try {
       const data = await api.get<NotificationAccountResponse[]>('/config/accounts');
       const filtered = data.filter(a => a.type === accountType && a.is_active);
-      setAccounts(filtered);
+      setPickerAccounts(filtered);
+      setPickerSelectedIds(currentAccountIds.filter(id => filtered.some(a => String(a.id) === id)));
+      setAccountPickerChannel(channel);
+      setAccountPickerOpen(true);
     } catch (error) {
       console.error('Failed to load accounts:', error);
     } finally {
@@ -379,19 +411,42 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     }
   };
 
-  const toggleAccountSelection = (accountId: number) => {
-    const currentIds = formData.reminderConfig.accountIds || [];
-    const newIds = currentIds.includes(String(accountId))
-      ? currentIds.filter(id => id !== String(accountId))
-      : [...currentIds, String(accountId)];
-    
-    setFormData({
-      ...formData,
-      reminderConfig: {
-        ...formData.reminderConfig,
-        accountIds: newIds,
-      },
+  const togglePickerAccount = (id: string) => {
+    setPickerSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const confirmPicker = () => {
+    setFormData(prev => {
+      const otherIds = (prev.reminderConfig.accountIds || []).filter(id =>
+        !pickerAccounts.some(a => String(a.id) === id)
+      );
+      return {
+        ...prev,
+        reminderConfig: {
+          ...prev.reminderConfig,
+          accountIds: [...otherIds, ...pickerSelectedIds],
+        },
+      };
     });
+    setAccountPickerOpen(false);
+    setAccountPickerChannel(null);
+  };
+
+  const cancelPicker = () => {
+    const channel = accountPickerChannel;
+    if (channel) {
+      setFormData(prev => ({
+        ...prev,
+        reminderConfig: {
+          ...prev.reminderConfig,
+          channels: (prev.reminderConfig.channels || []).filter(c => c !== channel),
+        },
+      }));
+    }
+    setAccountPickerOpen(false);
+    setAccountPickerChannel(null);
   };
 
   // 添加自定义提醒时间
@@ -773,77 +828,46 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                           key={channel.value}
                           type="button"
                           onClick={() => toggleChannel(channel.value)}
-                          className={`p-2 rounded-xl text-sm font-medium transition-all duration-300 alive-interactive flex items-center gap-1.5 ${
+                          className={`h-full min-h-[48px] w-full rounded-xl text-xs font-medium transition-all duration-300 alive-interactive flex flex-col items-center justify-center gap-1 p-1.5 ${
                             formData.reminderConfig.channels?.includes(channel.value)
                               ? 'bg-primary-500/20 text-primary-600 dark:text-primary-400 border border-primary-500/30'
                               : 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-transparent'
                           }`}
                         >
-                          <span className="text-base">{channel.icon}</span>
-                          <span>{channel.label}</span>
+                          <span className="text-base leading-none">{channel.icon}</span>
+                          <span className="text-center leading-tight line-clamp-2">{channel.label}</span>
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* 账户选择 - 当有可用账户时显示 */}
-                  {formData.reminderConfig.channels && formData.reminderConfig.channels.length > 0 && (
+                  {/* 已选账号摘要 */}
+                  {formData.reminderConfig.channels && formData.reminderConfig.channels.some(c => c !== 'email') && (
                     <div className="space-y-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                        通知账户（可选）
-                        <span className="text-xs text-slate-400">选择要使用的具体账户</span>
-                      </label>
-                      
-                      {accountsLoading ? (
-                        <div className="flex items-center gap-2 text-sm text-slate-400">
-                          <div className="w-4 h-4 border-2 border-slate-300 border-t-primary-500 rounded-full animate-spin" />
-                          加载账户中...
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {notificationChannels
-                            .filter(ch => formData.reminderConfig.channels?.includes(ch.value) && ch.value !== 'email')
-                            .map(channel => {
-                              const accountType = channelToAccountType[channel.value];
-                              const channelAccounts = accounts.filter(a => a.type === accountType);
-                              const selectedIds = formData.reminderConfig.accountIds || [];
-                              
-                              if (channelAccounts.length === 0) return null;
-                              
-                              return (
-                                <div key={channel.value} className="space-y-1.5">
-                                  <div className="flex items-center gap-2 text-sm">
-                                    <span className="text-base">{channel.icon}</span>
-                                    <span className="font-medium text-slate-700 dark:text-slate-300">{channel.label}</span>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2 ml-6">
-                                    {channelAccounts.map(account => (
-                                      <button
-                                        key={account.id}
-                                        type="button"
-                                        onClick={() => toggleAccountSelection(account.id)}
-                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-1.5 ${
-                                          selectedIds.includes(String(account.id))
-                                            ? 'bg-primary-500 text-white'
-                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-                                        }`}
-                                      >
-                                        {selectedIds.includes(String(account.id)) && (
-                                          <span className="text-xs">✓</span>
-                                        )}
-                                        {account.name}
-                                      </button>
-                                    ))}
-                                  </div>
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">通知账户</label>
+                      <div className="space-y-2">
+                        {notificationChannels
+                          .filter(ch => formData.reminderConfig.channels?.includes(ch.value) && ch.value !== 'email')
+                          .map(channel => {
+                            const accountType = channelToAccountType[channel.value];
+                            const selectedIds = formData.reminderConfig.accountIds || [];
+                            const channelAccounts = accounts.filter(a => a.type === accountType && selectedIds.includes(String(a.id)));
+
+                            return (
+                              <div key={channel.value} className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-base">{channel.icon}</span>
+                                  <span className="font-medium text-slate-700 dark:text-slate-300">{channel.label}</span>
                                 </div>
-                              );
-                            })}
-                          
-                          {accounts.length === 0 && (
-                            <p className="text-xs text-slate-400 ml-2">暂无可用账户，请在设置中添加账户</p>
-                          )}
-                        </div>
-                      )}
+                                <div className="text-xs text-slate-500 dark:text-slate-400 max-w-[55%] truncate text-right">
+                                  {channelAccounts.length > 0
+                                    ? channelAccounts.map(a => a.name).join('、')
+                                    : '未选择账号'}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
                     </div>
                   )}
 
@@ -903,6 +927,59 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
             </Button>
           </motion.div>
         </motion.form>
+
+        {/* 账号选择弹窗 */}
+        <Dialog open={accountPickerOpen} onOpenChange={setAccountPickerOpen}>
+          <DialogContent className="max-w-md rounded-[1.5rem] p-6" onPointerDownOutside={(e) => e.preventDefault()}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
+                <span className="text-2xl">
+                  {notificationChannels.find(c => c.value === accountPickerChannel)?.icon}
+                </span>
+                选择 {notificationChannels.find(c => c.value === accountPickerChannel)?.label} 账号
+              </DialogTitle>
+            </DialogHeader>
+            {accountsLoading ? (
+              <div className="flex items-center justify-center py-8 gap-2 text-slate-500">
+                <div className="w-5 h-5 border-2 border-slate-300 border-t-primary-500 rounded-full animate-spin" />
+                加载中...
+              </div>
+            ) : pickerAccounts.length === 0 ? (
+              <div className="py-8 text-center text-slate-500">
+                <p>暂无可用账号</p>
+                <p className="text-xs text-slate-400 mt-1">请在设置中添加账户后重试</p>
+              </div>
+            ) : (
+              <div className="space-y-2 py-2 max-h-[300px] overflow-y-auto">
+                {pickerAccounts.map(account => (
+                  <button
+                    key={account.id}
+                    type="button"
+                    onClick={() => togglePickerAccount(String(account.id))}
+                    className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
+                      pickerSelectedIds.includes(String(account.id))
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                    }`}
+                  >
+                    <span className="font-medium">{account.name}</span>
+                    {pickerSelectedIds.includes(String(account.id)) && (
+                      <span className="text-primary-500 font-bold">✓</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <Button type="button" variant="secondary" className="flex-1 h-11 rounded-xl" onClick={cancelPicker}>
+                取消
+              </Button>
+              <Button type="button" variant="vision" className="flex-1 h-11 rounded-xl" onClick={confirmPicker}>
+                确认
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

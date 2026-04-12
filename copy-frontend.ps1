@@ -1,0 +1,2 @@
+docker cp D:\works\timemark-docker\frontend\dist\index.html timemark-docker-app-1:/app/frontend/dist/index.html
+docker cp D:\works\timemark-docker\frontend\dist\assets timemark-docker-app-1:/app/frontend/dist/
