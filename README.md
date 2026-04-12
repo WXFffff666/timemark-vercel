@@ -38,11 +38,18 @@
 
 ---
 
-## 🚀 5秒快速部署
+## 🚀 快速部署
 
-### 📋 方式一：复制粘贴（推荐）
+支持两个镜像源，选择一个即可：
 
-将以下配置复制到你的 Docker Compose 编辑器中：
+### 📦 镜像源选择
+
+| 镜像源 | 拉取命令 | 是否需要登录 |
+|--------|----------|-------------|
+| **Docker Hub** (推荐) | `docker.io/xfffff666/timemark:latest` | ❌ 无需 |
+| **GHCR** | `ghcr.io/wfffff666/timemark:latest` | ⚠️ 可能需要 |
+
+### 📋 部署方式一：Docker Hub（推荐，无需认证）
 
 ```yaml
 services:
@@ -72,7 +79,7 @@ services:
     networks: [timemark]
 
   app:
-    image: ghcr.io/wfffff666/timemark:latest
+    image: docker.io/xfffff666/timemark:latest
     container_name: timemark-app
     restart: unless-stopped
     ports: ["3000:3000"]
@@ -97,16 +104,23 @@ volumes:
   postgres_data:
 ```
 
-### 💻 方式二：命令行一键部署
+### 📋 部署方式二：GHCR（如需要认证）
+
+```yaml
+# 镜像改为 ghcr.io/wfffff666/timemark:latest
+# 其他配置相同
+```
+
+### 💻 方式二：命令行部署
 
 ```bash
-# 1. 创建部署目录
-mkdir timemark && cd timemark
+# Docker Hub (推荐)
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 2. 下载配置文件
-curl -sSL https://ghcr.io/wfffff666/timemark/latest/docker-compose.simple.yml -o docker-compose.yml
+# 或者 GHCR
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.ghcr.yml -o docker-compose.yml
 
-# 3. 启动服务（约1-2分钟）
+# 启动服务
 docker compose up -d
 ```
 
