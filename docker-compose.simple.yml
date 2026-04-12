@@ -1,7 +1,5 @@
-version: '3.8'
-
 # TimeMark 一键部署配置
-# 适用于飞牛OS、群晖NAS、威联通等Docker环境
+# 适用于飞牛OS、群晖NAS、威联通、铁威马等NAS环境
 # 使用方法：复制全部内容到 Docker Compose 中即可
 
 services:
@@ -16,6 +14,9 @@ services:
       PGTZ: Asia/Shanghai
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    dns:  # 添加DNS解决NAS无法解析ghcr.io的问题
+      - 8.8.8.8
+      - 1.1.1.1
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U timemark"]
       interval: 10s
@@ -29,6 +30,9 @@ services:
     container_name: timemark-redis
     restart: unless-stopped
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    dns: 
+      - 8.8.8.8
+      - 1.1.1.1
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -38,7 +42,7 @@ services:
       - timemark
 
   app:
-    image: ghcr.io/wxf200707/timemark:latest
+    image: ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
     restart: unless-stopped
     ports:
@@ -52,6 +56,9 @@ services:
       DB_PASSWORD: timemark_pass
       REDIS_URL: redis://redis:6379
       TZ: Asia/Shanghai
+    dns: 
+      - 8.8.8.8
+      - 1.1.1.1
     volumes:
       - ./data:/app/data
     depends_on:

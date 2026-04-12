@@ -46,7 +46,7 @@ services:
 
   # 应用主程序
   timemark-app:
-    image: ghcr.io/wxf200707/timemark:latest
+    image: ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
     restart: unless-stopped
     # 端口映射 - 如被占用可修改左边端口号

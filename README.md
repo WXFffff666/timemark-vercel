@@ -62,7 +62,7 @@ services:
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     networks: [timemark]
   app:
-    image: ghcr.io/wxf200707/timemark:latest
+    image: ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
     restart: unless-stopped
     ports: ["3000:3000"]
@@ -92,7 +92,7 @@ volumes:
 mkdir timemark && cd timemark
 
 # 2. 下载配置文件
-curl -sSL https://ghcr.io/wxf200707/timemark/latest/docker-compose.simple.yml -o docker-compose.yml
+curl -sSL https://ghcr.io/wfffff666/timemark/latest/docker-compose.simple.yml -o docker-compose.yml
 
 # 3. 启动服务（约1-2分钟）
 docker-compose up -d

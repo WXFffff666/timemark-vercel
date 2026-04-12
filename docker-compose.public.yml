@@ -39,7 +39,7 @@ services:
       - timemark
 
   app:
-    image: ghcr.io/wxf200707/timemark:latest
+    image: ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
     ports:
       - "3000:3000"

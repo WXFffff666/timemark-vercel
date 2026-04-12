@@ -55,7 +55,7 @@ services:
     networks:
       - timemark
   app:
-    image: ghcr.io/wxf200707/timemark:latest
+    image: ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
     restart: unless-stopped
     ports:
@@ -90,7 +90,7 @@ volumes:
 mkdir timemark && cd timemark
 
 # 2. 下载配置文件
-curl -sSL https://ghcr.io/wxf200707/timemark:latest/docker-compose.yml -o docker-compose.yml
+curl -sSL https://ghcr.io/wfffff666/timemark:latest/docker-compose.yml -o docker-compose.yml
 
 # 3. 启动服务
 docker-compose up -d
@@ -128,7 +128,7 @@ docker-compose up -d
 mkdir -p /volume1/docker/timemark/{postgres,data}
 
 # 2. 下载配置
-curl -o docker-compose.yml https://ghcr.io/wxf200707/timemark/latest/docker-compose.nas.yml
+curl -o docker-compose.yml https://ghcr.io/wfffff666/timemark/latest/docker-compose.nas.yml
 
 # 3. 修改配置（vim/nano）
 #    - 将 /volume1/docker/timemark/... 改为你的实际路径
@@ -155,7 +155,7 @@ mkdir -p /opt/timemark/{data,config}
 
 # 2. 下载配置
 cd /opt/timemark
-wget https://ghcr.io/wxf200707/timemark/latest/docker-compose.full.yml
+wget https://ghcr.io/wfffff666/timemark/latest/docker-compose.full.yml
 
 # 3. 修改配置
 #    - JWT_SECRET: 生产环境密钥

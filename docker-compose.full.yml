@@ -53,7 +53,7 @@ services:
           memory: 256M
 
   app:
-    image: ghcr.io/wxf200707/timemark:latest
+    image: ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
     restart: unless-stopped
     ports:
