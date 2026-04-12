@@ -46,7 +46,7 @@
 
 | 镜像源 | 拉取命令 | 是否需要登录 |
 |--------|----------|-------------|
-| **Docker Hub** (推荐) | `docker.io/xfffff666/timemark:latest` | ❌ 无需 |
+| **Docker Hub** (推荐) | `xxxxxf666/timemark:latest` | ❌ 无需 |
 | **GHCR** | `ghcr.io/wfffff666/timemark:latest` | ⚠️ 可能需要 |
 
 ### 📋 部署方式一：Docker Hub（推荐，无需认证）
@@ -79,7 +79,7 @@ services:
     networks: [timemark]
 
   app:
-    image: docker.io/xfffff666/timemark:latest
+    image: xfffff666/timemark:latest
     container_name: timemark-app
     restart: unless-stopped
     ports: ["3000:3000"]
