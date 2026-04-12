@@ -1,15 +1,26 @@
-# TimeMark Docker 🕐
+# 🕐 TimeMark Docker
 
 <div align="center">
 
-[![Docker Image](https://img.shields.io/docker/vizualization/wxf200707/timemark?style=flat&label=Docker+Image&labelColor=2499f2&color=2499f2)](https://github.com/WXFffff666/timemark-docker/pkgs/container/timemark)
-[![Stars](https://img.shields.io/github/stars/WXFffff666/timemark-docker?style=flat&label=Stars&labelColor=fcd34d&color=fcd34d)](https://github.com/WXFffff666/timemark-docker/stargazers)
-[![License](https://img.shields.io/github/license/WXFffff666/timemark-docker?style=flat&label=License&labelColor=10b981&color=10b981)](LICENSE)
-[![Docker Pulls](https://img.shields.io/docker/pulls/wxf200707/timemark?style=flat&label=Pulls&labelColor=ef4444&color=ef4444)](https://github.com/WXFffff666/timemark-docker/pkgs/container/timemark)
+<!-- Badges -->
+![Version](https://img.shields.io/badge/Version-1.1.1-blue?style=flat&color=2563eb)
+![Docker Pulls](https://img.shields.io/docker/pulls/wfffff666/timemark?style=flat&color=0ea5e9)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)
+![Stars](https://img.shields.io/github/stars/WXFffff666/timemark-docker?style=flat&color=fcd34d)
 
-**智能事件提醒系统 | 支持27+通知渠道 | 农历转换 | 关系映射**
+<br>
 
-[🏠 主页](https://github.com/WXFffff666/timemark-docker) · [📖 部署文档](DEPLOYMENT.md) · [🐛 问题反馈](https://github.com/WXFffff666/timemark-docker/issues)
+<!-- Hero Image Placeholder -->
+![TimeMark Banner](https://via.placeholder.com/800x200/2563eb/ffffff?text=TimeMark+-+%E6%99%BA%E8%83%BD%E4%BA%BA%E7%94%9F%E7%9A%84%E4%BA%8B%E4%BB%A5%E6%8F%90%E9%80%9F%E7%B3%BB%E7%BB%9F)
+
+<br>
+
+### 🎯 智能事件提醒系统 | 27+通知渠道 | 农历转换 | 关系映射
+
+[🏠 项目主页](https://github.com/WXFffff666/timemark-docker) · 
+[📖 部署文档](DEPLOYMENT.md) · 
+[🐛 问题反馈](https://github.com/WXFffff666/timemark-docker/issues) ·
+[⭐ Star支持](https://github.com/WXFffff666/timemark-docker/stargazers)
 
 </div>
 
@@ -17,26 +28,23 @@
 
 ## ✨ 为什么选择 TimeMark？
 
-| 特性 | 说明 |
-|------|------|
-| 🌙 **精准农历** | 基于 lunars-javascript，支持闰月润日期转换 |
-| 🔔 **27+通知渠道** | 邮件/微信/钉钉/Telegram/飞书等国内外主流平台 |
-| 👥 **智能关系映射** | "我爸"→"父亲"，解决称呼尴尬问题 |
-| 🔐 **企业级安全** | JWT会话/TOTP/登录锁定/安全告警 |
-| 🌍 **全球时区** | NTP自动同步，支持世界各地时区 |
-| 📝 **完整日志** | 每次提醒都有详细记录可追溯 |
-| 🐳 **Docker部署** | 一键部署，兼容飞牛OS/群晖/威联通 |
+<div align="center">
+
+| 🌙 精准农历 | 🔔 27+渠道 | 👥 智能关系 | 🔐 企业安全 | 🌍 全球时区 |
+|:----------:|:-----------:|:-----------:|:----------:|:----------:|
+| 闰月转换 | 国内外全覆盖 | 称呼自动映射 | TOTP+JWT | NTP自动同步 |
+
+</div>
 
 ---
 
 ## 🚀 5秒快速部署
 
-### 方式一：复制粘贴（推荐）
+### 📋 方式一：复制粘贴（推荐）
 
-将以下内容复制到你的Docker Compose编辑器中：
+将以下配置复制到你的 Docker Compose 编辑器中：
 
 ```yaml
-version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
@@ -55,12 +63,14 @@ services:
       timeout: 5s
       retries: 5
     networks: [timemark]
+
   redis:
     image: redis:7-alpine
     container_name: timemark-redis
     restart: unless-stopped
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     networks: [timemark]
+
   app:
     image: ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
@@ -79,13 +89,15 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
     networks: [timemark]
+
 networks:
   timemark: {driver: bridge}
+
 volumes:
   postgres_data:
 ```
 
-### 方式二：命令行一键部署
+### 💻 方式二：命令行一键部署
 
 ```bash
 # 1. 创建部署目录
@@ -95,10 +107,10 @@ mkdir timemark && cd timemark
 curl -sSL https://ghcr.io/wfffff666/timemark/latest/docker-compose.simple.yml -o docker-compose.yml
 
 # 3. 启动服务（约1-2分钟）
-docker-compose up -d
+docker compose up -d
 ```
 
-### 方式三：飞牛OS/群晖 NAS
+### ☁️ 方式三：飞牛OS / 群晖 NAS
 
 详见 [部署文档](DEPLOYMENT.md) - 包含飞牛OS、群晖DSM、威联通QTS、铁威马TOS 详细教程
 
@@ -106,13 +118,15 @@ docker-compose up -d
 
 ## 🔐 首次登录
 
-| 项目 | 默认值 |
-|------|--------|
-| 🌐 访问地址 | http://你的服务器IP:3000 |
-| 👤 用户名 | `admin` |
-| 🔑 密码 | `TimeMark@2026` |
+<div align="center">
 
-> ⚠️ **安全提示**：首次登录后请立即修改默认密码！
+| 🌐 访问地址 | 👤 用户名 | 🔑 密码 |
+|-----------|---------|--------|
+| http://你的服务器IP:3000 | `admin` | `TimeMark@2026` |
+
+⚠️ **安全提示**：首次登录后请立即修改默认密码！
+
+</div>
 
 ---
 
@@ -120,28 +134,29 @@ docker-compose up -d
 
 ### 📅 事件管理
 
-```
-四种事件类型：
-🎂 生日    - 家人、朋友、同事的生日
-💕 纪念日 - 结婚纪念日、恋爱纪念日、创业纪念日
-🎉 节日    - 春节、中秋节、元旦、情人节
-✨ 自定义  - 任意重要日期
-```
+| 类型 | 图标 | 说明 |
+|------|------|------|
+| 🎂 生日 | 生日 | 家人、朋友、同事的生日 |
+| 💕 纪念日 | 纪念日 | 结婚/恋爱/创业纪念日 |
+| 🎉 节日 | 节日 | 春节/中秋节/情人节 |
+| ✨ 自定义 | 自定义 | 任意重要日期 |
 
 ### 📆 日历类型
 
 ```
-公历  - 仅显示公历日期（如 2026-01-01）
-农历  - 仅显示农历日期（如 农历正月初一）
-双历  - 同时显示公历和农历
+┌─────────────────────────────────────┐
+│  公历  │  仅显示公历日期              │
+│  农历  │  仅显示农历日期              │
+│  双历  │  同时显示公历+农历           │
+└─────────────────────────────────────┘
 ```
 
 ### ⏰ 提醒配置
 
 ```
-提醒时间   : 08:00 / 09:00 / 12:00 等预设 + 自定义
-提前天数   : 1天、3天、7天、14天、30天（可多选）
-通知渠道   : 邮件/微信/钉钉/Telegram等（可多选）
+提醒时间 : 08:00 / 09:00 / 12:00 + 自定义
+提前天数 : 1天 / 3天 / 7天 / 14天 / 30天
+通知渠道 : 邮件/微信/钉钉/Telegram等（多选）
 ```
 
 ### 👥 关系映射（核心特色）
@@ -152,6 +167,7 @@ docker-compose up -d
 |---------|----------|----------|
 | 我爸 | 父亲 | 给妈妈发送爸爸生日祝福 |
 | 我妈 | 妻子 | 给爸爸发送妈妈生日祝福 |
+| 老公 | 丈夫 | 通用称呼 |
 | 老婆 | 妻子 | 通用称呼 |
 | 爷爷 | 外公 | 家庭成员映射 |
 
@@ -159,70 +175,63 @@ docker-compose up -d
 
 ## 📢 支持的通知渠道（27个）
 
-### 🏆 官方直连（无需额外配置）
+### 🏆 官方直连
 
 | 渠道 | 图标 | 配置要求 | 适用场景 |
 |------|------|---------|----------|
-| 📧 邮件 | Email | Resend API Key | 正式通知、HTML模板 |
-| 🏢 飞书 | Feishu | Webhook URL | 飞书群聊卡片 |
-| 💬 企业微信 | WeCom | Webhook URL | 企业微信群 Markdown |
-| 📌 钉钉 | DingTalk | Webhook + Secret | 钉钉群 HMAC签名 |
-| ✈️ Telegram | Telegram | Bot Token + Chat ID | Telegram机器人 |
-| 💼 Slack | Slack | Webhook URL | Slack频道 |
-| 🎮 Discord | Discord | Webhook URL | Discord频道 |
-| 🟢 WxPusher | 微信 | AppToken + UID | 微信公众号推送 |
-| 🐧 QMsg | QQ | Key | QQ机器人 |
+| 📧 邮件 | Resend API Key | 正式通知、HTML模板 |
+| 🏢 飞书 | Webhook URL | 飞书群聊卡片 |
+| 💬 企业微信 | Webhook URL | 企业微信群 Markdown |
+| 📌 钉钉 | Webhook + Secret | 钉钉群 HMAC签名 |
+| ✈️ Telegram | Bot Token + Chat ID | Telegram机器人 |
+| 💼 Slack | Webhook URL | Slack频道 |
+| 🎮 Discord | Webhook URL | Discord频道 |
+| 🟢 WxPusher | AppToken + UID | 微信公众号推送 |
+| 🐧 QMsg | Key | QQ机器人 |
 
 ### 🌐 Webhook/集成
 
-| 渠道 | 图标 | 配置要求 |
-|------|------|---------|
-| WhatsApp | 📲 | WhatsApp Business API |
-| Google Chat | 🔵 | Webhook URL |
-| Signal | 🔒 | Signal Service |
-| iMessage | 🍎 | BlueBubbles Server |
-| IRC | 💻 | IRC Server |
-| Microsoft Teams | 📊 | Webhook URL |
-| Matrix | ⚡ | Matrix Server |
-| LINE | 🟢 | LINE Bot |
-| Mattermost | 🧱 | Webhook URL |
-| Nextcloud Talk | ☁️ | Nextcloud Server |
-| Nostr | 🕸️ | Nostr Relay |
-| Synology Chat | 🖥️ | Synology Chat |
-| Twitch | 📺 | Twitch EventSub |
-| Zalo | 💌 | Zalo OA |
+| 渠道 | 图标 | 渠道 | 图标 |
+|------|------|------|------|
+| WhatsApp | 📲 | Google Chat | 🔵 |
+| Signal | 🔒 | iMessage | 🍎 |
+| IRC | 💻 | Microsoft Teams | 📊 |
+| Matrix | ⚡ | LINE | 🟢 |
+| Mattermost | 🧱 | Nextcloud Talk | ☁️ |
+| Nostr | 🕸️ | Synology Chat | 🖥️ |
+| Twitch | 📺 | Zalo | 💌 |
 
 ---
 
 ## 🏗️ 系统架构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     🌐 用户访问                             │
-│                  https://your-domain.com:3000               │
-└─────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              ▼                           ▼
-┌─────────────────────────┐     ┌─────────────────────────┐
-│        前端           │     │         后端           │
-│       React          │◄───►│        Hono            │
-│    (静态资源)        │     │     (Node.js)         │
-│       :3000          │     │       :3000           │
-└─────────────────────────┘     └───────────┬─────────┘
-                                            │
-                    ┌───────────────────────┼───────────────────────┐
-                    ▼                       ▼                       ▼
-          ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-          │   PostgreSQL    │     │      Redis      │     │     Cron       │
-          │     :5432       │     │     :6379       │     │   (定时任务)    │
-          └─────────────────┘     └─────────────────┘     └─────────────────┘
+                    ┌─────────────────────────────────────┐
+                    │         🌐 用户访问                 │
+                    │    https://your-domain.com:3000    │
+                    └─────────────────┬─────────────────┘
+                                      │
+                    ┌─────────────────┴─────────────────┐
+                    ▼                                   ▼
+          ┌─────────────────────┐               ┌─────────────────────┐
+          │      前端          │               │      后端          │
+          │    React          │◄─────────────►│      Hono          │
+          │   (静态资源)       │               │    (Node.js)       │
+          │     :3000          │               │     :3000          │
+          └─────────────────────┘               └──────────┬──────────┘
+                                                        │
+                    ┌────────────────────────────────────┴────────────────────┐
+                    ▼                                   ▼                       ▼
+          ┌─────────────────────┐               ┌─────────────────────┐       ┌─────────────────────┐
+          │    PostgreSQL        │               │      Redis         │       │      Cron        │
+          │      :5432         │               │      :6379        │       │   (定时任务)      │
+          └─────────────────────┘               └─────────────────────┘       └─────────────────────┘
 ```
 
-### 技术栈
+### 🛠️ 技术栈
 
 | 层级 | 技术选型 |
-|------|----------|
+|------|--------|
 | 🖥️ 前端 | React 18 + TypeScript + TailwindCSS + Framer Motion |
 | ⚙️ 后端 | Hono + TypeScript + lunar-javascript |
 | 🗄️ 数据库 | PostgreSQL 15 + Redis 7 |
@@ -265,8 +274,8 @@ docker-compose up -d
 
 ```
 ✓ 5次连续登录失败 → 发送告警邮件
-✓ 新设备登录    → 发送告警邮件  
-✓ 密码被修改   → 发送告警邮件
+✓ 新设备登录     → 发送告警邮件  
+✓ 密码被修改    → 发送告警邮件
 ```
 
 ---
@@ -285,12 +294,12 @@ docker-compose up -d
 
 ```bash
 # 手动备份
-docker-compose down
+docker compose down
 tar -czf timemark-backup-$(date +%Y%m%d).tar.gz ./data ./postgres
-docker-compose up -d
+docker compose up -d
 
 # 自动备份（每天凌晨3点）
-0 3 * * * cd /opt/timemark && docker-compose down && tar -czf /backup/timemark-$(date +%Y%m%d).tar.gz ./data && docker-compose up -d
+0 3 * * * cd /opt/timemark && docker compose down && tar -czf /backup/timemark-$(date +%Y%m%d).tar.gz ./data && docker compose up -d
 ```
 
 ---
@@ -323,7 +332,11 @@ docker-compose up -d
 
 **如果对你有帮助，点个 ⭐ Star 支持一下！**
 
+<br>
+
 Made with ❤️ by TimeMark
+
+<br>
 
 ---
 📧 邮箱: wxf200707@gmail.com  
