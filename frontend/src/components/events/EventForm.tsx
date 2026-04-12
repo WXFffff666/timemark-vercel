@@ -6,10 +6,25 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { CalendarClock, Type, AlignLeft, Globe, Bell, Mail, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles } from 'lucide-react';
+import { CalendarClock, Type, AlignLeft, Globe, Bell, Mail, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lunar, Solar } from 'lunar-javascript';
+import { api } from '@/lib/api';
 import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate } from '@timemark/shared';
+
+interface NotificationAccountResponse {
+  id: number;
+  user_id: number;
+  type: string;
+  name: string;
+  webhook: string | null;
+  token: string | null;
+  secret: string | null;
+  chat_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 interface EventFormProps {
   open: boolean;
@@ -131,6 +146,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   const [newEmail, setNewEmail] = useState('');
   const [customTime, setCustomTime] = useState('');
+  const [accounts, setAccounts] = useState<NotificationAccountResponse[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(false);
 
   useEffect(() => {
     if (event && open) {
@@ -305,6 +322,10 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         channels: newChannels,
       },
     });
+    
+    if (!currentChannels.includes(channel) && channel !== 'email') {
+      loadAccountsForChannel(channel);
+    }
   };
 
   const handleTypeChange = (type: EventType) => {
@@ -313,6 +334,64 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   const handleCalendarTypeChange = (calendarType: CalendarType) => {
     setFormData({ ...formData, calendarType });
+  };
+
+  const channelToAccountType: Record<string, string> = {
+    feishu: 'feishu',
+    wecom: 'wecom',
+    dingtalk: 'dingtalk',
+    telegram: 'telegram',
+    discord: 'discord',
+    slack: 'slack',
+    googlechat: 'googlechat',
+    irc: 'irc',
+    synologychat: 'synologychat',
+    twitch: 'twitch',
+    line: 'line',
+    matrix: 'matrix',
+    mattermost: 'mattermost',
+    msteams: 'msteams',
+    nextcloud_talk: 'nextcloudtalk',
+    nostr: 'nostr',
+    whatsapp: 'whatsapp',
+    signal: 'signal',
+    zalo: 'zalo',
+    wechat_official: 'wxpusher',
+    wechat_personal: 'wechat_personal',
+    qqbot: 'qqbot',
+    qmsg: 'qmsg',
+    wxpusher: 'wxpusher',
+  };
+
+  const loadAccountsForChannel = async (channel: string) => {
+    const accountType = channelToAccountType[channel];
+    if (!accountType) return;
+    
+    setAccountsLoading(true);
+    try {
+      const data = await api.get<NotificationAccountResponse[]>('/config/accounts');
+      const filtered = data.filter(a => a.type === accountType && a.is_active);
+      setAccounts(filtered);
+    } catch (error) {
+      console.error('Failed to load accounts:', error);
+    } finally {
+      setAccountsLoading(false);
+    }
+  };
+
+  const toggleAccountSelection = (accountId: number) => {
+    const currentIds = formData.reminderConfig.accountIds || [];
+    const newIds = currentIds.includes(String(accountId))
+      ? currentIds.filter(id => id !== String(accountId))
+      : [...currentIds, String(accountId)];
+    
+    setFormData({
+      ...formData,
+      reminderConfig: {
+        ...formData.reminderConfig,
+        accountIds: newIds,
+      },
+    });
   };
 
   // 添加自定义提醒时间
@@ -706,6 +785,67 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                       ))}
                     </div>
                   </div>
+
+                  {/* 账户选择 - 当有可用账户时显示 */}
+                  {formData.reminderConfig.channels && formData.reminderConfig.channels.length > 0 && (
+                    <div className="space-y-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                        通知账户（可选）
+                        <span className="text-xs text-slate-400">选择要使用的具体账户</span>
+                      </label>
+                      
+                      {accountsLoading ? (
+                        <div className="flex items-center gap-2 text-sm text-slate-400">
+                          <div className="w-4 h-4 border-2 border-slate-300 border-t-primary-500 rounded-full animate-spin" />
+                          加载账户中...
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {notificationChannels
+                            .filter(ch => formData.reminderConfig.channels?.includes(ch.value) && ch.value !== 'email')
+                            .map(channel => {
+                              const accountType = channelToAccountType[channel.value];
+                              const channelAccounts = accounts.filter(a => a.type === accountType);
+                              const selectedIds = formData.reminderConfig.accountIds || [];
+                              
+                              if (channelAccounts.length === 0) return null;
+                              
+                              return (
+                                <div key={channel.value} className="space-y-1.5">
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-base">{channel.icon}</span>
+                                    <span className="font-medium text-slate-700 dark:text-slate-300">{channel.label}</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2 ml-6">
+                                    {channelAccounts.map(account => (
+                                      <button
+                                        key={account.id}
+                                        type="button"
+                                        onClick={() => toggleAccountSelection(account.id)}
+                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-1.5 ${
+                                          selectedIds.includes(String(account.id))
+                                            ? 'bg-primary-500 text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                                        }`}
+                                      >
+                                        {selectedIds.includes(String(account.id)) && (
+                                          <span className="text-xs">✓</span>
+                                        )}
+                                        {account.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          
+                          {accounts.length === 0 && (
+                            <p className="text-xs text-slate-400 ml-2">暂无可用账户，请在设置中添加账户</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* 邮件收件人 */}
                   <div className="space-y-2">

@@ -1,9 +1,34 @@
-import { createClient, Client, Platform } from 'oicq';
 import QRCode from 'qrcode';
 import { getBlessing } from '../../../../shared/src/blessings.js';
 
+let oicq: typeof import('oicq') | undefined;
+let oicqLoadError: Error | undefined;
+
+async function loadOicq() {
+  if (!oicq) {
+    try {
+      oicq = await import('oicq');
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error('[QQBot] Failed to load oicq module:', errMsg);
+      oicqLoadError = new Error(`认证启动失败: npm包oicq未正确安装，请确保已执行 pnpm install。详细信息: ${errMsg}`);
+      throw oicqLoadError;
+    }
+  }
+}
+
+function getOicq() {
+  if (oicqLoadError) {
+    throw oicqLoadError;
+  }
+  if (!oicq) {
+    throw new Error('认证启动失败: npm包oicq未正确安装，请确保已执行 pnpm install');
+  }
+  return oicq;
+}
+
 // In-memory storage for active sessions (in production, use Redis or database)
-const activeSessions = new Map<string, { client: Client; qqNumber: string; authenticated: boolean; user?: string }>();
+const activeSessions = new Map<string, { client: any; qqNumber: string; authenticated: boolean; user?: string }>();
 
 /**
  * Generate a unique session ID
@@ -18,13 +43,15 @@ function generateSessionId(): string {
  * @returns Object containing QR code data URL and session ID
  */
 export async function startAuth(qqNumber: string): Promise<{ qrcode: string; sessionId: string }> {
+  await loadOicq();
+  const oicqModule = getOicq();
+  
   const sessionId = generateSessionId();
   
   return new Promise((resolve, reject) => {
     try {
-      // Create oicq client with the QQ number
-      const client = createClient(Number(qqNumber), {
-        platform: Platform.iPad, // Use iPad platform for better compatibility
+      const client = oicqModule.createClient(Number(qqNumber), {
+        platform: oicqModule.Platform.iPad,
         log_level: 'info',
       });
 

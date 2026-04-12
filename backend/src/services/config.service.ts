@@ -23,9 +23,10 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
       encrypted_qmsg_qq,
       encrypted_channel_webhooks,
       telegram_chat_id,
-      reminder_emails
+      reminder_emails,
+      alert_channels
     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
      ON CONFLICT (user_id) DO UPDATE SET
        encrypted_resend_key = COALESCE(EXCLUDED.encrypted_resend_key, user_configs.encrypted_resend_key),
        encrypted_github_token = COALESCE(EXCLUDED.encrypted_github_token, user_configs.encrypted_github_token),
@@ -42,7 +43,8 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
        encrypted_qmsg_qq = COALESCE(EXCLUDED.encrypted_qmsg_qq, user_configs.encrypted_qmsg_qq),
        encrypted_channel_webhooks = COALESCE(EXCLUDED.encrypted_channel_webhooks, user_configs.encrypted_channel_webhooks),
        telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, user_configs.telegram_chat_id),
-       reminder_emails = COALESCE(EXCLUDED.reminder_emails, user_configs.reminder_emails)`,
+       reminder_emails = COALESCE(EXCLUDED.reminder_emails, user_configs.reminder_emails),
+       alert_channels = COALESCE(EXCLUDED.alert_channels, user_configs.alert_channels)`,
     [
       userId,
       e(config.resend_api_key),
@@ -61,6 +63,7 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
       e(config.channel_webhooks ? JSON.stringify(config.channel_webhooks) : undefined),
       config.telegram_chat_id || null,
       config.reminder_emails ? JSON.stringify(config.reminder_emails) : null,
+      config.alert_channels ? JSON.stringify(config.alert_channels) : null,
     ]
   );
 }
@@ -94,6 +97,11 @@ export async function getUserConfig(userId: number): Promise<any> {
       const raw = r.reminder_emails;
       if (!raw) return [];
       try { return JSON.parse(raw); } catch { return []; }
+    })(),
+    alert_channels: (() => {
+      const raw = r.alert_channels;
+      if (!raw) return ['email'];
+      try { return JSON.parse(raw); } catch { return ['email']; }
     })(),
   };
 }

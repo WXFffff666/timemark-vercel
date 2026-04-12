@@ -15,6 +15,7 @@ import { startAuth as startQQAuth, checkAuth as checkQQAuth, logout as logoutQQ 
 import { startAuth as startSignalAuth, checkAuth as checkSignalAuth, logout as logoutSignal } from '../services/notifications/signal.service.js';
 import { startAuth as startZaloAuth, checkAuth as checkZaloAuth, logout as logoutZalo } from '../services/notifications/zalo.service.js';
 import { startAuth as startBlueBubblesAuth, checkAuth as checkBlueBubblesAuth, logout as logoutBlueBubbles } from '../services/notifications/bluebubbles.service.js';
+import { testConnection } from '../services/notifications/test-connection.js';
 
 const channels = new Hono<{ Variables: { user: User } }>();
 
@@ -187,6 +188,41 @@ channels.delete('/plugin/:type/logout', async (c) => {
   } catch (error: any) {
     console.error(`[Plugin Auth] Failed to logout for ${type}:`, error);
     return c.json({ success: false, error: error.message || '登出失败' }, 500);
+  }
+});
+
+// Test connection
+channels.post('/test', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  
+  const { type, configMethod, webhook, token, chatId, secret, sessionData } = body;
+  
+  if (!type) {
+    return c.json({ success: false, error: '渠道类型不能为空' }, 400);
+  }
+  
+  try {
+    const result = await testConnection({
+      type,
+      configMethod: configMethod || 'webhook',
+      webhook,
+      token,
+      chatId,
+      secret,
+      sessionData
+    });
+    
+    return c.json({ 
+      success: result.success, 
+      message: result.message,
+      details: result.details
+    });
+  } catch (error: any) {
+    console.error('[TestConnection] Failed:', error);
+    return c.json({ 
+      success: false, 
+      error: error.message || '测试连接失败' 
+    }, 500);
   }
 });
 

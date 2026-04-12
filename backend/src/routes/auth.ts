@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { verifyUserPassword, createLoginLog, trackLoginFailure } from '../services/auth.service.js';
+import { verifyUserPassword, createLoginLog, trackLoginFailure, getAccountLockStatus } from '../services/auth.service.js';
 import { createSession, deleteSession } from '../services/session.service.js';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
 import { loginSchema, changePasswordSchema } from '@timemark/shared';
@@ -12,7 +12,138 @@ const auth = new Hono();
 
 auth.post('/login', async (c) => {
   try {
-    const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || 'unknown';
+    // 获取真实IP - 优先从代理头获取，其次从连接获取
+    // 检查所有可能的代理头
+    const forwardedFor = c.req.header('x-forwarded-for');
+    const cfIP = c.req.header('cf-connecting-ip');
+    const realIP = c.req.header('X-Real-IP');
+    const clientIP = c.req.header('Client-IP');
+    const forwarded = c.req.header('forwarded');
+    
+    let ip = '';
+    
+    // 1. 首先尝试从代理头解析
+    if (forwardedFor) {
+      // x-forwarded-for 可能包含多个IP，取第一个（最原始的客户端IP）
+      ip = forwardedFor.split(',')[0].trim();
+    } else if (cfIP) {
+      ip = cfIP.trim();
+    } else if (realIP) {
+      ip = realIP.trim();
+    } else if (clientIP) {
+      ip = clientIP.trim();
+    } else if (forwarded) {
+      // forwarded 头格式: for=1.2.3.4, for=5.6.7.8
+      const forMatch = forwarded.match(/for=([^,]+)/i);
+      ip = forMatch ? forMatch[1].trim() : '';
+    }
+    
+    // 2. 如果没有代理头，尝试从Hono 4.x获取request IP
+    if (!ip) {
+      try {
+        // Hono 4.x 使用 getRequestIP - 但需要传入 options
+        // @ts-ignore - hono 4.x 新 API
+        if (typeof (c as any).getRequestIP === 'function') {
+          // @ts-ignore
+          ip = (c as any).getRequestIP({ proxyProof: false }) || '';
+        }
+      } catch (e) {
+        // 忽略错误
+      }
+    }
+    
+    // 3. 最后fallback: 从底层socket获取
+    if (!ip) {
+      try {
+        // Node.js request 对象
+        const raw = (c.req as any).raw;
+        if (raw?.socket?.remoteAddress) {
+          ip = raw.socket.remoteAddress.replace(/^::ffff:/, '');
+        } else if (raw?.connection?.remoteAddress) {
+          ip = raw.connection.remoteAddress.replace(/^::ffff:/, '');
+        }
+      } catch (e) {
+        // 忽略错误
+      }
+    }
+    
+    // 4. 最后的fallback - 尝试从req.info获取（hono内部）
+    if (!ip) {
+      try {
+        // @ts-ignore - hono internal
+        const req = c.req as any;
+        if (req?.raw?.socket?.remoteAddress) {
+          ip = req.raw.socket.remoteAddress.replace(/^::ffff:/, '');
+        }
+      } catch (e) {
+        // 忽略
+      }
+    }
+    
+    // 5. 如果仍然没有IP，尝试从 event.fetchAPI 获取（Server-Sent Events）
+    if (!ip) {
+      try {
+        // @ts-ignore - hono request event
+        const event = (c as any).executionCtx ?? (c as any).req?.raw;
+        if (event?.request?.headers) {
+          // 检查event.request.headers中的remote地址
+        }
+      } catch (e) {
+        // 忽略
+      }
+    }
+    
+    // 6. 对于本地开发环境，使用Docker网络网关IP或localhost
+    // Docker容器默认网关通常是172.17.0.1或192.168.65.1
+    if (!ip || ip.includes('::') || ip.length > 45) {
+      // 尝试获取实际的远端地址
+      try {
+        // @ts-ignore
+        const socket = (c as any).req?.raw?.socket;
+        if (socket?.remoteAddress) {
+          ip = socket.remoteAddress;
+          // 处理IPv6格式
+          if (ip.startsWith('::ffff:')) {
+            ip = ip.replace('::ffff:', '');
+          }
+          // 如果是IPv6本地地址，转换为IPv4本地地址
+          if (ip === '::1' || ip.startsWith('fe80') || ip.startsWith('::')) {
+            ip = '127.0.0.1';
+          }
+        }
+      } catch (e) {
+        ip = '127.0.0.1';
+      }
+    }
+    
+    // 7. 最终清理：确保返回有效的IPv4地址
+    // 清理IPv6前缀和其他无效值
+    if (ip) {
+      // 移除IPv6映射的IPv4前缀 ::ffff:
+      if (ip.startsWith('::ffff:')) {
+        ip = ip.replace('::ffff:', '');
+      }
+      // 如果仍然包含冒号（IPv6），说明是纯IPv6地址
+      if (ip.includes(':') && !ip.includes('.')) {
+        ip = '';
+      }
+    }
+    
+    // 验证并最终设置
+    const validIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ip || !validIPv4.test(ip) || ip === '0.0.0.0' || ip.startsWith('127.') || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
+      // 对于本地/内网访问，都使用有意义的外网IP
+      // 在Docker容器中访问，使用172.17.0.1作为默认网关IP
+      ip = ip && validIPv4.test(ip) && !ip.startsWith('127.') ? ip : '127.0.0.1';
+    }
+    
+    console.log('[Auth] Client IP detected:', ip, 'headers:', {
+      'x-forwarded-for': forwardedFor,
+      'cf-connecting-ip': cfIP,
+      'X-Real-IP': realIP,
+      'forwarded': forwarded
+    });
+    
     const userAgent = c.req.header('user-agent') || 'unknown';
     
     const body = await c.req.json();
@@ -27,8 +158,33 @@ auth.post('/login', async (c) => {
     const user = await verifyUserPassword(username, password);
 
     if (!user) {
-      await createLoginLog(username, ip, userAgent, '', false, 'Invalid credentials');
       const tracking = await trackLoginFailure({ username, ip });
+      
+      // 检查账户是否应该被锁定
+      if (tracking.shouldLock) {
+        // 获取账户锁定状态
+        const lockStatus = await getAccountLockStatus({ username, ip });
+        if (lockStatus.isLocked) {
+          await createLoginLog(username, ip, userAgent, '', false, 'Account locked due to multiple failures');
+          // 发送安全告警
+          await sendSecurityAlert({
+            adminEmails: ['1127251096@qq.com', 'wxf200707@gmail.com'],
+            username,
+            ip,
+            userAgent,
+            failureCount: tracking.failureCount,
+            locked: true
+          });
+          return c.json({ 
+            success: false, 
+            error: '账户已锁定，请15分钟后重试或联系管理员',
+            locked: true,
+            remainingSeconds: lockStatus.remainingSeconds
+          }, 429);
+        }
+      }
+      
+      await createLoginLog(username, ip, userAgent, '', false, 'Invalid credentials');
       
       if (tracking.failureCount >= 5) {
         await sendSecurityAlert({

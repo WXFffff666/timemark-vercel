@@ -1,5 +1,6 @@
 FROM node:20-alpine
-RUN apk add --no-cache dumb-init chromium chromium-chromedriver ca-certificates
+RUN apk add --no-cache dumb-init chromium chromium-chromedriver ca-certificates \
+    g++ make python3 git
 WORKDIR /app
 ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
@@ -11,15 +12,17 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY shared/package.json ./shared/
 COPY backend/package.json ./backend/
 
-# Install pnpm globally, then use it to install dependencies
+# Install pnpm globally, then use it to install dependencies  
 RUN npm install -g pnpm && \
-    pnpm config set store-dir /root/.pnpm-store && \
-    pnpm install --frozen-lockfile
+    pnpm config set store-dir /root/.pnpm-store
 
 # Copy dist folders (already built locally)
 COPY shared/dist ./shared/dist
 COPY backend/dist ./backend/dist
 COPY frontend/dist ./frontend/dist
+
+# Install dependencies inside container (to handle pnpm symlinks)
+RUN pnpm install --ignore-scripts
 
 EXPOSE 3000
 

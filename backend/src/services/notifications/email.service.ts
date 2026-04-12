@@ -171,11 +171,21 @@ export async function sendSecurityAlertEmail(
     userAgent: string;
     failureCount: number;
     locked: boolean;
+    alertType?: 'login_failure' | 'new_device' | 'password_change';
   },
   apiKey: string,
   fromEmail: string
 ): Promise<void> {
   const resend = new Resend(apiKey);
+
+  const alertTypeLabels: Record<string, { title: string; icon: string; color: string; description: string }> = {
+    login_failure: { title: '登录失败告警', icon: '🔐', color: '#dc2626', description: '检测到异常登录行为' },
+    new_device: { title: '新设备登录告警', icon: '📱', color: '#f59e0b', description: '检测到新设备登录' },
+    password_change: { title: '密码修改告警', icon: '🔑', color: '#8b5cf6', description: '密码已被修改' },
+  };
+
+  const alertType = params.alertType || 'login_failure';
+  const alertInfo = alertTypeLabels[alertType];
 
   const html = `
 <!DOCTYPE html>
@@ -199,7 +209,7 @@ export async function sendSecurityAlertEmail(
       border-radius: 12px;
       padding: 30px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-      border-top: 4px solid #dc2626;
+      border-top: 4px solid ${alertInfo.color};
     }
     .header {
       text-align: center;
@@ -213,7 +223,7 @@ export async function sendSecurityAlertEmail(
     .title {
       font-size: 24px;
       font-weight: bold;
-      color: #dc2626;
+      color: ${alertInfo.color};
       margin: 0;
     }
     .alert-box {
@@ -249,12 +259,12 @@ export async function sendSecurityAlertEmail(
       word-break: break-all;
     }
     .highlight {
-      color: #dc2626;
+      color: ${alertInfo.color};
       font-weight: 600;
     }
     .status-locked {
       display: inline-block;
-      background-color: #dc2626;
+      background-color: ${alertInfo.color};
       color: white;
       padding: 4px 12px;
       border-radius: 4px;
@@ -289,13 +299,13 @@ export async function sendSecurityAlertEmail(
 <body>
   <div class="container">
     <div class="header">
-      <div class="icon">🛡️</div>
-      <h1 class="title">安全告警</h1>
+      <div class="icon">${alertInfo.icon}</div>
+      <h1 class="title">${alertInfo.title}</h1>
     </div>
     
     <div class="alert-box">
-      <div class="alert-title">⚠️ 检测到异常登录行为</div>
-      <p>用户 <strong>${params.username}</strong> 的账户在短时间内发生了多次失败的登录尝试。</p>
+      <div class="alert-title">⚠️ ${alertInfo.description}</div>
+      <p>用户 <strong>${params.username}</strong> 的账户发生了安全相关事件。</p>
     </div>
     
     <div class="info-row">
@@ -311,13 +321,16 @@ export async function sendSecurityAlertEmail(
     <div class="info-row">
       <span class="info-label">💻 设备信息</span>
       <span class="info-value">${params.userAgent}</span>
-    </div>
+    </tr>
     
+    ${params.failureCount ? `
     <div class="info-row">
       <span class="info-label">❌ 失败次数</span>
       <span class="info-value highlight">${params.failureCount} 次</span>
     </div>
+    ` : ''}
     
+    ${params.locked !== undefined ? `
     <div class="info-row">
       <span class="info-label">🔒 账户状态</span>
       <span class="info-value">
@@ -326,6 +339,7 @@ export async function sendSecurityAlertEmail(
           : '<span class="status-warning">警告中</span>'}
       </span>
     </div>
+    ` : ''}
     
     <div class="timestamp">
       告警时间: ${new Date().toLocaleString('zh-CN')}
@@ -342,7 +356,7 @@ export async function sendSecurityAlertEmail(
   const { error } = await resend.emails.send({
     from: fromEmail,
     to: params.adminEmails,
-    subject: `🛡️ TimeMark 安全告警: ${params.username} 登录异常`,
+    subject: `${alertInfo.icon} TimeMark 安全告警: ${params.username} ${alertInfo.title}`,
     html,
   });
 

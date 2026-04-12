@@ -51,7 +51,7 @@ interface Account extends NotificationAccount {
 const iconMap: Record<string, React.ElementType> = {
   MessageCircle, MessageSquare, Mail, Webhook, Gamepad2, Hash, Building2,
   Terminal, Server, Video, Smartphone, Send, Grid3X3, Cloud, Zap, Phone,
-  Shield, BookOpen, Plus, Settings, Puzzle, QrCode
+  Shield, BookOpen, Plus, Settings, Puzzle, QrCode, Loader2
 };
 
 const containerVariants = { 
@@ -90,6 +90,7 @@ export default function Channels() {
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [configForm, setConfigForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [testingConnection, setTestingConnection] = useState<number | null>(null);
 
   // QR code state for plugins
   const [qrCodeData, setQrCodeData] = useState<string>('');
@@ -209,14 +210,12 @@ export default function Channels() {
     setSelectedTemplate(template);
     setSelectedAccount(account);
     
-    // Initialize form with account values
-    // Note: API returns chat_id but we need to check both forms
-    const chatId = (account as any).chatId || (account as any).chat_id || '';
+    const roomId = (account as any).roomId || (account as any).room_id || (account as any).chatId || (account as any).chat_id || '';
     setConfigForm({
       name: account.name || '',
-      webhook: account.webhook || '',
+      homeserver: account.webhook || '',
       token: account.token || '',
-      chat_id: chatId,
+      roomId: roomId,
       secret: (account as any).secret || '',
     });
     
@@ -242,13 +241,16 @@ export default function Channels() {
     setSaving(true);
     try {
       // For email channel, fromEmail goes to webhook, recipientEmail goes to chatId
+      // For Matrix channel, homeserver goes to webhook, roomId goes to chatId
       let webhook = configForm.webhook || undefined;
       let chatId = configForm.chat_id || undefined;
       
       if (selectedTemplate.id === 'email') {
-        // Use fromEmail/recipientEmail from form if available, otherwise fallback to webhook/chat_id
         webhook = configForm.fromEmail || configForm.webhook || undefined;
         chatId = configForm.recipientEmail || configForm.chat_id || undefined;
+      } else if (selectedTemplate.id === 'matrix') {
+        webhook = configForm.homeserver || undefined;
+        chatId = configForm.roomId || undefined;
       }
       
       const accountData = {
@@ -302,6 +304,35 @@ export default function Channels() {
       fetchData();
     } catch (error) {
       console.error('Failed to delete account:', error);
+    }
+  };
+
+  const testConnection = async (account: Account) => {
+    setTestingConnection(account.id);
+    try {
+      const result = await api.post<{ success: boolean; message: string }>(
+        '/channels/test',
+        {
+          type: account.type,
+          configMethod: account.configMethod,
+          webhook: account.webhook,
+          token: account.token,
+          chatId: (account as any).chatId || (account as any).chat_id,
+          secret: (account as any).secret,
+          sessionData: (account as any).sessionData,
+        }
+      );
+      
+      if (result?.success) {
+        alert(`✅ ${result.message}`);
+      } else {
+        alert(`❌ ${result?.message || '测试失败'}`);
+      }
+    } catch (error: any) {
+      console.error('Failed to test connection:', error);
+      alert(`❌ 测试失败: ${error.message || '未知错误'}`);
+    } finally {
+      setTestingConnection(null);
     }
   };
 
@@ -474,6 +505,20 @@ export default function Channels() {
                               类型: {template?.name || account.type}
                             </span>
                             <div className="flex gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="rounded-lg"
+                                onClick={() => testConnection(account)}
+                                disabled={testingConnection === account.id}
+                              >
+                                {testingConnection === account.id ? (
+                                  <Loader2 size={14} className="mr-1 animate-spin" />
+                                ) : (
+                                  <Settings size={14} className="mr-1" />
+                                )} 
+                                {testingConnection === account.id ? '测试中' : '测试'}
+                              </Button>
                               <Button 
                                 variant="ghost" 
                                 size="sm" 

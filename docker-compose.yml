@@ -44,7 +44,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-timemark_pass}
       REDIS_URL: redis://redis:6379
       MASTER_KEY: ${MASTER_KEY}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:-timemark-secret-key-production-2026}
       TZ: Asia/Shanghai
     depends_on:
       postgres:

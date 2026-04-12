@@ -339,6 +339,9 @@ export async function sendNotifications(event: any, userId: number, channels: st
       }
       else if (genericWebhookChannels.has(ch) && chConfig.webhook)
         await sendGenericWebhookNotification(event, chConfig.webhook, ch);
+      // Matrix channel (token-based with homeserver URL)
+      else if (ch === 'matrix' && chConfig.server_url && chConfig.token && chConfig.chat_id)
+        await sendMatrixNotification(event, chConfig.server_url, chConfig.token, chConfig.chat_id);
       // Plugin-based channels
       else if (ch === 'wechat_personal' && chConfig.sessionData) {
         const toUser = chConfig.toUser || event.personName || 'me';

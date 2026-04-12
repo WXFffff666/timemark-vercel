@@ -339,12 +339,12 @@ const tokenChannels: ChannelTemplate[] = [
     isBuiltIn: true,
     fields: [
       {
-        name: 'webhook',
+        name: 'homeserver',
         label: 'Homeserver URL',
         type: 'text',
         required: true,
         placeholder: 'https://matrix.org',
-        description: 'Matrix Homeserver URL'
+        description: 'Matrix Homeserver 地址'
       },
       {
         name: 'token',
@@ -355,7 +355,7 @@ const tokenChannels: ChannelTemplate[] = [
         description: 'Matrix 访问令牌'
       },
       {
-        name: 'chat_id',
+        name: 'roomId',
         label: 'Room ID',
         type: 'text',
         required: true,

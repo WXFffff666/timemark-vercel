@@ -143,8 +143,9 @@ export async function trackLoginFailure(params: { username: string; ip: string }
   );
   
   const count = result.rows.length > 0 ? parseInt(result.rows[0].count) : 0;
+  // 在15分钟窗口内，5次失败后锁定账户
   return {
-    shouldLock: count >= 10,
+    shouldLock: count >= 5,
     failureCount: count
   };
 }
