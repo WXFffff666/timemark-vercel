@@ -1,0 +1,81 @@
+version: '3.8'
+
+# TimeMark 群晖NAS/威联通/铁威马 一键部署
+# 适用于：群晖DSM、威联通QTS、铁威马TOS
+# 使用方法：
+#   1. 在NAS Docker应用中创建"自由"网络
+#   2. 创建数据存储文件夹（如 /timemark）
+#   3. 复制下方配置到"docker-compose.yml"
+#   4. 按需修改端口和数据路径后部署
+
+services:
+  # 数据库
+  timemark-postgres:
+    image: postgres:16-alpine
+    container_name: timemark-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: timemark
+      POSTGRES_USER: timemark
+      POSTGRES_PASSWORD: timemark_pass
+      PGTZ: Asia/Shanghai
+    volumes:
+      # 数据持久化 - 修改左边路径为你的NAS实际文件夹
+      - /volume1/docker/timemark/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timemark"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - timemark-network
+
+  # 缓存
+  timemark-redis:
+    image: redis:7-alpine
+    container_name: timemark-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - timemark-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # 应用主程序
+  timemark-app:
+    image: ghcr.io/wxf200707/timemark:latest
+    container_name: timemark-app
+    restart: unless-stopped
+    # 端口映射 - 如被占用可修改左边端口号
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DB_HOST: timemark-postgres
+      DB_PORT: 5432
+      DB_NAME: timemark
+      DB_USER: timemark
+      DB_PASSWORD: timemark_pass
+      REDIS_URL: redis://timemark-redis:6379
+      TZ: Asia/Shanghai
+      # 生产环境建议修改密钥
+      # JWT_SECRET: 你的JWT密钥
+      # MASTER_KEY: 你的主密钥
+    volumes:
+      # 配置备份目录 - 修改左边路径
+      - /volume1/docker/timemark/data:/app/data
+    depends_on:
+      timemark-postgres:
+        condition: service_healthy
+      timemark-redis:
+        condition: service_healthy
+    networks:
+      - timemark-network
+
+networks:
+  timemark-network:
+    name: timemark-network
+    driver: bridge
