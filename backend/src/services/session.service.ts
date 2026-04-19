@@ -7,7 +7,7 @@ export async function createSession(userId: string, deviceFingerprint: string, i
   
   const token = randomUUID();
   const expiresIn = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
-  const expiresAt = new Date(Date.now() + expiresIn);
+  const expiresAt = new Date(Date.now() + expiresIn).toISOString();
 
   // Convert userId string to integer for database
   const numericUserId = parseInt(userId, 10);
@@ -17,7 +17,7 @@ export async function createSession(userId: string, deviceFingerprint: string, i
 
   const result = await query(
     'INSERT INTO sessions (user_id, token, device_fingerprint, is_trusted, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-    [numericUserId, token, deviceFingerprint, isTrusted, expiresAt]
+    [numericUserId, token, deviceFingerprint, isTrusted ? 1 : 0, expiresAt]
   );
 
   const id = result.rows[0].id;
@@ -25,7 +25,7 @@ export async function createSession(userId: string, deviceFingerprint: string, i
   const refreshToken = await generateRefreshToken(userId);
 
   return {
-    session: { id, userId, token, deviceFingerprint, isTrusted, expiresAt: expiresAt.toISOString() },
+    session: { id, userId, token, deviceFingerprint, isTrusted, expiresAt },
     accessToken,
     refreshToken,
   };
@@ -46,5 +46,5 @@ export async function deleteSession(token: string): Promise<void> {
 }
 
 export async function markDeviceAsTrusted(sessionId: string): Promise<void> {
-  await query('UPDATE sessions SET is_trusted = TRUE WHERE id = $1', [sessionId]);
+  await query('UPDATE sessions SET is_trusted = 1 WHERE id = $1', [sessionId]);
 }

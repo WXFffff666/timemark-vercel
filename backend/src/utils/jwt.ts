@@ -3,15 +3,7 @@ import { sign, verify } from 'hono/jwt';
 const DEFAULT_JWT_SECRET = 'change-this-secret-in-production';
 const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
 
-// 安全检查：如果使用默认密钥，发出警告
-if (JWT_SECRET === DEFAULT_JWT_SECRET) {
-  console.warn('[SECURITY] ⚠️ 使用默认JWT密钥！请在生产环境设置JWT_SECRET环境变量');
-}
 
-// 安全检查：JWT密钥长度提示（不阻塞启动）
-if (JWT_SECRET.length < 32) {
-  console.warn('[SECURITY] ⚠️ JWT_SECRET 长度不足32字符，建议使用更长的密钥');
-}
 
 // 安全检查函数
 export function isSecureSecret(): boolean {

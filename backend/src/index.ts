@@ -7,7 +7,6 @@ import 'dotenv/config';
 import { waitForDb, query } from './db/index.js';
 import { runMigrations } from './db/migrate.js';
 import { hashPassword } from './utils/password.js';
-import { randomUUID } from 'crypto';
 import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
 import configRoutes from './routes/config.js';
@@ -15,10 +14,7 @@ import channelsRoutes from './routes/channels.js';
 import { startScheduler, stopScheduler } from './queue/scheduler.js';
 
 async function bootstrap() {
-  // 0. 环境变量提示（不阻塞启动）
-  if (!process.env.MASTER_KEY) {
-    console.warn('⚠️ MASTER_KEY 未设置，使用默认密钥。建议生产环境设置自定义密钥');
-  }
+
 
   // 1. 等待数据库就绪
   console.log('⏳ 等待数据库初始化...');
@@ -34,19 +30,14 @@ async function bootstrap() {
     const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
     const password = process.env.DEFAULT_ADMIN_PASSWORD || 'TimeMark@2026';
     const passwordHash = hashPassword(password);
-    const id = randomUUID();
-    const createdAt = new Date().toISOString();
 
     await query(
-      'INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)',
-      [id, username, passwordHash, createdAt]
+      'INSERT INTO users (username, password_hash) VALUES (?, ?)',
+      [username, passwordHash]
     );
 
-    console.log('✅ 创建默认用户成功');
-    console.log(`   用户名: ${username}`);
-    if (password === 'TimeMark@2026') {
-      console.warn('⚠️  使用默认密码！请登录后立即修改密码并启用2FA！');
-    }
+    console.log(`✅ 默认用户已创建 (${username})`);
+
   } else {
     console.log('✅ 数据库已初始化，已存在用户');
   }

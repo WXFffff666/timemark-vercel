@@ -70,8 +70,8 @@ export async function createLoginLog(userIdOrUsername: string, ip: string, userA
     }
     
     await query(
-      'INSERT INTO login_logs (id, user_id, username, ip_address, user_agent, device_fingerprint, success, failure_reason, login_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, datetime(\'now\', \'+8 hours\'))',
-      [id, userId, username, ip, userAgent, fingerprint, success, reason || null]
+      'INSERT INTO login_logs (id, user_id, username, ip_address, user_agent, device_fingerprint, success, failure_reason, login_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, datetime(\'now\'))',
+      [id, userId, username, ip, userAgent, fingerprint, success ? 1 : 0, reason || null]
     );
   } catch (error) {
     console.error('[createLoginLog] Failed to log login attempt:', error);
@@ -86,12 +86,12 @@ export async function getAccountLockStatus(params: { username: string; ip: strin
   remainingSeconds: number;
 }> {
   // 检查最近1小时内的失败尝试
-  const windowStart = new Date(Date.now() - 60 * 60 * 1000);
+  const windowStart = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   
   const result = await query(
     `SELECT COUNT(*) as count, MAX(login_time) as last_failure FROM login_logs 
      WHERE (username = $1 OR ip_address = $2) 
-     AND success = FALSE 
+     AND success = 0 
      AND login_time > $3`,
     [params.username, params.ip, windowStart]
   );
@@ -132,7 +132,7 @@ export async function getAccountLockStatus(params: { username: string; ip: strin
 }
 
 export async function trackLoginFailure(params: { username: string; ip: string }): Promise<{ shouldLock: boolean; failureCount: number }> {
-  const windowStart = new Date(Date.now() - 15 * 60 * 1000);
+  const windowStart = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   
   const result = await query(
     `SELECT COUNT(*) as count FROM login_logs 
