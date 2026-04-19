@@ -33,7 +33,7 @@ export async function createSession(userId: string, deviceFingerprint: string, i
 
 export async function getSessionByToken(token: string): Promise<Session | null> {
   const result = await query(
-    'SELECT * FROM sessions WHERE token = $1 AND expires_at > CURRENT_TIMESTAMP', 
+    "SELECT * FROM sessions WHERE token = $1 AND expires_at > datetime('now')", 
     [token]
   );
   if (result.rows.length === 0) return null;

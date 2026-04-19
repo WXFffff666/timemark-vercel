@@ -9,3 +9,13 @@ build
 *.js
 *.js.map
 !*.config.js
+
+# Data directory (contains SQLite DB)
+data/
+
+# Test files with credentials
+test-login.json
+test-api*.ps1
+
+# Sisyphus state
+.sisyphus/

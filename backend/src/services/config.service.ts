@@ -125,12 +125,40 @@ export interface NotificationAccount {
   updated_at: string;
 }
 
+function decryptNotificationField(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    return decrypt(value, MASTER_KEY);
+  } catch {
+    // backward compatibility: plaintext historical data
+    return value;
+  }
+}
+
+function mapNotificationAccountRow(row: any): NotificationAccount {
+  return {
+    ...row,
+    webhook: decryptNotificationField(row.webhook),
+    token: decryptNotificationField(row.token),
+    secret: decryptNotificationField(row.secret),
+    session_data: (() => {
+      const raw = decryptNotificationField(row.session_data);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return raw;
+      }
+    })(),
+  };
+}
+
 export async function getNotificationAccounts(userId: number): Promise<NotificationAccount[]> {
   const result = await query(
     'SELECT * FROM notification_accounts WHERE user_id = $1 ORDER BY created_at DESC',
     [userId]
   );
-  return result.rows;
+  return result.rows.map(mapNotificationAccountRow);
 }
 
 export async function createNotificationAccount(
@@ -147,6 +175,7 @@ export async function createNotificationAccount(
     plugin_package?: string;
   }
 ): Promise<NotificationAccount> {
+  const e = (v: string | undefined) => v ? encrypt(v, MASTER_KEY) : null;
   const result = await query(
     `INSERT INTO notification_accounts (user_id, type, name, webhook, token, secret, chat_id, config_method, session_data, plugin_package)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -155,16 +184,16 @@ export async function createNotificationAccount(
       userId, 
       data.type, 
       data.name, 
-      data.webhook || null, 
-      data.token || null, 
-      data.secret || null, 
+      e(data.webhook), 
+      e(data.token), 
+      e(data.secret), 
       data.chat_id || null,
       data.config_method || 'webhook',
-      data.session_data ? JSON.stringify(data.session_data) : null,
+      data.session_data ? encrypt(JSON.stringify(data.session_data), MASTER_KEY) : null,
       data.plugin_package || null
     ]
   );
-  return result.rows[0];
+  return mapNotificationAccountRow(result.rows[0]);
 }
 
 export async function updateNotificationAccount(
@@ -182,7 +211,7 @@ export async function updateNotificationAccount(
     plugin_package: string;
   }>
 ): Promise<NotificationAccount | null> {
-  const updates: string[] = ['updated_at = CURRENT_TIMESTAMP'];
+  const updates: string[] = ["updated_at = datetime('now')"];
   const values: any[] = [];
   let paramIndex = 1;
 
@@ -192,15 +221,15 @@ export async function updateNotificationAccount(
   }
   if (data.webhook !== undefined) {
     updates.push(`webhook = $${paramIndex++}`);
-    values.push(data.webhook);
+    values.push(data.webhook ? encrypt(data.webhook, MASTER_KEY) : null);
   }
   if (data.token !== undefined) {
     updates.push(`token = $${paramIndex++}`);
-    values.push(data.token);
+    values.push(data.token ? encrypt(data.token, MASTER_KEY) : null);
   }
   if (data.secret !== undefined) {
     updates.push(`secret = $${paramIndex++}`);
-    values.push(data.secret);
+    values.push(data.secret ? encrypt(data.secret, MASTER_KEY) : null);
   }
   if (data.chat_id !== undefined) {
     updates.push(`chat_id = $${paramIndex++}`);
@@ -216,7 +245,7 @@ export async function updateNotificationAccount(
   }
   if (data.session_data !== undefined) {
     updates.push(`session_data = $${paramIndex++}`);
-    values.push(data.session_data ? JSON.stringify(data.session_data) : null);
+    values.push(data.session_data ? encrypt(JSON.stringify(data.session_data), MASTER_KEY) : null);
   }
   if (data.plugin_package !== undefined) {
     updates.push(`plugin_package = $${paramIndex++}`);
@@ -230,7 +259,7 @@ export async function updateNotificationAccount(
     `UPDATE notification_accounts SET ${updates.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex} RETURNING *`,
     values
   );
-  return result.rows[0] || null;
+  return result.rows[0] ? mapNotificationAccountRow(result.rows[0]) : null;
 }
 
 export async function deleteNotificationAccount(id: number, userId: number): Promise<boolean> {
@@ -294,7 +323,7 @@ export async function updateRelationshipMapping(
   userId: number,
   data: Partial<{ from_relation: string; to_relation: string; recipient_email: string; recipient_type: string }>
 ): Promise<RelationshipMapping | null> {
-  const updates: string[] = ['updated_at = CURRENT_TIMESTAMP'];
+  const updates: string[] = ["updated_at = datetime('now')"];
   const values: any[] = [];
   let paramIndex = 1;
 
@@ -428,7 +457,7 @@ export async function saveEventTemplate(
      VALUES ($1, $2, $3)
      ON CONFLICT (user_id, event_type) DO UPDATE SET
        template_content = EXCLUDED.template_content,
-       updated_at = CURRENT_TIMESTAMP
+       updated_at = datetime('now')
      RETURNING *`,
     [userId, eventType, templateContent]
   );

@@ -1,45 +1,14 @@
-# TimeMark Docker Compose 配置
+# TimeMark Docker Compose 配置 (GHCR)
 # 适用于飞牛OS、群晖NAS、威联通、铁威马等NAS环境
+# 单容器部署：SQLite 内置数据库
+
+# ⚠️ 重要：首次部署前请修改以下环境变量！
+# - DEFAULT_ADMIN_USERNAME: 管理员用户名
+# - DEFAULT_ADMIN_PASSWORD: 管理员密码（请使用强密码，至少8位）
+# - JWT_SECRET: JWT签名密钥（请使用随机字符串，至少32位）
+# - MASTER_KEY: 主密钥（用于敏感数据加密，请使用随机字符串）
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: timemark-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: timemark
-      POSTGRES_USER: timemark
-      POSTGRES_PASSWORD: timemark_pass
-      PGTZ: Asia/Shanghai
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U timemark"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - timemark
-
-  redis:
-    image: redis:7-alpine
-    container_name: timemark-redis
-    restart: unless-stopped
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - timemark
-
   app:
     image: ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
@@ -47,31 +16,28 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: timemark
-      DB_USER: timemark
-      DB_PASSWORD: timemark_pass
-      REDIS_URL: redis://redis:6379
+      # SQLite: 数据存储位置（容器内）
+      DB_PATH: /app/data/timemark.db
+      # 管理员凭证（⚠️ 必须修改）
+      DEFAULT_ADMIN_USERNAME: admin
+      DEFAULT_ADMIN_PASSWORD: YourSecurePassword123
+      # 时区
       TZ: Asia/Shanghai
+      # 环境
+      NODE_ENV: production
+      # JWT 密钥（⚠️ 生产环境必须修改为随机字符串）
+      JWT_SECRET: ${JWT_SECRET:-your-secure-jwt-secret-min-32-chars}
+      # 主密钥（⚠️ 生产环境必须修改为随机字符串）
+      MASTER_KEY: ${MASTER_KEY:-your-secure-master-key-min-32}
     dns:
       - 8.8.8.8
       - 1.1.1.1
     volumes:
+      # 数据持久化目录（包含 SQLite 数据库和上传文件）
       - ./data:/app/data
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - timemark
 
 networks:
   timemark:
     driver: bridge
-
-volumes:
-  postgres_data:
-    name: timemark-postgres-data

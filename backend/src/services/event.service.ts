@@ -32,8 +32,8 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
   
   try {
     // Don't specify id - let the database auto-increment (SERIAL)
-    await query(
-      `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, notification_channels, relationship_mapping_id, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    const result = await query(
+      `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, notification_channels, relationship_mapping_id, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`,
       [numericUserId, data.name, data.type, data.date, data.calendarType, 
         data.lunarDate ? JSON.stringify(data.lunarDate) : null, 
         JSON.stringify(reminderConfig),
@@ -45,8 +45,6 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
         data.reminderRecipientName || null,
         data.reminderRecipientEmail || null]
     );
-    // Get the created event's id
-    const result = await query('SELECT lastval() as id');
     const eventId = result.rows[0].id;
     console.log('[createEvent] Insert successful! Event ID:', eventId);
     
@@ -180,9 +178,11 @@ export async function deleteEvent(id: string, userId: string): Promise<boolean> 
 export async function deleteEventsByIds(ids: string[], userId: string): Promise<number> {
   if (ids.length === 0) return 0;
 
+  const placeholders = ids.map((_, index) => `$${index + 2}`).join(',');
+
   const result = await query(
-    'DELETE FROM events WHERE user_id = $1 AND id::text = ANY($2::text[])',
-    [userId, ids]
+    `DELETE FROM events WHERE user_id = $1 AND CAST(id AS TEXT) IN (${placeholders})`,
+    [userId, ...ids]
   );
   return result.rowCount ?? 0;
 }

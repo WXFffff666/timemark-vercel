@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { getBlessing } from '@timemark/shared/blessings';
+import { escapeHtml } from '../../utils/html.js';
 
 export async function sendEmailNotification(
   event: any,
@@ -115,21 +116,21 @@ export async function sendEmailNotification(
       <h1 class="title">事件提醒</h1>
     </div>
     
-    <div class="event-name">${event.name}</div>
+    <div class="event-name">${escapeHtml(event.name)}</div>
     
     <div class="info-row">
       <span class="info-label">📆 日期</span>
-      <span class="info-value">${event.date}</span>
+      <span class="info-value">${escapeHtml(event.date)}</span>
     </div>
     
     <div class="info-row">
       <span class="info-label">🏷️ 类型</span>
-      <span class="info-value">${getEventTypeLabel(event.type)}</span>
+      <span class="info-value">${escapeHtml(getEventTypeLabel(event.type))}</span>
     </div>
     
     <div class="blessing">
       <span class="blessing-icon">🎉</span>
-      ${blessing}
+      ${escapeHtml(blessing)}
     </div>
     
     <div class="footer">
@@ -304,23 +305,23 @@ export async function sendSecurityAlertEmail(
     </div>
     
     <div class="alert-box">
-      <div class="alert-title">⚠️ ${alertInfo.description}</div>
-      <p>用户 <strong>${params.username}</strong> 的账户发生了安全相关事件。</p>
+      <div class="alert-title">⚠️ ${escapeHtml(alertInfo.description)}</div>
+      <p>用户 <strong>${escapeHtml(params.username)}</strong> 的账户发生了安全相关事件。</p>
     </div>
     
     <div class="info-row">
       <span class="info-label">👤 用户名</span>
-      <span class="info-value">${params.username}</span>
+      <span class="info-value">${escapeHtml(params.username)}</span>
     </div>
     
     <div class="info-row">
       <span class="info-label">🌐 IP 地址</span>
-      <span class="info-value">${params.ip}</span>
+      <span class="info-value">${escapeHtml(params.ip)}</span>
     </div>
     
     <div class="info-row">
       <span class="info-label">💻 设备信息</span>
-      <span class="info-value">${params.userAgent}</span>
+      <span class="info-value">${escapeHtml(params.userAgent)}</span>
     </tr>
     
     ${params.failureCount ? `

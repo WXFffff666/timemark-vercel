@@ -1,64 +1,27 @@
+# TimeMark 开发/本地部署配置
+# 单容器：SQLite 内置数据库
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: timemark
-      POSTGRES_USER: timemark
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-timemark_pass}
-      PGTZ: Asia/Shanghai
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
-      - ./docker/seed-db.sql:/docker-entrypoint-initdb.d/02-seed.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U timemark"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - timemark
-
-  redis:
-    image: redis:7-alpine
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - timemark
-
   app:
     build: .
+    container_name: timemark-app
     ports:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: timemark
-      DB_USER: timemark
-      DB_PASSWORD: ${DB_PASSWORD:-timemark_pass}
-      REDIS_URL: redis://redis:6379
+      DB_PATH: /app/data/timemark.db
       MASTER_KEY: ${MASTER_KEY}
-      JWT_SECRET: ${JWT_SECRET:-timemark-secret-key-production-2026}
+      JWT_SECRET: ${JWT_SECRET:-your-secure-jwt-secret-min-32-chars}
       TZ: Asia/Shanghai
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    networks:
+      - timemark
     deploy:
       resources:
         limits:
           cpus: '0.1'
           memory: 512M
-    networks:
-      - timemark
-
-volumes:
-  postgres_data:
 
 networks:
   timemark:

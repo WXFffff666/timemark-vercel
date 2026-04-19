@@ -8,17 +8,28 @@
 
 ---
 
+## 新版特性 (v2.0.0)
+
+| 特性 | 说明 |
+|------|------|
+| **单容器** | 只需一个镜像，无需 PostgreSQL + Redis |
+| **内置数据库** | SQLite 自动初始化，开箱即用 |
+| **更轻量** | 镜像更小，资源占用更低 |
+| **安全加固** | JWT 长度验证、限流、XSS 防护 |
+
+---
+
 ## 配置文件总览
 
 | 配置文件 | 适用场景 | 镜像源 | 数据持久化 |
 |----------|----------|--------|----------|
-| `docker-compose.dockerhub.yml` | 通用部署 (推荐) | Docker Hub | 仅PostgreSQL |
-| `docker-compose.ghcr.yml` | 通用部署 | GHCR | 仅PostgreSQL |
-| `docker-compose.simple.yml` | 飞牛OS | GHCR | PostgreSQL + 静态文件 |
+| `docker-compose.dockerhub.yml` | 通用部署 (推荐) | Docker Hub | SQLite |
+| `docker-compose.ghcr.yml` | 通用部署 | GHCR | SQLite |
+| `docker-compose.simple.yml` | 飞牛OS | GHCR | SQLite |
 | `docker-compose.nas.yml` | 群晖/威联通/铁威马 | GHCR | 完整自定义路径 |
 | `docker-compose.full.yml` | 公网服务器 | GHCR | 完整配置 + Traefik |
-| `docker-compose.public.yml` | 快速测试 | GHCR | 仅PostgreSQL |
-| `docker-compose.yml` | 本地开发 | 本地构建 | 完整挂载 |
+| `docker-compose.public.yml` | 快速测试 | GHCR | SQLite |
+| `docker-compose.yml` | 本地开发 | 本地构建 | SQLite |
 
 ---
 
@@ -74,45 +85,8 @@ docker compose up -d
 
 将以下内容复制到 Docker Compose 编辑器：
 
-#### Docker Hub 版本
-
 ```yaml
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: timemark-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: timemark
-      POSTGRES_USER: timemark
-      POSTGRES_PASSWORD: timemark_pass
-      PGTZ: Asia/Shanghai
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U timemark"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - timemark
-
-  redis:
-    image: redis:7-alpine
-    container_name: timemark-redis
-    restart: unless-stopped
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - timemark
-
   app:
     image: xfffff666/timemark:latest
     container_name: timemark-app
@@ -121,34 +95,18 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: timemark
-      DB_USER: timemark
-      DB_PASSWORD: timemark_pass
-      REDIS_URL: redis://redis:6379
+      DB_PATH: /app/data/timemark.db
       TZ: Asia/Shanghai
+      # 生产环境建议修改密钥
+      # JWT_SECRET: your-secure-jwt-secret
+      # MASTER_KEY: your-secure-master-key
     volumes:
       - ./data:/app/data
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - timemark
 
 networks:
   timemark:
     driver: bridge
-
-volumes:
-  postgres_data:
 ```
-
-#### GHCR 版本
-
-只需将上述配置中的 `xxxxx666/timemark:latest` 替换为 `ghcr.io/wfffff666/timemark:latest`
 
 ---
 
@@ -182,12 +140,12 @@ volumes:
 
 ```bash
 # 1. 创建目录
-mkdir -p /volume1/docker/timemark/{postgres,data}
+mkdir -p /volume1/docker/timemark/data
 
 # 2. 下载NAS配置
 curl -o docker-compose.yml https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.nas.yml
 
-# 3. 修改路径
+# 3. 修改路径（如需要）
 vim docker-compose.yml
 # 将 /volume1/docker/timemark/... 改为实际路径
 
@@ -203,7 +161,7 @@ sudo docker compose up -d
 
 ```bash
 # 1. 创建目录
-mkdir -p /share/Container/timemark/{postgres,data}
+mkdir -p /share/Container/timemark/data
 
 # 2. 下载配置
 curl -o docker-compose.yml https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.nas.yml
@@ -265,25 +223,16 @@ ports:
 ### 数据持久化路径
 
 ```yaml
-# PostgreSQL
 volumes:
-  - /your/custom/path:/var/lib/postgresql/data
-
-# 静态文件
-volumes:
-  - ./data:/app/data
+  - /your/custom/path:/app/data
 ```
 
-### 修改数据库密码
+### 修改管理员密码
 
 ```yaml
-# PostgreSQL
 environment:
-  POSTGRES_PASSWORD: your_new_password
-
-# App
-environment:
-  DB_PASSWORD: your_new_password
+  DEFAULT_ADMIN_USERNAME: admin
+  DEFAULT_ADMIN_PASSWORD: YourSecurePassword123
 ```
 
 ---
@@ -304,15 +253,14 @@ environment:
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| DB_HOST | postgres | 数据库主机 |
-| DB_PORT | 5432 | 数据库端口 |
-| DB_NAME | timemark | 数据库名 |
-| DB_USER | timemark | 数据库用户 |
-| DB_PASSWORD | timemark_pass | 数据库密码 |
-| REDIS_URL | redis://redis:6379 | Redis地址 |
+| DB_PATH | /app/data/timemark.db | SQLite数据库路径 |
 | TZ | Asia/Shanghai | 时区 |
-| JWT_SECRET | auto | JWT密钥 |
+| NODE_ENV | production | 环境 |
+| JWT_SECRET | auto | JWT密钥 (生产环境必须修改!) |
 | MASTER_KEY | - | 主密钥（敏感数据加密） |
+| DEFAULT_ADMIN_USERNAME | admin | 初始管理员用户名 |
+| DEFAULT_ADMIN_PASSWORD | TimeMark@2026 | 初始管理员密码 |
+| LOG_QUERIES | false | 是否打印SQL查询日志 |
 
 ---
 
@@ -324,8 +272,8 @@ environment:
 # 停止服务
 docker compose down
 
-# 备份
-tar -czf timemark-backup.tar.gz ./data ./postgres
+# 备份（包含SQLite数据库和上传文件）
+tar -czf timemark-backup.tar.gz ./data
 
 # 启动
 docker compose up -d
@@ -344,9 +292,7 @@ docker compose up -d
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| Web界面 | 3000 | 浏览器访问 |
-| PostgreSQL | 5432 | 内部使用 |
-| Redis | 6379 | 内部使用 |
+| Web界面 | **3000** | 浏览器访问 |
 
 ---
 
@@ -361,16 +307,6 @@ ports:
   - "8888:3000"
 ```
 
-### Q: 数据库连接失败
-
-A: 检查网络和容器状态：
-
-```bash
-docker network ls
-docker ps -a
-docker logs timemark-app
-```
-
 ### Q: 镜像拉取失败
 
 A: 需要登录 GHCR：
@@ -381,11 +317,43 @@ docker login ghcr.io -u 你的用户名 -p 你的GitHubToken
 
 ### Q: 忘记密码
 
-A: 重置密码：
+A: 删除数据目录重新部署：
 
 ```bash
-docker exec -it timemark-postgres psql -U timemark -d timemark -c "UPDATE users SET password_hash='\$2a\$10\$MRqDgkKqsxdy/aEhSUsoy.Y5x.9fN5pItImBgQAK/.uWczeQ8rOeS' WHERE username='admin';"
+# 1. 停止服务
+docker compose down
+
+# 2. 删除数据目录（慎用！）
+rm -rf ./data
+
+# 3. 重新启动（会自动创建新数据库）
+docker compose up -d
 ```
+
+### Q: 数据库文件损坏
+
+A: 备份并重建：
+
+```bash
+# 1. 备份
+cp ./data/timemark.db ./data/timemark.db.bak
+
+# 2. 删除损坏的数据库
+rm ./data/timemark.db
+
+# 3. 重启（会自动初始化新数据库）
+docker compose restart
+```
+
+---
+
+## 从 v1.x 升级
+
+v2.0.0 使用全新架构，**不支持直接升级**。建议：
+
+1. 备份 v1.x 数据
+2. 使用新部署配置全新部署
+3. 手动迁移数��（或联系开发者协助）
 
 ---
 

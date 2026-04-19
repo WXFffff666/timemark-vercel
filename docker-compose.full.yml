@@ -1,55 +1,14 @@
-# TimeMark 完整一键部署（无公网IP/NAT环境）
-# 适用于：公网服务器、云服务器、本地数据中心
+# TimeMark 完整一键部署（公网服务器/云服务器）
+# 单容器部署：SQLite 内置数据库
 # 特点：数据持久化完整配置，自动备份配置
 
+# ⚠️ 重要：首次部署前请修改以下环境变量！
+# - DEFAULT_ADMIN_USERNAME: 管理员用户名
+# - DEFAULT_ADMIN_PASSWORD: 管理员密码（请使用强密码，至少8位）
+# - JWT_SECRET: JWT签名密钥（请使用随机字符串，至少32位）
+# - MASTER_KEY: 主密钥（用于敏感数据加密，请使用随机字符串）
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: timemark-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: timemark
-      POSTGRES_USER: timemark
-      POSTGRES_PASSWORD: timemark_pass
-      PGTZ: Asia/Shanghai
-    volumes:
-      # 数据持久化 - 修改冒号后路径为本地实际存储路径
-      - /mnt/timemark/postgres:/var/lib/postgresql/data
-      # 初始化SQL（首次部署时创建管理员账号）
-      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U timemark"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - timemark
-    # 生产环境建议添加资源限制
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-
-  redis:
-    image: redis:7-alpine
-    container_name: timemark-redis
-    restart: unless-stopped
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-    volumes:
-      # Redis持久化（可选，重启后恢复缓存）
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - timemark
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-
   app:
     image: ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
@@ -57,27 +16,24 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: timemark
-      DB_USER: timemark
-      DB_PASSWORD: timemark_pass
-      REDIS_URL: redis://redis:6379
+      # SQLite: 数据存储位置（容器内）
+      DB_PATH: /app/data/timemark.db
+      # 管理员凭证（⚠️ 必须修改）
+      DEFAULT_ADMIN_USERNAME: admin
+      DEFAULT_ADMIN_PASSWORD: YourSecurePassword123
+      # 时区
       TZ: Asia/Shanghai
-      # 生产环境密钥（务必修改！）
-      JWT_SECRET: TimeMark-Secure-JWT-Secret-2026-ChangeThis
-      MASTER_KEY: TimeMark-Secure-Master-Key-2026-ChangeThis
+      # 环境
+      NODE_ENV: production
+      # JWT 密钥（⚠️ 务必修改为随机字符串）
+      JWT_SECRET: ${JWT_SECRET:-your-secure-jwt-secret-min-32-chars}
+      # 主密钥（⚠️ 务必修改为随机字符串）
+      MASTER_KEY: ${MASTER_KEY:-your-secure-master-key-min-32}
     volumes:
-      # 上传文件存储目录
+      # 数据持久化目录（包含 SQLite 数据库和上传文件）
       - ./data:/app/data
       # 配置目录（备份恢复用）
       - ./config:/app/config
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - timemark
     deploy:
@@ -93,9 +49,3 @@ services:
 networks:
   timemark:
     driver: bridge
-
-volumes:
-  postgres_data:
-    name: timemark-postgres-data
-  redis_data:
-    name: timemark-redis-data

@@ -1,11 +1,10 @@
 FROM node:20-alpine
-RUN apk add --no-cache dumb-init chromium chromium-chromedriver ca-certificates \
-    g++ make python3 git
+# sql.js is pure JavaScript - no native compilation needed
+RUN apk add --no-cache dumb-init ca-certificates git
 WORKDIR /app
+
 ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy pnpm and package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -21,8 +20,14 @@ COPY shared/dist ./shared/dist
 COPY backend/dist ./backend/dist
 COPY frontend/dist ./frontend/dist
 
-# Install dependencies inside container (to handle pnpm symlinks)
+# Copy schema.sql for database initialization
+COPY docker/schema.sql ./docker/schema.sql
+
+# Install dependencies inside container
 RUN pnpm install --ignore-scripts
+
+# Create data directory
+RUN mkdir -p /app/data
 
 EXPOSE 3000
 

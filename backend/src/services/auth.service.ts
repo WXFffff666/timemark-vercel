@@ -70,7 +70,7 @@ export async function createLoginLog(userIdOrUsername: string, ip: string, userA
     }
     
     await query(
-      'INSERT INTO login_logs (id, user_id, username, ip_address, user_agent, device_fingerprint, success, failure_reason, login_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW() AT TIME ZONE \'Asia/Shanghai\')',
+      'INSERT INTO login_logs (id, user_id, username, ip_address, user_agent, device_fingerprint, success, failure_reason, login_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, datetime(\'now\', \'+8 hours\'))',
       [id, userId, username, ip, userAgent, fingerprint, success, reason || null]
     );
   } catch (error) {

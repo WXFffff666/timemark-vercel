@@ -2,40 +2,9 @@
 # 使用方法: docker-compose -f docker-compose.public.yml up -d
 # 访问地址: http://localhost:3000
 # 默认账号: admin / TimeMark@2026
+# 单容器：SQLite 内置数据库
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: timemark-postgres
-    environment:
-      POSTGRES_DB: timemark
-      POSTGRES_USER: timemark
-      POSTGRES_PASSWORD: timemark_pass
-      PGTZ: Asia/Shanghai
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      # 使用干净的初始化脚本（只创建管理员账号，无用户数据）
-      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U timemark"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - timemark
-
-  redis:
-    image: redis:7-alpine
-    container_name: timemark-redis
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - timemark
-
   app:
     image: ghcr.io/wfffff666/timemark:latest
     container_name: timemark-app
@@ -43,27 +12,16 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: timemark
-      DB_USER: timemark
-      DB_PASSWORD: timemark_pass
-      REDIS_URL: redis://redis:6379
+      DB_PATH: /app/data/timemark.db
       TZ: Asia/Shanghai
       # 生产环境建议修改以下密钥
       # JWT_SECRET: your-secure-jwt-secret
       # MASTER_KEY: your-secure-master-key
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    volumes:
+      - ./data:/app/data
     networks:
       - timemark
 
 networks:
   timemark:
     driver: bridge
-
-volumes:
-  postgres_data:

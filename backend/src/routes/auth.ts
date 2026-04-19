@@ -168,7 +168,7 @@ auth.post('/login', async (c) => {
           await createLoginLog(username, ip, userAgent, '', false, 'Account locked due to multiple failures');
           // 发送安全告警
           await sendSecurityAlert({
-            adminEmails: ['1127251096@qq.com', 'wxf200707@gmail.com'],
+            adminEmails: [],
             username,
             ip,
             userAgent,
@@ -188,7 +188,7 @@ auth.post('/login', async (c) => {
       
       if (tracking.failureCount >= 5) {
         await sendSecurityAlert({
-          adminEmails: ['1127251096@qq.com', 'wxf200707@gmail.com'],
+          adminEmails: [],
           username,
           ip,
           userAgent,

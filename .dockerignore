@@ -43,3 +43,21 @@ Thumbs.db
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Data directory
+data/
+
+# Test files with credentials
+test-login.json
+test-api*.ps1
+
+# Scripts
+*.ps1
+*.bat
+*.sh
+
+# Sisyphus state
+.sisyphus/
+
+# Commit message
+commit-msg.txt

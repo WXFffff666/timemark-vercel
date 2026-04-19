@@ -30,6 +30,7 @@ import { sendNotification as sendZaloNotification } from './zalo.service.js';
 import { sendNotification as sendBlueBubblesNotification } from './bluebubbles.service.js';
 
 import { getUserConfig, getRelationshipMappings, getNotificationAccounts, getEventTemplate } from '../config.service.js';
+import { applyRelationshipMapping } from '@timemark/shared/relationship';
 
 // 通用 Webhook 渠道（通过配置文件中的 channel_webhooks 字段配置）
 const genericWebhookChannels = new Set([
@@ -152,45 +153,6 @@ function getChannelConfigFromAccount(
     default:
       return null;
   }
-}
-
-/**
- * 应用关系映射转换事件名称
- */
-function applyRelationshipMapping(
-  eventName: string,
-  mappings: any[],
-  recipientEmail?: string,
-  recipientType?: string
-): string {
-  if (!mappings || mappings.length === 0) {
-    return eventName;
-  }
-
-  // 优先通过收件人类型匹配
-  if (recipientType) {
-    const typeMapping = mappings.find(m => m.recipient_type === recipientType);
-    if (typeMapping) {
-      return eventName.replace(typeMapping.from_relation, typeMapping.to_relation);
-    }
-  }
-
-  // 其次通过收件人邮箱匹配
-  if (recipientEmail) {
-    const emailMapping = mappings.find(m => m.recipient_email === recipientEmail);
-    if (emailMapping) {
-      return eventName.replace(emailMapping.from_relation, emailMapping.to_relation);
-    }
-  }
-
-  // 最后尝试模糊匹配
-  for (const mapping of mappings) {
-    if (eventName.includes(mapping.from_relation)) {
-      return eventName.replace(mapping.from_relation, mapping.to_relation);
-    }
-  }
-
-  return eventName;
 }
 
 export async function sendNotifications(event: any, userId: number, channels: string[]): Promise<void> {

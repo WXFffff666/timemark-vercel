@@ -2,3 +2,9 @@ packages:
   - 'frontend'
   - 'backend'
   - 'shared'
+allowBuilds:
+  '@swc/core': false
+  better-sqlite3: false
+  esbuild: false
+  leveldown: false
+  protobufjs: false

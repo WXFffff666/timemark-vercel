@@ -2,45 +2,7 @@ import { query } from '../db/index.js';
 import { Lunar, Solar } from 'lunar-javascript';
 import { sendNotifications } from '../services/notifications/index.js';
 import { getRelationshipMappings } from '../services/config.service.js';
-
-/**
- * 应用关系映射转换事件名称
- */
-function applyRelationshipMapping(
-  eventName: string,
-  mappings: any[],
-  recipientEmail?: string,
-  recipientType?: string
-): string {
-  if (!mappings || mappings.length === 0) {
-    return eventName;
-  }
-
-  // 优先通过收件人类型匹配
-  if (recipientType) {
-    const typeMapping = mappings.find(m => m.recipient_type === recipientType);
-    if (typeMapping) {
-      return eventName.replace(typeMapping.from_relation, typeMapping.to_relation);
-    }
-  }
-
-  // 其次通过收件人邮箱匹配
-  if (recipientEmail) {
-    const emailMapping = mappings.find(m => m.recipient_email === recipientEmail);
-    if (emailMapping) {
-      return eventName.replace(emailMapping.from_relation, emailMapping.to_relation);
-    }
-  }
-
-  // 最后尝试模糊匹配
-  for (const mapping of mappings) {
-    if (eventName.includes(mapping.from_relation)) {
-      return eventName.replace(mapping.from_relation, mapping.to_relation);
-    }
-  }
-
-  return eventName;
-}
+import { applyRelationshipMapping } from '@timemark/shared/relationship';
 
 export async function sendReminders() {
   console.log('[Task] Checking reminders...');
@@ -106,7 +68,8 @@ export async function sendReminders() {
   console.log(`[Task] Found ${eventsToRemind.length} events to remind`);
   
   for (const event of eventsToRemind) {
-    const channels = event.notification_channels || [];
+    const rawChannels = event.notification_channels;
+    const channels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
     if (channels.length > 0) {
       try {
         // 获取关系映射并转换事件名称
@@ -166,20 +129,20 @@ export async function archiveLoginHistory() {
 
 export async function cleanupSessions() {
   console.log('[Task] Cleaning up expired sessions...');
-  const result = await query('DELETE FROM sessions WHERE expires_at < NOW()');
+  const result = await query("DELETE FROM sessions WHERE expires_at < datetime('now')");
   console.log(`[Task] Cleaned up ${result.rowCount ?? 0} expired sessions`);
   
   // 清理30天前的登录日志
   console.log('[Task] Cleaning up old login logs...');
   const loginLogsResult = await query(
-    "DELETE FROM login_logs WHERE login_time < NOW() AT TIME ZONE 'Asia/Shanghai' - INTERVAL '30 days'"
+    "DELETE FROM login_logs WHERE login_time < datetime('now', '+8 hours', '-30 days')"
   );
   console.log(`[Task] Cleaned up ${loginLogsResult.rowCount ?? 0} old login logs`);
   
   // 清理30天前的事件触发日志
   console.log('[Task] Cleaning up old event trigger logs...');
   const triggerResult = await query(
-    "DELETE FROM event_trigger_logs WHERE created_at < NOW() AT TIME ZONE 'Asia/Shanghai' - INTERVAL '30 days'"
+    "DELETE FROM event_trigger_logs WHERE created_at < datetime('now', '+8 hours', '-30 days')"
   );
   console.log(`[Task] Cleaned up ${triggerResult.rowCount ?? 0} old event trigger logs`);
 }
