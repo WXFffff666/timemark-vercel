@@ -320,20 +320,13 @@ auth.get('/login-history', authMiddleware, async (c) => {
     // 将 user.id 转换为整数，因为数据库中 user_id 是 integer 类型
     const numericUserId = parseInt(user.id, 10);
     
-    // 显示该用户的所有登录记录（包括成功和失败）
-    // 成功登录有 user_id，失败登录没有 user_id 但有 username
-    // 使用 to_char 获取字符串形式的时间
     const result = await query(
-      `SELECT id, ip_address, username, user_agent, device_fingerprint, success, failure_reason, 
-              TO_CHAR(login_time, 'YYYY-MM-DD') || 'T' || TO_CHAR(login_time, 'HH24:MI:SS') || '.000+08:00' as login_time
+      `SELECT id, ip_address, username, user_agent, device_fingerprint, success, failure_reason, login_time
        FROM login_logs 
        WHERE user_id = $1 OR (user_id IS NULL AND username = $2)
        ORDER BY login_time DESC LIMIT 50`,
       [numericUserId, user.username]
     );
-    
-    console.log('[login-history] Query params:', { numericUserId, username: user.username });
-    console.log('[login-history] Results:', result.rows.length);
     
     return c.json({ success: true, data: result.rows });
   } catch (error) {
