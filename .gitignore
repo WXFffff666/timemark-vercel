@@ -10,8 +10,9 @@ build
 *.js.map
 !*.config.js
 
-# Data directory (contains SQLite DB)
+# Data directories (contains SQLite DB)
 data/
+data-test/
 backend/data/
 
 # Test files with credentials
