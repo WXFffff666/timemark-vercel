@@ -2,88 +2,147 @@
 
 <div align="center">
 
-### 智能事件提醒系统 | 27+通知渠道 | 农历转换 | 关系映射
+<h3>🎂 智能事件提醒系统 | 27+ 通知渠道 | 农历转换 | 关系映射</h3>
+
+<p>本文档提供 TimeMark v2.0 的完整部署指南，涵盖各类 NAS 平台、公网服务器及本地环境。</p>
 
 </div>
 
 ---
 
-## 新版特性 (v2.0.0)
+## 📋 目录
+
+- [v2.0 新版特性](#-v20-新版特性)
+- [部署前准备](#-部署前准备)
+- [镜像拉取方式](#-镜像拉取方式)
+- [快速部署](#-快速部署)
+- [平台部署指南](#-平台部署指南)
+  - [飞牛OS](#飞牛os-部署)
+  - [群晖NAS](#群晖nas-部署)
+  - [威联通NAS](#威联通nas-部署)
+  - [铁威马NAS](#铁威马nas-部署)
+  - [Docker Desktop (Windows/Mac)](#docker-desktop-windowsmac-部署)
+  - [公网服务器](#公网服务器部署)
+- [环境变量说明](#️-环境变量说明)
+- [常用配置](#-常用配置)
+- [首次登录](#-首次登录)
+- [数据备份与恢复](#-数据备份与恢复)
+- [从 v1.x 升级](#-从-v1x-升级)
+- [资源优化](#-资源优化低功耗设备)
+- [常见问题](#-常见问题)
+- [支持](#-支持)
+
+---
+
+## 🚀 v2.0 新版特性
 
 | 特性 | 说明 |
 |------|------|
-| **单容器** | 只需一个镜像，无需 PostgreSQL + Redis |
-| **内置数据库** | SQLite 自动初始化，开箱即用 |
-| **更轻量** | 镜像更小，资源占用更低 |
-| **安全加固** | JWT 长度验证、限流、XSS 防护 |
+| **单容器部署** | 只需一个镜像，无需 PostgreSQL + Redis |
+| **内置数据库** | SQLite (sql.js) 自动初始化，开箱即用 |
+| **更轻量** | 内存占用从 ~800MB 降至 ~256MB |
+| **安全加固** | MASTER_KEY 强制校验 + JWT 长度验证 + 限流 + XSS 防护 |
+| **凭证加密** | 通知渠道 API Key/Token 使用 AES-256 加密存储 |
+| **多账户通知** | 同一渠道可配置多个账户 |
 
 ---
 
-## 配置文件总览
+## 📦 部署前准备
 
-| 配置文件 | 适用场景 | 镜像源 | 数据持久化 |
-|----------|----------|--------|----------|
-| `docker-compose.dockerhub.yml` | 通用部署 (推荐) | Docker Hub | SQLite |
-| `docker-compose.ghcr.yml` | 通用部署 | GHCR | SQLite |
-| `docker-compose.simple.yml` | 飞牛OS | GHCR | SQLite |
-| `docker-compose.nas.yml` | 群晖/威联通/铁威马 | GHCR | 完整自定义路径 |
-| `docker-compose.full.yml` | 公网服务器 | GHCR | 完整配置 + Traefik |
-| `docker-compose.public.yml` | 快速测试 | GHCR | SQLite |
-| `docker-compose.yml` | 本地开发 | 本地构建 | SQLite |
+### 系统要求
+
+| 项目 | 最低配置 | 推荐配置 |
+|:----:|:--------:|:--------:|
+| CPU | 1 核 | 2 核 |
+| 内存 | 256MB | 512MB |
+| 磁盘 | 1GB | 5GB |
+| Docker | 20.10+ | 24.0+ |
+
+### 必须准备的密钥
+
+部署前请先生成以下密钥（**必填项**，未设置将无法启动）：
+
+```bash
+# 生成 JWT_SECRET（JWT 签名密钥，至少 32 字符）
+openssl rand -hex 32
+
+# 生成 MASTER_KEY（主密钥，用于加密通知渠道凭证，至少 32 字符）
+openssl rand -hex 32
+```
+
+> ⚠️ **请妥善保管 MASTER_KEY**。更换 MASTER_KEY 后，之前加密存储的通知渠道凭证将无法解密，需要重新配置。
+
+### 配置文件总览
+
+| 配置文件 | 适用场景 | 镜像源 | 特点 |
+|----------|:--------:|:------:|------|
+| `docker-compose.dockerhub.yml` | 通用部署 **(推荐)** | Docker Hub | 即拉即用，无需认证 |
+| `docker-compose.ghcr.yml` | 通用部署 | GHCR | 需要 GitHub 登录 |
+| `docker-compose.simple.yml` | 飞牛OS | GHCR | 轻量部署 |
+| `docker-compose.nas.yml` | 群晖/威联通/铁威马 | GHCR | NAS 专用，自定义路径 |
+| `docker-compose.full.yml` | 公网服务器 | GHCR | 完整生产配置 + Traefik |
+| `docker-compose.public.yml` | 快速测试 | GHCR | 测试用途 |
+| `docker-compose.yml` | 本地开发 | 本地构建 | 开发环境 |
 
 ---
 
-## 镜像拉取方式
+## 🐳 镜像拉取方式
 
 TimeMark 镜像托管在 **两个** 平台：
 
-### Docker Hub (推荐)
+### Docker Hub（推荐）
 
 ```bash
 # 无需登录，直接拉取
 docker pull xfffff666/timemark:latest
 ```
 
-配置文件：`docker-compose.dockerhub.yml`
+对应配置文件：`docker-compose.dockerhub.yml`
 
 ### GitHub Container Registry (GHCR)
 
 ```bash
-# 需要GitHub账号登录
-docker login ghcr.io -u 你的用户名 -p 你的GitHubToken
+# 需要 GitHub 账号登录
+docker login ghcr.io -u 你的GitHub用户名 -p 你的GitHubToken
 
 # 拉取镜像
 docker pull ghcr.io/wfffff666/timemark:latest
 ```
 
-配置文件：`docker-compose.ghcr.yml`
+对应配置文件：`docker-compose.ghcr.yml`
 
-> GHCR 拉取可能受限，推荐使用 Docker Hub。
+> 💡 GHCR 拉取可能受网络限制，**推荐使用 Docker Hub**。
 
 ---
 
-## 快速部署
+## ⚡ 快速部署
 
-### 方式一：一键命令部署
+### 方式一：命令行一键部署
 
 ```bash
-# 1. 创建目录
+# 1. 创建部署目录
 mkdir timemark && cd timemark
 
-# 2. 下载配置文件
-# Docker Hub (推荐)
+# 2. 下载配置文件（Docker Hub 源，推荐）
 curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 或 GHCR
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.ghcr.yml -o docker-compose.yml
+# 3. 生成密钥
+echo "JWT_SECRET: $(openssl rand -hex 32)"
+echo "MASTER_KEY: $(openssl rand -hex 32)"
 
-# 3. 启动
+# 4. 编辑配置文件，填入生成的密钥，修改管理员密码
+vim docker-compose.yml
+
+# 5. 启动服务
 docker compose up -d
+
+# 6. 查看日志确认启动成功
+docker compose logs -f
 ```
 
 ### 方式二：复制粘贴部署
 
-将以下内容复制到 Docker Compose 编辑器：
+将以下内容保存为 `docker-compose.yml`：
 
 ```yaml
 services:
@@ -94,279 +153,680 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NODE_ENV: production
+      # 数据库路径
       DB_PATH: /app/data/timemark.db
+      # 时区
       TZ: Asia/Shanghai
-      # 生产环境建议修改密钥
-      # JWT_SECRET: your-secure-jwt-secret
-      # MASTER_KEY: your-secure-master-key
+      # 运行环境
+      NODE_ENV: production
+      # ⚠️ 以下三项必须修改！
+      # 管理员密码（请使用强密码）
+      DEFAULT_ADMIN_USERNAME: admin
+      DEFAULT_ADMIN_PASSWORD: CHANGE_ME_IMMEDIATELY
+      # JWT 密钥（运行 openssl rand -hex 32 生成）
+      JWT_SECRET: CHANGE_ME_IMMEDIATELY
+      # 主密钥（运行 openssl rand -hex 32 生成）
+      MASTER_KEY: CHANGE_ME_IMMEDIATELY
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     volumes:
       - ./data:/app/data
+    networks:
+      - timemark
 
 networks:
   timemark:
     driver: bridge
 ```
 
+> ⚠️ **安全警告**：必须将所有 `CHANGE_ME_IMMEDIATELY` 替换为实际的强密码和密钥！
+
 ---
 
-## 平台部署指南
+## 🖥️ 平台部署指南
 
 ### 飞牛OS 部署
 
-1. 打开 **Docker 应用**
+飞牛OS 内置 Docker 管理界面，支持 Compose 部署。
+
+#### 方法 1：Docker Compose UI（推荐）
+
+1. 打开飞牛OS 的 **Docker 应用**
 2. 进入 **Compose** 功能
-3. 点击 **新建Compose**
-4. 选择 `docker-compose.dockerhub.yml` 或 `docker-compose.simple.yml`
-5. 根据需要修改端口
+3. 点击 **新建 Compose**
+4. 将上方「复制粘贴部署」的配置内容粘贴进去
+5. **修改配置**：
+   - 将 `CHANGE_ME_IMMEDIATELY` 替换为实际密码和密钥
+   - 如需修改端口，将 `"3000:3000"` 改为 `"你的端口:3000"`
 6. 点击 **部署**
 
-> 飞牛OS 可能需要先登录 GHCR（在SSH中执行 `docker login ghcr.io`）
+#### 方法 2：SSH 命令行
+
+```bash
+# 1. SSH 登录飞牛OS
+ssh root@你的飞牛IP
+
+# 2. 创建部署目录
+mkdir -p /vol1/docker/timemark && cd /vol1/docker/timemark
+
+# 3. 下载配置文件
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+
+# 4. 生成并填入密钥
+openssl rand -hex 32  # JWT_SECRET
+openssl rand -hex 32  # MASTER_KEY
+vim docker-compose.yml
+
+# 5. 启动
+docker compose up -d
+```
+
+#### 飞牛OS 注意事项
+
+- 如果使用 GHCR 源，需要先在 SSH 中执行 `docker login ghcr.io` 登录
+- 推荐使用 Docker Hub 源（`docker-compose.dockerhub.yml`），无需登录
+- 数据目录建议放在 `/vol1/docker/timemark/data`
 
 ---
 
 ### 群晖NAS 部署
 
-#### 方法1：Docker Compose UI
+群晖 DSM 7.0+ 内置 Container Manager，支持 Docker Compose。
 
-1. 打开 **Docker** 应用
-2. 进入 **项目** / **Compose**
-3. 点击 **新建项目**
-4. 选择配置文件
-5. 修改数据路径 `/volume1/docker/timemark/...`
-6. 部署
+#### 方法 1：Container Manager UI（推荐）
 
-#### 方法2：SSH命令行
+1. 打开 **Container Manager**（DSM 7.2+）或 **Docker**（DSM 7.0-7.1）
+2. 进入 **项目** → **新建**
+3. 项目名称填写 `timemark`
+4. 路径选择 `/volume1/docker/timemark`
+5. 将配置内容粘贴到编辑器中
+6. **修改配置**：
+   - 替换所有 `CHANGE_ME_IMMEDIATELY`
+   - 数据卷路径改为 `/volume1/docker/timemark/data:/app/data`
+7. 点击 **构建** 或 **部署**
+
+#### 方法 2：SSH 命令行
 
 ```bash
-# 1. 创建目录
-mkdir -p /volume1/docker/timemark/data
+# 1. SSH 登录群晖（需要先在 DSM 中启用 SSH）
+ssh admin@你的群晖IP
 
-# 2. 下载NAS配置
-curl -o docker-compose.yml https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.nas.yml
+# 2. 创建目录
+sudo mkdir -p /volume1/docker/timemark/data
 
-# 3. 修改路径（如需要）
-vim docker-compose.yml
-# 将 /volume1/docker/timemark/... 改为实际路径
+# 3. 下载配置
+cd /volume1/docker/timemark
+sudo curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 4. 部署
+# 4. 生成密钥并修改配置
+openssl rand -hex 32  # JWT_SECRET
+openssl rand -hex 32  # MASTER_KEY
+sudo vim docker-compose.yml
+# 修改数据卷路径为：/volume1/docker/timemark/data:/app/data
+
+# 5. 部署
 sudo docker compose up -d
 ```
 
+#### 群晖注意事项
+
+- DSM 7.2+ 使用 Container Manager，旧版使用 Docker 套件
+- 数据路径通常为 `/volume1/docker/timemark/data`（根据实际存储池调整）
+- 群晖默认用户可能没有 Docker 权限，需要 `sudo` 或使用 `root` 账户
+- 如果端口 3000 被占用，修改为其他端口如 `"8080:3000"`
+
 ---
 
-### 威联通/铁威马 部署
+### 威联通NAS 部署
 
-与群晖类似，使用 `docker-compose.nas.yml`：
+威联通 QTS 5.0+ 支持 Container Station 进行 Docker 管理。
+
+#### 方法 1：Container Station UI
+
+1. 打开 **Container Station**
+2. 进入 **创建** → **Docker Compose**
+3. 粘贴配置内容
+4. **修改配置**：
+   - 替换所有 `CHANGE_ME_IMMEDIATELY`
+   - 数据卷路径改为 `/share/Container/timemark/data:/app/data`
+5. 点击 **创建**
+
+#### 方法 2：SSH 命令行
 
 ```bash
-# 1. 创建目录
+# 1. SSH 登录威联通
+ssh admin@你的威联通IP
+
+# 2. 创建目录
 mkdir -p /share/Container/timemark/data
+cd /share/Container/timemark
 
-# 2. 下载配置
-curl -o docker-compose.yml https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.nas.yml
+# 3. 下载配置
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 3. 部署
+# 4. 生成密钥并修改配置
+openssl rand -hex 32  # JWT_SECRET
+openssl rand -hex 32  # MASTER_KEY
+vim docker-compose.yml
+# 修改数据卷路径为：/share/Container/timemark/data:/app/data
+
+# 5. 部署
 docker compose up -d
 ```
+
+#### 威联通注意事项
+
+- 数据路径通常为 `/share/Container/timemark/data`
+- Container Station 需要在 App Center 中安装
+- 确保 Docker 服务已启动
+
+---
+
+### 铁威马NAS 部署
+
+铁威马 TOS 5.0+ 支持 Docker 管理。
+
+#### 方法 1：Docker Manager UI
+
+1. 打开 **Docker Manager** 应用
+2. 进入 **Compose** 或 **项目**
+3. 新建项目，粘贴配置内容
+4. **修改配置**：
+   - 替换所有 `CHANGE_ME_IMMEDIATELY`
+   - 数据卷路径改为 `/Volume1/docker/timemark/data:/app/data`
+5. 部署
+
+#### 方法 2：SSH 命令行
+
+```bash
+# 1. SSH 登录铁威马
+ssh admin@你的铁威马IP
+
+# 2. 创建目录
+mkdir -p /Volume1/docker/timemark/data
+cd /Volume1/docker/timemark
+
+# 3. 下载配置
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+
+# 4. 生成密钥并修改配置
+openssl rand -hex 32  # JWT_SECRET
+openssl rand -hex 32  # MASTER_KEY
+vim docker-compose.yml
+# 修改数据卷路径为：/Volume1/docker/timemark/data:/app/data
+
+# 5. 部署
+docker compose up -d
+```
+
+#### 铁威马注意事项
+
+- 数据路径通常为 `/Volume1/docker/timemark/data`（根据实际存储池调整）
+- 部分型号可能需要先安装 Docker 应用
+
+---
+
+### Docker Desktop (Windows/Mac) 部署
+
+适合在 Windows 或 macOS 上本地运行 TimeMark。
+
+#### 前置条件
+
+1. 安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+2. 确保 Docker Desktop 已启动（系统托盘图标为绿色）
+
+#### 部署步骤
+
+**Windows (PowerShell)：**
+
+```powershell
+# 1. 创建部署目录
+mkdir timemark; cd timemark
+
+# 2. 下载配置文件
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml" -OutFile "docker-compose.yml"
+
+# 3. 用记事本编辑配置
+notepad docker-compose.yml
+# 修改 CHANGE_ME_IMMEDIATELY 为实际密码和密钥
+
+# 4. 启动
+docker compose up -d
+```
+
+**macOS (Terminal)：**
+
+```bash
+# 1. 创建部署目录
+mkdir timemark && cd timemark
+
+# 2. 下载配置文件
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+
+# 3. 生成密钥并修改配置
+openssl rand -hex 32  # JWT_SECRET
+openssl rand -hex 32  # MASTER_KEY
+nano docker-compose.yml
+
+# 4. 启动
+docker compose up -d
+```
+
+部署完成后访问 `http://localhost:3000`。
 
 ---
 
 ### 公网服务器部署
 
-使用 `docker-compose.full.yml`：
+适用于云服务器（阿里云、腾讯云、AWS 等），需要额外考虑安全性。
 
 ```bash
 # 1. 创建目录
-mkdir -p /opt/timemark/{data,config}
+sudo mkdir -p /opt/timemark/{data,config}
+cd /opt/timemark
 
 # 2. 下载完整配置
-cd /opt/timemark
-curl -o docker-compose.yml https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.full.yml
+sudo curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.full.yml -o docker-compose.yml
 
-# 3. 修改配置
-vim docker-compose.yml
-# 修改以下内容：
-# - JWT_SECRET: 生产环境密钥
-# - MASTER_KEY: 主密钥
-# - /mnt/timemark/...: 数据存储路径
+# 3. 生成密钥
+echo "JWT_SECRET: $(openssl rand -hex 32)"
+echo "MASTER_KEY: $(openssl rand -hex 32)"
 
-# 4. 启动
-docker compose up -d
+# 4. 修改配置
+sudo vim docker-compose.yml
+# 必须修改：
+# - JWT_SECRET: 填入生成的密钥
+# - MASTER_KEY: 填入生成的密钥
+# - DEFAULT_ADMIN_PASSWORD: 设置强密码
+# - 数据存储路径
 
-# 5. 配置Nginx反向代理（如需要HTTPS）
+# 5. 启动
+sudo docker compose up -d
+
+# 6. 确认运行状态
+sudo docker compose ps
+sudo docker compose logs -f
 ```
 
-#### HTTPS配置（Traefik）
+#### HTTPS 配置（Traefik）
 
-在 `docker-compose.full.yml` 中取消注释：
+在 `docker-compose.full.yml` 中取消注释 Traefik 相关配置：
 
 ```yaml
 labels:
   - "traefik.enable=true"
   - "traefik.http.routers.timemark.rule=Host(`your-domain.com`)"
   - "traefik.http.routers.timemark.tls=true"
+  - "traefik.http.routers.timemark.tls.certresolver=letsencrypt"
 ```
+
+#### Nginx 反向代理（替代方案）
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+#### 公网部署安全建议
+
+- **必须启用 HTTPS**，避免密码和 Token 明文传输
+- **修改默认端口**，不要直接暴露 3000 端口
+- **配置防火墙**，仅开放必要端口
+- **启用 2FA**，登录后立即开启双因素认证
+- **定期备份**，设置自动备份任务
 
 ---
 
-## 常用配置
+## ⚙️ 环境变量说明
 
-### 修改端口
+| 变量 | 默认值 | 说明 | 必需 |
+|------|--------|------|:----:|
+| `DB_PATH` | `/app/data/timemark.db` | SQLite 数据库文件路径 | 是 |
+| `TZ` | `Asia/Shanghai` | 时区设置 | 是 |
+| `NODE_ENV` | `production` | 运行环境 | 是 |
+| `JWT_SECRET` | - | JWT 签名密钥（至少 32 位随机字符串） | **是** |
+| `MASTER_KEY` | - | 主密钥（通知凭证 AES 加密，至少 32 位） | **是** |
+| `DEFAULT_ADMIN_USERNAME` | `admin` | 初始管理员用户名 | 是 |
+| `DEFAULT_ADMIN_PASSWORD` | - | 初始管理员密码（请使用强密码） | **是** |
+| `LOG_QUERIES` | `false` | 是否打印 SQL 查询日志（调试用） | 否 |
 
-```yaml
-# docker-compose.yml
-ports:
-  - "8080:3000"  # 改为8080端口访问
+### 密钥生成方法
+
+```bash
+# Linux / macOS / WSL
+openssl rand -hex 32
+
+# 如果没有 openssl，也可以用 Python
+python3 -c "import secrets; print(secrets.token_hex(32))"
+
+# 或者用 Node.js
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### 数据持久化路径
+> ⚠️ **MASTER_KEY 和 JWT_SECRET 为必填项**。未设置时应用将拒绝启动并输出致命错误。
+
+---
+
+## 🔧 常用配置
+
+### 修改访问端口
+
+```yaml
+ports:
+  - "8080:3000"  # 将外部端口改为 8080
+```
+
+### 自定义数据存储路径
 
 ```yaml
 volumes:
   - /your/custom/path:/app/data
 ```
 
-### 修改管理员密码
+### 修改时区
 
 ```yaml
 environment:
-  DEFAULT_ADMIN_USERNAME: admin
-  DEFAULT_ADMIN_PASSWORD: YourSecurePassword123
+  TZ: Asia/Tokyo  # 日本时区
+  # TZ: America/New_York  # 美东时区
+  # TZ: Europe/London  # 伦敦时区
 ```
 
 ---
 
-## 首次登录
+## 🔐 首次登录
 
-| 项目 | 默认值 |
-|------|--------|
-| 访问地址 | http://服务器IP:3000 |
-| 用户名 | admin |
-| 密码 | TimeMark@2026 |
+| 项目 | 说明 |
+|:----:|------|
+| 访问地址 | `http://服务器IP:3000` |
+| 用户名 | docker-compose 中 `DEFAULT_ADMIN_USERNAME` 设置的值 |
+| 密码 | docker-compose 中 `DEFAULT_ADMIN_PASSWORD` 设置的值 |
 
-> 安全提示：首次登录后请立即修改默认密码！
+> ⚠️ **安全提示**：首次登录后请立即修改密码并启用 2FA 双因素认证！
 
----
+### 首次登录后建议操作
 
-## 环境变量说明
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| DB_PATH | /app/data/timemark.db | SQLite数据库路径 |
-| TZ | Asia/Shanghai | 时区 |
-| NODE_ENV | production | 环境 |
-| JWT_SECRET | auto | JWT密钥 (生产环境必须修改!) |
-| MASTER_KEY | - | 主密钥（敏感数据加密） |
-| DEFAULT_ADMIN_USERNAME | admin | 初始管理员用户名 |
-| DEFAULT_ADMIN_PASSWORD | TimeMark@2026 | 初始管理员密码 |
-| LOG_QUERIES | false | 是否打印SQL查询日志 |
+1. **修改密码** — 进入「设置」→「安全」→「修改密码」
+2. **启用 2FA** — 进入「设置」→「安全」→「启用两步验证」，使用 Google Authenticator 或 Microsoft Authenticator 扫码
+3. **配置通知渠道** — 进入「通知渠道」，添加你需要的通知方式
+4. **添加事件** — 进入「事件管理」，添加生日、纪念日等
 
 ---
 
-## 数据备份
+## 💾 数据备份与恢复
+
+TimeMark v2.0 使用 SQLite 单文件数据库（sql.js 内存数据库 + 文件持久化），备份非常简单。
 
 ### 手动备份
 
 ```bash
-# 停止服务
-docker compose down
+# 方式一：在线备份（无需停止容器）
+# sql.js 定期将内存数据写入文件，直接复制即可
+cp ./data/timemark.db ./data/timemark.db.bak.$(date +%Y%m%d)
 
-# 备份（包含SQLite数据库和上传文件）
-tar -czf timemark-backup.tar.gz ./data
-
-# 启动
-docker compose up -d
+# 方式二：完整目录备份（包含数据库和上传文件）
+tar -czf timemark-backup-$(date +%Y%m%d).tar.gz ./data
 ```
+
+> 💡 **SQLite 备份优势**：由于 sql.js 使用内存数据库 + 文件持久化的方式，读取备份时不会锁定数据库，可以在容器运行时直接复制文件。
 
 ### 自动备份
 
 ```bash
-# 每天凌晨3点
-0 3 * * * cd /opt/timemark && docker compose down && tar -czf /backup/timemark-$(date +%Y%m%d).tar.gz ./data && docker compose up -d
+# 添加到 crontab（每天凌晨 3 点自动备份，保留最近 30 天）
+crontab -e
+
+# 添加以下行：
+0 3 * * * cd /opt/timemark && tar -czf /backup/timemark-$(date +\%Y\%m\%d).tar.gz ./data && find /backup -name "timemark-*.tar.gz" -mtime +30 -delete
 ```
 
----
-
-## 端口说明
-
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| Web界面 | **3000** | 浏览器访问 |
-
----
-
-## 常见问题
-
-### Q: 端口被占用
-
-A: 修改端口：
-
-```yaml
-ports:
-  - "8888:3000"
-```
-
-### Q: 镜像拉取失败
-
-A: 需要登录 GHCR：
-
-```bash
-docker login ghcr.io -u 你的用户名 -p 你的GitHubToken
-```
-
-### Q: 忘记密码
-
-A: 删除数据目录重新部署：
+### 恢复数据
 
 ```bash
 # 1. 停止服务
 docker compose down
 
-# 2. 删除数据目录（慎用！）
-rm -rf ./data
+# 2. 恢复备份
+# 从 tar.gz 恢复
+tar -xzf timemark-backup-20260420.tar.gz
 
-# 3. 重新启动（会自动创建新数据库）
+# 或从单文件恢复
+cp ./data/timemark.db.bak ./data/timemark.db
+
+# 3. 重新启动
 docker compose up -d
 ```
 
-### Q: 数据库文件损坏
+### 备份最佳实践
 
-A: 备份并重建：
+| 建议 | 说明 |
+|------|------|
+| 定期备份 | 至少每天一次自动备份 |
+| 异地备份 | 将备份文件同步到其他设备或云存储 |
+| 备份验证 | 定期测试备份文件是否可以正常恢复 |
+| 保留策略 | 建议保留最近 30 天的备份 |
+
+---
+
+## 🔄 从 v1.x 升级
+
+v2.0 使用全新架构（SQLite 替代 PostgreSQL + Redis），**不支持直接升级**。
+
+### 升级步骤
 
 ```bash
-# 1. 备份
-cp ./data/timemark.db ./data/timemark.db.bak
+# 1. 备份 v1.x 数据
+cd /opt/timemark-v1
+docker compose down
+tar -czf timemark-v1-backup-$(date +%Y%m%d).tar.gz ./data
 
-# 2. 删除损坏的数据库
-rm ./data/timemark.db
+# 2. 创建 v2.0 部署目录
+mkdir -p /opt/timemark-v2 && cd /opt/timemark-v2
 
-# 3. 重启（会自动初始化新数据库）
-docker compose restart
+# 3. 下载 v2.0 配置
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+
+# 4. 生成新密钥并修改配置
+openssl rand -hex 32  # JWT_SECRET
+openssl rand -hex 32  # MASTER_KEY
+vim docker-compose.yml
+
+# 5. 启动 v2.0
+docker compose up -d
+
+# 6. 手动迁移数据
+# 登录 v2.0 Web 界面，手动重新添加事件和通知渠道配置
+# v1.x 的 PostgreSQL 数据需要手动迁移
+```
+
+### 升级注意事项
+
+| 项目 | 说明 |
+|------|------|
+| 数据库 | v1.x 使用 PostgreSQL，v2.0 使用 SQLite，数据格式不兼容 |
+| 通知配置 | 需要重新配置所有通知渠道（v2.0 使用加密存储） |
+| 环境变量 | v2.0 新增 `MASTER_KEY`（必填），移除了 `DB_HOST`、`REDIS_URL` 等 |
+| 端口 | 默认端口不变，仍为 3000 |
+
+### 清理 v1.x 环境
+
+确认 v2.0 运行正常后，可以清理 v1.x 环境：
+
+```bash
+# 停止并删除 v1.x 容器
+cd /opt/timemark-v1
+docker compose down -v
+
+# 保留备份文件，删除旧部署目录
+# rm -rf /opt/timemark-v1  # 确认不再需要后执行
 ```
 
 ---
 
-## 从 v1.x 升级
+## ⚡ 资源优化（低功耗设备）
 
-v2.0.0 使用全新架构，**不支持直接升级**。建议：
+TimeMark v2.0 专门针对 Intel J4125、N5105 等低功耗 NAS 处理器做了优化。
 
-1. 备份 v1.x 数据
-2. 使用新部署配置全新部署
-3. 手动迁移数��（或联系开发者协助）
+### J4125 / N5105 优化建议
+
+| 优化项 | 建议 |
+|--------|------|
+| 内存限制 | 可在 docker-compose 中设置 `mem_limit: 512m` |
+| 日志级别 | 生产环境保持 `LOG_QUERIES: false` |
+| 备份时间 | 将自动备份设在凌晨低负载时段 |
+| 通知频率 | 避免设置过于频繁的提醒检查 |
+
+### Docker 资源限制配置
+
+```yaml
+services:
+  app:
+    image: xfffff666/timemark:latest
+    # ... 其他配置 ...
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+```
+
+### 性能对比
+
+| 指标 | v1.x (三容器) | v2.0 (单容器) |
+|:----:|:------------:|:------------:|
+| 内存占用 | ~800MB | ~256MB |
+| CPU 占用 | 中等 | 低 |
+| 启动时间 | ~30s | ~5s |
+| 磁盘占用 | ~2GB | ~500MB |
 
 ---
 
-## 支持
+## ❓ 常见问题
 
-- 邮箱: wxf200707@gmail.com
-- 问题反馈: https://github.com/WXFffff666/timemark-docker/issues
-- Star支持: https://github.com/WXFffff666/timemark-docker/stargazers
+### Q: 端口被占用怎么办？
+
+修改 docker-compose.yml 中的端口映射：
+
+```yaml
+ports:
+  - "8080:3000"  # 将 3000 改为其他可用端口
+```
+
+### Q: 镜像拉取失败
+
+如果使用 GHCR 源，需要先登录：
+
+```bash
+docker login ghcr.io -u 你的GitHub用户名 -p 你的GitHubToken
+```
+
+**推荐切换到 Docker Hub 源**，无需登录：`xfffff666/timemark:latest`
+
+### Q: 容器启动失败，提示 MASTER_KEY 错误
+
+MASTER_KEY 是 v2.0 的必填环境变量。请在 docker-compose.yml 中设置：
+
+```bash
+# 生成密钥
+openssl rand -hex 32
+
+# 将生成的字符串填入 docker-compose.yml 的 MASTER_KEY 字段
+```
+
+### Q: 忘记管理员密码
+
+```bash
+# 1. 停止服务
+docker compose down
+
+# 2. 删除数据目录（⚠️ 会清除所有数据！请先备份）
+rm -rf ./data
+
+# 3. 重新启动（自动创建新数据库和管理员账户）
+docker compose up -d
+```
+
+### Q: 通知渠道凭证解密失败
+
+如果更换了 MASTER_KEY，之前加密存储的通知渠道凭证将无法解密。需要重新配置所有通知渠道。**请妥善保管 MASTER_KEY**。
+
+### Q: 数据库文件损坏
+
+```bash
+# 1. 备份损坏的文件
+cp ./data/timemark.db ./data/timemark.db.corrupted
+
+# 2. 如果有备份，恢复备份
+cp ./data/timemark.db.bak ./data/timemark.db
+docker compose restart
+
+# 3. 如果没有备份，删除后重建（数据会丢失）
+rm ./data/timemark.db
+docker compose restart
+```
+
+### Q: 如何查看容器日志？
+
+```bash
+# 查看实时日志
+docker compose logs -f
+
+# 查看最近 100 行日志
+docker compose logs --tail 100
+
+# 查看特定时间段的日志
+docker compose logs --since "2026-04-20T00:00:00"
+```
+
+### Q: 如何更新到最新版本？
+
+```bash
+# 1. 备份数据
+tar -czf timemark-backup-$(date +%Y%m%d).tar.gz ./data
+
+# 2. 拉取最新镜像
+docker compose pull
+
+# 3. 重新启动
+docker compose up -d
+
+# 4. 确认版本
+docker compose logs | head -20
+```
 
 ---
+
+## 💬 支持
 
 <div align="center">
 
-Made with love by TimeMark
+**遇到问题？欢迎提交 Issue！**
+
+---
+
+🐛 问题反馈：[GitHub Issues](https://github.com/WXFffff666/timemark-docker/issues)
+
+⭐ Star 支持：[GitHub Stars](https://github.com/WXFffff666/timemark-docker/stargazers)
+
+---
+
+Made with ❤️ by TimeMark
 
 </div>

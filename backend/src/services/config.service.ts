@@ -1,7 +1,13 @@
 import { query } from '../db/index.js';
 import { encrypt, decrypt } from '@timemark/shared/crypto';
 
-const MASTER_KEY = process.env.MASTER_KEY!;
+if (!process.env.MASTER_KEY) {
+  console.error('[FATAL] MASTER_KEY environment variable is not set. This is required for encrypting sensitive data.');
+  console.error('[FATAL] Please set MASTER_KEY to a random string of at least 32 characters.');
+  console.error('[FATAL] Example: MASTER_KEY=$(openssl rand -hex 32)');
+  process.exit(1);
+}
+const MASTER_KEY: string = process.env.MASTER_KEY;
 
 export async function saveUserConfig(userId: number, config: any): Promise<void> {
   const e = (v: string | undefined) => v ? encrypt(v, MASTER_KEY) : null;

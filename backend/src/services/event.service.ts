@@ -2,11 +2,8 @@ import { query } from '../db/index.js';
 import type { Event, CreateEventRequest } from '@timemark/shared';
 
 export async function createEvent(userId: string, data: CreateEventRequest): Promise<Event> {
-  console.log('[createEvent] Received userId:', userId, 'type:', typeof userId);
-  
   // Convert userId from string to integer
   const numericUserId = parseInt(userId, 10);
-  console.log('[createEvent] Parsed numericUserId:', numericUserId, 'isNaN:', isNaN(numericUserId));
   
   if (isNaN(numericUserId)) {
     console.error('[createEvent] ERROR: Invalid user ID - received:', userId);
@@ -19,6 +16,7 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
     daysBeforeList: [1, 3, 7],
     emailRecipients: [] as string[],
     channels: [] as string[],
+    accountIds: [] as string[],
   };
   
   const reminderConfig = data.reminderConfig 
@@ -28,16 +26,18 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
   // Extract channels for separate column storage
   const notificationChannels = reminderConfig.channels || [];
   
-  console.log('[createEvent] About to insert with user_id:', numericUserId);
+  // Extract notification account IDs from reminderConfig
+  const notificationAccountIds = (reminderConfig.accountIds || []).map((id: string) => Number(id)).filter((id: number) => !isNaN(id));
   
   try {
     // Don't specify id - let the database auto-increment (SERIAL)
     const result = await query(
-      `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, notification_channels, relationship_mapping_id, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`,
+      `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, notification_channels, notification_account_ids, relationship_mapping_id, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id`,
       [numericUserId, data.name, data.type, data.date, data.calendarType, 
         data.lunarDate ? JSON.stringify(data.lunarDate) : null, 
         JSON.stringify(reminderConfig),
         JSON.stringify(notificationChannels),
+        JSON.stringify(notificationAccountIds),
         data.relationshipMappingId || null,
         data.personName || null,
         data.birthDate || null,
@@ -46,7 +46,6 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
         data.reminderRecipientEmail || null]
     );
     const eventId = result.rows[0].id;
-    console.log('[createEvent] Insert successful! Event ID:', eventId);
     
     return { id: eventId, userId, ...data, reminderConfig, createdAt: new Date().toISOString() };
   } catch (insertError) {
@@ -155,6 +154,10 @@ export async function updateEvent(id: string, userId: string, data: any): Promis
     // Also update notification_channels column
     updates.push(`notification_channels = $${paramIndex++}`);
     values.push(JSON.stringify(channels));
+    // Also update notification_account_ids column
+    const accountIds = (data.reminderConfig.accountIds || []).map((id: string) => Number(id)).filter((id: number) => !isNaN(id));
+    updates.push(`notification_account_ids = $${paramIndex++}`);
+    values.push(JSON.stringify(accountIds));
   }
   if (data.relationshipMappingId !== undefined) { updates.push(`relationship_mapping_id = $${paramIndex++}`); values.push(data.relationshipMappingId || null); }
   if (data.personName !== undefined) { updates.push(`person_name = $${paramIndex++}`); values.push(data.personName || null); }

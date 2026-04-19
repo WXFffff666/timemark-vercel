@@ -19,6 +19,7 @@ if (!fs.existsSync(dataDir)) {
 // In-memory database instance
 let db: SqlJsDatabase | null = null;
 let dbReady = false;
+let initPromise: Promise<SqlJsDatabase> | null = null;
 
 // Initialize database
 async function initDatabase(): Promise<SqlJsDatabase> {
@@ -33,6 +34,7 @@ async function initDatabase(): Promise<SqlJsDatabase> {
   }
   
   dbReady = true;
+  startAutoSave();
   return db;
 }
 
@@ -53,19 +55,61 @@ function saveDatabase(): void {
   }
 }
 
-// Wait for database initialization
+// Wait for database initialization (lazy singleton - no race condition)
 export async function waitForDb(): Promise<SqlJsDatabase> {
-  if (!db) {
-    await initDatabase();
+  if (!initPromise) {
+    initPromise = initDatabase();
   }
+  await initPromise;
   return getDb();
 }
 
-// Initialize on module load
-initDatabase().catch(console.error);
+// Periodic auto-save (every 5 minutes) as safety net for crash recovery
+const SAVE_INTERVAL = 5 * 60 * 1000;
+let saveTimer: ReturnType<typeof setInterval> | null = null;
+let isDirty = false;
+
+function markDirty(): void {
+  isDirty = true;
+}
+
+function startAutoSave(): void {
+  if (saveTimer) return;
+  saveTimer = setInterval(() => {
+    if (isDirty && db) {
+      saveDatabase();
+      isDirty = false;
+    }
+  }, SAVE_INTERVAL);
+  // Don't prevent process exit
+  if (saveTimer.unref) saveTimer.unref();
+}
+
+// Graceful shutdown
+function gracefulShutdown(): void {
+  if (db) {
+    console.log('[DB] Saving database before shutdown...');
+    saveDatabase();
+    console.log('[DB] Database saved.');
+  }
+  if (saveTimer) {
+    clearInterval(saveTimer);
+    saveTimer = null;
+  }
+}
+
+process.on('SIGTERM', () => { gracefulShutdown(); process.exit(0); });
+process.on('SIGINT', () => { gracefulShutdown(); process.exit(0); });
 
 const LOG_QUERIES = process.env.LOG_QUERIES === 'true';
 
+/**
+ * Convert PostgreSQL-style $1, $2 params to SQLite ? placeholders.
+ * WARNING: This is a simple regex replacement. It does NOT handle:
+ * - $N inside string literals (e.g., 'price is $5')
+ * - Out-of-order parameters (assumes $1, $2, $3... in order)
+ * All current queries use sequential params, so this works.
+ */
 function convertPgParamsToSqlite(text: string): string {
   return text.replace(/\$\d+/g, '?');
 }
@@ -104,9 +148,6 @@ export async function query(text: string, params: any[] = []): Promise<QueryResu
         console.log('Executed query', { text, duration, rows: rows.length });
       }
       
-      // Auto-save after reads
-      saveDatabase();
-      
       return {
         rows,
         rowCount: rows.length,
@@ -124,7 +165,7 @@ export async function query(text: string, params: any[] = []): Promise<QueryResu
       console.log('Executed query', { text, duration, rows: changes });
     }
     
-    // Auto-save after writes
+    // Save immediately after writes
     saveDatabase();
     
     return {

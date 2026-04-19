@@ -12,6 +12,7 @@ build
 
 # Data directory (contains SQLite DB)
 data/
+backend/data/
 
 # Test files with credentials
 test-login.json

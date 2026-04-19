@@ -36,7 +36,7 @@ export function applyRelationshipMapping(
   if (recipientType) {
     const typeMapping = mappings.find(m => m.recipient_type === recipientType);
     if (typeMapping) {
-      return eventName.replace(typeMapping.from_relation, typeMapping.to_relation);
+      return eventName.replaceAll(typeMapping.from_relation, typeMapping.to_relation);
     }
   }
 
@@ -44,14 +44,14 @@ export function applyRelationshipMapping(
   if (recipientEmail) {
     const emailMapping = mappings.find(m => m.recipient_email === recipientEmail);
     if (emailMapping) {
-      return eventName.replace(emailMapping.from_relation, emailMapping.to_relation);
+      return eventName.replaceAll(emailMapping.from_relation, emailMapping.to_relation);
     }
   }
 
   // 最后尝试模糊匹配（检查事件名称是否包含原始称呼）
   for (const mapping of mappings) {
     if (eventName.includes(mapping.from_relation)) {
-      return eventName.replace(mapping.from_relation, mapping.to_relation);
+      return eventName.replaceAll(mapping.from_relation, mapping.to_relation);
     }
   }
 

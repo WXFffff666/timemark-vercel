@@ -2,11 +2,13 @@
 # 单容器部署：SQLite 内置数据库
 # 特点：数据持久化完整配置，自动备份配置
 
-# ⚠️ 重要：首次部署前请修改以下环境变量！
-# - DEFAULT_ADMIN_USERNAME: 管理员用户名
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  ⚠️  安全警告：部署前必须修改以下所有默认值！              ║
+# ║  使用默认密码部署将导致严重安全风险！                       ║
+# ╚══════════════════════════════════════════════════════════════╝
 # - DEFAULT_ADMIN_PASSWORD: 管理员密码（请使用强密码，至少8位）
-# - JWT_SECRET: JWT签名密钥（请使用随机字符串，至少32位）
-# - MASTER_KEY: 主密钥（用于敏感数据加密，请使用随机字符串）
+# - JWT_SECRET: JWT签名密钥（至少32位随机字符串，示例: openssl rand -hex 32）
+# - MASTER_KEY: 主密钥（至少32位随机字符串，用于敏感数据加密）
 
 services:
   app:
@@ -18,17 +20,17 @@ services:
     environment:
       # SQLite: 数据存储位置（容器内）
       DB_PATH: /app/data/timemark.db
-      # 管理员凭证（⚠️ 必须修改）
+      # 管理员凭证（⚠️ 必须修改！使用默认值将无法保证安全！）
       DEFAULT_ADMIN_USERNAME: admin
-      DEFAULT_ADMIN_PASSWORD: YourSecurePassword123
+      DEFAULT_ADMIN_PASSWORD: CHANGE_ME_IMMEDIATELY
       # 时区
       TZ: Asia/Shanghai
       # 环境
       NODE_ENV: production
-      # JWT 密钥（⚠️ 务必修改为随机字符串）
-      JWT_SECRET: ${JWT_SECRET:-your-secure-jwt-secret-min-32-chars}
-      # 主密钥（⚠️ 务必修改为随机字符串）
-      MASTER_KEY: ${MASTER_KEY:-your-secure-master-key-min-32}
+      # JWT 密钥（⚠️ 必须修改！运行 openssl rand -hex 32 生成）
+      JWT_SECRET: ${JWT_SECRET:-CHANGE_ME_USE_openssl_rand_hex_32}
+      # 主密钥（⚠️ 必须修改！运行 openssl rand -hex 32 生成）
+      MASTER_KEY: ${MASTER_KEY:-CHANGE_ME_USE_openssl_rand_hex_32}
     volumes:
       # 数据持久化目录（包含 SQLite 数据库和上传文件）
       - ./data:/app/data

@@ -33,11 +33,14 @@ export async function testConnection(config: {
         return { success: false, message: '未知的配置方式' };
     }
   } catch (error: any) {
-    console.error('[TestConnection] Error:', error);
+    console.error(`[TestConnection] ${type} (${configMethod}) error:`, error?.message || error);
+    const details = error.response?.data 
+      ? JSON.stringify(error.response.data) 
+      : error.code ? `Error code: ${error.code}` : undefined;
     return { 
       success: false, 
-      message: error.message || '测试连接失败',
-      details: error.response?.data ? JSON.stringify(error.response.data) : undefined
+      message: error.message || `测试 ${type} 连接失败`,
+      details
     };
   }
 }
@@ -105,6 +108,17 @@ async function testTokenChannel(
     
     case 'line':
       return await testLineChannel(token, chatId!);
+    
+    case 'nextcloud_talk':
+    case 'mattermost':
+    case 'matrix':
+    case 'msteams':
+    case 'nostr':
+      // These channels require server_url + token + chat_id; validate presence
+      if (!chatId) {
+        return { success: false, message: `${type} 需要提供 Chat ID / Room Token` };
+      }
+      return { success: true, message: `${type} 配置格式正确（实际连通性将在发送时验证）` };
     
     default:
       return { success: false, message: `暂不支持测试 ${type} 渠道` };

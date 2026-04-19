@@ -1,141 +1,484 @@
-# TimeMark Docker
+# TimeMark Docker 技术文档
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
+[![Docker Pulls](https://img.shields.io/docker/pulls/xfffff666/timemark?style=flat&color=0ea5e9)](https://hub.docker.com/r/xfffff666/timemark)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
 
-**智能事件提醒系统** | **多渠道通知** | **关系映射** | **双因素认证**
+**智能事件提醒系统** · **27+ 通知渠道** · **农历转换** · **关系映射** · **双因素认证**
 
 ---
 
-[English](README.md) | [中文](PROJECT_DOC.md)
+[部署文档](DEPLOYMENT.md) · [问题反馈](https://github.com/WXFffff666/timemark-docker/issues)
 
 </div>
 
 ---
 
-## 项目简介
+## 📋 目录
 
-TimeMark Docker 是一款功能强大的智能事件提醒系统，专为管理生日、纪念日等重要事件而设计。
+- [项目简介](#-项目简介)
+- [系统架构](#-系统架构)
+- [技术栈](#-技术栈)
+- [数据库设计](#-数据库设计)
+- [API 接口](#-api-接口)
+- [通知渠道架构](#-通知渠道架构)
+- [安全模型](#-安全模型)
+- [核心功能](#-核心功能)
+- [项目结构](#-项目结构)
+- [开发指南](#-开发指南)
+- [部署配置](#-部署配置)
+
+---
+
+## 📖 项目简介
+
+TimeMark Docker 是一款功能强大的智能事件提醒系统，专为管理生日、纪念日等重要事件而设计。v2.0 版本进行了彻底的架构重构，从三容器方案（PostgreSQL + Redis + App）精简为单容器部署（SQLite 内置），大幅降低了部署复杂度和资源占用。
 
 ### 核心特性
 
 | 特性 | 说明 |
 |------|------|
-| 农历支持 | 支持公历/农历双重日历，智能闰月转换 |
-| 27个通知渠道 | 覆盖国内外主流通讯平台 |
-| 关系映射 | 自定义称呼转换 (如"我爸"→"父亲") |
-| 企业级安全 | TOTP双因素认证，JWT会话管理 |
-| 全球时区 | NTP自动时间同步 |
-| 触发日志 | 完整的事件触发记录 |
+| 🗓️ 农历支持 | 支持公历/农历双重日历，智能闰月转换 |
+| 📢 27+ 通知渠道 | 覆盖国内外主流通讯平台，同渠道多账户 |
+| 👨‍👩‍👧‍👦 关系映射 | 自定义称呼转换（如「我爸」→「父亲」） |
+| 🔒 企业级安全 | MASTER_KEY 加密 + TOTP 双因素认证 + JWT 会话 |
+| 🌍 全球时区 | NTP 自动时间同步，支持任意时区 |
+| 📊 触发日志 | 完整的事件触发记录，方便排查问题 |
+| 💾 数据导出 | 支持用户数据完整导出/导入 |
+
+### v2.0 vs v1.x
+
+| 对比项 | v1.x | v2.0 |
+|:------:|:----:|:----:|
+| 数据库 | PostgreSQL 15 + Redis 7 | SQLite 3 (sql.js) |
+| 容器数量 | 3 个 | 1 个 |
+| 内存占用 | ~800MB | ~256MB |
+| 部署复杂度 | 需配置数据库连接 | 开箱即用 |
+| 凭证存储 | 明文 | AES-256 加密 |
+| 定时任务 | Redis + Bull | Croner (内置) |
 
 ---
 
-## 快速开始
+## 🏗️ 系统架构
 
-### 前置要求
+### 整体架构
 
-- Docker Engine 20.10+
-- Docker Compose 2.0+
-- 2GB 可用内存
-- 端口 3000 可用
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      TimeMark v2.0                          │
+│                  单容器 · 零依赖 · 开箱即用                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ┌─────────────────┐         ┌──────────────────────┐      │
+│   │    :3000         │         │     SQLite DB         │      │
+│   │    Web UI        │         │  sql.js (内存数据库    │      │
+│   │  (React 18 SPA)  │         │  + 文件持久化)         │      │
+│   └────────┬────────┘         └──────────┬───────────┘      │
+│            │                              │                  │
+│            │      ┌────────────────┐      │                  │
+│            └─────>│    Hono API    │<─────┘                  │
+│                   │  (TypeScript)   │                         │
+│                   └───────┬────────┘                         │
+│                           │                                  │
+│          ┌────────────────┼────────────────┐                 │
+│          │                │                │                 │
+│   ┌──────┴──────┐  ┌─────┴──────┐  ┌──────┴───────┐        │
+│   │   Croner    │  │   Static   │  │    Alert     │        │
+│   │  Scheduler  │  │   Server   │  │   Service    │        │
+│   │  (定时任务)  │  │  (前端资源)  │  │  (通知分发)   │        │
+│   └─────────────┘  └────────────┘  └──────────────┘        │
+│                                           │                  │
+│                    ┌──────────────────────┤                  │
+│                    │                      │                  │
+│              ┌─────┴──────┐        ┌──────┴──────┐          │
+│              │  Webhook   │        │   Plugin    │          │
+│              │  Channels  │        │  Channels   │          │
+│              │ (直连推送)  │        │ (扫码授权)   │          │
+│              └────────────┘        └─────────────┘          │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### 镜像拉取方式
+### 请求处理流程
 
-| 镜像源 | 拉取地址 | 需要认证 |
-|--------|----------|:--------:|
-| **Docker Hub** (推荐) | `xfffff666/timemark:latest` | 否 |
-| **GHCR** | `ghcr.io/wfffff666/timemark:latest` | 是 |
+```
+客户端请求 → Hono 中间件链 → 路由匹配 → 业务逻辑 → 数据库操作 → 响应
 
-### 一键启动
+中间件链：
+  1. Logger (请求日志)
+  2. CORS (跨域处理)
+  3. Auth Middleware (JWT 验证，保护 /api/* 路由)
+  4. Rate Limiter (限流保护)
+```
 
-```bash
-# 1. 创建目录
-mkdir timemark && cd timemark
+### 定时任务流程
 
-# 2. 下载配置 (二选一)
-# Docker Hub (推荐)
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
-
-# GHCR
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.ghcr.yml -o docker-compose.yml
-
-# 3. 启动
-docker compose up -d
-
-# 4. 访问
-# http://localhost:3000
-# 账号: admin
-# 密码: TimeMark@2026
+```
+Croner Scheduler (每分钟检查)
+  → 查询当天需要提醒的事件
+  → 农历/公历日期匹配
+  → 获取事件关联的通知渠道和账户
+  → 解密通知凭证 (AES-256)
+  → 分发到各通知渠道
+  → 记录触发日志
 ```
 
 ---
 
-## 系统架构
+## 🔧 技术栈
+
+| 层级 | 技术 | 版本 | 说明 |
+|:----:|------|:----:|------|
+| 前端 | React | 18 | 现代化 SPA 应用 |
+| 前端 | TypeScript | 5.x | 类型安全 |
+| 前端 | TailwindCSS | 3.x | 原子化 CSS |
+| 前端 | Radix UI | - | 无障碍组件库 |
+| 后端 | Hono | 4.x | 轻量高性能 Web 框架 |
+| 后端 | TypeScript | 5.x | 类型安全 |
+| 后端 | lunar-javascript | - | 农历转换库 |
+| 数据库 | sql.js | - | SQLite 的纯 JS/WASM 实现 |
+| 定时任务 | Croner | - | 轻量级 Cron 调度器 |
+| 认证 | jose | - | JWT (HS256) 实现 |
+| 加密 | Node.js crypto | - | AES-256 + bcrypt |
+| 构建 | esbuild | - | 高速 TypeScript 编译 |
+| 容器 | Docker | - | 单容器部署 |
+
+### 关于 sql.js
+
+sql.js 是 SQLite 的纯 JavaScript/WebAssembly 实现，具有以下特点：
+
+- **内存运行**：数据库完全在内存中运行，读写速度极快
+- **文件持久化**：通过定期自动保存（auto-save）将内存数据写入磁盘文件
+- **零依赖**：不需要安装原生 SQLite 库，跨平台兼容性极佳
+- **WASM 加速**：使用 WebAssembly 编译的 SQLite 引擎，性能接近原生
+
+> ⚠️ 注意：sql.js 不支持 WAL (Write-Ahead Logging) 模式，因为数据库运行在内存中。持久化通过 `db.export()` 导出二进制数据并写入文件实现。
+
+---
+
+## 💾 数据库设计
+
+### Schema 概览
+
+TimeMark 使用 SQLite 数据库，包含以下核心表：
 
 ```
-+------------------------------------------------------------------+
-|                         TimeMark 架构图                           |
-+------------------------------------------------------------------+
-|                                                                   |
-|    +-------------------------------------------------------------+ |
-|    |                        :3000                                | |
-|    |                        Web UI                                | |
-|    +--------------------------+------------------------------------+ |
-|                             |                                     |
-|                             v                                     |
-|    +-------------------------------------------------------------+ |
-|    |                      Hono API                               | |
-|    |                  +------------+                           | |
-|    |                  |  /events   |  事件管理            | |
-|    |                  |  /auth    |  认证授权            | |
-|    |                  |  /config  |  配置管理            | |
-|    |                  |  /notify |  通知分发            | |
-|    |                  +------------+                           | |
-|    +--------------------------+------------------------------------+ |
-|                             |                                     |
-|           +-----------------+-----------------+                     |
-|           |                 |                 |                     |
-|           v                 v                 v                   |
-|    +----------+     +----------+     +----------+                |
-|    |  :5432  |     |  :6379  |     |  Cron   |                |
-|    |PostgreSQL     |  Redis   |    |Scheduler            |
-|    +----------+     +----------+     +----------+                |
-|                                                                   |
-+------------------------------------------------------------------+
+┌──────────────────┐     ┌──────────────────┐
+│      users       │     │     sessions     │
+│──────────────────│     │──────────────────│
+│ id (PK)          │────>│ user_id (FK)     │
+│ username         │     │ token            │
+│ password_hash    │     │ device_fingerprint│
+│ totp_secret      │     │ is_trusted       │
+│ avatar_url       │     │ expires_at       │
+│ created_at       │     │ created_at       │
+└──────────────────┘     └──────────────────┘
+         │
+         │ 1:N
+         ▼
+┌──────────────────┐     ┌──────────────────────┐
+│     events       │     │ notification_accounts │
+│──────────────────│     │──────────────────────│
+│ id (PK)          │     │ id (PK)              │
+│ user_id (FK)     │     │ user_id (FK)         │
+│ name             │     │ type                 │
+│ type             │     │ name                 │
+│ date             │     │ webhook (加密)        │
+│ calendar_type    │     │ token (加密)          │
+│ lunar_date       │     │ secret (加密)         │
+│ reminder_config  │     │ chat_id              │
+│ reminder_time    │     │ is_active            │
+│ notification_    │     │ config_method        │
+│   channels       │     │ session_data (加密)   │
+│ notification_    │     │ plugin_package       │
+│   account_ids    │     │ created_at           │
+│ person_name      │     └──────────────────────┘
+│ created_at       │
+└──────────────────┘
+         │
+         │ 1:N
+         ▼
+┌──────────────────────┐
+│  event_trigger_logs  │
+│──────────────────────│
+│ id (PK)              │
+│ event_id (FK)        │
+│ user_id (FK)         │
+│ trigger_type         │
+│ trigger_date         │
+│ scheduled_date       │
+│ status               │
+│ channels             │
+│ error_message        │
+│ created_at           │
+└──────────────────────┘
 ```
 
-### 技术栈
+### 完整表结构
 
-| 层级 | 技术 |
+| 表名 | 说明 | 主要字段 |
+|------|------|----------|
+| `users` | 用户表 | id, username, password_hash, totp_secret |
+| `sessions` | 会话表 | token, device_fingerprint, expires_at |
+| `events` | 事件表 | name, type, date, calendar_type, lunar_date, reminder_config |
+| `notification_accounts` | 通知账户表 | type, name, webhook(加密), token(加密), secret(加密) |
+| `event_trigger_logs` | 触发日志表 | event_id, trigger_type, status, channels |
+| `relationship_mappings` | 关系映射表 | from_relation, to_relation, recipient_type |
+| `user_configs` | 用户配置表 | 各渠道加密凭证, reminder_emails, alert_channels |
+| `email_logs` | 邮件日志表 | event_id, recipient, status, message_id |
+| `login_logs` | 登录日志表 | ip_address, user_agent, success, failure_reason |
+| `login_attempts` | 登录尝试表 | identifier, failed_count, locked_until |
+| `event_templates` | 事件模板表 | event_type, template_content |
+| `schema_version` | Schema 版本表 | version, applied_at |
+
+### 数据库初始化流程
+
+```
+应用启动
+  → initSqlJs() 加载 WASM 引擎
+  → 检查磁盘文件是否存在
+    → 存在：读取文件到内存
+    → 不存在：创建空数据库
+  → 启动自动保存定时器
+  → 执行 schema.sql 迁移（CREATE TABLE IF NOT EXISTS）
+  → 检查 schema_version 表，执行增量迁移
+  → 数据库就绪
+```
+
+---
+
+## 🌐 API 接口
+
+所有 API 路由挂载在 `/api` 前缀下，受 JWT 认证保护（除登录接口外）。
+
+### 认证接口 (`/api/auth`)
+
+| 方法 | 路径 | 说明 | 认证 |
+|:----:|------|------|:----:|
+| POST | `/api/auth/login` | 用户登录 | 否 |
+| POST | `/api/auth/verify-2fa` | 验证 TOTP 码 | 否 |
+| POST | `/api/auth/setup-2fa` | 获取 TOTP 密钥和二维码 | 是 |
+| POST | `/api/auth/logout` | 登出（销毁会话） | 是 |
+| POST | `/api/auth/change-password` | 修改密码 | 是 |
+| POST | `/api/auth/refresh` | 刷新 Access Token | 是 |
+
+### 事件接口 (`/api/events`)
+
+| 方法 | 路径 | 说明 | 认证 |
+|:----:|------|------|:----:|
+| GET | `/api/events` | 获取所有事件列表 | 是 |
+| POST | `/api/events` | 创建新事件 | 是 |
+| PUT | `/api/events/:id` | 更新事件 | 是 |
+| DELETE | `/api/events/:id` | 删除事件 | 是 |
+
+### 配置接口 (`/api/config`)
+
+| 方法 | 路径 | 说明 | 认证 |
+|:----:|------|------|:----:|
+| GET | `/api/config` | 获取用户配置 | 是 |
+| POST | `/api/config` | 保存用户配置 | 是 |
+
+### 通知渠道接口 (`/api/channels`)
+
+| 方法 | 路径 | 说明 | 认证 |
+|:----:|------|------|:----:|
+| GET | `/api/channels/templates` | 获取所有渠道模板 | 是 |
+| GET | `/api/channels/templates/:id` | 获取单个渠道模板 | 是 |
+| GET | `/api/channels/accounts` | 获取用户通知账户列表 | 是 |
+| POST | `/api/channels/accounts` | 创建通知账户 | 是 |
+| PUT | `/api/channels/accounts/:id` | 更新通知账户 | 是 |
+| DELETE | `/api/channels/accounts/:id` | 删除通知账户 | 是 |
+| POST | `/api/channels/test` | 测试通知连接 | 是 |
+| POST | `/api/channels/plugin/:type/start` | 启动插件授权 | 是 |
+| GET | `/api/channels/plugin/:type/status` | 查询插件授权状态 | 是 |
+| POST | `/api/channels/plugin/:type/logout` | 登出插件 | 是 |
+
+### 触发日志接口 (`/api/trigger-logs`)
+
+| 方法 | 路径 | 说明 | 认证 |
+|:----:|------|------|:----:|
+| GET | `/api/trigger-logs` | 获取触发日志列表 | 是 |
+| GET | `/api/trigger-logs/stats` | 获取触发统计 | 是 |
+
+### 数据接口 (`/api/data`)
+
+| 方法 | 路径 | 说明 | 认证 |
+|:----:|------|------|:----:|
+| GET | `/api/data/export` | 导出用户所有数据 | 是 |
+| POST | `/api/data/import` | 导入用户数据 | 是 |
+
+### 健康检查
+
+| 方法 | 路径 | 说明 | 认证 |
+|:----:|------|------|:----:|
+| GET | `/health` | 健康检查 | 否 |
+
+---
+
+## 📢 通知渠道架构
+
+### 渠道分类
+
+TimeMark 将 27+ 通知渠道分为三种配置方式：
+
+| 配置方式 | 说明 | 渠道数量 |
+|:--------:|------|:--------:|
+| **webhook** | 只需填写 Webhook URL | 大部分渠道 |
+| **token** | 需要 Bot Token + 其他参数 | 部分渠道 |
+| **plugin** | 需要扫码授权（如微信个人号） | 6 个 |
+
+### 渠道实现列表
+
+| 渠道 | 服务文件 | 配置方式 | 内置 |
+|------|----------|:--------:|:----:|
+| 邮件 (Resend) | `email.service.ts` | token | ✅ |
+| Discord | `discord.service.ts` | webhook | ✅ |
+| Slack | `slack.service.ts` | webhook | ✅ |
+| 飞书 | `feishu.service.ts` | webhook | ✅ |
+| 企业微信 | `wecom.service.ts` | webhook | ✅ |
+| 钉钉 | `dingtalk.service.ts` | webhook | ✅ |
+| Telegram | `telegram.service.ts` | token | ✅ |
+| WxPusher | `wxpusher.service.ts` | token | ✅ |
+| Qmsg | `qmsg.service.ts` | token | ✅ |
+| Google Chat | `googlechat.service.ts` | webhook | ✅ |
+| IRC | `irc.service.ts` | webhook | ✅ |
+| Synology Chat | `synologychat.service.ts` | webhook | ✅ |
+| Twitch | `twitch.service.ts` | webhook | ✅ |
+| Mattermost | `mattermost.service.ts` | webhook | ✅ |
+| Nextcloud Talk | `nextcloudtalk.service.ts` | webhook | ✅ |
+| 通用 Webhook | `generic-webhook.service.ts` | webhook | ✅ |
+| Matrix | `matrix.service.ts` | token | ✅ |
+| LINE | `line.service.ts` | token | ✅ |
+| Microsoft Teams | `msteams.service.ts` | webhook | ✅ |
+| Nostr | `nostr.service.ts` | token | ✅ |
+| WhatsApp | `whatsapp.service.ts` | plugin | ❌ |
+| 微信 (OpenClaw) | `wechat-openclaw.service.ts` | plugin | ❌ |
+| 微信 (Wechaty) | `wechaty.service.ts` | plugin | ❌ |
+| QQ Bot | `qqbot.service.ts` | plugin | ❌ |
+| Signal | `signal.service.ts` | plugin | ❌ |
+| iMessage | `bluebubbles.service.ts` | plugin | ❌ |
+| Zalo | `zalo.service.ts` | plugin | ❌ |
+
+### 通知发送流程
+
+```
+事件触发
+  → 获取事件关联的通知渠道 IDs
+  → 查询 notification_accounts 表
+  → 解密凭证 (AES-256, MASTER_KEY)
+  → 根据渠道类型调用对应 service
+    → webhook: HTTP POST 到 Webhook URL
+    → token: 使用 Bot Token 调用 API
+    → plugin: 通过已授权的会话发送
+  → 记录发送结果到 event_trigger_logs
+```
+
+### 多账户支持
+
+v2.0 支持同一渠道配置多个账户。例如可以配置多个 Telegram Bot，不同事件发送到不同的 Bot/群组。
+
+```
+notification_accounts 表:
+  ┌────┬──────────┬──────────────┬────────────┐
+  │ id │ type     │ name         │ is_active  │
+  ├────┼──────────┼──────────────┼────────────┤
+  │ 1  │ telegram │ 家庭群 Bot    │ 1          │
+  │ 2  │ telegram │ 工作群 Bot    │ 1          │
+  │ 3  │ discord  │ 个人频道      │ 1          │
+  └────┴──────────┴──────────────┴────────────┘
+```
+
+---
+
+## 🛡️ 安全模型
+
+### 安全架构概览
+
+```
+┌─────────────────────────────────────────────┐
+│              安全防护层                       │
+├─────────────────────────────────────────────┤
+│                                              │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │ 启动校验  │  │ 请求限流  │  │ XSS 防护 │  │
+│  │MASTER_KEY│  │Rate Limit│  │ 输出转义  │  │
+│  └──────────┘  └──────────┘  └──────────┘  │
+│                                              │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │ JWT 认证 │  │ TOTP 2FA │  │ 登录锁定 │  │
+│  │ HS256    │  │ 双因素   │  │ 5次/15分  │  │
+│  └──────────┘  └──────────┘  └──────────┘  │
+│                                              │
+│  ┌──────────┐  ┌──────────┐                 │
+│  │ 密码哈希 │  │ 凭证加密 │                 │
+│  │ bcrypt   │  │ AES-256  │                 │
+│  └──────────┘  └──────────┘                 │
+│                                              │
+└─────────────────────────────────────────────┘
+```
+
+### MASTER_KEY 机制
+
+MASTER_KEY 是 v2.0 的核心安全组件：
+
+- **启动强制校验**：应用启动时检查 `MASTER_KEY` 环境变量，未设置则 `process.exit(1)` 拒绝启动
+- **凭证加密**：所有通知渠道的敏感凭证（Webhook URL、Bot Token、Secret 等）使用 AES-256 加密后存储
+- **加密/解密函数**：`encrypt(value, MASTER_KEY)` / `decrypt(value, MASTER_KEY)`
+- **不可更换**：更换 MASTER_KEY 后，已加密的凭证将无法解密
+
+### JWT 会话管理
+
+| 令牌类型 | 有效期 | 用途 |
+|:--------:|:------:|------|
+| Access Token | 15 分钟 | API 请求认证 |
+| Refresh Token | 7 天 | 刷新 Access Token |
+
+- 签名算法：HS256
+- JWT_SECRET 最小长度：32 字符（生产环境强制检查）
+- 支持设备指纹和信任设备机制
+
+### 登录安全
+
+| 机制 | 说明 |
 |------|------|
-| 前端 | React 18, TypeScript, TailwindCSS |
-| 后端 | Hono, TypeScript, lunar-javascript |
-| 数据库 | PostgreSQL 15, Redis 7 |
-| 认证 | JWT, TOTP |
+| 密码哈希 | bcrypt (cost=10)，不可逆 |
+| 登录锁定 | 连续 5 次失败，锁定 15 分钟 |
+| 登录日志 | 记录 IP、User-Agent、设备指纹 |
+| 2FA | TOTP 双因素认证，支持 Google/Microsoft Authenticator |
+
+### 数据加密
+
+| 数据类型 | 加密方式 |
+|----------|----------|
+| 用户密码 | bcrypt (cost=10) 哈希 |
+| TOTP 密钥 | 数据库明文（仅管理员可见） |
+| 通知 Webhook URL | AES-256 加密 (MASTER_KEY) |
+| 通知 Bot Token | AES-256 加密 (MASTER_KEY) |
+| 通知 Secret | AES-256 加密 (MASTER_KEY) |
+| 插件会话数据 | AES-256 加密 (MASTER_KEY) |
 
 ---
 
-## 功能详解
+## 📋 核心功能
 
 ### 事件类型
 
-| 类型 | 说明 |
-|------|------|
-| birthday | 生日 |
-| anniversary | 纪念日 |
-| holiday | 节日 |
-| custom | 自定义 |
+| 类型标识 | 名称 | 说明 |
+|:--------:|------|------|
+| `birthday` | 生日 | 家人、朋友、同事的生日 |
+| `anniversary` | 纪念日 | 结婚/恋爱/创业纪念日 |
+| `holiday` | 节日 | 春节/中秋节/情人节等 |
+| `custom` | 自定义 | 任意重要日期 |
 
 ### 日历类型
 
 ```typescript
 type CalendarType = 'gregorian' | 'lunar' | 'both';
 // gregorian: 仅公历
-// lunar: 仅农历
-// both: 公历农历都显示
+// lunar: 仅农历（使用 lunar-javascript 库转换）
+// both: 公历 + 农历同时显示
 ```
 
 ### 提醒配置
@@ -144,156 +487,100 @@ type CalendarType = 'gregorian' | 'lunar' | 'both';
 {
   "reminderTime": "09:00",
   "reminderDaysBefore": [1, 3, 7],
-  "notificationChannels": ["email", "telegram"],
-  "reminderEmails": ["user@example.com"]
+  "notificationChannels": ["telegram", "email"],
+  "notificationAccountIds": [1, 3]
 }
 ```
 
----
+### 关系映射
 
-## 通知渠道 (27个)
-
-### 官方直连 (9个)
-
-| 渠道 | 说明 |
-|------|------|
-| Email (Resend) | 正式邮件通知 |
-| 飞书 | 飞书群聊通知 |
-| 企业微信 | 企业微信群聊 |
-| 钉钉 | 钉钉群聊通知 |
-| Telegram | Telegram机器人 |
-| Slack | Slack频道 |
-| Discord | Discord频道 |
-| WxPusher | 微信公众号通知 |
-| QMsg | QQ机器人通知 |
-
-### Webhook集成 (18个)
-
-WhatsApp / Google Chat / Signal / iMessage / IRC / Microsoft Teams / Matrix / LINE / Mattermost / Nostr / Twitch / Zalo / 等
+| 原始称呼 | 转换后 | 场景 |
+|:--------:|:------:|------|
+| 我爸 | 父亲 | 发送给其他家庭成员时 |
+| 我妈 | 母亲 | 发送给其他家庭成员时 |
+| 老婆 | 妻子 | 统一正式称呼 |
+| 爷爷 | 外公 | 家庭成员关系映射 |
 
 ---
 
-## 关系映射
-
-| 原始称呼 | 转换后 | 说明 |
-|---------|--------|------|
-| 我爸 | 父亲 | 给妈妈发送时 |
-| 我妈 | 妻子 | 给爸爸发送时 |
-| 老婆 | 妻子 | 统一称呼 |
-| 爷爷 | 外公 | 家庭成员映射 |
-
----
-
-## 安全特性
-
-### TOTP 双因素认证
-
-支持 Google Authenticator、Microsoft Authenticator 等TOTP应用
-
-### JWT 会话管理
-
-- Access Token: 15分钟
-- Refresh Token: 7天
-- 设备信任机制
-
-### 安全告警
-
-- 5次登录失败告警
-- 新设备登录告警
-- 密码修改告警
-
----
-
-## 项目结构
+## 📁 项目结构
 
 ```
 timemark-docker/
 ├── backend/
 │   └── src/
-│       ├── routes/         # API路由
-│       │   ├── auth.ts    # 认证
-│       │   ├── config.ts  # 配置
-│       │   └── events.ts # 事件
-│       ├── services/      # 业务逻辑
-│       │   └── notifications/ # 通知服务
-│       ├── jobs/         # 定时任务
-│       └── utils/        # 工具函数
+│       ├── index.ts              # 应用入口（启动校验、路由注册）
+│       ├── db/
+│       │   ├── index.ts          # sql.js 数据库初始化、连接管理
+│       │   └── migrate.ts        # Schema 迁移
+│       ├── routes/
+│       │   ├── auth.ts           # 认证路由（登录/登出/2FA/改密）
+│       │   ├── events.ts         # 事件 CRUD
+│       │   ├── config.ts         # 用户配置
+│       │   ├── channels.ts       # 通知渠道管理
+│       │   ├── trigger-logs.ts   # 触发日志查询
+│       │   └── data.ts           # 数据导出/导入
+│       ├── services/
+│       │   ├── auth.service.ts   # 认证业务逻辑
+│       │   ├── session.service.ts # 会话管理
+│       │   ├── alert.service.ts  # 提醒分发服务
+│       │   ├── config.service.ts # 配置服务（含加密/解密）
+│       │   └── notifications/    # 通知渠道实现
+│       │       ├── index.ts              # 统一入口
+│       │       ├── channels.config.ts    # 渠道定义和配置
+│       │       ├── test-connection.ts    # 连接测试
+│       │       ├── email.service.ts      # 邮件 (Resend)
+│       │       ├── telegram.service.ts   # Telegram
+│       │       ├── discord.service.ts    # Discord
+│       │       ├── slack.service.ts      # Slack
+│       │       ├── feishu.service.ts     # 飞书
+│       │       ├── wecom.service.ts      # 企业微信
+│       │       ├── dingtalk.service.ts   # 钉钉
+│       │       ├── wxpusher.service.ts   # WxPusher
+│       │       ├── qmsg.service.ts       # Qmsg
+│       │       ├── ... (更多渠道)
+│       │       └── zalo.service.ts       # Zalo
+│       ├── middleware/
+│       │   └── auth.middleware.ts # JWT 认证中间件
+│       ├── queue/
+│       │   └── scheduler.ts      # Croner 定时任务调度
+│       └── utils/
+│           ├── jwt.ts            # JWT 工具
+│           └── password.ts       # 密码哈希工具
 │
 ├── frontend/
 │   └── src/
-│       ├── pages/        # 页面
-│       └── components/   # 组件
+│       ├── pages/                # 页面组件
+│       └── components/           # UI 组件
 │
-├── shared/               # 共享类型
-├── docker/              # Docker配置
-├── docker-compose*.yml   # 多种部署配置
-└── README.md
+├── shared/                       # 前后端共享类型定义
+│
+├── docker/
+│   ├── Dockerfile                # Docker 构建文件
+│   └── schema.sql                # 数据库 Schema
+│
+├── docker-compose.dockerhub.yml  # Docker Hub 部署配置（推荐）
+├── docker-compose.ghcr.yml       # GHCR 部署配置
+├── docker-compose.simple.yml     # 飞牛OS 轻量配置
+├── docker-compose.nas.yml        # NAS 专用配置
+├── docker-compose.full.yml       # 公网服务器完整配置
+├── docker-compose.public.yml     # 快速测试配置
+├── docker-compose.yml            # 本地开发配置
+│
+├── README.md                     # 项目说明
+├── DEPLOYMENT.md                 # 部署指南
+└── PROJECT_DOC.md                # 技术文档（本文件）
 ```
 
 ---
 
-## 部署配置
+## 🛠️ 开发指南
 
-### 配置文件说明
+### 前置要求
 
-| 文件 | 适用场景 |
-|------|----------|
-| docker-compose.dockerhub.yml | 通用 (推荐) |
-| docker-compose.ghcr.yml | 通用 |
-| docker-compose.simple.yml | 飞牛OS |
-| docker-compose.nas.yml | 群晖/威联通/铁威马 |
-| docker-compose.full.yml | 公网服务器 |
-| docker-compose.yml | 本地开发 |
-
-### 环境变量
-
-```yaml
-environment:
-  # 数据库
-  - DB_HOST=postgres
-  - DB_PORT=5432
-  - DB_NAME=timemark
-  - DB_USER=timemark
-  - DB_PASSWORD=timemark_pass
-
-  # Redis
-  - REDIS_URL=redis://redis:6379
-
-  # JWT
-  - JWT_SECRET=your-secret-key
-
-  # 时区
-  - TZ=Asia/Shanghai
-```
-
----
-
-## 操作指南
-
-### 创建事件
-
-1. 登录后进入 Dashboard
-2. 点击 "+ 添加事件"
-3. 填写事件信息
-4. 配置提醒
-
-### 配置通知渠道
-
-1. 进入 "通知渠道"
-2. 选择渠道类型
-3. 填写凭���信��
-4. 保存
-
-### 启用双因素认证
-
-1. 进入 "设置" → "安全"
-2. 点击 "启用两步验证"
-3. 扫描二维码
-4. 输入验证码
-
----
-
-## 开发指南
+- Node.js 18+
+- pnpm 8+
+- Docker 20.10+（可选，用于容器化测试）
 
 ### 本地开发
 
@@ -301,103 +588,75 @@ environment:
 # 安装依赖
 pnpm install
 
-# 启动开发
-pnpm dev:frontend  # 前端 :5173
-pnpm dev:backend   # 后端 :3000
+# 启动前端开发服务器（:5173）
+pnpm dev:frontend
 
-# 构建
+# 启动后端开发服务器（:3000）
+pnpm dev:backend
+
+# 构建生产版本
 pnpm build
 ```
 
----
+### 环境变量（开发环境）
 
-## API 接口
-
-### 认证接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | /auth/login | 登录 |
-| POST | /auth/verify-2fa | 验证TOTP |
-| POST | /auth/setup-2fa | 获取TOTP密钥 |
-| POST | /auth/logout | 登出 |
-| POST | /auth/change-password | 修改密码 |
-
-### 事件接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /events | 获取所有事件 |
-| POST | /events | 创建事件 |
-| PUT | /events/:id | 更新事件 |
-| DELETE | /events/:id | 删除事件 |
-
-### 配置接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /config | 获取配置 |
-| POST | /config | 保存配置 |
-
----
-
-## 数据备份
-
-### 手动备份
+开发环境需要设置以下环境变量：
 
 ```bash
-docker compose down
-tar -czf timemark-backup.tar.gz ./data
-docker compose up -d
-```
-
-### 自动备份
-
-```bash
-0 3 * * * cd /opt/timemark && docker compose down && tar -czf /backup/timemark.tar.gz ./data && docker compose up -d
+export DB_PATH=./data/timemark.db
+export TZ=Asia/Shanghai
+export NODE_ENV=development
+export JWT_SECRET=$(openssl rand -hex 32)
+export MASTER_KEY=$(openssl rand -hex 32)
+export DEFAULT_ADMIN_USERNAME=admin
+export DEFAULT_ADMIN_PASSWORD=dev123456
 ```
 
 ---
 
-## 常见问题
+## 📦 部署配置
 
-### Q: 端口被占用
+### 配置文件说明
 
-修改 docker-compose.yml 中的端口映射
+| 文件 | 适用场景 | 镜像源 |
+|------|----------|:------:|
+| `docker-compose.dockerhub.yml` | 通用部署 **(推荐)** | Docker Hub |
+| `docker-compose.ghcr.yml` | 通用部署 | GHCR |
+| `docker-compose.simple.yml` | 飞牛OS | GHCR |
+| `docker-compose.nas.yml` | 群晖/威联通/铁威马 | GHCR |
+| `docker-compose.full.yml` | 公网服务器 | GHCR |
+| `docker-compose.yml` | 本地开发 | 本地构建 |
 
-### Q: 数据库连接失败
+### 必填环境变量
 
-```bash
-docker network ls
-docker logs timemark-app
-```
+| 变量 | 说明 |
+|------|------|
+| `JWT_SECRET` | JWT 签名密钥，至少 32 字符 |
+| `MASTER_KEY` | 主密钥，用于 AES 加密通知凭证，至少 32 字符 |
+| `DEFAULT_ADMIN_PASSWORD` | 初始管理员密码 |
 
-### Q: 镜像拉取失败
-
-需要登录 GHCR：
-```bash
-docker login ghcr.io -u 用户名 -p Token
-```
+详细部署步骤请参考 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
 ---
 
-## 开源协议
+## 📝 开源协议
 
 MIT License
 
 ---
 
-## 支持
-
-- 邮箱: wxf200707@gmail.com
-- 问题反馈: https://github.com/WXFffff666/timemark-docker/issues
-
----
+## 💬 支持
 
 <div align="center">
 
-**如果对你有帮助，请点个 Star 支持一下！**
+**如果对你有帮助，请点个 ⭐ Star 支持一下！**
 
-Made with love by TimeMark
+---
+
+🐛 问题反馈：[GitHub Issues](https://github.com/WXFffff666/timemark-docker/issues)
+
+---
+
+Made with ❤️ by TimeMark
 
 </div>

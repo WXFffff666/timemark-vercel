@@ -15,6 +15,14 @@ import channelsRoutes from './routes/channels.js';
 import { startScheduler, stopScheduler } from './queue/scheduler.js';
 
 async function bootstrap() {
+  // 0. 环境变量校验
+  if (!process.env.MASTER_KEY) {
+    console.error('[FATAL] MASTER_KEY environment variable is not set. This is required for encrypting sensitive data.');
+    console.error('[FATAL] Please set MASTER_KEY to a random string of at least 32 characters.');
+    console.error('[FATAL] Example: MASTER_KEY=$(openssl rand -hex 32)');
+    process.exit(1);
+  }
+
   // 1. 等待数据库就绪
   console.log('⏳ 等待数据库初始化...');
   await waitForDb();

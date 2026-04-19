@@ -7,7 +7,10 @@
 #   3. 复制下方配置到"docker-compose.yml"
 #   4. 按需修改端口和数据路径后部署
 
-# ⚠️ 重要：首次部署前请修改管理员密码和密钥！
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  ⚠️  安全警告：部署前必须修改管理员密码和密钥！            ║
+# ║  使用默认密码部署将导致严重安全风险！                       ║
+# ╚══════════════════════════════════════════════════════════════╝
 
 services:
   timemark-app:
@@ -20,14 +23,14 @@ services:
     environment:
       # SQLite: 数据存储位置（容器内）
       DB_PATH: /app/data/timemark.db
-      # 管理员凭证（⚠️ 建议修改密码）
+      # 管理员凭证（⚠️ 必须修改！使用默认值将无法保证安全！）
       DEFAULT_ADMIN_USERNAME: admin
-      DEFAULT_ADMIN_PASSWORD: YourSecurePassword123
+      DEFAULT_ADMIN_PASSWORD: CHANGE_ME_IMMEDIATELY
       # 时区
       TZ: Asia/Shanghai
       # 环境
       NODE_ENV: production
-      # 生产环境建议修改密钥
+      # ⚠️ 生产环境必须设置密钥！运行 openssl rand -hex 32 生成
       # JWT_SECRET: 你的JWT密钥（至少32位随机字符串）
       # MASTER_KEY: 你的主密钥（至少32位随机字符串）
     volumes:

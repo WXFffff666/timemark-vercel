@@ -8,9 +8,9 @@
 *.swp
 *.swo
 
-# Build artifacts (we need dist and node_modules)
-# dist
-# node_modules
+# Build artifacts
+# dist  -- needed for Docker build (pre-built locally or in CI)
+node_modules
 
 # Test files
 coverage

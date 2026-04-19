@@ -41,13 +41,11 @@ const genericWebhookChannels = new Set([
   'zalo',
   'zalo_personal',
   'network_chat',
-  'nextcloudtalk',
   'nostr',
   'irc',
   'synologychat',
   'twitch',
   'matrix',
-  'mattermost',
   'msteams',
   'line',
   'googlechat',
@@ -70,7 +68,7 @@ const channelToAccountType: Record<string, string> = {
   'matrix': 'matrix',
   'mattermost': 'mattermost',
   'msteams': 'msteams',
-  'nextcloudtalk': 'nextcloudtalk',
+  'nextcloud_talk': 'nextcloud_talk',
   'nostr': 'nostr',
   'irc': 'irc',
   'synologychat': 'synologychat',
@@ -161,6 +159,9 @@ export async function sendNotifications(event: any, userId: number, channels: st
   
   // 获取关系映射
   const mappings = await getRelationshipMappings(userId, event.id);
+  // Apply default relationship mapping for all channels
+  const defaultMappedName = applyRelationshipMapping(event.name, mappings);
+  const mappedEvent = { ...event, name: defaultMappedName };
   
   // 获取事件绑定的通知账户ID
   const boundAccountIds: number[] = (() => {
@@ -184,30 +185,26 @@ export async function sendNotifications(event: any, userId: number, channels: st
     accountsMap.set(account.id, account);
   }
   
-  // 为每个渠道准备配置（优先使用绑定的账户，否则使用全局配置）
-  const channelConfigs: Record<string, any> = {};
+  // 为每个渠道准备配置（支持多账号：一个渠道可能有多个账号）
+  const channelConfigsMap: Record<string, any[]> = {};
   
   for (const ch of channels) {
-    // 查找该渠道绑定的账户
-    let accountConfig: any = null;
+    const configs: any[] = [];
     
     if (boundAccountIds.length > 0) {
-      // 找到第一个匹配渠道类型的已绑定账户
+      // 找到所有匹配渠道类型的已绑定账户
       const accountType = channelToAccountType[ch];
       for (const accountId of boundAccountIds) {
         const account = accountsMap.get(accountId);
         if (account && account.type === accountType && account.is_active) {
-          accountConfig = getChannelConfigFromAccount(account, ch);
-          if (accountConfig) break;
+          const accountConfig = getChannelConfigFromAccount(account, ch);
+          if (accountConfig) configs.push(accountConfig);
         }
       }
     }
     
-    // 如果找到了账户配置，使用它；否则使用全局配置
-    if (accountConfig) {
-      channelConfigs[ch] = accountConfig;
-    } else {
-      // 使用全局配置
+    // 如果没有绑定的账户配置，使用全局配置
+    if (configs.length === 0) {
       const globalConfig: any = {};
       switch (ch) {
         case 'feishu':
@@ -259,78 +256,89 @@ export async function sendNotifications(event: any, userId: number, channels: st
       }
       
       if (Object.keys(globalConfig).length > 0) {
-        channelConfigs[ch] = globalConfig;
+        configs.push(globalConfig);
       }
+    }
+    
+    if (configs.length > 0) {
+      channelConfigsMap[ch] = configs;
     }
   }
   
-  // 发送通知
-  await Promise.allSettled(channels.map(async (ch) => {
-    const chConfig = channelConfigs[ch];
-    if (!chConfig) return;
+  // 发送通知（每个渠道可能有多个账号配置，独立发送）
+  await Promise.allSettled(channels.flatMap((ch) => {
+    const configs = channelConfigsMap[ch];
+    if (!configs || configs.length === 0) return [];
     
-    try {
-      if (ch === 'feishu' && chConfig.webhook) await sendFeishuNotification(event, chConfig.webhook);
-      else if (ch === 'wecom' && chConfig.webhook) await sendWeComNotification(event, chConfig.webhook);
-      else if (ch === 'dingtalk' && chConfig.webhook && chConfig.secret)
-        await sendDingTalkNotification(event, chConfig.webhook, chConfig.secret);
-      else if (ch === 'telegram' && chConfig.token && chConfig.chat_id)
-        await sendTelegramNotification(event, chConfig.token, chConfig.chat_id);
-      else if (ch === 'discord' && chConfig.webhook)
-        await sendDiscordNotification(event, chConfig.webhook);
-      else if (ch === 'slack' && chConfig.webhook)
-        await sendSlackNotification(event, chConfig.webhook);
-      else if (ch === 'wechat' && chConfig.token && chConfig.chat_id)
-        await sendWxPusherNotification(event, chConfig.token, chConfig.chat_id);
-      else if (ch === 'qq' && chConfig.token)
-        await sendQmsgNotification(event, chConfig.token, chConfig.chat_id);
-      else if (ch === 'email' && chConfig.apiKey && chConfig.emails?.length > 0) {
-        // 为每个收件人单独发送邮件，应用不同的关系映射
-        await Promise.allSettled(chConfig.emails.map(async (email: string) => {
-          const mappedEvent = {
-            ...event,
-            name: applyRelationshipMapping(event.name, mappings, email)
-          };
-          await sendEmailNotification(
-            mappedEvent,
-            chConfig.apiKey,
-            'TimeMark <noreply@timemark.app>',
-            email
-          );
-        }));
+    return configs.map(async (chConfig) => {
+      try {
+        if (ch === 'feishu' && chConfig.webhook) await sendFeishuNotification(mappedEvent, chConfig.webhook);
+        else if (ch === 'wecom' && chConfig.webhook) await sendWeComNotification(mappedEvent, chConfig.webhook);
+        else if (ch === 'dingtalk' && chConfig.webhook && chConfig.secret)
+          await sendDingTalkNotification(mappedEvent, chConfig.webhook, chConfig.secret);
+        else if (ch === 'telegram' && chConfig.token && chConfig.chat_id)
+          await sendTelegramNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+        else if (ch === 'discord' && chConfig.webhook)
+          await sendDiscordNotification(mappedEvent, chConfig.webhook);
+        else if (ch === 'slack' && chConfig.webhook)
+          await sendSlackNotification(mappedEvent, chConfig.webhook);
+        else if (ch === 'wechat' && chConfig.token && chConfig.chat_id)
+          await sendWxPusherNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+        else if (ch === 'qq' && chConfig.token)
+          await sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+        else if (ch === 'email' && chConfig.apiKey && chConfig.emails?.length > 0) {
+          // 为每个收件人单独发送邮件，应用不同的关系映射（per-recipient）
+          await Promise.allSettled(chConfig.emails.map(async (email: string) => {
+            const emailMappedEvent = {
+              ...event,
+              name: applyRelationshipMapping(event.name, mappings, email)
+            };
+            await sendEmailNotification(
+              emailMappedEvent,
+              chConfig.apiKey,
+              'TimeMark <noreply@timemark.app>',
+              email
+            );
+          }));
+        }
+        else if (genericWebhookChannels.has(ch) && chConfig.webhook)
+          await sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch);
+        // Token-based channels with dedicated APIs
+        else if (ch === 'nextcloud_talk' && chConfig.server_url && chConfig.token && chConfig.chat_id)
+          await sendNextcloudTalkNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id);
+        else if (ch === 'mattermost' && chConfig.server_url && chConfig.token && chConfig.chat_id)
+          await sendMattermostNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id);
+        // Matrix channel (token-based with homeserver URL)
+        else if (ch === 'matrix' && chConfig.server_url && chConfig.token && chConfig.chat_id)
+          await sendMatrixNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id);
+        // Plugin-based channels
+        else if (ch === 'wechat_personal' && chConfig.sessionData) {
+          const toUser = chConfig.toUser || mappedEvent.personName || 'me';
+          await sendWechatNotification(mappedEvent, chConfig.sessionData, toUser);
+        }
+        else if (ch === 'whatsapp' && chConfig.sessionData) {
+          const toUser = chConfig.toUser || mappedEvent.personName || '';
+          await sendWhatsappNotification(mappedEvent, chConfig.sessionData, toUser);
+        }
+        else if (ch === 'qq_bot' && chConfig.sessionData) {
+          const toUser = chConfig.toUser || mappedEvent.personName || '';
+          await sendQQNotification(mappedEvent, chConfig.sessionData, toUser);
+        }
+        else if (ch === 'signal' && chConfig.sessionData) {
+          const toUser = chConfig.toUser || mappedEvent.personName || '';
+          await sendSignalNotification(mappedEvent, chConfig.sessionData, toUser);
+        }
+        else if (ch === 'zalo' && chConfig.sessionData) {
+          const toUser = chConfig.toUser || mappedEvent.personName || '';
+          await sendZaloNotification(mappedEvent, chConfig.sessionData, toUser);
+        }
+        else if (ch === 'imessage' && chConfig.sessionData) {
+          const toUser = chConfig.toUser || mappedEvent.personName || '';
+          await sendBlueBubblesNotification(mappedEvent, chConfig.sessionData, toUser);
+        }
+      } catch (e) {
+        console.error(`Failed ${ch}:`, e);
       }
-      else if (genericWebhookChannels.has(ch) && chConfig.webhook)
-        await sendGenericWebhookNotification(event, chConfig.webhook, ch);
-      // Matrix channel (token-based with homeserver URL)
-      else if (ch === 'matrix' && chConfig.server_url && chConfig.token && chConfig.chat_id)
-        await sendMatrixNotification(event, chConfig.server_url, chConfig.token, chConfig.chat_id);
-      // Plugin-based channels
-      else if (ch === 'wechat_personal' && chConfig.sessionData) {
-        const toUser = chConfig.toUser || event.personName || 'me';
-        await sendWechatNotification(event, chConfig.sessionData, toUser);
-      }
-      else if (ch === 'whatsapp' && chConfig.sessionData) {
-        const toUser = chConfig.toUser || event.personName || '';
-        await sendWhatsappNotification(event, chConfig.sessionData, toUser);
-      }
-      else if (ch === 'qq_bot' && chConfig.sessionData) {
-        const toUser = chConfig.toUser || event.personName || '';
-        await sendQQNotification(event, chConfig.sessionData, toUser);
-      }
-      else if (ch === 'signal' && chConfig.sessionData) {
-        const toUser = chConfig.toUser || event.personName || '';
-        await sendSignalNotification(event, chConfig.sessionData, toUser);
-      }
-      else if (ch === 'zalo' && chConfig.sessionData) {
-        const toUser = chConfig.toUser || event.personName || '';
-        await sendZaloNotification(event, chConfig.sessionData, toUser);
-      }
-      else if (ch === 'imessage' && chConfig.sessionData) {
-        const toUser = chConfig.toUser || event.personName || '';
-        await sendBlueBubblesNotification(event, chConfig.sessionData, toUser);
-      }
-    } catch (e) {
-      console.error(`Failed ${ch}:`, e);
-    }
+    });
   }));
 }

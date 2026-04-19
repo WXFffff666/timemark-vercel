@@ -1,7 +1,7 @@
 # TimeMark 公开镜像部署配置
 # 使用方法: docker-compose -f docker-compose.public.yml up -d
 # 访问地址: http://localhost:3000
-# 默认账号: admin / TimeMark@2026
+# 默认账号: 由 DEFAULT_ADMIN_USERNAME / DEFAULT_ADMIN_PASSWORD 环境变量设置
 # 单容器：SQLite 内置数据库
 
 services:
@@ -14,9 +14,9 @@ services:
       NODE_ENV: production
       DB_PATH: /app/data/timemark.db
       TZ: Asia/Shanghai
-      # 生产环境建议修改以下密钥
-      # JWT_SECRET: your-secure-jwt-secret
-      # MASTER_KEY: your-secure-master-key
+      # ⚠️ 生产环境必须设置密钥！运行 openssl rand -hex 32 生成
+      # JWT_SECRET: 你的JWT密钥（至少32位随机字符串）
+      # MASTER_KEY: 你的主密钥（至少32位随机字符串）
     volumes:
       - ./data:/app/data
     networks:
