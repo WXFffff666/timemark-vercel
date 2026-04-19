@@ -8,11 +8,8 @@ if (JWT_SECRET === DEFAULT_JWT_SECRET) {
   console.warn('[SECURITY] ⚠️ 使用默认JWT密钥！请在生产环境设置JWT_SECRET环境变量');
 }
 
-// 安全检查：JWT密钥最小长度校验
-if (process.env.NODE_ENV === 'production' && JWT_SECRET.length < 32) {
-  console.error('[SECURITY] ❌ JWT_SECRET 长度不足32字符，生产环境不安全！');
-  process.exit(1);
-} else if (JWT_SECRET.length < 32) {
+// 安全检查：JWT密钥长度提示（不阻塞启动）
+if (JWT_SECRET.length < 32) {
   console.warn('[SECURITY] ⚠️ JWT_SECRET 长度不足32字符，建议使用更长的密钥');
 }
 

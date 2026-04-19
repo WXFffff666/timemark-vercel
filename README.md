@@ -77,23 +77,24 @@ v2.0 是一次彻底的架构重构，从三容器方案精简为单容器部署
 ### 一键部署
 
 ```bash
-# 1. 创建部署目录
+# 1. 创建目录
 mkdir timemark && cd timemark
 
-# 2. 下载配置文件
+# 2. 下载配置
 curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 3. 生成密钥并修改配置
-#    ⚠️ 必须修改默认密码和密钥！
-openssl rand -hex 32    # 生成 JWT_SECRET
-openssl rand -hex 32    # 生成 MASTER_KEY
-vim docker-compose.yml  # 填入生成的密钥，修改管理员密码
-
-# 4. 启动服务
+# 3. 启动（就这么简单，不需要改任何配置）
 docker compose up -d
 ```
 
-部署完成后访问 `http://服务器IP:3000` 即可使用。
+部署完成！访问 `http://服务器IP:3000`
+
+| 项目 | 值 |
+|:----:|:--:|
+| 默认用户名 | `admin` |
+| 默认密码 | `TimeMark@2026` |
+
+> ⚠️ **首次登录后请立即修改密码！** 进入设置页面即可修改。
 
 ### 配置文件说明
 

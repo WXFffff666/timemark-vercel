@@ -1,52 +1,27 @@
-# TimeMark 完整一键部署（公网服务器/云服务器）
-# 单容器部署：SQLite 内置数据库
-# 特点：数据持久化完整配置，自动备份配置
-
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  ⚠️  安全警告：部署前必须修改以下所有默认值！              ║
-# ║  使用默认密码部署将导致严重安全风险！                       ║
-# ╚══════════════════════════════════════════════════════════════╝
-# - DEFAULT_ADMIN_PASSWORD: 管理员密码（请使用强密码，至少8位）
-# - JWT_SECRET: JWT签名密钥（至少32位随机字符串，示例: openssl rand -hex 32）
-# - MASTER_KEY: 主密钥（至少32位随机字符串，用于敏感数据加密）
+# TimeMark 完整部署（公网服务器/云服务器）
+# 默认账号: admin / TimeMark@2026（登录后请修改密码）
+# 公网部署建议设置自定义密钥（可选，不设置也能用）
 
 services:
   app:
-    image: ghcr.io/wfffff666/timemark:latest
+    image: xfffff666/timemark:latest
     container_name: timemark-app
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      # SQLite: 数据存储位置（容器内）
-      DB_PATH: /app/data/timemark.db
-      # 管理员凭证（⚠️ 必须修改！使用默认值将无法保证安全！）
-      DEFAULT_ADMIN_USERNAME: admin
-      DEFAULT_ADMIN_PASSWORD: CHANGE_ME_IMMEDIATELY
-      # 时区
       TZ: Asia/Shanghai
-      # 环境
-      NODE_ENV: production
-      # JWT 密钥（⚠️ 必须修改！运行 openssl rand -hex 32 生成）
-      JWT_SECRET: ${JWT_SECRET:-CHANGE_ME_USE_openssl_rand_hex_32}
-      # 主密钥（⚠️ 必须修改！运行 openssl rand -hex 32 生成）
-      MASTER_KEY: ${MASTER_KEY:-CHANGE_ME_USE_openssl_rand_hex_32}
+      # 公网部署建议设置（可选，不设置使用内置默认值）
+      # JWT_SECRET: 你的自定义JWT密钥
+      # MASTER_KEY: 你的自定义加密密钥
     volumes:
-      # 数据持久化目录（包含 SQLite 数据库和上传文件）
       - ./data:/app/data
-      # 配置目录（备份恢复用）
-      - ./config:/app/config
     networks:
       - timemark
     deploy:
       resources:
         limits:
           memory: 512M
-    labels:
-      - "traefik.enable=true"
-      # 如需配置HTTPS反向代理，取消注释
-      # - "traefik.http.routers.timemark.rule=Host(`your-domain.com`)"
-      # - "traefik.http.routers.timemark.tls=true"
 
 networks:
   timemark:

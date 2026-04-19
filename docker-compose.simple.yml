@@ -1,6 +1,5 @@
-# TimeMark 一键部署配置
-# 适用于飞牛OS、群晖NAS、威联通、铁威马等NAS环境
-# 单容器：SQLite 内置数据库
+# TimeMark 一键部署配置（飞牛OS / NAS）
+# 默认账号: admin / TimeMark@2026（登录后请修改密码）
 
 services:
   app:
@@ -10,17 +9,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NODE_ENV: production
-      DB_PATH: /app/data/timemark.db
       TZ: Asia/Shanghai
-      # ⚠️ 生产环境必须设置密钥！运行 openssl rand -hex 32 生成
-      # JWT_SECRET: 你的JWT密钥（至少32位随机字符串）
-      # MASTER_KEY: 你的主密钥（至少32位随机字符串）
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
     volumes:
-      # 数据持久化目录 - 修改左边路径为你的NAS实际文件夹
       - ./data:/app/data
     networks:
       - timemark

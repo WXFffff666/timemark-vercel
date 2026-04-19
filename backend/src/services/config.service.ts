@@ -1,13 +1,12 @@
 import { query } from '../db/index.js';
 import { encrypt, decrypt } from '@timemark/shared/crypto';
 
-if (!process.env.MASTER_KEY) {
-  console.error('[FATAL] MASTER_KEY environment variable is not set. This is required for encrypting sensitive data.');
-  console.error('[FATAL] Please set MASTER_KEY to a random string of at least 32 characters.');
-  console.error('[FATAL] Example: MASTER_KEY=$(openssl rand -hex 32)');
-  process.exit(1);
+// MASTER_KEY: 用于加密通知账户凭证。有默认值可直接启动，建议生产环境自定义
+const DEFAULT_MASTER_KEY = 'timemark-default-master-key-change-in-production-2026';
+const MASTER_KEY: string = process.env.MASTER_KEY || DEFAULT_MASTER_KEY;
+if (MASTER_KEY === DEFAULT_MASTER_KEY) {
+  console.warn('[SECURITY] ⚠️ 使用默认 MASTER_KEY，建议设置自定义密钥以增强安全性');
 }
-const MASTER_KEY: string = process.env.MASTER_KEY;
 
 export async function saveUserConfig(userId: number, config: any): Promise<void> {
   const e = (v: string | undefined) => v ? encrypt(v, MASTER_KEY) : null;

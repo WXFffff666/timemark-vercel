@@ -58,9 +58,9 @@
 | 磁盘 | 1GB | 5GB |
 | Docker | 20.10+ | 24.0+ |
 
-### 必须准备的密钥
+### 可选准备：自定义密钥（内建默认值）
 
-部署前请先生成以下密钥（**必填项**，未设置将无法启动）：
+系统内置默认密钥，**开箱即可用**。如需自定义（建议公网部署时配置）：
 
 ```bash
 # 生成 JWT_SECRET（JWT 签名密钥，至少 32 字符）
@@ -71,6 +71,12 @@ openssl rand -hex 32
 ```
 
 > ⚠️ **请妥善保管 MASTER_KEY**。更换 MASTER_KEY 后，之前加密存储的通知渠道凭证将无法解密，需要重新配置。
+
+| 项目 | 内置默认值 | 说明 |
+|------|------------|------|
+| 默认管理员 | `admin` / `TimeMark@2026` | 首次登录后请修改密码 |
+| JWT_SECRET | 内置默认值 | 可选，自定义更安全 |
+| MASTER_KEY | 内置默认值 | 可选，自定义更安全 |
 
 ### 配置文件总览
 
@@ -126,19 +132,19 @@ mkdir timemark && cd timemark
 # 2. 下载配置文件（Docker Hub 源，推荐）
 curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 3. 生成密钥
-echo "JWT_SECRET: $(openssl rand -hex 32)"
-echo "MASTER_KEY: $(openssl rand -hex 32)"
+# 3. 可选：自定义密钥（公网部署建议配置）
+# echo "JWT_SECRET: $(openssl rand -hex 32)"
+# echo "MASTER_KEY: $(openssl rand -hex 32)"
+# vim docker-compose.yml
 
-# 4. 编辑配置文件，填入生成的密钥，修改管理员密码
-vim docker-compose.yml
-
-# 5. 启动服务
+# 4. 启动服务（无需修改任何配置，即开即用！）
 docker compose up -d
 
-# 6. 查看日志确认启动成功
+# 5. 查看日志确认启动成功
 docker compose logs -f
 ```
+
+> ✅ **即开即用**：无需配置密钥，默认账号 `admin` / `TimeMark@2026`
 
 ### 方式二：复制粘贴部署
 
@@ -159,14 +165,13 @@ services:
       TZ: Asia/Shanghai
       # 运行环境
       NODE_ENV: production
-      # ⚠️ 以下三项必须修改！
-      # 管理员密码（请使用强密码）
+      # 默认管理员（可选，可自定义或登录后修改密码）
       DEFAULT_ADMIN_USERNAME: admin
-      DEFAULT_ADMIN_PASSWORD: CHANGE_ME_IMMEDIATELY
-      # JWT 密钥（运行 openssl rand -hex 32 生成）
-      JWT_SECRET: CHANGE_ME_IMMEDIATELY
-      # 主密钥（运行 openssl rand -hex 32 生成）
-      MASTER_KEY: CHANGE_ME_IMMEDIATELY
+      # DEFAULT_ADMIN_PASSWORD: TimeMark@2026  # 可选：自定义密码
+      # JWT 密钥（可选：公网部署建议自定义）
+      # JWT_SECRET: <自定义密钥>
+      # 主密钥（可选：公网部署建议自定义）
+      # MASTER_KEY: <自定义密钥>
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -180,7 +185,7 @@ networks:
     driver: bridge
 ```
 
-> ⚠️ **安全警告**：必须将所有 `CHANGE_ME_IMMEDIATELY` 替换为实际的强密码和密钥！
+> ✅ **即开即用**：直接运行 `docker compose up -d`，默认账号 `admin` / `TimeMark@2026`，登录后请修改密码！
 
 ---
 
@@ -196,8 +201,9 @@ networks:
 2. 进入 **Compose** 功能
 3. 点击 **新建 Compose**
 4. 将上方「复制粘贴部署」的配置内容粘贴进去
-5. **修改配置**：
-   - 将 `CHANGE_ME_IMMEDIATELY` 替换为实际密码和密钥
+5. **可选修改**：
+   - 如需自定义密码，取消注释 `DEFAULT_ADMIN_PASSWORD` 行并设置密码
+   - 如需自定义密钥，取消注释 `JWT_SECRET` 和 `MASTER_KEY` 行
    - 如需修改端口，将 `"3000:3000"` 改为 `"你的端口:3000"`
 6. 点击 **部署**
 
@@ -213,12 +219,12 @@ mkdir -p /vol1/docker/timemark && cd /vol1/docker/timemark
 # 3. 下载配置文件
 curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 4. 生成并填入密钥
-openssl rand -hex 32  # JWT_SECRET
-openssl rand -hex 32  # MASTER_KEY
-vim docker-compose.yml
+# 4. 可选：生成自定义密钥（公网部署建议配置）
+# openssl rand -hex 32  # JWT_SECRET
+# openssl rand -hex 32  # MASTER_KEY
+# vim docker-compose.yml
 
-# 5. 启动
+# 5. 启动（无需修改配置，即开即用！）
 docker compose up -d
 ```
 
@@ -241,8 +247,8 @@ docker compose up -d
 3. 项目名称填写 `timemark`
 4. 路径选择 `/volume1/docker/timemark`
 5. 将配置内容粘贴到编辑器中
-6. **修改配置**：
-   - 替换所有 `CHANGE_ME_IMMEDIATELY`
+6. **可选修改**：
+   - 如需自定义密码/密钥，取消注释相应行
    - 数据卷路径改为 `/volume1/docker/timemark/data:/app/data`
 7. 点击 **构建** 或 **部署**
 
@@ -259,13 +265,13 @@ sudo mkdir -p /volume1/docker/timemark/data
 cd /volume1/docker/timemark
 sudo curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 4. 生成密钥并修改配置
-openssl rand -hex 32  # JWT_SECRET
-openssl rand -hex 32  # MASTER_KEY
-sudo vim docker-compose.yml
+# 4. 可选：生成自定义密钥（公网部署建议配置）
+# sudo openssl rand -hex 32  # JWT_SECRET
+# sudo openssl rand -hex 32  # MASTER_KEY
+# sudo vim docker-compose.yml
 # 修改数据卷路径为：/volume1/docker/timemark/data:/app/data
 
-# 5. 部署
+# 5. 部署（无需修改配置，即开即用！）
 sudo docker compose up -d
 ```
 
@@ -287,8 +293,8 @@ sudo docker compose up -d
 1. 打开 **Container Station**
 2. 进入 **创建** → **Docker Compose**
 3. 粘贴配置内容
-4. **修改配置**：
-   - 替换所有 `CHANGE_ME_IMMEDIATELY`
+4. **可选修改**：
+   - 如需自定义密码/密钥，取消注释相应行
    - 数据卷路径改为 `/share/Container/timemark/data:/app/data`
 5. 点击 **创建**
 
@@ -305,13 +311,13 @@ cd /share/Container/timemark
 # 3. 下载配置
 curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 4. 生成密钥并修改配置
-openssl rand -hex 32  # JWT_SECRET
-openssl rand -hex 32  # MASTER_KEY
-vim docker-compose.yml
+# 4. 可选：生成自定义密钥（公网部署建议配置）
+# openssl rand -hex 32  # JWT_SECRET
+# openssl rand -hex 32  # MASTER_KEY
+# vim docker-compose.yml
 # 修改数据卷路径为：/share/Container/timemark/data:/app/data
 
-# 5. 部署
+# 5. 部署（无需修改配置，即开即用！）
 docker compose up -d
 ```
 
@@ -332,8 +338,8 @@ docker compose up -d
 1. 打开 **Docker Manager** 应用
 2. 进入 **Compose** 或 **项目**
 3. 新建项目，粘贴配置内容
-4. **修改配置**：
-   - 替换所有 `CHANGE_ME_IMMEDIATELY`
+4. **可选修改**：
+   - 如需自定义密码/密钥，取消注释相应行
    - 数据卷路径改为 `/Volume1/docker/timemark/data:/app/data`
 5. 部署
 
@@ -350,13 +356,13 @@ cd /Volume1/docker/timemark
 # 3. 下载配置
 curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 4. 生成密钥并修改配置
-openssl rand -hex 32  # JWT_SECRET
-openssl rand -hex 32  # MASTER_KEY
-vim docker-compose.yml
+# 4. 可选：生成自定义密钥（公网部署建议配置）
+# openssl rand -hex 32  # JWT_SECRET
+# openssl rand -hex 32  # MASTER_KEY
+# vim docker-compose.yml
 # 修改数据卷路径为：/Volume1/docker/timemark/data:/app/data
 
-# 5. 部署
+# 5. 部署（无需修改配置，即开即用！）
 docker compose up -d
 ```
 
@@ -387,11 +393,10 @@ mkdir timemark; cd timemark
 # 2. 下载配置文件
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml" -OutFile "docker-compose.yml"
 
-# 3. 用记事本编辑配置
-notepad docker-compose.yml
-# 修改 CHANGE_ME_IMMEDIATELY 为实际密码和密钥
+# 3. 可选：用记事本编辑配置（自定义密码/密钥）
+# notepad docker-compose.yml
 
-# 4. 启动
+# 4. 启动（无需修改，即开即用！）
 docker compose up -d
 ```
 
@@ -404,16 +409,16 @@ mkdir timemark && cd timemark
 # 2. 下载配置文件
 curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 3. 生成密钥并修改配置
-openssl rand -hex 32  # JWT_SECRET
-openssl rand -hex 32  # MASTER_KEY
-nano docker-compose.yml
+# 3. 可选：生成自定义密钥（公网部署建议配置）
+# openssl rand -hex 32  # JWT_SECRET
+# openssl rand -hex 32  # MASTER_KEY
+# nano docker-compose.yml
 
-# 4. 启动
+# 4. 启动（无需修改，即开即用！）
 docker compose up -d
 ```
 
-部署完成后访问 `http://localhost:3000`。
+部署完成后访问 `http://localhost:3000`，默认账号 `admin` / `TimeMark@2026`。
 
 ---
 
@@ -429,19 +434,19 @@ cd /opt/timemark
 # 2. 下载完整配置
 sudo curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.full.yml -o docker-compose.yml
 
-# 3. 生成密钥
+# 3. 建议：生成自定义密钥（公网部署强烈建议配置！）
 echo "JWT_SECRET: $(openssl rand -hex 32)"
 echo "MASTER_KEY: $(openssl rand -hex 32)"
 
 # 4. 修改配置
 sudo vim docker-compose.yml
-# 必须修改：
-# - JWT_SECRET: 填入生成的密钥
-# - MASTER_KEY: 填入生成的密钥
+# 建议修改：
+# - JWT_SECRET: 填入生成的密钥（自定义更安全）
+# - MASTER_KEY: 填入生成的密钥（自定义更安全）
 # - DEFAULT_ADMIN_PASSWORD: 设置强密码
 # - 数据存储路径
 
-# 5. 启动
+# 5. 启动（也可以直接运行，系统有内置默认值）
 sudo docker compose up -d
 
 # 6. 确认运行状态
@@ -498,13 +503,15 @@ server {
 | `DB_PATH` | `/app/data/timemark.db` | SQLite 数据库文件路径 | 是 |
 | `TZ` | `Asia/Shanghai` | 时区设置 | 是 |
 | `NODE_ENV` | `production` | 运行环境 | 是 |
-| `JWT_SECRET` | - | JWT 签名密钥（至少 32 位随机字符串） | **是** |
-| `MASTER_KEY` | - | 主密钥（通知凭证 AES 加密，至少 32 位） | **是** |
+| `JWT_SECRET` | 内置默认值 | JWT 签名密钥（至少 32 位随机字符串） | **可选** |
+| `MASTER_KEY` | 内置默认值 | 主密钥（通知凭证 AES 加密，至少 32 位） | **可选** |
 | `DEFAULT_ADMIN_USERNAME` | `admin` | 初始管理员用户名 | 是 |
-| `DEFAULT_ADMIN_PASSWORD` | - | 初始管理员密码（请使用强密码） | **是** |
+| `DEFAULT_ADMIN_PASSWORD` | `TimeMark@2026` | 初始管理员密码（请使用强密码） | **可选** |
 | `LOG_QUERIES` | `false` | 是否打印 SQL 查询日志（调试用） | 否 |
 
-### 密钥生成方法
+> ✅ **即开即用**：以上变量均有内置默认值，无需配置即可启动。建议公网部署时自定义密钥以增强安全性。
+
+### 密钥生成方法（可选：公网部署建议配置）
 
 ```bash
 # Linux / macOS / WSL
@@ -517,7 +524,7 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-> ⚠️ **MASTER_KEY 和 JWT_SECRET 为必填项**。未设置时应用将拒绝启动并输出致命错误。
+> 💡 **安全建议**：公网部署时建议自定义 `JWT_SECRET` 和 `MASTER_KEY`，使用自定义密钥后安全性更高。更换 MASTER_KEY 前请注意：已加密的通知渠道凭证将无法解密。
 
 ---
 
@@ -553,8 +560,8 @@ environment:
 | 项目 | 说明 |
 |:----:|------|
 | 访问地址 | `http://服务器IP:3000` |
-| 用户名 | docker-compose 中 `DEFAULT_ADMIN_USERNAME` 设置的值 |
-| 密码 | docker-compose 中 `DEFAULT_ADMIN_PASSWORD` 设置的值 |
+| 用户名 | `admin`（默认）或自定义 |
+| 密码 | `TimeMark@2026`（默认）或自定义 |
 
 > ⚠️ **安全提示**：首次登录后请立即修改密码并启用 2FA 双因素认证！
 
@@ -640,10 +647,10 @@ mkdir -p /opt/timemark-v2 && cd /opt/timemark-v2
 # 3. 下载 v2.0 配置
 curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
 
-# 4. 生成新密钥并修改配置
-openssl rand -hex 32  # JWT_SECRET
-openssl rand -hex 32  # MASTER_KEY
-vim docker-compose.yml
+# 4. 可选：生成新密钥（公网部署建议配置）
+# openssl rand -hex 32  # JWT_SECRET
+# openssl rand -hex 32  # MASTER_KEY
+# vim docker-compose.yml
 
 # 5. 启动 v2.0
 docker compose up -d
@@ -741,14 +748,16 @@ docker login ghcr.io -u 你的GitHub用户名 -p 你的GitHubToken
 
 ### Q: 容器启动失败，提示 MASTER_KEY 错误
 
-MASTER_KEY 是 v2.0 的必填环境变量。请在 docker-compose.yml 中设置：
+系统已内置默认值，一般不会遇到此错误。如果自定义了 MASTER_KEY，请确保配置正确：
 
 ```bash
-# 生成密钥
+# 生成密钥（公网部署建议配置）
 openssl rand -hex 32
 
 # 将生成的字符串填入 docker-compose.yml 的 MASTER_KEY 字段
 ```
+
+> 💡 v2.0 现在支持内置默认密钥，开箱即用。如遇此错误，请检查 docker-compose.yml 中是否有语法错误。
 
 ### Q: 忘记管理员密码
 
