@@ -41,7 +41,7 @@
 | **单容器部署** | 只需一个镜像，无需 PostgreSQL + Redis |
 | **内置数据库** | SQLite (sql.js) 自动初始化，开箱即用 |
 | **更轻量** | 内存占用从 ~800MB 降至 ~256MB |
-| **安全加固** | MASTER_KEY 强制校验 + JWT 长度验证 + 限流 + XSS 防护 |
+| **安全加固** | 登录锁定 + 安全告警 + 登录日志 + JWT + 限流 + XSS 防护 |
 | **凭证加密** | 通知渠道 API Key/Token 使用 AES-256 加密存储 |
 | **多账户通知** | 同一渠道可配置多个账户 |
 
@@ -491,27 +491,30 @@ server {
 - **必须启用 HTTPS**，避免密码和 Token 明文传输
 - **修改默认端口**，不要直接暴露 3000 端口
 - **配置防火墙**，仅开放必要端口
-- **启用 2FA**，登录后立即开启双因素认证
+- **自定义密钥**，公网部署建议自定义 `JWT_SECRET` 和 `MASTER_KEY`
+- **修改默认密码**，首次登录后立即修改
 - **定期备份**，设置自动备份任务
 
 ---
 
 ## ⚙️ 环境变量说明
 
-| 变量 | 默认值 | 说明 | 必需 |
-|------|--------|------|:----:|
-| `DB_PATH` | `/app/data/timemark.db` | SQLite 数据库文件路径 | 是 |
-| `TZ` | `Asia/Shanghai` | 时区设置 | 是 |
-| `NODE_ENV` | `production` | 运行环境 | 是 |
-| `JWT_SECRET` | 内置默认值 | JWT 签名密钥（至少 32 位随机字符串） | **可选** |
-| `MASTER_KEY` | 内置默认值 | 主密钥（通知凭证 AES 加密，至少 32 位） | **可选** |
-| `DEFAULT_ADMIN_USERNAME` | `admin` | 初始管理员用户名 | 是 |
-| `DEFAULT_ADMIN_PASSWORD` | `TimeMark@2026` | 初始管理员密码（请使用强密码） | **可选** |
-| `LOG_QUERIES` | `false` | 是否打印 SQL 查询日志（调试用） | 否 |
+> ✅ **所有环境变量均为可选，不设置也能正常使用。** 系统内置默认值，`docker compose up -d` 即可启动。
 
-> ✅ **即开即用**：以上变量均有内置默认值，无需配置即可启动。建议公网部署时自定义密钥以增强安全性。
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `TZ` | `Asia/Shanghai` | 时区设置（常用自定义项） |
+| `DB_PATH` | `/app/data/timemark.db` | SQLite 数据库文件路径 |
+| `NODE_ENV` | `production` | 运行环境 |
+| `JWT_SECRET` | 内置默认值 | JWT 签名密钥，公网部署建议自定义 |
+| `MASTER_KEY` | 内置默认值 | 主密钥（通知凭证 AES 加密），公网部署建议自定义 |
+| `DEFAULT_ADMIN_USERNAME` | `admin` | 初始管理员用户名 |
+| `DEFAULT_ADMIN_PASSWORD` | `TimeMark@2026` | 初始管理员密码 |
+| `LOG_QUERIES` | `false` | 是否打印 SQL 查询日志（调试用） |
 
-### 密钥生成方法（可选：公网部署建议配置）
+> 💡 **公网部署建议**：自定义 `JWT_SECRET` 和 `MASTER_KEY` 以增强安全性。更换 MASTER_KEY 后，已加密的通知渠道凭证需要重新配置。
+
+### 自定义密钥（可选，公网部署建议）
 
 ```bash
 # Linux / macOS / WSL
@@ -523,8 +526,6 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 # 或者用 Node.js
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
-
-> 💡 **安全建议**：公网部署时建议自定义 `JWT_SECRET` 和 `MASTER_KEY`，使用自定义密钥后安全性更高。更换 MASTER_KEY 前请注意：已加密的通知渠道凭证将无法解密。
 
 ---
 
@@ -563,14 +564,13 @@ environment:
 | 用户名 | `admin`（默认）或自定义 |
 | 密码 | `TimeMark@2026`（默认）或自定义 |
 
-> ⚠️ **安全提示**：首次登录后请立即修改密码并启用 2FA 双因素认证！
+> ⚠️ **首次登录后请立即修改密码！** 进入设置页面即可修改。
 
 ### 首次登录后建议操作
 
 1. **修改密码** — 进入「设置」→「安全」→「修改密码」
-2. **启用 2FA** — 进入「设置」→「安全」→「启用两步验证」，使用 Google Authenticator 或 Microsoft Authenticator 扫码
-3. **配置通知渠道** — 进入「通知渠道」，添加你需要的通知方式
-4. **添加事件** — 进入「事件管理」，添加生日、纪念日等
+2. **添加通知账户** — 进入「通知渠道」，添加邮箱、微信、Telegram 等通知账户
+3. **创建事件** — 进入「事件管理」，添加生日、纪念日等，选择通知账户
 
 ---
 
@@ -666,7 +666,7 @@ docker compose up -d
 |------|------|
 | 数据库 | v1.x 使用 PostgreSQL，v2.0 使用 SQLite，数据格式不兼容 |
 | 通知配置 | 需要重新配置所有通知渠道（v2.0 使用加密存储） |
-| 环境变量 | v2.0 新增 `MASTER_KEY`（必填），移除了 `DB_HOST`、`REDIS_URL` 等 |
+| 环境变量 | v2.0 所有变量均可选（有内置默认值），移除了 `DB_HOST`、`REDIS_URL` 等 |
 | 端口 | 默认端口不变，仍为 3000 |
 
 ### 清理 v1.x 环境
