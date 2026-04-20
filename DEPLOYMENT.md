@@ -82,13 +82,12 @@ openssl rand -hex 32
 
 | 配置文件 | 适用场景 | 镜像源 | 特点 |
 |----------|:--------:|:------:|------|
-| `docker-compose.dockerhub.yml` | 通用部署 **(推荐)** | Docker Hub | 即拉即用，无需认证 |
-| `docker-compose.ghcr.yml` | 通用部署 | GHCR | 需要 GitHub 登录 |
-| `docker-compose.simple.yml` | 飞牛OS | GHCR | 轻量部署 |
-| `docker-compose.nas.yml` | 群晖/威联通/铁威马 | GHCR | NAS 专用，自定义路径 |
-| `docker-compose.full.yml` | 公网服务器 | GHCR | 完整生产配置 + Traefik |
-| `docker-compose.public.yml` | 快速测试 | GHCR | 测试用途 |
-| `docker-compose.yml` | 本地开发 | 本地构建 | 开发环境 |
+| `docker-compose.dockerhub.yml` | 通用部署 | Docker Hub | 即拉即用，无需认证，**推荐** |
+| `docker-compose.simple.yml` | 飞牛OS / NAS | Docker Hub | 最简配置 |
+| `docker-compose.nas.yml` | 群晖/威联通/铁威马 | Docker Hub | NAS 专用，自定义存储路径 |
+| `docker-compose.full.yml` | 公网服务器 | Docker Hub | 生产配置，含资源限制 |
+| `docker-compose.ghcr.yml` | 通用部署 | GHCR | 需要 GitHub 登录，备用 |
+| `docker-compose.public.yml` | 快速测试 | Docker Hub | 测试用途 |
 
 ---
 
@@ -130,7 +129,7 @@ docker pull ghcr.io/wfffff666/timemark:latest
 mkdir timemark && cd timemark
 
 # 2. 下载配置文件（Docker Hub 源，推荐）
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml -o docker-compose.yml
 
 # 3. 可选：自定义密钥（公网部署建议配置）
 # echo "JWT_SECRET: $(openssl rand -hex 32)"
@@ -173,8 +172,8 @@ services:
       # 主密钥（可选：公网部署建议自定义）
       # MASTER_KEY: <自定义密钥>
     dns:
-      - 8.8.8.8
-      - 1.1.1.1
+      - 223.5.5.5
+      - 119.29.29.29
     volumes:
       - ./data:/app/data
     networks:
@@ -217,7 +216,7 @@ ssh root@你的飞牛IP
 mkdir -p /vol1/docker/timemark && cd /vol1/docker/timemark
 
 # 3. 下载配置文件
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml -o docker-compose.yml
 
 # 4. 可选：生成自定义密钥（公网部署建议配置）
 # openssl rand -hex 32  # JWT_SECRET
@@ -263,7 +262,7 @@ sudo mkdir -p /volume1/docker/timemark/data
 
 # 3. 下载配置
 cd /volume1/docker/timemark
-sudo curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+sudo curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml -o docker-compose.yml
 
 # 4. 可选：生成自定义密钥（公网部署建议配置）
 # sudo openssl rand -hex 32  # JWT_SECRET
@@ -309,7 +308,7 @@ mkdir -p /share/Container/timemark/data
 cd /share/Container/timemark
 
 # 3. 下载配置
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml -o docker-compose.yml
 
 # 4. 可选：生成自定义密钥（公网部署建议配置）
 # openssl rand -hex 32  # JWT_SECRET
@@ -354,7 +353,7 @@ mkdir -p /Volume1/docker/timemark/data
 cd /Volume1/docker/timemark
 
 # 3. 下载配置
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml -o docker-compose.yml
 
 # 4. 可选：生成自定义密钥（公网部署建议配置）
 # openssl rand -hex 32  # JWT_SECRET
@@ -391,7 +390,7 @@ docker compose up -d
 mkdir timemark; cd timemark
 
 # 2. 下载配置文件
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml" -OutFile "docker-compose.yml"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml" -OutFile "docker-compose.yml"
 
 # 3. 可选：用记事本编辑配置（自定义密码/密钥）
 # notepad docker-compose.yml
@@ -407,7 +406,7 @@ docker compose up -d
 mkdir timemark && cd timemark
 
 # 2. 下载配置文件
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml -o docker-compose.yml
 
 # 3. 可选：生成自定义密钥（公网部署建议配置）
 # openssl rand -hex 32  # JWT_SECRET
@@ -432,7 +431,7 @@ sudo mkdir -p /opt/timemark/{data,config}
 cd /opt/timemark
 
 # 2. 下载完整配置
-sudo curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.full.yml -o docker-compose.yml
+sudo curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.full.yml -o docker-compose.yml
 
 # 3. 建议：生成自定义密钥（公网部署强烈建议配置！）
 echo "JWT_SECRET: $(openssl rand -hex 32)"
@@ -645,7 +644,7 @@ tar -czf timemark-v1-backup-$(date +%Y%m%d).tar.gz ./data
 mkdir -p /opt/timemark-v2 && cd /opt/timemark-v2
 
 # 3. 下载 v2.0 配置
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml -o docker-compose.yml
 
 # 4. 可选：生成新密钥（公网部署建议配置）
 # openssl rand -hex 32  # JWT_SECRET

@@ -1,6 +1,6 @@
-# TimeMark 完整部署（公网服务器/云服务器）
+# TimeMark 公网服务器部署
 # 默认账号: admin / TimeMark@2026（登录后请修改密码）
-# 公网部署建议设置自定义密钥（可选，不设置也能用）
+# 公网部署建议自定义密钥（可选，不设置也能用）
 
 services:
   app:
@@ -11,18 +11,15 @@ services:
       - "3000:3000"
     environment:
       TZ: Asia/Shanghai
-      # 公网部署建议设置（可选，不设置使用内置默认值）
+      # 公网部署建议设置（可选）
       # JWT_SECRET: 你的自定义JWT密钥
       # MASTER_KEY: 你的自定义加密密钥
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
     volumes:
       - ./data:/app/data
-    networks:
-      - timemark
     deploy:
       resources:
         limits:
           memory: 512M
-
-networks:
-  timemark:
-    driver: bridge

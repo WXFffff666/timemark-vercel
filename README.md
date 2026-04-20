@@ -14,7 +14,7 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/xfffff666/timemark?style=flat&color=0ea5e9)](https://hub.docker.com/r/xfffff666/timemark)
 [![Docker Image Size](https://img.shields.io/docker/image-size/xfffff666/timemark/latest?style=flat&color=6366f1)](https://hub.docker.com/r/xfffff666/timemark)
 [![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-docker?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-docker/stargazers)
-[![Last Commit](https://img.shields.io/github/last-commit/WXFffff666/timemark-docker?style=flat&color=10b981)](https://github.com/WXFffff666/timemark-docker/commits/main)
+[![Last Commit](https://img.shields.io/github/last-commit/WXFffff666/timemark-docker?style=flat&color=10b981)](https://github.com/WXFffff666/timemark-docker/commits/master)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
 
 ---
@@ -82,7 +82,7 @@ v2.0 是一次彻底的架构重构，从三容器方案精简为单容器部署
 mkdir timemark && cd timemark
 
 # 2. 下载配置
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/main/docker-compose.dockerhub.yml -o docker-compose.yml
+curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml -o docker-compose.yml
 
 # 3. 启动（就这么简单，不需要改任何配置）
 docker compose up -d
@@ -102,10 +102,10 @@ docker compose up -d
 | 文件名 | 适用平台 | 镜像源 | 特点 |
 |--------|:-------:|:------:|------|
 | `docker-compose.dockerhub.yml` | 通用 | Docker Hub | 即拉即用，无需认证，**推荐** |
-| `docker-compose.ghcr.yml` | 通用 | GHCR | 需要 GitHub 登录 |
-| `docker-compose.simple.yml` | 飞牛OS | GHCR | 轻量部署 |
-| `docker-compose.nas.yml` | 群晖/威联通/铁威马 | GHCR | NAS 专用配置，自定义路径 |
-| `docker-compose.full.yml` | 公网服务器 | GHCR | 完整生产配置 + Traefik HTTPS |
+| `docker-compose.simple.yml` | 飞牛OS / NAS | Docker Hub | 最简配置 |
+| `docker-compose.nas.yml` | 群晖/威联通/铁威马 | Docker Hub | NAS 专用，自定义存储路径 |
+| `docker-compose.full.yml` | 公网服务器 | Docker Hub | 生产配置，含资源限制 |
+| `docker-compose.ghcr.yml` | 通用 | GHCR | 需要 GitHub 登录，备用 |
 
 ---
 

@@ -1,6 +1,6 @@
-# TimeMark Docker Compose 配置 (Docker Hub)
-# 即开即用：拉取后直接 docker compose up -d 即可使用
-# 默认账号: admin / TimeMark@2026（登录后请立即修改密码）
+# TimeMark 一键部署 (Docker Hub)
+# 默认账号: admin / TimeMark@2026（登录后请修改密码）
+# 使用: docker compose up -d
 
 services:
   app:
@@ -11,16 +11,8 @@ services:
       - "3000:3000"
     environment:
       TZ: Asia/Shanghai
-      # 以下为可选配置，不设置也能正常使用（使用内置默认值）
-      # DEFAULT_ADMIN_USERNAME: admin
-      # DEFAULT_ADMIN_PASSWORD: TimeMark@2026
-      # JWT_SECRET: 自定义JWT密钥（可选，有内置默认值）
-      # MASTER_KEY: 自定义加密密钥（可选，有内置默认值）
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
     volumes:
       - ./data:/app/data
-    networks:
-      - timemark
-
-networks:
-  timemark:
-    driver: bridge

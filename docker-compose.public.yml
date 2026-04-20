@@ -7,9 +7,13 @@ services:
   app:
     image: xfffff666/timemark:latest
     container_name: timemark-app
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       TZ: Asia/Shanghai
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
     volumes:
       - ./data:/app/data

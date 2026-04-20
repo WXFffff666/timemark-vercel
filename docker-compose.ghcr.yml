@@ -1,6 +1,6 @@
-# TimeMark Docker Compose 配置 (GHCR)
-# 即开即用：拉取后直接 docker compose up -d 即可使用
-# 默认账号: admin / TimeMark@2026（登录后请立即修改密码）
+# TimeMark 一键部署 (GHCR - 需要 GitHub 登录)
+# 默认账号: admin / TimeMark@2026（登录后请修改密码）
+# 国内用户推荐使用 docker-compose.dockerhub.yml
 
 services:
   app:
@@ -11,11 +11,8 @@ services:
       - "3000:3000"
     environment:
       TZ: Asia/Shanghai
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
     volumes:
       - ./data:/app/data
-    networks:
-      - timemark
-
-networks:
-  timemark:
-    driver: bridge
