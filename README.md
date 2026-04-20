@@ -4,13 +4,13 @@
 
 <h1>🎂 TimeMark</h1>
 
-<h3>智能事件提醒系统 | 27+ 通知渠道 | 农历转换 | 关系映射</h3>
+<h3>智能事件提醒系统 | 35+ 通知渠道 | 农历转换 | 关系映射</h3>
 
 <p>一个为生日、纪念日等重要日期打造的全功能提醒系统。<br/>单容器部署，开箱即用，支持飞牛OS / 群晖 / 威联通 / 铁威马等 NAS 平台。</p>
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
+[![Version](https://img.shields.io/badge/Version-2.1.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
 [![Docker Pulls](https://img.shields.io/docker/pulls/xfffff666/timemark?style=flat&color=0ea5e9)](https://hub.docker.com/r/xfffff666/timemark)
 [![Docker Image Size](https://img.shields.io/docker/image-size/xfffff666/timemark/latest?style=flat&color=6366f1)](https://hub.docker.com/r/xfffff666/timemark)
 [![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-docker?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-docker/stargazers)
@@ -57,7 +57,7 @@ v2.0 是一次彻底的架构重构，从三容器方案精简为单容器部署
 
 | 🗓️ 精准农历 | 📢 多渠道通知 | 👨‍👩‍👧‍👦 智能关系映射 | 🔒 安全防护 | 🌍 全球时区 |
 |:----------:|:----------:|:---------------:|:----------:|:--------:|
-| 闰月自动转换 | 27+ 通知渠道 | 称呼智能适配 | 登录锁定 + 告警 | NTP 自动同步 |
+| 闰月自动转换 | 35+ 通知渠道 | 称呼智能适配 | 登录锁定 + 告警 | NTP 自动同步 |
 | 公历/农历双历 | 同渠道多账户 | 家庭关系映射 | AES 凭证加密 | 自定义时区 |
 
 ---
@@ -179,7 +179,7 @@ docker compose up -d
 |--------|--------|
 | 提醒时间 | 08:00 / 09:00 / 12:00 + 自定义任意时间 |
 | 提前天数 | 1天 / 3天 / 7天 / 14天 / 30天 (可多选) |
-| 通知渠道 | 27+ 渠道任意组合 (可多选) |
+| 通知渠道 | 35+ 渠道任意组合 (可多选) |
 
 ### 关系映射
 
@@ -194,11 +194,11 @@ docker compose up -d
 
 ---
 
-## 📢 通知渠道 (27+)
+## 📢 通知渠道 (35+)
 
-TimeMark 支持 27+ 通知渠道，覆盖国内外主流通讯平台。所有渠道（含邮箱）统一通过「通知账户」管理，支持同渠道多账户配置，创建事件时可选择发送给哪些账户。
+TimeMark 支持 35+ 通知渠道，覆盖国内外主流通讯平台。所有渠道（含邮箱）统一通过「通知账户」管理，支持同渠道多账户配置，创建事件时可选择发送给哪些账户。
 
-### 💬 即时通讯 (9 个)
+### 💬 即时通讯 (11 个)
 
 | 渠道 | 说明 |
 |------|------|
@@ -211,8 +211,10 @@ TimeMark 支持 27+ 通知渠道，覆盖国内外主流通讯平台。所有渠
 | 🟣 Discord | Discord Webhook |
 | 📱 WxPusher | 微信公众号推送 |
 | 💬 Qmsg | QQ 消息推送 |
+| 🦞 微信龙虾 (ClawBot) | 直接推送到个人微信（ilink API） |
+| 📡 Server酱 | 微信推送服务（Turbo/V3） |
 
-### 🔗 Webhook 集成 (8 个)
+### 🔗 Webhook 集成 (10 个)
 
 | 渠道 | 说明 |
 |------|------|
@@ -223,6 +225,17 @@ TimeMark 支持 27+ 通知渠道，覆盖国内外主流通讯平台。所有渠
 | Mattermost | Mattermost 频道 |
 | Nextcloud Talk | Nextcloud 聊天 |
 | 通用 Webhook | 自定义 HTTP 回调 |
+| PushPlus | 多渠道推送服务 |
+| PushMe | 多平台统一推送 |
+
+### 📱 移动推送 (4 个)
+
+| 渠道 | 说明 |
+|------|------|
+| Bark | iOS 自定义推送通知 |
+| Gotify | 自托管推送服务 |
+| 喵推送 (Meow) | 鸿蒙系统推送 |
+| 企业微信应用 | 企微应用消息推送 |
 
 ### 🌐 协议集成 (5 个)
 
@@ -400,6 +413,7 @@ docker compose restart
 
 | 版本 | 日期 | 内容 |
 |:----:|:----:|------|
+| **v2.1.0** | 2026-04 | 新增 8 个通知渠道（ClawBot/ServerChan/PushPlus/Bark/Gotify/Meow/PushMe/WeComApp）；邮箱多账号选择；登录锁定线性叠加；Docker 依赖修复；零配置即开即用 |
 | **v2.0.0** | 2026-04 | 架构重构：PostgreSQL + Redis → SQLite 单容器；零配置即开即用；登录锁定 + 安全告警 + 登录日志；通知凭证 AES 加密；邮箱多账号选择；触发日志 |
 | v1.1.1 | 2026-04 | 登录锁定、UI 优化 |
 | v1.1.0 | 2025-04 | 提醒多选、农历修复 |
