@@ -173,7 +173,7 @@ services:
       # MASTER_KEY: <自定义密钥>
     dns:
       - 223.5.5.5
-      - 119.29.29.29
+      - 8.8.8.8
     volumes:
       - ./data:/app/data
     networks:
