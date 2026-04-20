@@ -14,14 +14,16 @@ ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
 
 # Install pnpm
-RUN npm install -g pnpm && pnpm config set store-dir /root/.pnpm-store
+RUN npm install -g pnpm
 
-# Copy package files and install production dependencies only
+# Copy package files and install production dependencies
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY shared/package.json ./shared/
 COPY backend/package.json ./backend/
 
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+# Use shamefully-hoist to flatten node_modules (fixes pnpm symlink issues in Docker)
+RUN echo "shamefully-hoist=true" > .npmrc && \
+    pnpm install --prod --frozen-lockfile
 
 # Copy pre-built artifacts (built by CI or locally via `pnpm -r build`)
 COPY shared/dist ./shared/dist

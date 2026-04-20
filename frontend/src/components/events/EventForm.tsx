@@ -113,6 +113,15 @@ const notificationChannels = [
   { value: 'nostr', label: 'Nostr', icon: '🕸️' },
   { value: 'wxpusher', label: 'WxPusher', icon: '💚' },
   { value: 'qmsg', label: 'Qmsg', icon: '🐧' },
+  // New token-based channels (batch 2)
+  { value: 'clawbot', label: '微信龙虾', icon: '🦞' },
+  { value: 'serverchan', label: 'Server酱', icon: '📡' },
+  { value: 'pushplus', label: 'PushPlus', icon: '➕' },
+  { value: 'bark', label: 'Bark', icon: '🐕' },
+  { value: 'gotify', label: 'Gotify', icon: '📨' },
+  { value: 'meow', label: '喵推送', icon: '🐱' },
+  { value: 'pushme', label: 'PushMe', icon: '📲' },
+  { value: 'wecomapp', label: '企微应用', icon: '🏢' },
   // Plugin-based channels
   { value: 'wechat_official', label: '微信公众号', icon: '📣' },
   { value: 'wechat_personal', label: '微信个人号', icon: '💬' },
@@ -357,6 +366,14 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     qqbot: 'qqbot',
     qmsg: 'qmsg',
     wxpusher: 'wxpusher',
+    clawbot: 'clawbot',
+    serverchan: 'serverchan',
+    pushplus: 'pushplus',
+    bark: 'bark',
+    gotify: 'gotify',
+    meow: 'meow',
+    pushme: 'pushme',
+    wecomapp: 'wecomapp',
   };
 
   const openAccountPicker = async (channel: string, currentAccountIds: string[]) => {

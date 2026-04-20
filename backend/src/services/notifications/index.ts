@@ -20,6 +20,15 @@ import { sendMattermostNotification } from './mattermost.service.js';
 import { sendMicrosoftTeamsNotification } from './msteams.service.js';
 import { sendNextcloudTalkNotification } from './nextcloudtalk.service.js';
 import { sendNostrNotification } from './nostr.service.js';
+// New token-based channels (batch 2)
+import { sendClawBotNotification } from './clawbot.service.js';
+import { sendServerChanNotification } from './serverchan.service.js';
+import { sendPushPlusNotification } from './pushplus.service.js';
+import { sendBarkNotification } from './bark.service.js';
+import { sendGotifyNotification } from './gotify.service.js';
+import { sendMeowNotification } from './meow.service.js';
+import { sendPushMeNotification } from './pushme.service.js';
+import { sendWeComAppNotification } from './wecomapp.service.js';
 
 // Plugin channel services
 import { sendNotification as sendWechatNotification } from './wechaty.service.js';
@@ -76,6 +85,15 @@ const channelToAccountType: Record<string, string> = {
   'whatsapp': 'whatsapp',
   'signal': 'signal',
   'zalo': 'zalo',
+  // New channels (batch 2)
+  'clawbot': 'clawbot',
+  'serverchan': 'serverchan',
+  'pushplus': 'pushplus',
+  'bark': 'bark',
+  'gotify': 'gotify',
+  'meow': 'meow',
+  'pushme': 'pushme',
+  'wecomapp': 'wecomapp',
   // Plugin channels
   'wechat_personal': 'wechat_personal',
   'qq_bot': 'qq_bot',
@@ -138,6 +156,47 @@ function getChannelConfigFromAccount(
     case 'msteams':
       return (account.token && account.chat_id)
         ? { token: account.token, chat_id: account.chat_id }
+        : null;
+    
+    // New token-based channels (batch 2)
+    case 'clawbot':
+      return (account.token && account.chat_id)
+        ? { token: account.token, chat_id: account.chat_id, server_url: account.webhook || 'https://ilinkai.weixin.qq.com' }
+        : null;
+    
+    case 'serverchan':
+      return account.token
+        ? { token: account.token }
+        : null;
+    
+    case 'pushplus':
+      return account.token
+        ? { token: account.token, chat_id: account.chat_id }
+        : null;
+    
+    case 'bark':
+      return (account.webhook && account.token)
+        ? { webhook: account.webhook, token: account.token, chat_id: account.chat_id, secret: account.secret }
+        : null;
+    
+    case 'gotify':
+      return (account.webhook && account.token)
+        ? { webhook: account.webhook, token: account.token, chat_id: account.chat_id }
+        : null;
+    
+    case 'meow':
+      return account.token
+        ? { token: account.token }
+        : null;
+    
+    case 'pushme':
+      return account.token
+        ? { token: account.token }
+        : null;
+    
+    case 'wecomapp':
+      return (account.token && account.secret && account.chat_id && account.webhook)
+        ? { token: account.token, secret: account.secret, chat_id: account.chat_id, webhook: account.webhook }
         : null;
     
     // Plugin-based channels
@@ -322,6 +381,23 @@ export async function sendNotifications(event: any, userId: number, channels: st
         // Matrix channel (token-based with homeserver URL)
         else if (ch === 'matrix' && chConfig.server_url && chConfig.token && chConfig.chat_id)
           await sendMatrixNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id);
+        // New token-based channels (batch 2)
+        else if (ch === 'clawbot' && chConfig.token && chConfig.chat_id)
+          await sendClawBotNotification(mappedEvent, chConfig.token, chConfig.chat_id, chConfig.server_url || 'https://ilinkai.weixin.qq.com');
+        else if (ch === 'serverchan' && chConfig.token)
+          await sendServerChanNotification(mappedEvent, chConfig.token);
+        else if (ch === 'pushplus' && chConfig.token)
+          await sendPushPlusNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+        else if (ch === 'bark' && chConfig.webhook && chConfig.token)
+          await sendBarkNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id, chConfig.secret);
+        else if (ch === 'gotify' && chConfig.webhook && chConfig.token)
+          await sendGotifyNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id ? Number(chConfig.chat_id) : 5);
+        else if (ch === 'meow' && chConfig.token)
+          await sendMeowNotification(mappedEvent, chConfig.token);
+        else if (ch === 'pushme' && chConfig.token)
+          await sendPushMeNotification(mappedEvent, chConfig.token);
+        else if (ch === 'wecomapp' && chConfig.token && chConfig.secret && chConfig.chat_id && chConfig.webhook)
+          await sendWeComAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id, chConfig.webhook);
         // Plugin-based channels
         else if (ch === 'wechat_personal' && chConfig.sessionData) {
           const toUser = chConfig.toUser || mappedEvent.personName || 'me';

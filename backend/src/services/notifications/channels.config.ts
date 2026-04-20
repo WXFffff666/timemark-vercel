@@ -533,6 +533,236 @@ const tokenChannels: ChannelTemplate[] = [
       }
     ],
     docsUrl: 'https://qmsg.zendee.cn/'
+  },
+  {
+    id: 'clawbot',
+    name: '微信龙虾 (ClawBot)',
+    description: '微信龙虾机器人消息推送',
+    icon: 'Bot',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Token',
+        type: 'password',
+        required: true,
+        description: '龙虾机器人的 Token'
+      },
+      {
+        name: 'chat_id',
+        label: '接收用户 ID',
+        type: 'text',
+        required: true,
+        placeholder: 'toUserId',
+        description: '接收消息的用户 ID'
+      },
+      {
+        name: 'webhook',
+        label: '服务地址 (可选)',
+        type: 'text',
+        required: false,
+        placeholder: 'https://ilinkai.weixin.qq.com',
+        description: '自定义服务地址，默认为 https://ilinkai.weixin.qq.com'
+      }
+    ]
+  },
+  {
+    id: 'serverchan',
+    name: 'Server酱 (ServerChan)',
+    description: 'Server酱消息推送',
+    icon: 'Radio',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'SendKey',
+        type: 'password',
+        required: true,
+        placeholder: 'SCT...',
+        description: '从 Server酱 官网获取的 SendKey'
+      }
+    ],
+    docsUrl: 'https://sct.ftqq.com/'
+  },
+  {
+    id: 'pushplus',
+    name: 'PushPlus',
+    description: 'PushPlus 消息推送',
+    icon: 'BellPlus',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Token',
+        type: 'password',
+        required: true,
+        description: '从 PushPlus 官网获取的 Token'
+      },
+      {
+        name: 'chat_id',
+        label: '群组编码 (可选)',
+        type: 'text',
+        required: false,
+        placeholder: 'topic',
+        description: '群组编码，不填仅发送给自己'
+      }
+    ],
+    docsUrl: 'https://www.pushplus.plus/doc/'
+  },
+  {
+    id: 'bark',
+    name: 'Bark',
+    description: 'Bark iOS 推送通知',
+    icon: 'Smartphone',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: '服务器地址',
+        type: 'text',
+        required: true,
+        placeholder: 'https://api.day.app',
+        description: 'Bark 服务器地址'
+      },
+      {
+        name: 'token',
+        label: 'Device Key',
+        type: 'password',
+        required: true,
+        description: 'Bark 设备推送 Key'
+      },
+      {
+        name: 'chat_id',
+        label: '分组 (可选)',
+        type: 'text',
+        required: false,
+        placeholder: 'TimeMark',
+        description: '推送消息分组'
+      },
+      {
+        name: 'secret',
+        label: '铃声 (可选)',
+        type: 'text',
+        required: false,
+        placeholder: 'birdsong',
+        description: '推送铃声名称'
+      }
+    ],
+    docsUrl: 'https://bark.day.app/'
+  },
+  {
+    id: 'gotify',
+    name: 'Gotify',
+    description: 'Gotify 自托管推送服务',
+    icon: 'Bell',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: '服务器地址',
+        type: 'text',
+        required: true,
+        placeholder: 'https://gotify.example.com',
+        description: 'Gotify 服务器地址'
+      },
+      {
+        name: 'token',
+        label: 'App Token',
+        type: 'password',
+        required: true,
+        description: 'Gotify 应用 Token'
+      },
+      {
+        name: 'chat_id',
+        label: '优先级 (可选)',
+        type: 'text',
+        required: false,
+        placeholder: '5',
+        description: '消息优先级，默认为 5'
+      }
+    ],
+    docsUrl: 'https://gotify.net/docs/'
+  },
+  {
+    id: 'meow',
+    name: '喵推送 (Meow)',
+    description: '喵推送消息推送',
+    icon: 'Cat',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: '昵称 (Nickname)',
+        type: 'text',
+        required: true,
+        description: '喵推送的用户昵称'
+      }
+    ],
+    docsUrl: 'https://meopush.com/'
+  },
+  {
+    id: 'pushme',
+    name: 'PushMe',
+    description: 'PushMe 消息推送',
+    icon: 'SendHorizontal',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Push Key',
+        type: 'password',
+        required: true,
+        description: '从 PushMe 获取的推送 Key'
+      }
+    ],
+    docsUrl: 'https://push.i-i.me/'
+  },
+  {
+    id: 'wecomapp',
+    name: '企微应用 (WeComApp)',
+    description: '企业微信应用消息推送',
+    icon: 'Building',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'CorpID',
+        type: 'text',
+        required: true,
+        description: '企业微信的企业 ID'
+      },
+      {
+        name: 'secret',
+        label: 'CorpSecret',
+        type: 'password',
+        required: true,
+        description: '应用的 Secret'
+      },
+      {
+        name: 'chat_id',
+        label: 'AgentID',
+        type: 'text',
+        required: true,
+        description: '应用的 AgentID'
+      },
+      {
+        name: 'webhook',
+        label: '接收人 (touser)',
+        type: 'text',
+        required: true,
+        placeholder: '@all',
+        description: '接收消息的用户 ID，多个用 | 分隔，@all 表示全部'
+      }
+    ],
+    docsUrl: 'https://developer.work.weixin.qq.com/document/path/90236'
   }
 ];
 

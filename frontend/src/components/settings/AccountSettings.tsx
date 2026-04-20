@@ -104,6 +104,14 @@ export function AccountSettings() {
       wechat: '🟢 微信(WxPusher)',
       qq: '🐧 QQ(Qmsg)',
       network_chat: '🌍 网络聊天',
+      clawbot: '🦞 微信龙虾',
+      serverchan: '📡 Server酱',
+      pushplus: '➕ PushPlus',
+      bark: '🐕 Bark',
+      gotify: '📨 Gotify',
+      meow: '🐱 喵推送',
+      pushme: '📲 PushMe',
+      wecomapp: '🏢 企微应用',
     };
     return labels[type as keyof typeof labels] || type;
   };
