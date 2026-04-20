@@ -22,38 +22,51 @@ export async function sendSecurityAlert(params: {
       locked: params.locked
     });
 
-    let channels: string[] = ['email'];
     let userId = params.userId;
+    const alertContent = buildAlertContent(params);
 
+    // 通过用户已配置的所有通知渠道发送告警
     if (userId) {
       const config = await getUserConfig(userId);
-      if (config?.alert_channels && config.alert_channels.length > 0) {
-        channels = config.alert_channels;
+      const channels = config?.alert_channels && config.alert_channels.length > 0
+        ? config.alert_channels
+        : [];
+
+      // 邮件渠道
+      if (channels.includes('email') && process.env.RESEND_API_KEY && params.adminEmails.length > 0) {
+        await sendSecurityAlertEmail(
+          {
+            adminEmails: params.adminEmails,
+            username: params.username,
+            ip: params.ip,
+            userAgent: params.userAgent,
+            failureCount: params.failureCount,
+            locked: params.locked,
+            alertType: params.alertType
+          },
+          process.env.RESEND_API_KEY,
+          'TimeMark Security <security@timemark.app>'
+        );
+        console.log('[Security Alert] Email sent');
+      }
+
+      // 其他渠道（飞书/企微/钉钉/Telegram等）
+      const nonEmailChannels = channels.filter((ch: string) => ch !== 'email');
+      if (nonEmailChannels.length > 0) {
+        await sendAlertToChannels(userId, nonEmailChannels, alertContent);
+      }
+
+      // 如果用户没有配置任何渠道，也通过 sendNotifications 尝试发送
+      if (channels.length === 0) {
+        try {
+          await sendNotifications(alertContent, userId, []);
+        } catch (e) {
+          // 没有配置渠道，静默忽略
+        }
       }
     }
 
-    const alertContent = buildAlertContent(params);
-
-    if (channels.includes('email') && process.env.RESEND_API_KEY && params.adminEmails.length > 0) {
-      await sendSecurityAlertEmail(
-        {
-          adminEmails: params.adminEmails,
-          username: params.username,
-          ip: params.ip,
-          userAgent: params.userAgent,
-          failureCount: params.failureCount,
-          locked: params.locked,
-          alertType: params.alertType
-        },
-        process.env.RESEND_API_KEY,
-        'TimeMark Security <security@timemark.app>'
-      );
-      console.log('[Security Alert] Email notification sent');
-    }
-
-    if (userId && channels.length > 0 && !channels.includes('email')) {
-      await sendAlertToChannels(userId, channels, alertContent);
-    }
+    console.log(`[Security Alert] ${params.alertType || 'login_failure'}: ${params.username} from ${params.ip}, failures: ${params.failureCount}, locked: ${params.locked}`);
   } catch (error) {
     console.error('[sendSecurityAlert] Failed to send alert:', error);
   }

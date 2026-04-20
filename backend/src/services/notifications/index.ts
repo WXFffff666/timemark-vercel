@@ -88,9 +88,13 @@ const channelToAccountType: Record<string, string> = {
 function getChannelConfigFromAccount(
   account: any,
   channel: string
-): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string } | null {
+): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string; email?: string } | null {
   // 直接使用账户的字段
   switch (channel) {
+    // Email channel
+    case 'email':
+      return { email: account.chat_id || account.name };
+    
     // Webhook-based channels
     case 'feishu':
     case 'wecom':
@@ -244,9 +248,16 @@ export async function sendNotifications(event: any, userId: number, channels: st
           }
           break;
         case 'email':
-          if (config?.resend_api_key && config?.reminder_emails?.length > 0) {
+          if (config?.resend_api_key) {
             globalConfig.apiKey = config.resend_api_key;
-            globalConfig.emails = config.reminder_emails;
+            // Get email addresses from notification_accounts
+            const emailAccounts = allAccounts.filter(a => a.type === 'email' && a.is_active);
+            if (emailAccounts.length > 0) {
+              globalConfig.emails = emailAccounts.map((a: any) => a.chat_id || a.name);
+            } else if (config?.reminder_emails?.length > 0) {
+              // Fallback to legacy reminder_emails
+              globalConfig.emails = config.reminder_emails;
+            }
           }
           break;
         default:

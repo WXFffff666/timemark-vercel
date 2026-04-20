@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { verifyUserPassword, createLoginLog, trackLoginFailure, getAccountLockStatus } from '../services/auth.service.js';
+import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus } from '../services/auth.service.js';
 import { createSession, deleteSession } from '../services/session.service.js';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
 import { loginSchema, changePasswordSchema } from '@timemark/shared';
@@ -154,54 +154,61 @@ auth.post('/login', async (c) => {
     }
 
     const { username, password, deviceFingerprint, rememberMe = false } = parsed.data;
-    
+
+    // 1. 先检查是否被锁定（锁定期间不验证密码）
+    const lockStatus = await getAccountLockStatus({ username, ip });
+    if (lockStatus.isLocked) {
+      await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, `Locked (${lockStatus.lockMinutes}min)`);
+      return c.json({
+        success: false,
+        error: `账户已锁定，请${lockStatus.lockMinutes}分钟后重试`,
+        locked: true,
+        remainingSeconds: lockStatus.remainingSeconds
+      }, 429);
+    }
+
+    // 2. 验证密码
     const user = await verifyUserPassword(username, password);
 
     if (!user) {
+      // 记录失败日志
+      await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'Invalid credentials');
+
+      // 检查是否刚好触发锁定（每5次触发一次）
       const tracking = await trackLoginFailure({ username, ip });
-      
-      // 检查账户是否应该被锁定
+
       if (tracking.shouldLock) {
-        // 获取账户锁定状态
-        const lockStatus = await getAccountLockStatus({ username, ip });
-        if (lockStatus.isLocked) {
-          await createLoginLog(username, ip, userAgent, '', false, 'Account locked due to multiple failures');
-          // 发送安全告警
-          await sendSecurityAlert({
-            adminEmails: [],
-            username,
-            ip,
-            userAgent,
-            failureCount: tracking.failureCount,
-            locked: true
-          });
-          return c.json({ 
-            success: false, 
-            error: '账户已锁定，请15分钟后重试或联系管理员',
-            locked: true,
-            remainingSeconds: lockStatus.remainingSeconds
-          }, 429);
-        }
-      }
-      
-      await createLoginLog(username, ip, userAgent, '', false, 'Invalid credentials');
-      
-      if (tracking.failureCount >= 5) {
+        // 获取用户ID用于发送告警到已配置的渠道
+        const targetUser = await getUserByUsername(username);
+        const userId = targetUser ? parseInt(targetUser.id, 10) : undefined;
+
         await sendSecurityAlert({
+          userId,
           adminEmails: [],
           username,
           ip,
           userAgent,
           failureCount: tracking.failureCount,
-          locked: tracking.shouldLock
+          locked: true,
+          alertType: 'login_failure'
         });
+
+        const newLockStatus = await getAccountLockStatus({ username, ip });
+        return c.json({
+          success: false,
+          error: `登录失败次数过多，账户已锁定${newLockStatus.lockMinutes}分钟`,
+          locked: true,
+          remainingSeconds: newLockStatus.remainingSeconds
+        }, 429);
       }
-      
-      return c.json({ success: false, error: 'Invalid credentials' }, 401);
+
+      // 返回剩余尝试次数提示
+      const remaining = 5 - (tracking.failureCount % 5);
+      return c.json({ success: false, error: `密码错误，还剩${remaining}次尝试机会` }, 401);
     }
 
-    await createLoginLog(user.id, ip, userAgent, '', true);
-
+    // 3. 登录成功
+    await createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', true);
     const { accessToken, refreshToken } = await createSession(user.id, deviceFingerprint || '', false, rememberMe);
     return c.json({ success: true, data: { accessToken, refreshToken, user } });
   } catch (error: any) {

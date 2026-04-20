@@ -6,7 +6,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { CalendarClock, Type, AlignLeft, Globe, Bell, Mail, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, ChevronDown } from 'lucide-react';
+import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lunar, Solar } from 'lunar-javascript';
 import { api } from '@/lib/api';
@@ -144,7 +144,6 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   const [lunarInputValue, setLunarInputValue] = useState('');
 
-  const [newEmail, setNewEmail] = useState('');
   const [customTime, setCustomTime] = useState('');
   const [accounts, setAccounts] = useState<NotificationAccountResponse[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(false);
@@ -278,37 +277,6 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     }
   };
 
-  const addEmail = () => {
-    if (!newEmail.trim()) return;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-      alert('请输入有效的邮箱地址');
-      return;
-    }
-    const currentEmails = formData.reminderConfig.emailRecipients || [];
-    if (currentEmails.includes(newEmail)) {
-      alert('该邮箱已存在');
-      return;
-    }
-    setFormData({
-      ...formData,
-      reminderConfig: {
-        ...formData.reminderConfig,
-        emailRecipients: [...currentEmails, newEmail],
-      },
-    });
-    setNewEmail('');
-  };
-
-  const removeEmail = (email: string) => {
-    setFormData({
-      ...formData,
-      reminderConfig: {
-        ...formData.reminderConfig,
-        emailRecipients: formData.reminderConfig.emailRecipients?.filter(e => e !== email) || [],
-      },
-    });
-  };
-
   const toggleReminderDay = (day: number) => {
     const currentDays = formData.reminderConfig.daysBeforeList || [];
     const newDays = currentDays.includes(day)
@@ -351,9 +319,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
           channels: [...currentChannels, channel],
         },
       });
-      if (channel !== 'email') {
-        await openAccountPicker(channel, currentAccountIds);
-      }
+      await openAccountPicker(channel, currentAccountIds);
     }
   };
 
@@ -366,6 +332,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   };
 
   const channelToAccountType: Record<string, string> = {
+    email: 'email',
     feishu: 'feishu',
     wecom: 'wecom',
     dingtalk: 'dingtalk',
@@ -842,12 +809,12 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   </div>
 
                   {/* 已选账号摘要 */}
-                  {formData.reminderConfig.channels && formData.reminderConfig.channels.some(c => c !== 'email') && (
+                  {formData.reminderConfig.channels && formData.reminderConfig.channels.length > 0 && (
                     <div className="space-y-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">通知账户</label>
                       <div className="space-y-2">
                         {notificationChannels
-                          .filter(ch => formData.reminderConfig.channels?.includes(ch.value) && ch.value !== 'email')
+                          .filter(ch => formData.reminderConfig.channels?.includes(ch.value))
                           .map(channel => {
                             const accountType = channelToAccountType[channel.value];
                             const selectedIds = formData.reminderConfig.accountIds || [];
@@ -871,42 +838,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                     </div>
                   )}
 
-                  {/* 邮件收件人 */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <Mail size={14} />
-                      邮件收件人
-                    </label>
-                    <div className="flex gap-2">
-                      <Input
-                        type="email"
-                        placeholder="输入邮箱地址"
-                        value={newEmail}
-                        onChange={(e) => setNewEmail(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
-                        className="h-10 flex-1"
-                      />
-                      <Button type="button" variant="secondary" size="sm" onClick={addEmail} className="h-10 px-4">
-                        <Plus size={16} />
-                      </Button>
-                    </div>
-                    {formData.reminderConfig.emailRecipients && formData.reminderConfig.emailRecipients.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {formData.reminderConfig.emailRecipients.map((email) => (
-                          <Badge key={email} variant="secondary" className="flex items-center gap-1 px-3 py-1">
-                            {email}
-                            <button
-                              type="button"
-                              onClick={() => removeEmail(email)}
-                              className="hover:text-red-500 transition-colors"
-                            >
-                              <X size={14} />
-                            </button>
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+
                 </motion.div>
               )}
             </AnimatePresence>
