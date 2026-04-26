@@ -158,7 +158,7 @@ export function exportSessionData(sessionId: string): string | null {
   return JSON.stringify({
     sessionId: session.sessionId,
     bot_token: session.bot_token,
-    ilink_bot_id: session.ilink_bot_id,
+    ilink_bot_id: session.ilink_bot_id || '',
     baseUrl: session.baseUrl || ILINK_BASE,
     authenticated: true,
     user: session.user,
