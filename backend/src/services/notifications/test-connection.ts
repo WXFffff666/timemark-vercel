@@ -95,7 +95,11 @@ async function testTokenChannel(
 
   switch (type) {
     case 'email':
+    case 'resend':
       return await testEmailChannel(token, fromEmail!, chatId!);
+    
+    case 'smtp':
+      return await testSmtpChannel(fromEmail!, token, chatId!);
     
     case 'telegram':
       return await testTelegramChannel(token, chatId!);
@@ -307,6 +311,7 @@ async function testPluginChannel(type: string, sessionData?: string): Promise<Te
       case 'signal':
       case 'zalo':
       case 'imessage':
+      case 'clawbot':
         if (parsed.authenticated === true) {
           const template = getChannelTemplate(type);
           return { 
@@ -321,5 +326,35 @@ async function testPluginChannel(type: string, sessionData?: string): Promise<Te
     }
   } catch {
     return { success: false, message: '会话数据格式无效' };
+  }
+}
+
+async function testSmtpChannel(smtpHost: string, password: string, fromEmail: string): Promise<TestConnectionResult> {
+  if (!smtpHost || !password || !fromEmail) {
+    return { success: false, message: 'SMTP 服务器、密码和发件邮箱都不能为空' };
+  }
+
+  try {
+    const nodemailer = await import('nodemailer');
+    const transporter = nodemailer.default.createTransport({
+      host: smtpHost,
+      port: 587,
+      secure: false,
+      auth: {
+        user: fromEmail,
+        pass: password,
+      },
+    });
+
+    await transporter.verify();
+    return { success: true, message: 'SMTP 连接成功' };
+  } catch (error: any) {
+    if (error.code === 'EAUTH') {
+      return { success: false, message: 'SMTP 认证失败，请检查邮箱和密码/授权码' };
+    }
+    if (error.code === 'ECONNREFUSED') {
+      return { success: false, message: 'SMTP 服务器连接被拒绝，请检查服务器地址' };
+    }
+    return { success: false, message: `SMTP 连接失败: ${error.message}` };
   }
 }

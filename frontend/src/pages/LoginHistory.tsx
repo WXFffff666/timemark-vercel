@@ -100,31 +100,28 @@ export default function LoginHistory() {
   };
 
   const formatTime = (timeStr: string) => {
-    // 后端返回的时间格式：2026-04-10T15:11:57.000+08:00
-    // 直接提取时间部分显示，不做复杂的时区转换
-    const match = timeStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
-    if (!match) {
+    // 后端返回 ISO 8601 格式（UTC）：2026-04-10T07:11:57.000Z
+    // 使用 Date 构造函数自动处理时区转换为本地时间
+    const date = new Date(timeStr);
+    if (isNaN(date.getTime())) {
       return timeStr;
     }
     
-    const year = parseInt(match[1]);
-    const month = parseInt(match[2]);
-    const day = parseInt(match[3]);
-    const hour = parseInt(match[4]);
-    const minute = parseInt(match[5]);
-    
-    // 直接用本地时间创建Date对象
-    const targetTime = new Date(year, month - 1, day, hour, minute).getTime();
     const now = Date.now();
-    const diff = now - targetTime;
+    const diff = now - date.getTime();
     
     if (diff < 60000) return '刚刚';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
     if (diff < 172800000) return '昨天';
     
-    // 显示完整日期时间
-    return `${year}/${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')} ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    // 显示完整日期时间（本地时区）
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const hour = date.getHours().toString().padStart(2, '0');
+    const minute = date.getMinutes().toString().padStart(2, '0');
+    return `${year}/${month}/${day} ${hour}:${minute}`;
   };
 
   const getLocation = (ip: string) => {

@@ -335,7 +335,14 @@ auth.get('/login-history', authMiddleware, async (c) => {
       [numericUserId, user.username]
     );
     
-    return c.json({ success: true, data: result.rows });
+    // SQLite datetime('now') stores UTC time. Convert to proper ISO 8601 so frontend
+    // can correctly interpret the timezone and display local time.
+    const rows = result.rows.map((row: any) => ({
+      ...row,
+      login_time: row.login_time ? new Date(row.login_time + 'Z').toISOString() : row.login_time
+    }));
+    
+    return c.json({ success: true, data: rows });
   } catch (error) {
     console.error('Failed to fetch login history:', error);
     return c.json({ success: true, data: [] });

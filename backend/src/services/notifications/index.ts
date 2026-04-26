@@ -8,6 +8,7 @@ import { sendWxPusherNotification } from './wxpusher.service.js';
 import { sendQmsgNotification } from './qmsg.service.js';
 import { sendGenericWebhookNotification } from './generic-webhook.service.js';
 import { sendEmailNotification } from './email.service.js';
+import { sendSmtpNotification } from './smtp.service.js';
 // New webhook-based channels
 import { sendGoogleChatNotification } from './googlechat.service.js';
 import { sendIRCNotification } from './irc.service.js';
@@ -71,6 +72,8 @@ const channelToAccountType: Record<string, string> = {
   'wechat': 'wxpusher',
   'qq': 'qmsg',
   'email': 'email',
+  'resend': 'resend',
+  'smtp': 'smtp',
   // New mappings
   'googlechat': 'googlechat',
   'line': 'line',
@@ -109,9 +112,15 @@ function getChannelConfigFromAccount(
 ): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string; email?: string } | null {
   // 直接使用账户的字段
   switch (channel) {
-    // Email channel
+    // Email channels
     case 'email':
+    case 'resend':
       return { email: account.chat_id || account.name };
+    
+    case 'smtp':
+      return (account.webhook && account.token && account.chat_id)
+        ? { webhook: account.webhook, token: account.token, secret: account.secret, chat_id: account.chat_id }
+        : null;
     
     // Webhook-based channels
     case 'feishu':
@@ -159,11 +168,6 @@ function getChannelConfigFromAccount(
         : null;
     
     // New token-based channels (batch 2)
-    case 'clawbot':
-      return (account.token && account.chat_id)
-        ? { token: account.token, chat_id: account.chat_id, server_url: account.webhook || 'https://ilinkai.weixin.qq.com' }
-        : null;
-    
     case 'serverchan':
       return account.token
         ? { token: account.token }
@@ -204,6 +208,7 @@ function getChannelConfigFromAccount(
     case 'whatsapp':
     case 'qq_bot':
     case 'signal':
+    case 'clawbot':
       return (account.session_data || account.token)
         ? { 
             sessionData: account.session_data || account.token,
@@ -307,10 +312,11 @@ export async function sendNotifications(event: any, userId: number, channels: st
           }
           break;
         case 'email':
+        case 'resend':
           if (config?.resend_api_key) {
             globalConfig.apiKey = config.resend_api_key;
             // Get email addresses from notification_accounts
-            const emailAccounts = allAccounts.filter(a => a.type === 'email' && a.is_active);
+            const emailAccounts = allAccounts.filter(a => (a.type === 'email' || a.type === 'resend') && a.is_active);
             if (emailAccounts.length > 0) {
               globalConfig.emails = emailAccounts.map((a: any) => a.chat_id || a.name);
             } else if (config?.reminder_emails?.length > 0) {
@@ -356,7 +362,7 @@ export async function sendNotifications(event: any, userId: number, channels: st
           await sendWxPusherNotification(mappedEvent, chConfig.token, chConfig.chat_id);
         else if (ch === 'qq' && chConfig.token)
           await sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id);
-        else if (ch === 'email' && chConfig.apiKey && chConfig.emails?.length > 0) {
+        else if ((ch === 'email' || ch === 'resend') && chConfig.apiKey && chConfig.emails?.length > 0) {
           // 为每个收件人单独发送邮件，应用不同的关系映射（per-recipient）
           await Promise.allSettled(chConfig.emails.map(async (email: string) => {
             const emailMappedEvent = {
@@ -371,6 +377,13 @@ export async function sendNotifications(event: any, userId: number, channels: st
             );
           }));
         }
+        else if (ch === 'smtp' && chConfig.webhook && chConfig.token && chConfig.chat_id) {
+          const smtpHost = chConfig.webhook;
+          const smtpPort = parseInt(chConfig.secret || '587', 10);
+          const password = chConfig.token;
+          const fromEmail = chConfig.chat_id;
+          await sendSmtpNotification(mappedEvent, smtpHost, smtpPort, password, fromEmail, fromEmail);
+        }
         else if (genericWebhookChannels.has(ch) && chConfig.webhook)
           await sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch);
         // Token-based channels with dedicated APIs
@@ -382,8 +395,6 @@ export async function sendNotifications(event: any, userId: number, channels: st
         else if (ch === 'matrix' && chConfig.server_url && chConfig.token && chConfig.chat_id)
           await sendMatrixNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id);
         // New token-based channels (batch 2)
-        else if (ch === 'clawbot' && chConfig.token && chConfig.chat_id)
-          await sendClawBotNotification(mappedEvent, chConfig.token, chConfig.chat_id, chConfig.server_url || 'https://ilinkai.weixin.qq.com');
         else if (ch === 'serverchan' && chConfig.token)
           await sendServerChanNotification(mappedEvent, chConfig.token);
         else if (ch === 'pushplus' && chConfig.token)
@@ -422,6 +433,17 @@ export async function sendNotifications(event: any, userId: number, channels: st
         else if (ch === 'imessage' && chConfig.sessionData) {
           const toUser = chConfig.toUser || mappedEvent.personName || '';
           await sendBlueBubblesNotification(mappedEvent, chConfig.sessionData, toUser);
+        }
+        else if (ch === 'clawbot' && chConfig.sessionData) {
+          const sessionObj = typeof chConfig.sessionData === 'string'
+            ? JSON.parse(chConfig.sessionData)
+            : chConfig.sessionData;
+          const botToken = sessionObj.bot_token;
+          const baseUrl = sessionObj.baseUrl || 'https://ilinkai.weixin.qq.com';
+          const toUser = chConfig.toUser || '';
+          if (botToken && toUser) {
+            await sendClawBotNotification(mappedEvent, botToken, toUser, baseUrl);
+          }
         }
       } catch (e) {
         console.error(`Failed ${ch}:`, e);

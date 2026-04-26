@@ -1,4 +1,3 @@
-import QRCode from 'qrcode';
 import { getBlessing } from '../../../../shared/src/blessings.js';
 
 let oicq: typeof import('oicq') | undefined;
@@ -60,13 +59,11 @@ export async function startAuth(qqNumber: string): Promise<{ qrcode: string; ses
       // Handle QR code event
       client.on('system.login.qrcode', async (event) => {
         try {
-          // Generate QR code data URL from the image buffer
+          // oicq provides event.image as a raw PNG buffer of the QR code.
+          // Convert directly to data URL instead of re-encoding through qrcode library
+          // (re-encoding treats the base64 as text to encode, producing a corrupted/green image).
           const qrBuffer = event.image;
-          qrCodeData = await QRCode.toDataURL(qrBuffer.toString('base64'), {
-            type: 'image/png',
-            margin: 2,
-            scale: 8,
-          });
+          qrCodeData = 'data:image/png;base64,' + qrBuffer.toString('base64');
           
           // Store session
           activeSessions.set(sessionId, {

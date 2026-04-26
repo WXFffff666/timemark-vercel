@@ -172,7 +172,8 @@ const webhookChannels: ChannelTemplate[] = [
         placeholder: 'https://hooks.slack.com/services/...',
         description: 'IRC 桥接 Webhook URL（如 matterbridge）'
       }
-    ]
+    ],
+    docsUrl: 'https://github.com/42wim/matterbridge/wiki'
   },
   {
     id: 'synologychat',
@@ -190,7 +191,8 @@ const webhookChannels: ChannelTemplate[] = [
         placeholder: 'https://your-nas:5001/webapi/entry.cgi?...',
         description: '在 Synology Chat 中创建传入 Webhook'
       }
-    ]
+    ],
+    docsUrl: 'https://kb.synology.com/en-global/DSM/help/Chat/chat_integration'
   },
   {
     id: 'twitch',
@@ -208,7 +210,8 @@ const webhookChannels: ChannelTemplate[] = [
         placeholder: 'https://api.twitch.tv/helix/...',
         description: 'Twitch EventSub Webhook URL'
       }
-    ]
+    ],
+    docsUrl: 'https://dev.twitch.tv/docs/eventsub/'
   },
   {
     id: 'generic_webhook',
@@ -242,9 +245,9 @@ const webhookChannels: ChannelTemplate[] = [
 
 const tokenChannels: ChannelTemplate[] = [
   {
-    id: 'email',
-    name: '邮件 (Email)',
-    description: '邮件提醒通知（支持 HTML 模板）',
+    id: 'resend',
+    name: 'Resend',
+    description: 'Resend 邮件 API 推送（支持 HTML 模板）',
     icon: 'Mail',
     configMethod: 'token',
     isBuiltIn: true,
@@ -275,6 +278,48 @@ const tokenChannels: ChannelTemplate[] = [
       }
     ],
     docsUrl: 'https://resend.com/docs'
+  },
+  {
+    id: 'smtp',
+    name: 'SMTP 邮件',
+    description: 'SMTP 协议邮件推送（支持 Gmail、Outlook、自建邮箱等）',
+    icon: 'Mail',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: 'SMTP 服务器',
+        type: 'text',
+        required: true,
+        placeholder: 'smtp.gmail.com',
+        description: 'SMTP 服务器地址'
+      },
+      {
+        name: 'secret',
+        label: 'SMTP 端口',
+        type: 'text',
+        required: true,
+        placeholder: '587',
+        description: 'SMTP 端口号（通常 587 或 465）'
+      },
+      {
+        name: 'token',
+        label: '邮箱密码/授权码',
+        type: 'password',
+        required: true,
+        description: '邮箱密码或应用专用密码/授权码'
+      },
+      {
+        name: 'chat_id',
+        label: '发件人邮箱',
+        type: 'text',
+        required: true,
+        placeholder: 'user@gmail.com',
+        description: '发件人邮箱地址（也用作 SMTP 用户名和收件人）'
+      }
+    ],
+    docsUrl: 'https://nodemailer.com/about/'
   },
   {
     id: 'telegram',
@@ -455,7 +500,8 @@ const tokenChannels: ChannelTemplate[] = [
         required: true,
         description: 'Talk 房间的 token'
       }
-    ]
+    ],
+    docsUrl: 'https://nextcloud-talk.readthedocs.io/en/latest/'
   },
   {
     id: 'nostr',
@@ -534,39 +580,7 @@ const tokenChannels: ChannelTemplate[] = [
     ],
     docsUrl: 'https://qmsg.zendee.cn/'
   },
-  {
-    id: 'clawbot',
-    name: '微信龙虾 (ClawBot)',
-    description: '微信龙虾机器人消息推送',
-    icon: 'Bot',
-    configMethod: 'token',
-    isBuiltIn: true,
-    fields: [
-      {
-        name: 'token',
-        label: 'Token',
-        type: 'password',
-        required: true,
-        description: '龙虾机器人的 Token'
-      },
-      {
-        name: 'chat_id',
-        label: '接收用户 ID',
-        type: 'text',
-        required: true,
-        placeholder: 'toUserId',
-        description: '接收消息的用户 ID'
-      },
-      {
-        name: 'webhook',
-        label: '服务地址 (可选)',
-        type: 'text',
-        required: false,
-        placeholder: 'https://ilinkai.weixin.qq.com',
-        description: '自定义服务地址，默认为 https://ilinkai.weixin.qq.com'
-      }
-    ]
-  },
+
   {
     id: 'serverchan',
     name: 'Server酱 (ServerChan)',
@@ -907,6 +921,25 @@ const pluginChannels: ChannelTemplate[] = [
       }
     ],
     docsUrl: 'https://developers.zalo.com/'
+  },
+  {
+    id: 'clawbot',
+    name: '微信龙虾 (ClawBot)',
+    description: '微信龙虾机器人消息推送（扫码登录）',
+    icon: 'Bot',
+    configMethod: 'plugin',
+    isBuiltIn: true,
+    pluginPackage: 'ilink-clawbot-api',
+    fields: [
+      {
+        name: 'session_data',
+        label: '认证会话',
+        type: 'textarea',
+        required: false,
+        description: '扫码登录后自动填充的会话数据'
+      }
+    ],
+    docsUrl: 'https://github.com/nicepkg/wechat-clawbot'
   }
 ];
 
@@ -953,4 +986,5 @@ export const legacyChannelToAccountType: Record<string, string> = {
   'qq': 'qmsg',
   'qq_bot': 'qmsg',
   'email': 'email',
+  'resend': 'resend',
 };

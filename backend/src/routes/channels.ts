@@ -15,6 +15,7 @@ import { startAuth as startQQAuth, checkAuth as checkQQAuth, logout as logoutQQ 
 import { startAuth as startSignalAuth, checkAuth as checkSignalAuth, logout as logoutSignal } from '../services/notifications/signal.service.js';
 import { startAuth as startZaloAuth, checkAuth as checkZaloAuth, logout as logoutZalo } from '../services/notifications/zalo.service.js';
 import { startAuth as startBlueBubblesAuth, checkAuth as checkBlueBubblesAuth, logout as logoutBlueBubbles } from '../services/notifications/bluebubbles.service.js';
+import { startAuth as startClawBotAuth, checkAuth as checkClawBotAuth, logout as logoutClawBot } from '../services/notifications/clawbot.service.js';
 import { testConnection } from '../services/notifications/test-connection.js';
 
 const channels = new Hono<{ Variables: { user: User } }>();
@@ -98,6 +99,9 @@ channels.post('/plugin/:type/start-auth', async (c) => {
       case 'imessage':
         result = await startBlueBubblesAuth(body.config);
         break;
+      case 'clawbot':
+        result = await startClawBotAuth();
+        break;
       default:
         return c.json({ success: false, error: '不支持的插件类型' }, 400);
     }
@@ -140,6 +144,9 @@ channels.post('/plugin/:type/check-auth', async (c) => {
       case 'imessage':
         result = await checkBlueBubblesAuth(sessionData);
         break;
+      case 'clawbot':
+        result = await checkClawBotAuth(sessionData);
+        break;
       default:
         return c.json({ success: false, error: '不支持的插件类型' }, 400);
     }
@@ -179,6 +186,9 @@ channels.delete('/plugin/:type/logout', async (c) => {
         break;
       case 'imessage':
         await logoutBlueBubbles(sessionData);
+        break;
+      case 'clawbot':
+        await logoutClawBot(sessionData);
         break;
       default:
         return c.json({ success: false, error: '不支持的插件类型' }, 400);
