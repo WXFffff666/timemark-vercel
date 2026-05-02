@@ -56,14 +56,7 @@ export async function sendSecurityAlert(params: {
         await sendAlertToChannels(userId, nonEmailChannels, alertContent);
       }
 
-      // 如果用户没有配置任何渠道，也通过 sendNotifications 尝试发送
-      if (channels.length === 0) {
-        try {
-          await sendNotifications(alertContent, userId, []);
-        } catch (e) {
-          // 没有配置渠道，静默忽略
-        }
-      }
+      // 没有配置渠道时跳过
     }
 
     console.log(`[Security Alert] ${params.alertType || 'login_failure'}: ${params.username} from ${params.ip}, failures: ${params.failureCount}, locked: ${params.locked}`);

@@ -394,16 +394,16 @@ export default function Channels() {
       }
 
       try {
-        const sessionData = JSON.stringify({ sessionId, authenticated: false });
-        const result = await api.post<{ authenticated: boolean; user?: string }>(
+        const pendingSessionData = JSON.stringify({ sessionId, authenticated: false });
+        const result = await api.post<{ authenticated: boolean; user?: string; sessionData?: string }>(
           `/channels/plugin/${type}/check-auth`,
-          { sessionData }
+          { sessionData: pendingSessionData }
         );
 
         if (result?.authenticated) {
           setAuthStatus('authenticated');
-          // Save session data to config form
-          setConfigForm({ ...configForm, sessionData: sessionData });
+          // Save session data to config form - use the full credentials returned by backend
+          setConfigForm({ ...configForm, sessionData: result.sessionData || pendingSessionData });
         } else {
           attempts++;
           setTimeout(poll, 2000);

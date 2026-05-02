@@ -9,8 +9,10 @@ export interface LunarDate {
 }
 
 export type NotificationChannel =
-  // Email (mandatory)
+  // Email channels
   | 'email'
+  | 'resend'
+  | 'smtp'
   // Webhook channels
   | 'feishu'
   | 'dingtalk'
@@ -30,23 +32,34 @@ export type NotificationChannel =
   | 'nextcloudtalk'
   | 'wxpusher'
   | 'qmsg'
+  | 'clawbot'
+  | 'serverchan'
+  | 'pushplus'
+  | 'bark'
+  | 'gotify'
+  | 'meow'
+  | 'pushme'
+  | 'wecomapp'
+  // Plugin channels
+  | 'whatsapp'
+  | 'signal'
+  | 'qqbot'
+  | 'zalo'
+  | 'imessage'
+  | 'wechat_official'
+  | 'wechat_personal'
   // Legacy/other channels
   | 'wechat'
   | 'qq'
-  | 'whatsapp'
-  | 'signal'
-  | 'imessage'
   | 'bluebubbles'
   | 'microsoft_teams'
   | 'nostr'
   | 'tlon'
-  | 'zalo'
   | 'zalo_personal'
   | 'network_chat'
   | 'google_chat'
   | 'synology_chat'
-  | 'nextcloud_talk'
-  | 'qqbot';
+  | 'nextcloud_talk';
 
 export interface ReminderConfig {
   enabled: boolean;

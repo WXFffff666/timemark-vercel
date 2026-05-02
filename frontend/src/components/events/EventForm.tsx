@@ -91,8 +91,10 @@ const convertToGregorian = (lunarDate: { year: number; month: number; day: numbe
 };
 
 const notificationChannels = [
-  // Email (mandatory)
+  // Email channels
   { value: 'email', label: '邮件', icon: '📧' },
+  { value: 'resend', label: 'Resend邮件', icon: '📧' },
+  { value: 'smtp', label: 'SMTP邮件', icon: '📧' },
   // Webhook channels
   { value: 'feishu', label: '飞书', icon: '📱' },
   { value: 'dingtalk', label: '钉钉', icon: '🔔' },
@@ -342,6 +344,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   const channelToAccountType: Record<string, string> = {
     email: 'email',
+    resend: 'resend',
+    smtp: 'smtp',
     feishu: 'feishu',
     wecom: 'wecom',
     dingtalk: 'dingtalk',

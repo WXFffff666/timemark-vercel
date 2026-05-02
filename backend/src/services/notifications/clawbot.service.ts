@@ -65,7 +65,7 @@ export async function startAuth(): Promise<{ qrcode: string; sessionId: string }
 /**
  * Check if the session is authenticated by polling iLink qrcode status
  */
-export async function checkAuth(sessionData: any): Promise<{ authenticated: boolean; user?: string }> {
+export async function checkAuth(sessionData: any): Promise<{ authenticated: boolean; user?: string; sessionData?: string }> {
   try {
     const parsed: ClawBotSessionData = typeof sessionData === 'string'
       ? JSON.parse(sessionData)
@@ -79,14 +79,15 @@ export async function checkAuth(sessionData: any): Promise<{ authenticated: bool
     if (!session) {
       // Session not in memory — check if sessionData already has credentials
       if (parsed.bot_token && parsed.authenticated) {
-        return { authenticated: true, user: parsed.user || parsed.ilink_bot_id };
+        const exported = exportSessionData(parsed.sessionId);
+        return { authenticated: true, user: parsed.user || parsed.ilink_bot_id, sessionData: exported || undefined };
       }
       return { authenticated: false };
     }
 
     // Already confirmed
     if (session.authenticated && session.bot_token) {
-      return { authenticated: true, user: session.user || session.ilink_bot_id };
+      return { authenticated: true, user: session.user || session.ilink_bot_id, sessionData: exportSessionData(session.sessionId) || undefined };
     }
 
     // Poll the qrcode status
@@ -108,7 +109,7 @@ export async function checkAuth(sessionData: any): Promise<{ authenticated: bool
       activeSessions.set(parsed.sessionId, session);
 
       console.log(`[ClawBot] Session ${parsed.sessionId} authenticated as ${session.user}`);
-      return { authenticated: true, user: session.user };
+      return { authenticated: true, user: session.user, sessionData: exportSessionData(session.sessionId) || undefined };
     }
 
     if (data.status === 'expired') {

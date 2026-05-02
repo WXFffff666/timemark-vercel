@@ -982,7 +982,7 @@ export const legacyChannelToAccountType: Record<string, string> = {
   'slack': 'slack',
   'wechat': 'wxpusher',
   'wechat_official': 'wxpusher',
-  'wechat_personal': 'wxpusher',
+  'wechat_personal': 'wechat_personal',
   'qq': 'qmsg',
   'qq_bot': 'qmsg',
   'email': 'email',

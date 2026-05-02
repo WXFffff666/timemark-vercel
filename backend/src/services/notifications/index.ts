@@ -209,6 +209,8 @@ function getChannelConfigFromAccount(
     case 'qq_bot':
     case 'signal':
     case 'clawbot':
+    case 'zalo':
+    case 'imessage':
       return (account.session_data || account.token)
         ? { 
             sessionData: account.session_data || account.token,

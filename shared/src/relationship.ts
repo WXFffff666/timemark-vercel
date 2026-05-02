@@ -4,7 +4,7 @@
  * 例如："我妈" → "妻子"
  */
 
-export interface RelationshipMapping {
+export interface RelationshipMappingRow {
   id: number;
   user_id: number;
   event_id: number;
@@ -24,7 +24,7 @@ export interface RelationshipMapping {
  */
 export function applyRelationshipMapping(
   eventName: string,
-  mappings: RelationshipMapping[],
+  mappings: RelationshipMappingRow[],
   recipientEmail?: string,
   recipientType?: string
 ): string {
