@@ -13,8 +13,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
 
-# Install pnpm via corepack (smaller than npm install -g pnpm)
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm via npm
+RUN npm install -g pnpm
 
 # Create non-root user
 RUN addgroup -S app && adduser -S app -G app
