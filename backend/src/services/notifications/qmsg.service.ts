@@ -12,5 +12,5 @@ export async function sendQmsgNotification(event: any, key: string, qq?: string)
   await axios.post(`https://qmsg.zendee.cn/jsend/${key}`, {
     msg,
     ...(qq ? { qq } : {}),
-  });
+  }, { timeout: 10000 });
 }

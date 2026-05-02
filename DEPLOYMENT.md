@@ -514,8 +514,16 @@ server {
 | `DEFAULT_ADMIN_USERNAME` | `admin` | 初始管理员用户名 |
 | `DEFAULT_ADMIN_PASSWORD` | `TimeMark@2026` | 初始管理员密码 |
 | `LOG_QUERIES` | `false` | 是否打印 SQL 查询日志（调试用） |
+| `CORS_ORIGIN` | 无（默认 localhost） | 允许的前端源，逗号分隔，如 `https://app.example.com,https://admin.example.com` |
 
 > 💡 **公网部署建议**：自定义 `JWT_SECRET` 和 `MASTER_KEY` 以增强安全性。更换 MASTER_KEY 后，已加密的通知渠道凭证需要重新配置。
+
+### v2.2.0 安全改进
+
+- **非 root 运行**: 容器现在以 `app` 用户运行，降低安全风险
+- **密钥检测**: 启动时检测默认密钥并输出警告
+- **通知重试**: 通知发送失败自动重试 3 次（指数退避）
+- **请求追踪**: 每个请求自动生成唯一 ID，便于排查问题
 
 ### 自定义密钥（可选，公网部署建议）
 

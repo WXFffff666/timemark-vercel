@@ -48,5 +48,5 @@ export async function sendGoogleChatNotification(event: any, webhook: string): P
     ]
   };
 
-  await axios.post(webhook, message);
+  await axios.post(webhook, message, { timeout: 10000 });
 }

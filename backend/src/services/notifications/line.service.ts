@@ -27,6 +27,7 @@ export async function sendLINENotification(event: any, token: string, userId: st
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
-    }
+    },
+    timeout: 10000
   });
 }

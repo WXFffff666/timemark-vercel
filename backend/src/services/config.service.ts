@@ -28,23 +28,23 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
     )
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
      ON CONFLICT (user_id) DO UPDATE SET
-       encrypted_resend_key = COALESCE(EXCLUDED.encrypted_resend_key, user_configs.encrypted_resend_key),
-       encrypted_github_token = COALESCE(EXCLUDED.encrypted_github_token, user_configs.encrypted_github_token),
-       encrypted_feishu_webhook = COALESCE(EXCLUDED.encrypted_feishu_webhook, user_configs.encrypted_feishu_webhook),
-       encrypted_wecom_webhook = COALESCE(EXCLUDED.encrypted_wecom_webhook, user_configs.encrypted_wecom_webhook),
-       encrypted_dingtalk_webhook = COALESCE(EXCLUDED.encrypted_dingtalk_webhook, user_configs.encrypted_dingtalk_webhook),
-       encrypted_dingtalk_secret = COALESCE(EXCLUDED.encrypted_dingtalk_secret, user_configs.encrypted_dingtalk_secret),
-       encrypted_telegram_bot_token = COALESCE(EXCLUDED.encrypted_telegram_bot_token, user_configs.encrypted_telegram_bot_token),
-       encrypted_discord_webhook = COALESCE(EXCLUDED.encrypted_discord_webhook, user_configs.encrypted_discord_webhook),
-       encrypted_slack_webhook = COALESCE(EXCLUDED.encrypted_slack_webhook, user_configs.encrypted_slack_webhook),
-       encrypted_wxpusher_app_token = COALESCE(EXCLUDED.encrypted_wxpusher_app_token, user_configs.encrypted_wxpusher_app_token),
-       encrypted_wxpusher_uid = COALESCE(EXCLUDED.encrypted_wxpusher_uid, user_configs.encrypted_wxpusher_uid),
-       encrypted_qmsg_key = COALESCE(EXCLUDED.encrypted_qmsg_key, user_configs.encrypted_qmsg_key),
-       encrypted_qmsg_qq = COALESCE(EXCLUDED.encrypted_qmsg_qq, user_configs.encrypted_qmsg_qq),
-       encrypted_channel_webhooks = COALESCE(EXCLUDED.encrypted_channel_webhooks, user_configs.encrypted_channel_webhooks),
-       telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, user_configs.telegram_chat_id),
-       reminder_emails = COALESCE(EXCLUDED.reminder_emails, user_configs.reminder_emails),
-       alert_channels = COALESCE(EXCLUDED.alert_channels, user_configs.alert_channels)`,
+       encrypted_resend_key = EXCLUDED.encrypted_resend_key,
+       encrypted_github_token = EXCLUDED.encrypted_github_token,
+       encrypted_feishu_webhook = EXCLUDED.encrypted_feishu_webhook,
+       encrypted_wecom_webhook = EXCLUDED.encrypted_wecom_webhook,
+       encrypted_dingtalk_webhook = EXCLUDED.encrypted_dingtalk_webhook,
+       encrypted_dingtalk_secret = EXCLUDED.encrypted_dingtalk_secret,
+       encrypted_telegram_bot_token = EXCLUDED.encrypted_telegram_bot_token,
+       encrypted_discord_webhook = EXCLUDED.encrypted_discord_webhook,
+       encrypted_slack_webhook = EXCLUDED.encrypted_slack_webhook,
+       encrypted_wxpusher_app_token = EXCLUDED.encrypted_wxpusher_app_token,
+       encrypted_wxpusher_uid = EXCLUDED.encrypted_wxpusher_uid,
+       encrypted_qmsg_key = EXCLUDED.encrypted_qmsg_key,
+       encrypted_qmsg_qq = EXCLUDED.encrypted_qmsg_qq,
+       encrypted_channel_webhooks = EXCLUDED.encrypted_channel_webhooks,
+       telegram_chat_id = EXCLUDED.telegram_chat_id,
+       reminder_emails = EXCLUDED.reminder_emails,
+       alert_channels = EXCLUDED.alert_channels`,
     [
       userId,
       e(config.resend_api_key),
@@ -141,6 +141,7 @@ function mapNotificationAccountRow(row: any): NotificationAccount {
     webhook: decryptNotificationField(row.webhook),
     token: decryptNotificationField(row.token),
     secret: decryptNotificationField(row.secret),
+    chat_id: decryptNotificationField(row.chat_id),
     session_data: (() => {
       const raw = decryptNotificationField(row.session_data);
       if (!raw) return null;
@@ -187,7 +188,7 @@ export async function createNotificationAccount(
       e(data.webhook), 
       e(data.token), 
       e(data.secret), 
-      data.chat_id || null,
+      data.chat_id ? encrypt(data.chat_id, MASTER_KEY) : null,
       data.config_method || 'webhook',
       data.session_data ? encrypt(JSON.stringify(data.session_data), MASTER_KEY) : null,
       data.plugin_package || null
@@ -233,7 +234,7 @@ export async function updateNotificationAccount(
   }
   if (data.chat_id !== undefined) {
     updates.push(`chat_id = $${paramIndex++}`);
-    values.push(data.chat_id);
+    values.push(data.chat_id ? encrypt(data.chat_id, MASTER_KEY) : null);
   }
   if (data.is_active !== undefined) {
     updates.push(`is_active = $${paramIndex++}`);

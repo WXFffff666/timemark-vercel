@@ -12,5 +12,5 @@ export async function sendTelegramNotification(event: any, botToken: string, cha
   const text = `📅 *${escape(event.name)}*\n\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${escape(blessing)}`;
   await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     chat_id: chatId, text, parse_mode: 'MarkdownV2'
-  });
+  }, { timeout: 10000 });
 }

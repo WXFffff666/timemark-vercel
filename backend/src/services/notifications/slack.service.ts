@@ -11,5 +11,5 @@ export async function sendSlackNotification(event: any, webhook: string): Promis
   await axios.post(webhook, {
     text: `📅 ${event.name}（${event.type}）`,
     blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `*📅 ${event.name}*\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}` } }],
-  });
+  }, { timeout: 10000 });
 }

@@ -32,7 +32,8 @@ export async function sendNextcloudTalkNotification(
         'Authorization': `Basic ${Buffer.from(`:${appPassword}`).toString('base64')}`,
         'OCS-APIRequest': 'true',
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 10000
     }
   );
 }

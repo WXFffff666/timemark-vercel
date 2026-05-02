@@ -10,5 +10,5 @@ export async function sendGenericWebhookNotification(event: any, webhook: string
     channel: channelLabel,
     title: `TimeMark提醒：${event.name}`,
     event,
-  });
+  }, { timeout: 10000 });
 }

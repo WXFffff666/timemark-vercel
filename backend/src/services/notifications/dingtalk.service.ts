@@ -14,5 +14,5 @@ export async function sendDingTalkNotification(event: any, webhookUrl: string, S
   await axios.post(`${webhookUrl}&timestamp=${timestamp}&sign=${sign}`, {
     msgtype: 'markdown',
     markdown: { title: event.name, text: `## 📅 ${event.name}\n\n**日期:** ${event.date}  \n**类型:** ${event.type}\n\n🎉 ${blessing}` }
-  });
+  }, { timeout: 10000 });
 }

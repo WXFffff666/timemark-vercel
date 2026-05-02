@@ -29,7 +29,8 @@ export async function sendMicrosoftTeamsNotification(
       headers: {
         'Authorization': `Bearer ${botToken}`,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 10000
     }
   );
 }

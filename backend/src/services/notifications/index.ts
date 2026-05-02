@@ -42,6 +42,26 @@ import { sendNotification as sendBlueBubblesNotification } from './bluebubbles.s
 import { getUserConfig, getRelationshipMappings, getNotificationAccounts, getEventTemplate } from '../config.service.js';
 import { applyRelationshipMapping } from '@timemark/shared/relationship';
 
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelayMs: number = 1000
+): Promise<T> {
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
 // 通用 Webhook 渠道（通过配置文件中的 channel_webhooks 字段配置）
 const genericWebhookChannels = new Set([
   'whatsapp',
@@ -350,20 +370,20 @@ export async function sendNotifications(event: any, userId: number, channels: st
     
     return configs.map(async (chConfig) => {
       try {
-        if (ch === 'feishu' && chConfig.webhook) await sendFeishuNotification(mappedEvent, chConfig.webhook);
-        else if (ch === 'wecom' && chConfig.webhook) await sendWeComNotification(mappedEvent, chConfig.webhook);
+        if (ch === 'feishu' && chConfig.webhook) await retryWithBackoff(() => sendFeishuNotification(mappedEvent, chConfig.webhook));
+        else if (ch === 'wecom' && chConfig.webhook) await retryWithBackoff(() => sendWeComNotification(mappedEvent, chConfig.webhook));
         else if (ch === 'dingtalk' && chConfig.webhook && chConfig.secret)
-          await sendDingTalkNotification(mappedEvent, chConfig.webhook, chConfig.secret);
+          await retryWithBackoff(() => sendDingTalkNotification(mappedEvent, chConfig.webhook, chConfig.secret));
         else if (ch === 'telegram' && chConfig.token && chConfig.chat_id)
-          await sendTelegramNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+          await retryWithBackoff(() => sendTelegramNotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if (ch === 'discord' && chConfig.webhook)
-          await sendDiscordNotification(mappedEvent, chConfig.webhook);
+          await retryWithBackoff(() => sendDiscordNotification(mappedEvent, chConfig.webhook));
         else if (ch === 'slack' && chConfig.webhook)
-          await sendSlackNotification(mappedEvent, chConfig.webhook);
+          await retryWithBackoff(() => sendSlackNotification(mappedEvent, chConfig.webhook));
         else if (ch === 'wechat' && chConfig.token && chConfig.chat_id)
-          await sendWxPusherNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+          await retryWithBackoff(() => sendWxPusherNotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if (ch === 'qq' && chConfig.token)
-          await sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+          await retryWithBackoff(() => sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if ((ch === 'email' || ch === 'resend') && chConfig.apiKey && chConfig.emails?.length > 0) {
           // 为每个收件人单独发送邮件，应用不同的关系映射（per-recipient）
           await Promise.allSettled(chConfig.emails.map(async (email: string) => {
@@ -371,12 +391,12 @@ export async function sendNotifications(event: any, userId: number, channels: st
               ...event,
               name: applyRelationshipMapping(event.name, mappings, email)
             };
-            await sendEmailNotification(
+            await retryWithBackoff(() => sendEmailNotification(
               emailMappedEvent,
               chConfig.apiKey,
               'TimeMark <noreply@timemark.app>',
               email
-            );
+            ));
           }));
         }
         else if (ch === 'smtp' && chConfig.webhook && chConfig.token && chConfig.chat_id) {
@@ -384,57 +404,57 @@ export async function sendNotifications(event: any, userId: number, channels: st
           const smtpPort = parseInt(chConfig.secret || '587', 10);
           const password = chConfig.token;
           const fromEmail = chConfig.chat_id;
-          await sendSmtpNotification(mappedEvent, smtpHost, smtpPort, password, fromEmail, fromEmail);
+          await retryWithBackoff(() => sendSmtpNotification(mappedEvent, smtpHost, smtpPort, password, fromEmail, fromEmail));
         }
         else if (genericWebhookChannels.has(ch) && chConfig.webhook)
-          await sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch);
+          await retryWithBackoff(() => sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch));
         // Token-based channels with dedicated APIs
         else if (ch === 'nextcloud_talk' && chConfig.server_url && chConfig.token && chConfig.chat_id)
-          await sendNextcloudTalkNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id);
+          await retryWithBackoff(() => sendNextcloudTalkNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id));
         else if (ch === 'mattermost' && chConfig.server_url && chConfig.token && chConfig.chat_id)
-          await sendMattermostNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id);
+          await retryWithBackoff(() => sendMattermostNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id));
         // Matrix channel (token-based with homeserver URL)
         else if (ch === 'matrix' && chConfig.server_url && chConfig.token && chConfig.chat_id)
-          await sendMatrixNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id);
+          await retryWithBackoff(() => sendMatrixNotification(mappedEvent, chConfig.server_url, chConfig.token, chConfig.chat_id));
         // New token-based channels (batch 2)
         else if (ch === 'serverchan' && chConfig.token)
-          await sendServerChanNotification(mappedEvent, chConfig.token);
+          await retryWithBackoff(() => sendServerChanNotification(mappedEvent, chConfig.token));
         else if (ch === 'pushplus' && chConfig.token)
-          await sendPushPlusNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+          await retryWithBackoff(() => sendPushPlusNotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if (ch === 'bark' && chConfig.webhook && chConfig.token)
-          await sendBarkNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id, chConfig.secret);
+          await retryWithBackoff(() => sendBarkNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id, chConfig.secret));
         else if (ch === 'gotify' && chConfig.webhook && chConfig.token)
-          await sendGotifyNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id ? Number(chConfig.chat_id) : 5);
+          await retryWithBackoff(() => sendGotifyNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id ? Number(chConfig.chat_id) : 5));
         else if (ch === 'meow' && chConfig.token)
-          await sendMeowNotification(mappedEvent, chConfig.token);
+          await retryWithBackoff(() => sendMeowNotification(mappedEvent, chConfig.token));
         else if (ch === 'pushme' && chConfig.token)
-          await sendPushMeNotification(mappedEvent, chConfig.token);
+          await retryWithBackoff(() => sendPushMeNotification(mappedEvent, chConfig.token));
         else if (ch === 'wecomapp' && chConfig.token && chConfig.secret && chConfig.chat_id && chConfig.webhook)
-          await sendWeComAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id, chConfig.webhook);
+          await retryWithBackoff(() => sendWeComAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id, chConfig.webhook));
         // Plugin-based channels
         else if (ch === 'wechat_personal' && chConfig.sessionData) {
           const toUser = chConfig.toUser || mappedEvent.personName || 'me';
-          await sendWechatNotification(mappedEvent, chConfig.sessionData, toUser);
+          await retryWithBackoff(() => sendWechatNotification(mappedEvent, chConfig.sessionData, toUser));
         }
         else if (ch === 'whatsapp' && chConfig.sessionData) {
           const toUser = chConfig.toUser || mappedEvent.personName || '';
-          await sendWhatsappNotification(mappedEvent, chConfig.sessionData, toUser);
+          await retryWithBackoff(() => sendWhatsappNotification(mappedEvent, chConfig.sessionData, toUser));
         }
         else if (ch === 'qq_bot' && chConfig.sessionData) {
           const toUser = chConfig.toUser || mappedEvent.personName || '';
-          await sendQQNotification(mappedEvent, chConfig.sessionData, toUser);
+          await retryWithBackoff(() => sendQQNotification(mappedEvent, chConfig.sessionData, toUser));
         }
         else if (ch === 'signal' && chConfig.sessionData) {
           const toUser = chConfig.toUser || mappedEvent.personName || '';
-          await sendSignalNotification(mappedEvent, chConfig.sessionData, toUser);
+          await retryWithBackoff(() => sendSignalNotification(mappedEvent, chConfig.sessionData, toUser));
         }
         else if (ch === 'zalo' && chConfig.sessionData) {
           const toUser = chConfig.toUser || mappedEvent.personName || '';
-          await sendZaloNotification(mappedEvent, chConfig.sessionData, toUser);
+          await retryWithBackoff(() => sendZaloNotification(mappedEvent, chConfig.sessionData, toUser));
         }
         else if (ch === 'imessage' && chConfig.sessionData) {
           const toUser = chConfig.toUser || mappedEvent.personName || '';
-          await sendBlueBubblesNotification(mappedEvent, chConfig.sessionData, toUser);
+          await retryWithBackoff(() => sendBlueBubblesNotification(mappedEvent, chConfig.sessionData, toUser));
         }
         else if (ch === 'clawbot' && chConfig.sessionData) {
           const sessionObj = typeof chConfig.sessionData === 'string'
@@ -444,7 +464,7 @@ export async function sendNotifications(event: any, userId: number, channels: st
           const baseUrl = sessionObj.baseUrl || 'https://ilinkai.weixin.qq.com';
           const toUser = chConfig.toUser || '';
           if (botToken && toUser) {
-            await sendClawBotNotification(mappedEvent, botToken, toUser, baseUrl);
+            await retryWithBackoff(() => sendClawBotNotification(mappedEvent, botToken, toUser, baseUrl));
           }
         }
       } catch (e) {

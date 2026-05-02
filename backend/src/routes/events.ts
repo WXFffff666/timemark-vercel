@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { createEvent, getEventsByUserId, updateEvent, deleteEvent, deleteEventsByIds } from '../services/event.service.js';
 import { createEventSchema, updateEventSchema } from '@timemark/shared';
+import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
 
 const events = new Hono<{ Variables: { user: User } }>();
@@ -101,6 +102,54 @@ events.delete('/:id', async (c) => {
   }
 
   return c.json({ success: true });
+});
+
+// CSV Import endpoint
+events.post('/import-csv', async (c) => {
+  const user = c.get('user');
+  const userId = Number(user.id);
+  
+  try {
+    const body = await c.req.json();
+    const { csvData } = body;
+    
+    if (!csvData || typeof csvData !== 'string') {
+      return c.json({ success: false, error: 'csvData is required' }, 400);
+    }
+    
+    const lines = csvData.split('\n').filter((line: string) => line.trim());
+    const headers = lines[0].split(',').map((h: string) => h.trim().toLowerCase());
+    
+    let imported = 0;
+    const errors: string[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const values = lines[i].split(',').map((v: string) => v.trim());
+        const row: Record<string, string> = {};
+        headers.forEach((h: string, idx: number) => { row[h] = values[idx] || ''; });
+        
+        if (!row.name || !row.date) {
+          errors.push(`Row ${i + 1}: missing name or date`);
+          continue;
+        }
+        
+        await query(
+          `INSERT INTO events (user_id, name, type, date, calendar_type, reminder_config, notification_channels)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [userId, row.name, row.type || 'other', row.date, row.calendar_type || 'gregorian',
+           JSON.stringify({ enabled: true, daysBeforeList: [1, 3, 7] }), JSON.stringify([])]
+        );
+        imported++;
+      } catch (rowError: any) {
+        errors.push(`Row ${i + 1}: ${rowError.message}`);
+      }
+    }
+    
+    return c.json({ success: true, data: { imported, errors } });
+  } catch (error: any) {
+    return c.json({ success: false, error: error.message || 'CSV import failed' }, 500);
+  }
 });
 
 export default events;

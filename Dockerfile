@@ -13,8 +13,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
 
-# Install pnpm
-RUN npm install -g pnpm
+# Install pnpm via corepack (smaller than npm install -g pnpm)
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Create non-root user
+RUN addgroup -S app && adduser -S app -G app
 
 # Copy package files and install production dependencies
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -33,12 +36,15 @@ COPY frontend/dist ./frontend/dist
 # Copy schema for database initialization
 COPY docker/schema.sql ./docker/schema.sql
 
-# Create data directory for SQLite persistence
-RUN mkdir -p /app/data
+# Create data directory with correct permissions for non-root user
+RUN mkdir -p /app/data && chown -R app:app /app
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
+
+# Switch to non-root user
+USER app
 
 CMD ["dumb-init", "node", "./backend/dist/backend/src/index.js"]

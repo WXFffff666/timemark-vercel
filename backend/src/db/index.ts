@@ -69,8 +69,22 @@ const SAVE_INTERVAL = 5 * 60 * 1000;
 let saveTimer: ReturnType<typeof setInterval> | null = null;
 let isDirty = false;
 
+// Debounced save - delays file write by 2 seconds after last write operation
+const DEBOUNCE_SAVE_MS = 2000;
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 function markDirty(): void {
   isDirty = true;
+}
+
+function debouncedSave(): void {
+  markDirty();
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    saveDatabase();
+    isDirty = false;
+    debounceTimer = null;
+  }, DEBOUNCE_SAVE_MS);
 }
 
 function startAutoSave(): void {
@@ -85,8 +99,13 @@ function startAutoSave(): void {
   if (saveTimer.unref) saveTimer.unref();
 }
 
-// Graceful shutdown
-function gracefulShutdown(): void {
+// Graceful shutdown - exported for unified handler in index.ts
+export function gracefulShutdown(): void {
+  // Cancel pending debounce timer
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
   if (db) {
     console.log('[DB] Saving database before shutdown...');
     saveDatabase();
@@ -97,9 +116,6 @@ function gracefulShutdown(): void {
     saveTimer = null;
   }
 }
-
-process.on('SIGTERM', () => { gracefulShutdown(); process.exit(0); });
-process.on('SIGINT', () => { gracefulShutdown(); process.exit(0); });
 
 const LOG_QUERIES = process.env.LOG_QUERIES === 'true';
 
@@ -165,8 +181,8 @@ export async function query(text: string, params: any[] = []): Promise<QueryResu
       console.log('Executed query', { text, duration, rows: changes });
     }
     
-    // Save immediately after writes
-    saveDatabase();
+    // Debounced save after writes (2-second delay, batches rapid writes)
+    debouncedSave();
     
     return {
       rows: [],

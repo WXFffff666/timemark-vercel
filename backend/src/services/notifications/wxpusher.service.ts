@@ -15,5 +15,5 @@ export async function sendWxPusherNotification(event: any, appToken: string, uid
     summary: `TimeMark提醒：${event.name}`,
     contentType: 1,
     uids: [uid],
-  });
+  }, { timeout: 10000 });
 }

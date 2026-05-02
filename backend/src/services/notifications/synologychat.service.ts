@@ -23,6 +23,7 @@ export async function sendSynologyChatNotification(event: any, webhook: string):
   await axios.post(webhook, payload, {
     headers: {
       'Content-Type': 'application/json'
-    }
+    },
+    timeout: 10000
   });
 }

@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { requestIdMiddleware } from './middleware/request-id.js';
 import 'dotenv/config';
 import { waitForDb, query } from './db/index.js';
 import { runMigrations } from './db/migrate.js';
@@ -11,6 +12,8 @@ import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
 import configRoutes from './routes/config.js';
 import channelsRoutes from './routes/channels.js';
+import statsRoutes from './routes/stats.js';
+import backupRoutes from './routes/backup.js';
 import { startScheduler, stopScheduler } from './queue/scheduler.js';
 
 async function bootstrap() {
@@ -29,7 +32,7 @@ async function bootstrap() {
   if (userResult.rows.length === 0) {
     const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
     const password = process.env.DEFAULT_ADMIN_PASSWORD || 'TimeMark@2026';
-    const passwordHash = hashPassword(password);
+    const passwordHash = await hashPassword(password);
 
     await query(
       'INSERT INTO users (username, password_hash) VALUES (?, ?)',
@@ -42,19 +45,35 @@ async function bootstrap() {
     console.log('✅ 数据库已初始化，已存在用户');
   }
 
+  // Security check: warn about default secrets
+  const DEFAULT_JWT = 'change-this-secret-in-production';
+  const DEFAULT_MASTER = 'timemark-default-master-key-change-in-production-2026';
+  if ((process.env.JWT_SECRET || DEFAULT_JWT) === DEFAULT_JWT) {
+    console.warn('⚠️  WARNING: Using default JWT_SECRET. Set JWT_SECRET env var for production!');
+  }
+  if ((process.env.MASTER_KEY || DEFAULT_MASTER) === DEFAULT_MASTER) {
+    console.warn('⚠️  WARNING: Using default MASTER_KEY. Set MASTER_KEY env var for production!');
+  }
+
   // 4. 创建 Hono 应用
   const app = new Hono();
 
   app.use('*', logger());
+  const corsOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+    : ['http://localhost:5173', 'http://localhost:3000'];
   app.use('*', cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    origin: corsOrigins,
     credentials: true,
   }));
+  app.use('*', requestIdMiddleware);
 
   app.route('/api/auth', authRoutes);
   app.route('/api/events', eventRoutes);
   app.route('/api/config', configRoutes);
   app.route('/api/channels', channelsRoutes);
+  app.route('/api/stats', statsRoutes);
+  app.route('/api/backup', backupRoutes);
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
@@ -71,6 +90,8 @@ async function bootstrap() {
   process.on('SIGTERM', async () => {
     console.log('SIGTERM received, shutting down...');
     await stopScheduler();
+    const { gracefulShutdown } = await import('./db/index.js');
+    gracefulShutdown();
     process.exit(0);
   });
 

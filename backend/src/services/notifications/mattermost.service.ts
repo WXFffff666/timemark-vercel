@@ -33,7 +33,8 @@ export async function sendMattermostNotification(
       headers: {
         'Authorization': `Bearer ${botToken}`,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 10000
     }
   );
 }

@@ -167,6 +167,25 @@ auth.post('/login', async (c) => {
       }, 429);
     }
 
+    // 1b. Also check username-based lock (prevents attacks from different IPs)
+    const usernameLockResult = await query(
+      `SELECT failed_count, locked_until FROM login_attempts 
+       WHERE identifier = $1 AND type = 'username'`,
+      [username]
+    );
+    if (usernameLockResult.rows.length > 0) {
+      const row = usernameLockResult.rows[0];
+      if (row.locked_until && new Date(row.locked_until + 'Z').getTime() > Date.now()) {
+        const remaining = Math.ceil((new Date(row.locked_until + 'Z').getTime() - Date.now()) / 1000);
+        return c.json({
+          success: false,
+          error: `账户已锁定，请${Math.ceil(remaining / 60)}分钟后重试`,
+          locked: true,
+          remainingSeconds: remaining
+        }, 429);
+      }
+    }
+
     // 2. 验证密码
     const user = await verifyUserPassword(username, password);
 
@@ -352,7 +371,7 @@ auth.get('/login-history', authMiddleware, async (c) => {
 auth.delete('/login-history', authMiddleware, async (c) => {
   const user = c.get('user');
   try {
-    await query('DELETE FROM login_logs WHERE user_id = $1', [user.id]);
+    await query('DELETE FROM login_logs WHERE user_id = $1', [parseInt(user.id, 10)]);
     return c.json({ success: true });
   } catch (error) {
     console.error('Failed to clear login history:', error);

@@ -4,6 +4,13 @@ import { getUserById } from '../services/auth.service.js';
 import type { User } from '@timemark/shared';
 
 export async function authMiddleware(c: Context<{ Variables: { user: User } }>, next: Next) {
+  // Skip if user already set (e.g. by API key middleware)
+  const existingUser = c.get('user');
+  if (existingUser) {
+    await next();
+    return;
+  }
+
   const authHeader = c.req.header('Authorization');
   const token = authHeader?.replace('Bearer ', '');
 

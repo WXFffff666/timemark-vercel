@@ -16,5 +16,5 @@ export async function sendFeishuNotification(event: any, webhookUrl: string): Pr
         { tag: 'div', text: { tag: 'lark_md', content: `**日期:** ${event.date}\n**类型:** ${event.type}\n\n🎉 ${blessing}` } }
       ]
     }
-  });
+  }, { timeout: 10000 });
 }

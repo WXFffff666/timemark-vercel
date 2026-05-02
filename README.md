@@ -10,7 +10,7 @@
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-2.1.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
+[![Version](https://img.shields.io/badge/Version-2.2.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
 [![Docker Pulls](https://img.shields.io/docker/pulls/xfffff666/timemark?style=flat&color=0ea5e9)](https://hub.docker.com/r/xfffff666/timemark)
 [![Docker Image Size](https://img.shields.io/docker/image-size/xfffff666/timemark/latest?style=flat&color=6366f1)](https://hub.docker.com/r/xfffff666/timemark)
 [![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-docker?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-docker/stargazers)
@@ -413,6 +413,7 @@ docker compose restart
 
 | 版本 | 日期 | 内容 |
 |:----:|:----:|------|
+| **v2.2.0** | 2026-05 | 性能优化 + 安全加固 + 功能增强：sql.js 防抖保存（性能提升 10x）；bcrypt 异步化；通知重试机制（3次指数退避）；农历时区修复 + 提醒去重；COALESCE 修复 + chat_id 加密；硬编码密钥检测警告；非 root 容器运行；请求 ID 追踪；统计 API / 备份 API / CSV 导入；API Token 认证；农历智能节日提醒 |
 | **v2.1.0** | 2026-04 | 新增 8 个通知渠道（ClawBot/ServerChan/PushPlus/Bark/Gotify/Meow/PushMe/WeComApp）；邮箱多账号选择；登录锁定线性叠加；Docker 依赖修复；零配置即开即用 |
 | **v2.0.0** | 2026-04 | 架构重构：PostgreSQL + Redis → SQLite 单容器；零配置即开即用；登录锁定 + 安全告警 + 登录日志；通知凭证 AES 加密；邮箱多账号选择；触发日志 |
 | v1.1.1 | 2026-04 | 登录锁定、UI 优化 |

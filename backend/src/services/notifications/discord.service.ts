@@ -10,5 +10,5 @@ export async function sendDiscordNotification(event: any, webhook: string): Prom
     event.reminderRecipientName
   );
   const content = `📅 **${event.name}**\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
-  await axios.post(webhook, { content, username: 'TimeMark Bot' });
+  await axios.post(webhook, { content, username: 'TimeMark Bot' }, { timeout: 10000 });
 }

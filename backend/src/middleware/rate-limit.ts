@@ -8,7 +8,7 @@ interface RateLimitEntry {
 const store = new Map<string, RateLimitEntry>();
 
 // Cleanup expired entries every 5 minutes
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of store) {
     if (entry.resetAt <= now) {
@@ -16,6 +16,7 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000);
+cleanupTimer.unref();
 
 function getClientIP(c: Context): string {
   return (
@@ -45,6 +46,20 @@ export function rateLimit(maxRequests: number, windowMs: number) {
     }
 
     entry.count++;
+
+    // Prevent unbounded growth
+    if (store.size > 10000) {
+      const now2 = Date.now();
+      for (const [k, v] of store) {
+        if (v.resetAt <= now2) store.delete(k);
+      }
+      // If still too large, delete oldest 10%
+      if (store.size > 10000) {
+        const entries = [...store.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt);
+        const toDelete = Math.ceil(store.size * 0.1);
+        for (let i = 0; i < toDelete; i++) store.delete(entries[i][0]);
+      }
+    }
 
     // Set rate limit headers
     c.header('X-RateLimit-Limit', String(maxRequests));

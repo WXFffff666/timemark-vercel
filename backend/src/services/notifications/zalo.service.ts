@@ -16,7 +16,8 @@ export async function getOAInfo(accessToken: string): Promise<any> {
     headers: {
       'Access_token': accessToken,
       'Content-Type': 'application/json'
-    }
+    },
+    timeout: 10000
   });
   return response.data;
 }
@@ -32,7 +33,8 @@ export async function getFollowers(accessToken: string, offset: number = 0, coun
     headers: {
       'Access_token': accessToken,
       'Content-Type': 'application/json'
-    }
+    },
+    timeout: 10000
   });
   return response.data;
 }
@@ -56,7 +58,8 @@ export async function sendZaloMessage(
     headers: {
       'Access_token': accessToken,
       'Content-Type': 'application/json'
-    }
+    },
+    timeout: 10000
   });
   return response.data;
 }

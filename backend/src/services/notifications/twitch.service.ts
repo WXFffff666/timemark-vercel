@@ -19,5 +19,5 @@ export async function sendTwitchNotification(event: any, webhook: string): Promi
   await axios.post(webhook, {
     content: message,
     username: 'TimeMark Bot'
-  });
+  }, { timeout: 10000 });
 }

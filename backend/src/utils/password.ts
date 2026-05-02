@@ -1,10 +1,10 @@
 import pkg from 'bcryptjs';
-const { hashSync, compareSync } = pkg;
+const { hash, compare } = pkg;
 
-export function hashPassword(password: string): string {
-  return hashSync(password, 10);
+export async function hashPassword(password: string): Promise<string> {
+  return hash(password, 10);
 }
 
-export function verifyPassword(password: string, hash: string): boolean {
-  return compareSync(password, hash);
+export async function verifyPassword(password: string, hashStr: string): Promise<boolean> {
+  return compare(password, hashStr);
 }

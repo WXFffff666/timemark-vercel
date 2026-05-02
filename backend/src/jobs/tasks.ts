@@ -105,7 +105,7 @@ export async function sendReminders() {
           for (const year of [currentYear, currentYear + 1]) {
             const tryLunarDate = Lunar.fromYmd(year, month, lunarData.day);
             const trySolar = tryLunarDate.getSolar();
-            const tryDate = new Date(trySolar.getYear(), trySolar.getMonth() - 1, trySolar.getDay());
+            const tryDate = new Date(Date.UTC(trySolar.getYear(), trySolar.getMonth() - 1, trySolar.getDay()));
             const tryDateStr = tryDate.toISOString().split('T')[0];
             
             const diff = diffDays(today, tryDateStr);
@@ -123,6 +123,17 @@ export async function sendReminders() {
     }
     
     if (eventTargetDate) {
+      // Check if current hour matches event's reminder_time
+      const currentHour = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Shanghai',
+        hour: '2-digit',
+        hour12: false
+      }).format(now);
+      const eventReminderTime = event.reminder_time || '09:00';
+      const eventHour = eventReminderTime.split(':')[0].padStart(2, '0');
+      if (currentHour !== eventHour) {
+        continue; // Skip - not the right hour for this event
+      }
       eventsToRemind.push({ ...event, targetDate: eventTargetDate });
     }
   }
@@ -133,6 +144,17 @@ export async function sendReminders() {
     const rawChannels = event.notification_channels;
     const channels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
     if (channels.length > 0) {
+      // Check if already sent today
+      const alreadySent = await query(
+        `SELECT id FROM event_trigger_logs 
+         WHERE event_id = $1 AND trigger_date = $2 AND status = 'success'
+         LIMIT 1`,
+        [event.id, today]
+      );
+      if (alreadySent.rows.length > 0) {
+        console.log(`[Task] Event ${event.id} already reminded today, skipping`);
+        continue;
+      }
       try {
         // Relationship mapping is handled inside sendNotifications() per-recipient
         await sendNotifications(event, event.user_id, channels);
