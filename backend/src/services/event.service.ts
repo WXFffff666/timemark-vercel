@@ -1,5 +1,43 @@
 import { query } from '../db/index.js';
-import type { Event, CreateEventRequest } from '@timemark/shared';
+import type { Event, CreateEventRequest, RecurringConfig, ReminderConfig, EventType, CalendarType } from '@timemark/shared';
+
+interface EventRow {
+  id: number;
+  user_id: number;
+  name: string;
+  type: string;
+  date: string | Date;
+  calendar_type: string;
+  lunar_date: string | null;
+  reminder_config: string | null;
+  notification_channels: string | null;
+  notification_account_ids: string | null;
+  relationship_mapping_id: number | null;
+  person_name: string | null;
+  birth_date: string | null;
+  birth_date_lunar: string | null;
+  reminder_recipient_name: string | null;
+  reminder_recipient_email: string | null;
+  recurring_config: string | null;
+  next_occurrence: string | null;
+  created_at: string;
+}
+
+interface UpdateEventData {
+  name?: string;
+  type?: string;
+  date?: string;
+  calendarType?: string;
+  lunarDate?: { year: number; month: number; day: number; isLeap: boolean } | null;
+  reminderConfig?: Partial<ReminderConfig> | null;
+  recurringConfig?: Partial<RecurringConfig> | null;
+  personName?: string | null;
+  birthDate?: string | null;
+  birthDateLunar?: string | null;
+  reminderRecipientName?: string | null;
+  reminderRecipientEmail?: string | null;
+  relationshipMappingId?: string | null;
+}
 
 export async function createEvent(userId: string, data: CreateEventRequest): Promise<Event> {
   // Convert userId from string to integer
@@ -65,7 +103,7 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
 /**
  * 计算下次发生日期
  */
-function calculateNextOccurrence(date: string, config: any): string | null {
+function calculateNextOccurrence(date: string, config: RecurringConfig): string | null {
   try {
     const baseDate = new Date(date + 'T00:00:00');
     const now = new Date();
@@ -116,24 +154,31 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
   }
   
   const result = await query('SELECT * FROM events WHERE user_id = $1 ORDER BY date ASC', [numericUserId]);
-  return result.rows.map((row: any) => {
-    let reminderConfig: any = {};
+  return result.rows.map((row: EventRow) => {
+    const defaultReminderConfig: ReminderConfig = {
+      enabled: true,
+      daysBeforeList: [1, 3, 7],
+      emailRecipients: [],
+    };
+    
+    let reminderConfig: ReminderConfig = { ...defaultReminderConfig };
     try {
       // pg JSON column may return as string or already parsed object
       const rawConfig = row.reminder_config;
       if (rawConfig === null || rawConfig === undefined) {
-        reminderConfig = {};
+        reminderConfig = { ...defaultReminderConfig };
       } else if (typeof rawConfig === 'object') {
-        reminderConfig = rawConfig;
+        reminderConfig = { ...defaultReminderConfig, ...(rawConfig as Partial<ReminderConfig>) };
       } else if (typeof rawConfig === 'string') {
-        reminderConfig = JSON.parse(rawConfig);
+        const parsed = JSON.parse(rawConfig);
+        reminderConfig = { ...defaultReminderConfig, ...parsed };
       } else {
         console.warn('Unknown reminder_config type:', typeof rawConfig, rawConfig);
-        reminderConfig = {};
+        reminderConfig = { ...defaultReminderConfig };
       }
     } catch (e) {
       console.error('Failed to parse reminder_config:', e, row.reminder_config);
-      reminderConfig = {};
+      reminderConfig = { ...defaultReminderConfig };
     }
     
     // Merge notification_channels from separate column into reminderConfig
@@ -161,10 +206,10 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
     }
     
     return {
-      id: row.id,
-      userId: row.user_id,
+      id: String(row.id),
+      userId: String(row.user_id),
       name: row.name,
-      type: row.type,
+      type: row.type as EventType,
       // Handle date - PostgreSQL returns Date objects, extract YYYY-MM-DD
       date: (() => {
         try {
@@ -181,7 +226,7 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
           return String(row.date);
         }
       })(),
-      calendarType: row.calendar_type,
+      calendarType: row.calendar_type as CalendarType,
       lunarDate: row.lunar_date ? (() => { try { return JSON.parse(row.lunar_date); } catch { return undefined; } })() : undefined,
       reminderConfig,
       recurringConfig,
@@ -198,10 +243,10 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
   });
 }
 
-export async function updateEvent(id: string, userId: string, data: any): Promise<boolean> {
+export async function updateEvent(id: string, userId: string, data: UpdateEventData): Promise<boolean> {
   const numericUserId = parseInt(userId, 10);
   const updates: string[] = [];
-  const values: any[] = [];
+  const values: (string | number | null)[] = [];
   let paramIndex = 1;
 
   if (data.name) { updates.push(`name = $${paramIndex++}`); values.push(data.name); }
@@ -236,8 +281,8 @@ export async function updateEvent(id: string, userId: string, data: any): Promis
     updates.push(`recurring_config = $${paramIndex++}`); 
     values.push(data.recurringConfig ? JSON.stringify(data.recurringConfig) : null);
     // 计算下次发生日期
-    if (data.recurringConfig?.enabled && data.date) {
-      const nextOccurrence = calculateNextOccurrence(data.date.split('T')[0], data.recurringConfig);
+    if (data.recurringConfig?.enabled && data.recurringConfig?.frequency && data.recurringConfig?.interval && data.date) {
+      const nextOccurrence = calculateNextOccurrence(data.date.split('T')[0], data.recurringConfig as RecurringConfig);
       updates.push(`next_occurrence = $${paramIndex++}`);
       values.push(nextOccurrence);
     } else {
