@@ -4,8 +4,8 @@ import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions } fro
 let jobs: Cron[] = [];
 
 export async function startScheduler(): Promise<void> {
-  // 每小时运行一次提醒检查（北京时间）
-  jobs.push(new Cron('0 * * * *', { timezone: 'Asia/Shanghai', name: 'hourly-reminders' }, async () => {
+  // 每15分钟运行一次提醒检查（北京时间）
+  jobs.push(new Cron('*/15 * * * *', { timezone: 'Asia/Shanghai', name: 'reminder-check' }, async () => {
     try {
       console.log('[Scheduler] Running reminder check...');
       await sendReminders();

@@ -237,7 +237,8 @@ const webhookChannels: ChannelTemplate[] = [
         placeholder: '用于验证请求签名',
         description: '用于验证 Webhook 请求的密钥'
       }
-    ]
+    ],
+    docsUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Webhooks'
   }
 ];
 

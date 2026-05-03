@@ -4,6 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { requestIdMiddleware } from './middleware/request-id.js';
+import { csrfProtection } from './middleware/csrf.js';
 import 'dotenv/config';
 import { waitForDb, query } from './db/index.js';
 import { runMigrations } from './db/migrate.js';
@@ -62,6 +63,7 @@ async function bootstrap() {
     credentials: true,
   }));
   app.use('*', requestIdMiddleware);
+  app.use('*', csrfProtection());
 
   app.route('/api/auth', authRoutes);
   app.route('/api/events', eventRoutes);
