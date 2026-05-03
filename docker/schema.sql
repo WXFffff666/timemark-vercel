@@ -171,7 +171,17 @@ CREATE INDEX IF NOT EXISTS idx_trigger_logs_event ON event_trigger_logs(event_id
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_user ON event_trigger_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_date ON event_trigger_logs(trigger_date);
 
--- event_templates 表 - 用户自定义事件模板
+-- push_subscriptions 表
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL,
+  keys_p256dh TEXT,
+  keys_auth TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, endpoint)
+);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
 CREATE TABLE IF NOT EXISTS event_templates (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,

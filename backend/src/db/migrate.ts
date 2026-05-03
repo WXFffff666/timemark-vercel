@@ -109,6 +109,20 @@ async function applyIncrementalMigrations(db: any, currentVersion: number): Prom
       name: 'add_recurring_index',
       sql: `CREATE INDEX IF NOT EXISTS idx_events_next_occurrence ON events(next_occurrence);`
     },
+    {
+      version: 7,
+      name: 'add_push_subscriptions',
+      sql: `CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL,
+        keys_p256dh TEXT,
+        keys_auth TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(user_id, endpoint)
+      );
+      CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);`
+    },
   ];
 
   for (const migration of migrations) {
