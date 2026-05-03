@@ -8,6 +8,7 @@ import 'dotenv/config';
 import { waitForDb, query } from './db/index.js';
 import { runMigrations } from './db/migrate.js';
 import { hashPassword } from './utils/password.js';
+import { initSecretKeys } from './utils/secrets.js';
 import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
 import configRoutes from './routes/config.js';
@@ -18,6 +19,10 @@ import { startScheduler, stopScheduler } from './queue/scheduler.js';
 
 async function bootstrap() {
 
+  // 0. 初始化密钥（首次启动自动生成，后续启动从文件读取）
+  console.log('🔐 Initializing secret keys...');
+  const secrets = initSecretKeys();
+  console.log('✅ Secret keys ready');
 
   // 1. 等待数据库就绪
   console.log('⏳ 等待数据库初始化...');
@@ -43,16 +48,6 @@ async function bootstrap() {
 
   } else {
     console.log('✅ 数据库已初始化，已存在用户');
-  }
-
-  // Security check: warn about default secrets
-  const DEFAULT_JWT = 'change-this-secret-in-production';
-  const DEFAULT_MASTER = 'timemark-default-master-key-change-in-production-2026';
-  if ((process.env.JWT_SECRET || DEFAULT_JWT) === DEFAULT_JWT) {
-    console.warn('⚠️  WARNING: Using default JWT_SECRET. Set JWT_SECRET env var for production!');
-  }
-  if ((process.env.MASTER_KEY || DEFAULT_MASTER) === DEFAULT_MASTER) {
-    console.warn('⚠️  WARNING: Using default MASTER_KEY. Set MASTER_KEY env var for production!');
   }
 
   // 4. 创建 Hono 应用

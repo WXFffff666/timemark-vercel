@@ -57,7 +57,8 @@ const reminderTimes = [
 // 使用 lunar-javascript 转换农历/公历
 const convertToLunar = (gregorianDate: string): { year: number; month: number; day: number; isLeap: boolean } | null => {
   try {
-    const date = new Date(gregorianDate);
+    // Append T00:00:00 to force local timezone instead of UTC
+    const date = new Date(gregorianDate + 'T00:00:00');
     if (isNaN(date.getTime())) return null;
     
     const solar = Solar.fromDate(date);
@@ -241,7 +242,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     if (formData.date.includes('T')) {
       dateToValidate = formData.date.split('T')[0];
     }
-    const targetDate = new Date(dateToValidate);
+    // Append T00:00:00 to force local timezone instead of UTC
+    const targetDate = new Date(dateToValidate + 'T00:00:00');
     if (isNaN(targetDate.getTime())) {
       alert('无效的日期格式');
       return;
@@ -261,8 +263,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
       // If it's in YYYY-MM-DDTHH:mm format, extract YYYY-MM-DD
       const dateMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (!dateMatch) {
-        // Try to parse as date
-        const targetDate = new Date(formData.date);
+        // Try to parse as date (append T00:00:00 to force local timezone)
+        const targetDate = new Date(formData.date + 'T00:00:00');
         if (isNaN(targetDate.getTime())) {
           alert('无效的日期格式');
           return;

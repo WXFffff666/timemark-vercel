@@ -281,13 +281,17 @@ TimeMark 支持 35+ 通知渠道，覆盖国内外主流通讯平台。所有渠
 | `TZ` | `Asia/Shanghai` | 时区设置（常用自定义项） |
 | `DB_PATH` | `/app/data/timemark.db` | SQLite 数据库文件路径 |
 | `NODE_ENV` | `production` | 运行环境 |
-| `JWT_SECRET` | 内置默认值 | JWT 签名密钥，公网部署建议自定义 |
-| `MASTER_KEY` | 内置默认值 | 主密钥（通知凭证 AES 加密），公网部署建议自定义 |
+| `JWT_SECRET` | 首次启动自动生成 | JWT 签名密钥，自动保存到 `data/.env` |
+| `MASTER_KEY` | 首次启动自动生成 | 主密钥（通知凭证 AES 加密），自动保存到 `data/.env` |
 | `DEFAULT_ADMIN_USERNAME` | `admin` | 初始管理员用户名 |
 | `DEFAULT_ADMIN_PASSWORD` | `TimeMark@2026` | 初始管理员密码 |
 | `LOG_QUERIES` | `false` | 是否打印 SQL 查询日志（调试用） |
 
-> 💡 **公网部署建议**：自定义 `JWT_SECRET` 和 `MASTER_KEY` 以增强安全性。更换 MASTER_KEY 后，已加密的通知渠道凭证需要重新配置。
+> 🔐 **密钥管理说明**：
+> - 首次启动时，系统会自动生成随机的 `JWT_SECRET` 和 `MASTER_KEY`
+> - 生成的密钥会保存到 `data/.env` 文件中，后续启动会自动读取
+> - 如需自定义密钥，可直接设置环境变量或修改 `data/.env` 文件
+> - ⚠️ 更换 `MASTER_KEY` 后，已加密的通知渠道凭证需要重新配置
 
 ---
 
@@ -297,6 +301,7 @@ TimeMark v2.0 内置多层安全防护：
 
 | 特性 | 说明 |
 |------|------|
+| **自动生成密钥** | 首次启动自动生成随机 JWT_SECRET 和 MASTER_KEY，无需手动配置 |
 | **登录失败锁定** | 连续 5 次失败触发锁定，锁定时间线性叠加（5/10/15/20... 分钟） |
 | **安全告警** | 触发锁定时，自动通过已配置的通知渠道发送告警通知 |
 | **登录日志** | 记录所有登录尝试（成功/失败），含 IP、时间、结果 |

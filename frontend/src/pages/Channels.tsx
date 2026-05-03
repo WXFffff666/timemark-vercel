@@ -314,7 +314,7 @@ export default function Channels() {
         '/channels/test',
         {
           type: account.type,
-          configMethod: account.configMethod,
+          configMethod: (account as any).configMethod || (account as any).config_method || 'webhook',
           webhook: account.webhook,
           token: account.token,
           chatId: (account as any).chatId || (account as any).chat_id,

@@ -41,7 +41,8 @@ events.post('/:id/test-send', async (c) => {
   
   const event = result.rows[0];
   console.log('[test-send] Event data:', JSON.stringify(event, null, 2));
-  const channels = event.notification_channels || [];
+  const rawChannels = event.notification_channels;
+  const channels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
   console.log('[test-send] Channels:', channels);
 
   if (channels.length === 0) {

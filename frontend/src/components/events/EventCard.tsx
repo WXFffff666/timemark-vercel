@@ -15,10 +15,11 @@ interface EventCardProps {
   onSelectToggle?: (id: string, c: boolean) => void;
 }
 
-// Helper to safely parse dates
+// Helper to safely parse dates (append T00:00:00 to ensure local timezone interpretation)
 const safeParseDate = (dateString: string | undefined): Date | null => {
   if (!dateString) return null;
-  const date = new Date(dateString);
+  // Append T00:00:00 to force local timezone instead of UTC
+  const date = new Date(dateString + 'T00:00:00');
   return isNaN(date.getTime()) ? null : date;
 };
 

@@ -129,13 +129,17 @@ const channelToAccountType: Record<string, string> = {
 function getChannelConfigFromAccount(
   account: any,
   channel: string
-): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string; email?: string } | null {
+): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string; email?: string; apiKey?: string; emails?: string[]; fromEmail?: string } | null {
   // 直接使用账户的字段
   switch (channel) {
     // Email channels
     case 'email':
     case 'resend':
-      return { email: account.chat_id || account.name };
+      return { 
+        apiKey: account.token,  // Resend API Key
+        emails: [account.chat_id || account.name],  // Recipient emails as array
+        fromEmail: account.webhook || 'TimeMark <noreply@timemark.app>'  // Sender email
+      };
     
     case 'smtp':
       return (account.webhook && account.token && account.chat_id)
@@ -386,6 +390,7 @@ export async function sendNotifications(event: any, userId: number, channels: st
           await retryWithBackoff(() => sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if ((ch === 'email' || ch === 'resend') && chConfig.apiKey && chConfig.emails?.length > 0) {
           // 为每个收件人单独发送邮件，应用不同的关系映射（per-recipient）
+          const fromEmail = chConfig.fromEmail || 'TimeMark <noreply@timemark.app>';
           await Promise.allSettled(chConfig.emails.map(async (email: string) => {
             const emailMappedEvent = {
               ...event,
@@ -394,7 +399,7 @@ export async function sendNotifications(event: any, userId: number, channels: st
             await retryWithBackoff(() => sendEmailNotification(
               emailMappedEvent,
               chConfig.apiKey,
-              'TimeMark <noreply@timemark.app>',
+              fromEmail,
               email
             ));
           }));

@@ -223,9 +223,12 @@ channels.post('/test', async (c) => {
     });
     
     return c.json({ 
-      success: result.success, 
-      message: result.message,
-      details: result.details
+      success: true, 
+      data: {
+        success: result.success, 
+        message: result.message,
+        details: result.details
+      }
     });
   } catch (error: any) {
     console.error('[TestConnection] Failed:', error);

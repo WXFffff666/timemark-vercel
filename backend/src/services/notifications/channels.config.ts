@@ -169,7 +169,7 @@ const webhookChannels: ChannelTemplate[] = [
         label: 'Webhook URL',
         type: 'text',
         required: true,
-        placeholder: 'https://hooks.slack.com/services/...',
+        placeholder: 'https://your-matterbridge-url/...',
         description: 'IRC 桥接 Webhook URL（如 matterbridge）'
       }
     ],
