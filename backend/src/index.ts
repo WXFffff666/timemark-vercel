@@ -16,6 +16,7 @@ import configRoutes from './routes/config.js';
 import channelsRoutes from './routes/channels.js';
 import statsRoutes from './routes/stats.js';
 import backupRoutes from './routes/backup.js';
+import calendarRoutes from './routes/calendar.js';
 import { startScheduler, stopScheduler } from './queue/scheduler.js';
 
 async function bootstrap() {
@@ -71,6 +72,7 @@ async function bootstrap() {
   app.route('/api/channels', channelsRoutes);
   app.route('/api/stats', statsRoutes);
   app.route('/api/backup', backupRoutes);
+  app.route('/api/calendar', calendarRoutes);
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
