@@ -6,7 +6,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, ChevronDown } from 'lucide-react';
+import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, ChevronDown, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lunar, Solar } from 'lunar-javascript';
 import { api } from '@/lib/api';
@@ -38,6 +38,12 @@ const eventTypes: { value: EventType; label: string; icon: React.ReactNode; colo
   { value: 'exam', label: '考试', icon: <GraduationCap size={18} />, color: 'bg-blue-500' },
   { value: 'anniversary', label: '纪念日', icon: <Heart size={18} />, color: 'bg-rose-500' },
   { value: 'holiday', label: '节日', icon: <PartyPopper size={18} />, color: 'bg-yellow-500' },
+  { value: 'meeting', label: '会议', icon: <CalendarClock size={18} />, color: 'bg-cyan-500' },
+  { value: 'deadline', label: '截止日期', icon: <Clock size={18} />, color: 'bg-orange-500' },
+  { value: 'travel', label: '旅行', icon: <Sparkles size={18} />, color: 'bg-teal-500' },
+  { value: 'graduation', label: '毕业', icon: <GraduationCap size={18} />, color: 'bg-indigo-500' },
+  { value: 'wedding', label: '婚礼', icon: <Heart size={18} />, color: 'bg-red-500' },
+  { value: 'medical', label: '医疗', icon: <Sparkles size={18} />, color: 'bg-green-500' },
   { value: 'other', label: '其他', icon: <Sparkles size={18} />, color: 'bg-purple-500' },
 ];
 
@@ -862,6 +868,90 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   )}
 
 
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+
+          {/* 重复事件 */}
+          <motion.div variants={itemVariants} className="space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                <Calendar size={16} className="text-primary-500" />
+                重复事件
+              </label>
+              <Switch
+                checked={formData.recurringConfig?.enabled || false}
+                onCheckedChange={(checked) => setFormData({
+                  ...formData,
+                  recurringConfig: checked ? {
+                    enabled: true,
+                    frequency: 'yearly',
+                    interval: 1,
+                    endType: 'never',
+                  } : undefined
+                })}
+              />
+            </div>
+
+            <AnimatePresence>
+              {formData.recurringConfig?.enabled && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-4 pl-2 border-l-2 border-primary-500/30"
+                >
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">重复频率</label>
+                    <div className="flex gap-2 flex-wrap">
+                      {[
+                        { value: 'daily', label: '每天' },
+                        { value: 'weekly', label: '每周' },
+                        { value: 'monthly', label: '每月' },
+                        { value: 'yearly', label: '每年' },
+                      ].map((freq) => (
+                        <button
+                          key={freq.value}
+                          type="button"
+                          onClick={() => setFormData({
+                            ...formData,
+                            recurringConfig: { ...formData.recurringConfig!, frequency: freq.value as any }
+                          })}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ${
+                            formData.recurringConfig?.frequency === freq.value
+                              ? 'bg-primary-500 text-white'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          {freq.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">间隔</label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-600 dark:text-slate-300">每</span>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={formData.recurringConfig?.interval || 1}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          recurringConfig: { ...formData.recurringConfig!, interval: parseInt(e.target.value) || 1 }
+                        })}
+                        className="w-20 h-9"
+                      />
+                      <span className="text-sm text-slate-600 dark:text-slate-300">
+                        {formData.recurringConfig?.frequency === 'daily' ? '天' :
+                         formData.recurringConfig?.frequency === 'weekly' ? '周' :
+                         formData.recurringConfig?.frequency === 'monthly' ? '月' : '年'}
+                      </span>
+                    </div>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>

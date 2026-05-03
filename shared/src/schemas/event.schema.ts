@@ -21,7 +21,7 @@ export const recurringConfigSchema = z.object({
 
 export const createEventSchema = z.object({
   name: z.string().min(1).max(100),
-  type: z.enum(['birthday', 'exam', 'anniversary', 'holiday', 'other']),
+  type: z.enum(['birthday', 'exam', 'anniversary', 'holiday', 'meeting', 'deadline', 'travel', 'graduation', 'wedding', 'medical', 'other']),
   date: z.string(),
   calendarType: z.enum(['gregorian', 'lunar', 'both']),
   lunarDate: z.object({

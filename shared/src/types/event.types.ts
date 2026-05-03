@@ -1,4 +1,4 @@
-export type EventType = 'birthday' | 'exam' | 'anniversary' | 'holiday' | 'other';
+export type EventType = 'birthday' | 'exam' | 'anniversary' | 'holiday' | 'meeting' | 'deadline' | 'travel' | 'graduation' | 'wedding' | 'medical' | 'other';
 export type CalendarType = 'gregorian' | 'lunar' | 'both';
 
 export interface LunarDate {

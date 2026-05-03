@@ -10,7 +10,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { RealtimeClock } from '@/components/RealtimeClock';
 import { TimezoneSelector } from '@/components/TimezoneSelector';
 import type { Event, CreateEventRequest } from '@timemark/shared';
-import { Settings, Bell, Plus } from 'lucide-react';
+import { Settings, Bell, Plus, Download, Calendar } from 'lucide-react';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -50,6 +50,47 @@ export function Dashboard() {
     }
   };
 
+  const handleExportCalendar = async (format: 'ics' | 'google' | 'apple') => {
+    try {
+      if (format === 'ics') {
+        // Download ICS file
+        const response = await fetch('/api/calendar/export.ics', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken')}` }
+        });
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'timemark-events.ics';
+        a.click();
+        window.URL.revokeObjectURL(url);
+      } else if (format === 'google') {
+        // Open Google Calendar links
+        const response = await fetch('/api/calendar/google', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken')}` }
+        });
+        const data = await response.json();
+        if (data.success && data.data?.length > 0) {
+          window.open(data.data[0].link, '_blank');
+        } else {
+          alert('没有可导出的事件');
+        }
+      } else if (format === 'apple') {
+        // Subscribe to Apple Calendar
+        const response = await fetch('/api/calendar/apple', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken')}` }
+        });
+        const data = await response.json();
+        if (data.success) {
+          window.open(data.data.subscribeUrl, '_blank');
+        }
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('导出失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    }
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
       <header className="sticky top-4 z-50 px-4 max-w-7xl mx-auto">
@@ -69,6 +110,9 @@ export function Dashboard() {
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/channels')}>
                 <Bell size={20} className="text-slate-600 dark:text-slate-300" />
+              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full" title="导出 ICS" onClick={() => handleExportCalendar('ics')}>
+                <Download size={20} className="text-slate-600 dark:text-slate-300" />
               </Button>
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/settings')}>
                 <Settings size={20} className="text-slate-600 dark:text-slate-300" />

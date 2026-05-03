@@ -54,18 +54,20 @@ const getEventTypeColor = (type: EventType): string => {
 };
 
 const getEventTypeLabel = (type: EventType): string => {
-  switch (type) {
-    case 'birthday':
-      return '生日';
-    case 'exam':
-      return '考试';
-    case 'anniversary':
-      return '纪念日';
-    case 'holiday':
-      return '节日';
-    default:
-      return '其他';
-  }
+  const labels: Record<string, string> = {
+    birthday: '生日',
+    exam: '考试',
+    anniversary: '纪念日',
+    holiday: '节日',
+    meeting: '会议',
+    deadline: '截止日期',
+    travel: '旅行',
+    graduation: '毕业',
+    wedding: '婚礼',
+    medical: '医疗',
+    other: '其他',
+  };
+  return labels[type] || '其他';
 };
 
 export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, selected, onSelectToggle }: EventCardProps) {
@@ -168,6 +170,14 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
           {event.reminderConfig.daysBeforeList && event.reminderConfig.daysBeforeList.length > 0 && (
             <span className="text-slate-400">• 提前 {event.reminderConfig.daysBeforeList.join(', ')} 天</span>
           )}
+        </div>
+      )}
+
+      {/* Reminder times */}
+      {event.reminderConfig?.reminderTimes && event.reminderConfig.reminderTimes.length > 0 && (
+        <div className="mb-4 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 relative z-10">
+          <Clock size={12} />
+          <span>提醒时间: {event.reminderConfig.reminderTimes.join(', ')}</span>
         </div>
       )}
 
