@@ -94,6 +94,21 @@ async function applyIncrementalMigrations(db: any, currentVersion: number): Prom
       CREATE INDEX IF NOT EXISTS idx_notification_queue_status ON notification_queue(status);
       CREATE INDEX IF NOT EXISTS idx_notification_queue_user ON notification_queue(user_id);`
     },
+    {
+      version: 4,
+      name: 'add_recurring_events',
+      sql: `ALTER TABLE events ADD COLUMN recurring_config TEXT;`
+    },
+    {
+      version: 5,
+      name: 'add_next_occurrence',
+      sql: `ALTER TABLE events ADD COLUMN next_occurrence TEXT;`
+    },
+    {
+      version: 6,
+      name: 'add_recurring_index',
+      sql: `CREATE INDEX IF NOT EXISTS idx_events_next_occurrence ON events(next_occurrence);`
+    },
   ];
 
   for (const migration of migrations) {

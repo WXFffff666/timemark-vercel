@@ -29,10 +29,16 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
   // Extract notification account IDs from reminderConfig
   const notificationAccountIds = (reminderConfig.accountIds || []).map((id: string) => Number(id)).filter((id: number) => !isNaN(id));
   
+  // 计算下次发生日期（如果是重复事件）
+  let nextOccurrence = null;
+  if (data.recurringConfig?.enabled) {
+    nextOccurrence = calculateNextOccurrence(data.date, data.recurringConfig);
+  }
+  
   try {
     // Don't specify id - let the database auto-increment (SERIAL)
     const result = await query(
-      `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, notification_channels, notification_account_ids, relationship_mapping_id, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id`,
+      `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, notification_channels, notification_account_ids, relationship_mapping_id, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email, recurring_config, next_occurrence) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
       [numericUserId, data.name, data.type, data.date, data.calendarType, 
         data.lunarDate ? JSON.stringify(data.lunarDate) : null, 
         JSON.stringify(reminderConfig),
@@ -43,14 +49,62 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
         data.birthDate || null,
         data.birthDateLunar || null,
         data.reminderRecipientName || null,
-        data.reminderRecipientEmail || null]
+        data.reminderRecipientEmail || null,
+        data.recurringConfig ? JSON.stringify(data.recurringConfig) : null,
+        nextOccurrence]
     );
     const eventId = result.rows[0].id;
     
-    return { id: eventId, userId, ...data, reminderConfig, createdAt: new Date().toISOString() };
+    return { id: eventId, userId, ...data, reminderConfig, nextOccurrence, createdAt: new Date().toISOString() };
   } catch (insertError) {
     console.error('[createEvent] INSERT ERROR:', insertError);
     throw insertError;
+  }
+}
+
+/**
+ * 计算下次发生日期
+ */
+function calculateNextOccurrence(date: string, config: any): string | null {
+  try {
+    const baseDate = new Date(date + 'T00:00:00');
+    const now = new Date();
+    
+    // 如果基础日期已经过了，需要计算下一个发生日期
+    let nextDate = new Date(baseDate);
+    
+    while (nextDate <= now) {
+      switch (config.frequency) {
+        case 'daily':
+          nextDate.setDate(nextDate.getDate() + config.interval);
+          break;
+        case 'weekly':
+          nextDate.setDate(nextDate.getDate() + (7 * config.interval));
+          break;
+        case 'monthly':
+          nextDate.setMonth(nextDate.getMonth() + config.interval);
+          break;
+        case 'yearly':
+          nextDate.setFullYear(nextDate.getFullYear() + config.interval);
+          break;
+        default:
+          return null;
+      }
+      
+      // 检查是否超过结束条件
+      if (config.endType === 'date' && config.endDate) {
+        const endDate = new Date(config.endDate + 'T00:00:00');
+        if (nextDate > endDate) {
+          return null;
+        }
+      }
+    }
+    
+    // 格式化为 YYYY-MM-DD
+    return `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
+  } catch (error) {
+    console.error('[calculateNextOccurrence] Error:', error);
+    return null;
   }
 }
 
@@ -95,6 +149,17 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
     // Ensure channels is in reminderConfig
     reminderConfig.channels = notificationChannels;
     
+    // Parse recurring config
+    let recurringConfig = undefined;
+    try {
+      const rawRecurring = row.recurring_config;
+      if (rawRecurring) {
+        recurringConfig = typeof rawRecurring === 'string' ? JSON.parse(rawRecurring) : rawRecurring;
+      }
+    } catch (e) {
+      console.error('Failed to parse recurring_config:', e);
+    }
+    
     return {
       id: row.id,
       userId: row.user_id,
@@ -119,6 +184,8 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
       calendarType: row.calendar_type,
       lunarDate: row.lunar_date ? (() => { try { return JSON.parse(row.lunar_date); } catch { return undefined; } })() : undefined,
       reminderConfig,
+      recurringConfig,
+      nextOccurrence: row.next_occurrence || null,
       relationshipMappingId: row.relationship_mapping_id?.toString(),
       // New fields
       personName: row.person_name,
@@ -165,6 +232,19 @@ export async function updateEvent(id: string, userId: string, data: any): Promis
   if (data.birthDateLunar !== undefined) { updates.push(`birth_date_lunar = $${paramIndex++}`); values.push(data.birthDateLunar || null); }
   if (data.reminderRecipientName !== undefined) { updates.push(`reminder_recipient_name = $${paramIndex++}`); values.push(data.reminderRecipientName || null); }
   if (data.reminderRecipientEmail !== undefined) { updates.push(`reminder_recipient_email = $${paramIndex++}`); values.push(data.reminderRecipientEmail || null); }
+  if (data.recurringConfig !== undefined) { 
+    updates.push(`recurring_config = $${paramIndex++}`); 
+    values.push(data.recurringConfig ? JSON.stringify(data.recurringConfig) : null);
+    // 计算下次发生日期
+    if (data.recurringConfig?.enabled && data.date) {
+      const nextOccurrence = calculateNextOccurrence(data.date.split('T')[0], data.recurringConfig);
+      updates.push(`next_occurrence = $${paramIndex++}`);
+      values.push(nextOccurrence);
+    } else {
+      updates.push(`next_occurrence = $${paramIndex++}`);
+      values.push(null);
+    }
+  }
 
   if (updates.length === 0) return false;
 

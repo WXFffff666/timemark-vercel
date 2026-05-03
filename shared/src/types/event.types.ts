@@ -71,6 +71,15 @@ export interface ReminderConfig {
   reminderTimes?: string[]; // 多选提醒时间 HH:mm 数组
 }
 
+export interface RecurringConfig {
+  enabled: boolean;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  interval: number; // 每 N 个周期
+  endType: 'never' | 'count' | 'date';
+  endCount?: number; // 重复次数
+  endDate?: string; // 结束日期 YYYY-MM-DD
+}
+
 export interface Event {
   id: string;
   userId: string;
@@ -80,6 +89,8 @@ export interface Event {
   calendarType: CalendarType;
   lunarDate?: LunarDate;
   reminderConfig: ReminderConfig;
+  recurringConfig?: RecurringConfig;
+  nextOccurrence?: string | null;
   // 被提醒人（生日/事件所有者）
   personName?: string | null;
   birthDate?: string | null;
@@ -98,6 +109,7 @@ export interface CreateEventRequest {
   calendarType: CalendarType;
   lunarDate?: LunarDate;
   reminderConfig: ReminderConfig;
+  recurringConfig?: RecurringConfig;
   personName?: string | null;
   birthDate?: string | null;
   birthDateLunar?: string | null;

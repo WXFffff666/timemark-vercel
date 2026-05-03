@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS events (
   birth_date_lunar TEXT,
   reminder_recipient_name TEXT,
   reminder_recipient_email TEXT,
+  recurring_config TEXT,
+  next_occurrence TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_events_user_date ON events(user_id, date);

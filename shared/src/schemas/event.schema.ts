@@ -10,6 +10,15 @@ export const reminderConfigSchema = z.object({
   reminderTimes: z.array(z.string()).optional(), // 多选提醒时间 HH:mm 数组
 });
 
+export const recurringConfigSchema = z.object({
+  enabled: z.boolean(),
+  frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
+  interval: z.number().int().min(1),
+  endType: z.enum(['never', 'count', 'date']),
+  endCount: z.number().int().min(1).optional(),
+  endDate: z.string().optional(),
+});
+
 export const createEventSchema = z.object({
   name: z.string().min(1).max(100),
   type: z.enum(['birthday', 'exam', 'anniversary', 'holiday', 'other']),
@@ -31,6 +40,7 @@ export const createEventSchema = z.object({
     isLeap: z.boolean(),
   }).optional(),
   reminderConfig: reminderConfigSchema,
+  recurringConfig: recurringConfigSchema.optional(),
   // 被提醒人（生日/事件所有者）
   personName: z.string().optional().nullable(),
   birthDate: z.string().optional().nullable(),
@@ -68,6 +78,14 @@ export const updateEventSchema = z.object({
     channels: z.array(z.string()).optional(),
     accountIds: z.array(z.string()).optional(),
     reminderTimes: z.array(z.string()).optional(),
+  }).optional(),
+  recurringConfig: z.object({
+    enabled: z.boolean().optional(),
+    frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']).optional(),
+    interval: z.number().int().min(1).optional(),
+    endType: z.enum(['never', 'count', 'date']).optional(),
+    endCount: z.number().int().min(1).optional(),
+    endDate: z.string().optional(),
   }).optional(),
   personName: z.string().optional().nullable(),
   birthDate: z.string().optional().nullable(),
