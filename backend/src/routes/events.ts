@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { createEvent, getEventsByUserId, updateEvent, deleteEvent, deleteEventsByIds } from '../services/event.service.js';
+import { createEvent, getEventsByUserId, getEventsByUserIdPaginated, updateEvent, deleteEvent, deleteEventsByIds } from '../services/event.service.js';
 import { createEventSchema, updateEventSchema } from '@timemark/shared';
 import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
@@ -11,8 +11,25 @@ events.use('*', authMiddleware);
 
 events.get('/', async (c) => {
   const user = c.get('user');
-  const userEvents = await getEventsByUserId(user.id);
-  return c.json({ success: true, data: userEvents });
+  
+  // 解析分页参数
+  const page = parseInt(c.req.query('page') || '1', 10);
+  const limit = parseInt(c.req.query('limit') || '50', 10);
+  const offset = (page - 1) * limit;
+  
+  // 获取分页数据
+  const result = await getEventsByUserIdPaginated(user.id, limit, offset);
+  
+  return c.json({
+    success: true,
+    data: result.events,
+    pagination: {
+      page,
+      limit,
+      total: result.total,
+      totalPages: Math.ceil(result.total / limit),
+    },
+  });
 });
 
 events.post('/', async (c) => {

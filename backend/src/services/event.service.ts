@@ -243,6 +243,102 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
   });
 }
 
+export async function getEventsByUserIdPaginated(userId: string, limit: number, offset: number): Promise<{ events: Event[]; total: number }> {
+  const numericUserId = parseInt(userId, 10);
+  if (isNaN(numericUserId)) {
+    return { events: [], total: 0 };
+  }
+  
+  // 获取总数
+  const countResult = await query('SELECT COUNT(*) as total FROM events WHERE user_id = $1', [numericUserId]);
+  const total = countResult.rows[0]?.total || 0;
+  
+  // 获取分页数据
+  const result = await query(
+    'SELECT * FROM events WHERE user_id = $1 ORDER BY date ASC LIMIT $2 OFFSET $3',
+    [numericUserId, limit, offset]
+  );
+  
+  const events = result.rows.map((row: EventRow) => {
+    const defaultReminderConfig: ReminderConfig = {
+      enabled: true,
+      daysBeforeList: [1, 3, 7],
+      emailRecipients: [],
+    };
+    
+    let reminderConfig: ReminderConfig = { ...defaultReminderConfig };
+    try {
+      const rawConfig = row.reminder_config;
+      if (rawConfig === null || rawConfig === undefined) {
+        reminderConfig = { ...defaultReminderConfig };
+      } else if (typeof rawConfig === 'object') {
+        reminderConfig = { ...defaultReminderConfig, ...(rawConfig as Partial<ReminderConfig>) };
+      } else if (typeof rawConfig === 'string') {
+        const parsed = JSON.parse(rawConfig);
+        reminderConfig = { ...defaultReminderConfig, ...parsed };
+      }
+    } catch (e) {
+      console.error('Failed to parse reminder_config:', e);
+    }
+    
+    let notificationChannels: string[] = [];
+    try {
+      const rawChannels = row.notification_channels;
+      if (rawChannels) {
+        notificationChannels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : rawChannels;
+      }
+    } catch (e) {
+      console.error('Failed to parse notification_channels:', e);
+    }
+    reminderConfig.channels = notificationChannels;
+    
+    let recurringConfig = undefined;
+    try {
+      const rawRecurring = row.recurring_config;
+      if (rawRecurring) {
+        recurringConfig = typeof rawRecurring === 'string' ? JSON.parse(rawRecurring) : rawRecurring;
+      }
+    } catch (e) {
+      console.error('Failed to parse recurring_config:', e);
+    }
+    
+    return {
+      id: String(row.id),
+      userId: String(row.user_id),
+      name: row.name,
+      type: row.type as EventType,
+      date: (() => {
+        try {
+          if (row.date instanceof Date) {
+            const d = row.date;
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          }
+          if (typeof row.date === 'string') {
+            return row.date.split('T')[0];
+          }
+          return String(row.date);
+        } catch {
+          return String(row.date);
+        }
+      })(),
+      calendarType: row.calendar_type as CalendarType,
+      lunarDate: row.lunar_date ? (() => { try { return JSON.parse(row.lunar_date); } catch { return undefined; } })() : undefined,
+      reminderConfig,
+      recurringConfig,
+      nextOccurrence: row.next_occurrence || null,
+      relationshipMappingId: row.relationship_mapping_id?.toString(),
+      personName: row.person_name,
+      birthDate: row.birth_date,
+      birthDateLunar: row.birth_date_lunar,
+      reminderRecipientName: row.reminder_recipient_name,
+      reminderRecipientEmail: row.reminder_recipient_email,
+      createdAt: row.created_at,
+    };
+  });
+  
+  return { events, total };
+}
+
 export async function updateEvent(id: string, userId: string, data: UpdateEventData): Promise<boolean> {
   const numericUserId = parseInt(userId, 10);
   const updates: string[] = [];
