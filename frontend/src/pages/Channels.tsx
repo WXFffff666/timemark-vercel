@@ -403,7 +403,9 @@ export default function Channels() {
         if (result?.authenticated) {
           setAuthStatus('authenticated');
           // Save session data to config form - use the full credentials returned by backend
-          setConfigForm({ ...configForm, sessionData: result.sessionData || pendingSessionData });
+          const sessionDataToSave = result.sessionData || pendingSessionData;
+          setConfigForm(prev => ({ ...prev, sessionData: sessionDataToSave }));
+          console.log('[Channels] Authenticated! Session data saved.');
         } else {
           attempts++;
           setTimeout(poll, 2000);
@@ -1023,15 +1025,23 @@ export default function Channels() {
               variant="vision"
               className="flex-1 h-12 rounded-2xl font-bold shadow-lg shadow-primary-500/30"
               onClick={() => {
-                // 扫码完成后返回到配置页面
-                // 如果是已有账户（待授权列表点击），直接关闭即可
-                if (selectedAccount) {
-                  setShowQrModal(false);
-                  setModalBackStack(['main']);
+                // 扫码完成后，验证认证状态
+                if (authStatus === 'authenticated') {
+                  // 认证成功，保存并关闭
+                  if (selectedAccount) {
+                    setShowQrModal(false);
+                    setModalBackStack(['main']);
+                  } else {
+                    setShowQrModal(false);
+                    setShowConfigModal(true);
+                    setModalBackStack(['main', 'template', 'config']);
+                  }
+                } else if (authStatus === 'authenticating') {
+                  // 还在认证中，提示用户等待
+                  alert('正在等待扫码确认，请稍候...');
                 } else {
-                  setShowQrModal(false);
-                  setShowConfigModal(true);
-                  setModalBackStack(['main', 'template', 'config']);
+                  // 认证失败或未开始，提示用户
+                  alert('尚未完成扫码授权，请先扫码或选择"稍后授权"');
                 }
               }}
             >

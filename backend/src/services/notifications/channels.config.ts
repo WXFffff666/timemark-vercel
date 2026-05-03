@@ -880,18 +880,33 @@ const pluginChannels: ChannelTemplate[] = [
   {
     id: 'imessage',
     name: 'iMessage',
-    description: 'iMessage 消息推送（需 macOS 设备）',
+    description: 'iMessage 消息推送（需 BlueBubbles 服务器）',
     icon: 'MessageSquare',
-    configMethod: 'plugin',
+    configMethod: 'token',
     isBuiltIn: true,
-    pluginPackage: 'imessage-exporter',
     fields: [
       {
-        name: 'session_data',
-        label: '设备配置',
-        type: 'textarea',
-        required: false,
-        description: 'macOS 设备配置信息'
+        name: 'webhook',
+        label: 'BlueBubbles 服务器 URL',
+        type: 'text',
+        required: true,
+        placeholder: 'https://your-bluebubbles-server.com',
+        description: 'BlueBubbles 服务器地址'
+      },
+      {
+        name: 'token',
+        label: 'API 密钥',
+        type: 'password',
+        required: true,
+        description: 'BlueBubbles 服务器的 API 密钥'
+      },
+      {
+        name: 'chat_id',
+        label: '接收人 ID',
+        type: 'text',
+        required: true,
+        placeholder: 'iMessage 地址或电话号码',
+        description: 'iMessage 接收人地址（邮箱或电话号码）'
       }
     ],
     docsUrl: 'https://bluebubbles.app/'

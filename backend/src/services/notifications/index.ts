@@ -234,11 +234,20 @@ function getChannelConfigFromAccount(
     case 'signal':
     case 'clawbot':
     case 'zalo':
-    case 'imessage':
       return (account.session_data || account.token)
         ? { 
             sessionData: account.session_data || account.token,
             toUser: account.chat_id 
+          }
+        : null;
+    
+    // iMessage via BlueBubbles
+    case 'imessage':
+      return (account.webhook && account.token && account.chat_id)
+        ? {
+            webhook: account.webhook,
+            token: account.token,
+            chat_id: account.chat_id
           }
         : null;
     
@@ -457,9 +466,14 @@ export async function sendNotifications(event: any, userId: number, channels: st
           const toUser = chConfig.toUser || mappedEvent.personName || '';
           await retryWithBackoff(() => sendZaloNotification(mappedEvent, chConfig.sessionData, toUser));
         }
-        else if (ch === 'imessage' && chConfig.sessionData) {
-          const toUser = chConfig.toUser || mappedEvent.personName || '';
-          await retryWithBackoff(() => sendBlueBubblesNotification(mappedEvent, chConfig.sessionData, toUser));
+        else if (ch === 'imessage' && chConfig.webhook && chConfig.token && chConfig.chat_id) {
+          // iMessage via BlueBubbles
+          const sessionData = {
+            serverUrl: chConfig.webhook,
+            password: chConfig.token,
+            sessionId: 'direct'
+          };
+          await retryWithBackoff(() => sendBlueBubblesNotification(mappedEvent, sessionData, chConfig.chat_id));
         }
         else if (ch === 'clawbot' && chConfig.sessionData) {
           const sessionObj = typeof chConfig.sessionData === 'string'
