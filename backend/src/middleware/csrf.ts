@@ -16,6 +16,8 @@ const getAllowedOrigins = (): string[] => {
   const origins: string[] = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    'http://localhost:5173',  // Vite dev server
+    'http://127.0.0.1:5173',
   ];
 
   // 添加环境变量中配置的 CORS_ORIGIN
@@ -35,7 +37,6 @@ const getAllowedOrigins = (): string[] => {
  */
 function isOriginAllowed(origin: string | undefined, allowedOrigins: string[]): boolean {
   if (!origin) {
-    // 没有 Origin 头部时，检查 Referer
     return false;
   }
 
@@ -90,6 +91,13 @@ export function csrfProtection() {
       if (authHeader && authHeader.startsWith('Bearer ')) {
         // 有 JWT token，允许通过
         // 这是因为 JWT 本身已经提供了 CSRF 保护
+        return next();
+      }
+      
+      // 检查 Content-Type 是否为 application/json（API 调用）
+      const contentType = c.req.header('Content-Type');
+      if (contentType && contentType.includes('application/json')) {
+        // JSON 请求通常来自 API 调用，允许通过
         return next();
       }
       
