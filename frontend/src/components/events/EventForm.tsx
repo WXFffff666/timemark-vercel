@@ -652,40 +652,52 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
               关联人员（可选）
             </label>
             
-            {/* 被提醒人 - 生日/事件所有者 */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-3">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                💡 设置关联人员后，系统会根据接收人自动转换称呼（如"我爸"→"父亲"）
+              </p>
+              
+              {/* 被提醒人 - 生日/事件所有者 */}
               <div className="space-y-1.5">
-                <span className="text-xs text-slate-500 dark:text-slate-400">被提醒人（事件所有者）</span>
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  被提醒人（事件主角）
+                </span>
                 <Input
-                  placeholder="例如：我爸、妈妈、李四"
+                  placeholder="例如：妈妈、老婆、李四"
                   value={formData.personName || ''}
                   onChange={(e) => setFormData({ ...formData, personName: e.target.value })}
                   className="h-10"
                 />
+                <p className="text-[10px] text-slate-400">这个人的生日/纪念日/事件</p>
               </div>
               
               {/* 提醒人 - 接收通知的人 */}
               <div className="space-y-1.5">
-                <span className="text-xs text-slate-500 dark:text-slate-400">提醒人（接收通知者）</span>
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  提醒人（接收通知者）
+                </span>
                 <Input
-                  placeholder="例如：我、妻子、王五"
+                  placeholder="例如：我、爸爸、妻子"
                   value={formData.reminderRecipientName || ''}
                   onChange={(e) => setFormData({ ...formData, reminderRecipientName: e.target.value })}
                   className="h-10"
                 />
+                <p className="text-[10px] text-slate-400">谁会收到这条提醒通知</p>
               </div>
-            </div>
-            
-            {/* 提醒人邮箱（可选） */}
-            <div className="space-y-1.5">
-              <span className="text-xs text-slate-500 dark:text-slate-400">提醒人邮箱（可选）</span>
-              <Input
-                type="email"
-                placeholder="提醒人专属邮箱，不填则使用默认邮箱"
-                value={formData.reminderRecipientEmail || ''}
-                onChange={(e) => setFormData({ ...formData, reminderRecipientEmail: e.target.value })}
-                className="h-10"
-              />
+              
+              {/* 提醒人邮箱（可选） */}
+              <div className="space-y-1.5">
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  提醒人邮箱（可选）
+                </span>
+                <Input
+                  type="email"
+                  placeholder="不填则使用通知渠道配置的邮箱"
+                  value={formData.reminderRecipientEmail || ''}
+                  onChange={(e) => setFormData({ ...formData, reminderRecipientEmail: e.target.value })}
+                  className="h-10"
+                />
+              </div>
             </div>
           </motion.div>
 
