@@ -1,6 +1,28 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { getUserConfig, saveUserConfig, getNotificationAccounts, createNotificationAccount, updateNotificationAccount, deleteNotificationAccount, getRelationshipMappings, createRelationshipMapping, updateRelationshipMapping, deleteRelationshipMapping, getReminderSettings, saveReminderSettings, getEventTemplates, getEventTemplate, saveEventTemplate, deleteEventTemplate } from '../services/config.service.js';
+import {
+  saveUserConfig,
+  getUserConfig,
+  getNotificationAccounts,
+  createNotificationAccount,
+  updateNotificationAccount,
+  deleteNotificationAccount,
+  getRelationshipMappings,
+  createRelationshipMapping,
+  updateRelationshipMapping,
+  deleteRelationshipMapping,
+  getReminderSettings,
+  saveReminderSettings,
+  getEventTemplates,
+  getEventTemplate,
+  saveEventTemplate,
+  deleteEventTemplate,
+} from '../services/config.service.js';
+import {
+  createNotificationAccountSchema,
+  updateNotificationAccountSchema,
+  saveUserConfigSchema,
+} from '@timemark/shared';
 import type { User } from '@timemark/shared';
 
 const config = new Hono<{ Variables: { user: User } }>();
@@ -33,20 +55,21 @@ config.post('/accounts', async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
   
-  if (!body.type || !body.name) {
-    return c.json({ success: false, error: 'type and name are required' }, 400);
+  const parsed = createNotificationAccountSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Invalid input', details: parsed.error.flatten() }, 400);
   }
   
   const account = await createNotificationAccount(Number(user.id), {
-    type: body.type,
-    name: body.name,
-    webhook: body.webhook,
-    token: body.token,
-    secret: body.secret,
-    chat_id: body.chatId,
-    config_method: body.configMethod || 'webhook',
-    session_data: body.sessionData,
-    plugin_package: body.pluginPackage,
+    type: parsed.data.type,
+    name: parsed.data.name,
+    webhook: parsed.data.webhook || undefined,
+    token: parsed.data.token || undefined,
+    secret: parsed.data.secret || undefined,
+    chat_id: parsed.data.chatId || undefined,
+    config_method: parsed.data.configMethod || 'webhook',
+    session_data: parsed.data.sessionData || undefined,
+    plugin_package: parsed.data.pluginPackage || undefined,
   });
   
   return c.json({ success: true, data: account }, 201);
@@ -57,16 +80,21 @@ config.put('/accounts/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const body = await c.req.json().catch(() => ({}));
   
+  const parsed = updateNotificationAccountSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Invalid input', details: parsed.error.flatten() }, 400);
+  }
+  
   const account = await updateNotificationAccount(id, Number(user.id), {
-    name: body.name,
-    webhook: body.webhook,
-    token: body.token,
-    secret: body.secret,
-    chat_id: body.chatId,
-    is_active: body.isActive,
-    config_method: body.configMethod,
-    session_data: body.sessionData,
-    plugin_package: body.pluginPackage,
+    name: parsed.data.name,
+    webhook: parsed.data.webhook || undefined,
+    token: parsed.data.token || undefined,
+    secret: parsed.data.secret || undefined,
+    chat_id: parsed.data.chatId || undefined,
+    is_active: parsed.data.isActive,
+    config_method: parsed.data.configMethod,
+    session_data: parsed.data.sessionData || undefined,
+    plugin_package: parsed.data.pluginPackage || undefined,
   });
   
   if (!account) {
