@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createNotificationAccountSchema = z.object({
   type: z.string().min(1, 'Type is required'),
   name: z.string().min(1, 'Name is required').max(100),
-  webhook: z.string().url().optional().nullable(),
+  webhook: z.string().optional().nullable(),  // 允许URL或邮箱地址
   token: z.string().optional().nullable(),
   secret: z.string().optional().nullable(),
   chatId: z.string().optional().nullable(),
@@ -14,7 +14,7 @@ export const createNotificationAccountSchema = z.object({
 
 export const updateNotificationAccountSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  webhook: z.string().url().optional().nullable(),
+  webhook: z.string().optional().nullable(),  // 允许URL或邮箱地址
   token: z.string().optional().nullable(),
   secret: z.string().optional().nullable(),
   chatId: z.string().optional().nullable(),

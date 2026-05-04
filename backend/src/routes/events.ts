@@ -42,6 +42,16 @@ events.post('/', async (c) => {
   }
 
   const event = await createEvent(user.id, parsed.data);
+  
+  // 事件创建后立即检查是否需要发送提醒
+  // 这样可以确保不会错过即将到来的提醒时间
+  try {
+    const { sendReminders } = await import('../jobs/tasks.js');
+    await sendReminders();
+  } catch (error) {
+    console.error('[POST /events] Failed to check reminders after event creation:', error);
+  }
+  
   return c.json({ success: true, data: event }, 201);
 });
 
@@ -92,6 +102,15 @@ events.put('/:id', async (c) => {
   const success = await updateEvent(id, user.id, parsed.data);
   if (!success) {
     return c.json({ success: false, error: 'Event not found' }, 404);
+  }
+
+  // 事件更新后立即检查是否需要发送提醒
+  // 这样可以确保不会错过即将到来的提醒时间
+  try {
+    const { sendReminders } = await import('../jobs/tasks.js');
+    await sendReminders();
+  } catch (error) {
+    console.error('[PUT /events/:id] Failed to check reminders after event update:', error);
   }
 
   return c.json({ success: true });

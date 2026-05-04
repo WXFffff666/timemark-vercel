@@ -263,11 +263,11 @@ const tokenChannels: ChannelTemplate[] = [
       },
       {
         name: 'webhook',
-        label: '发送邮箱',
+        label: '发件人邮箱',
         type: 'text',
-        required: true,
-        placeholder: 'onboarding@resend.dev',
-        description: '发件人邮箱地址（需在 Resend 中验证）'
+        required: false,
+        placeholder: 'noreply@yourdomain.com',
+        description: '已验证域名的邮箱地址，如 noreply@email.the37777777.top。留空使用测试地址 onboarding@resend.dev（仅能发送到自己的邮箱）'
       }
     ],
     docsUrl: 'https://resend.com/docs'

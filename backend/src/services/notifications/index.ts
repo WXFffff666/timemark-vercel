@@ -138,7 +138,8 @@ function getChannelConfigFromAccount(
       return { 
         apiKey: account.token,  // Resend API Key
         emails: [account.chat_id || account.name],  // Recipient emails as array
-        fromEmail: account.webhook || 'TimeMark <noreply@timemark.app>'  // Sender email
+        // 使用已验证域名的邮箱地址，或Resend测试地址（仅能发送到自己的邮箱）
+        fromEmail: account.webhook || 'onboarding@resend.dev'
       };
     
     case 'smtp':

@@ -130,16 +130,19 @@ async function testTokenChannel(
 }
 
 async function testEmailChannel(apiKey: string, fromEmail: string, toEmail: string): Promise<TestConnectionResult> {
-  if (!apiKey || !fromEmail || !toEmail) {
-    return { success: false, message: 'API Key、发件邮箱、收件邮箱都不能为空' };
+  if (!apiKey || !toEmail) {
+    return { success: false, message: 'API Key 和收件邮箱不能为空' };
   }
+
+  // 如果发件邮箱为空，使用Resend测试地址（仅能发送到自己的邮箱）
+  const effectiveFrom = fromEmail || 'onboarding@resend.dev';
 
   try {
     const { Resend } = await import('resend');
     const resend = new Resend(apiKey);
     
     const { error } = await resend.emails.send({
-      from: fromEmail,
+      from: effectiveFrom,
       to: toEmail,
       subject: '🔔 TimeMark 连接测试',
       html: `
