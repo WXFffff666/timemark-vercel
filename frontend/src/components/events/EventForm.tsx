@@ -6,10 +6,12 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, ChevronDown, Clock } from 'lucide-react';
+import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, ChevronDown, Clock, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lunar, Solar } from 'lunar-javascript';
 import { api } from '@/lib/api';
+import { PRESET_TEMPLATES, renderTemplate } from '@timemark/shared/templates';
+import { getBlessing } from '@timemark/shared/blessings';
 import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate } from '@timemark/shared';
 
 interface NotificationAccountResponse {
@@ -171,6 +173,32 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   const [accountPickerChannel, setAccountPickerChannel] = useState<string | null>(null);
   const [pickerAccounts, setPickerAccounts] = useState<NotificationAccountResponse[]>([]);
   const [pickerSelectedIds, setPickerSelectedIds] = useState<string[]>([]);
+
+  // 通知预览状态
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('birthday');
+
+  // 生成预览内容
+  const generatePreview = () => {
+    const template = PRESET_TEMPLATES.find(t => t.id === selectedTemplateId);
+    if (!template) return '请选择模板';
+    
+    const blessing = getBlessing(formData.type, undefined, formData.personName, formData.reminderRecipientName);
+    const data: Record<string, string> = {
+      event_name: formData.name || '示例事件',
+      event_date: formData.date || '2026-05-04',
+      event_type: formData.type === 'birthday' ? '生日' : 
+                  formData.type === 'anniversary' ? '纪念日' :
+                  formData.type === 'exam' ? '考试' :
+                  formData.type === 'holiday' ? '节日' : '其他',
+      person_name: formData.personName || '某人',
+      days_until: '3',
+      blessing: blessing,
+      reminder_time: formData.reminderConfig?.reminderTimes?.[0] || '09:00',
+    };
+    
+    return renderTemplate(template.content, data);
+  };
 
   useEffect(() => {
     if (event && open) {
@@ -885,6 +913,29 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
             </AnimatePresence>
           </motion.div>
 
+          {/* 通知预览 */}
+          <motion.div variants={itemVariants} className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                <Eye size={16} className="text-primary-500" />
+                通知预览
+              </label>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setPreviewOpen(true)}
+                className="rounded-lg"
+              >
+                <Eye size={14} className="mr-1" />
+                预览通知
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              预览通知内容将根据您填写的事件信息自动生成
+            </p>
+          </motion.div>
+
           {/* 重复事件 */}
           <motion.div variants={itemVariants} className="space-y-4">
             <div className="flex items-center justify-between">
@@ -984,6 +1035,52 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
             </Button>
           </motion.div>
         </motion.form>
+
+        {/* 通知预览弹窗 */}
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent className="max-w-md rounded-[1.5rem] p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
+                <Eye size={24} className="text-primary-500" />
+                通知预览
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {/* 模板选择 */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">选择模板</label>
+                <div className="flex flex-wrap gap-2">
+                  {PRESET_TEMPLATES.map(template => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => setSelectedTemplateId(template.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        selectedTemplateId === template.id
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      {template.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* 预览内容 */}
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4">
+                <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                  {generatePreview()}
+                </p>
+              </div>
+              
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                💡 实际通知内容会根据事件日期和提醒设置自动调整
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* 账号选择弹窗 */}
         <Dialog open={accountPickerOpen} onOpenChange={setAccountPickerOpen}>
