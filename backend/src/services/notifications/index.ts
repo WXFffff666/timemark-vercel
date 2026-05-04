@@ -412,7 +412,7 @@ export async function sendNotifications(event: any, userId: number, channels: st
             console.error('[sendNotifications] Failed to parse reminder_config:', e);
           }
           
-          // 获取收件人邮箱：优先使用事件级别的配置，回退到渠道配置
+          // 获取收件人邮箱：只使用事件级别的配置
           let recipientEmails: string[] = [];
           
           // 1. 优先使用事件的 reminderRecipientEmail
@@ -423,14 +423,10 @@ export async function sendNotifications(event: any, userId: number, channels: st
           else if (parsedReminderConfig.emailRecipients?.length > 0) {
             recipientEmails = parsedReminderConfig.emailRecipients;
           }
-          // 3. 回退到渠道配置的 emails（向后兼容）
-          else if (chConfig.emails?.length > 0) {
-            recipientEmails = chConfig.emails;
-          }
           
+          // 如果没有配置收件人邮箱，跳过此渠道
           if (recipientEmails.length === 0) {
-            console.warn(`[sendNotifications] No recipient emails found for event ${event.id}, skipping email channel`);
-            // Skip to next channel - use return instead of continue
+            console.warn(`[sendNotifications] No recipient emails configured for event ${event.id}, skipping email channel`);
             return;
           }
           

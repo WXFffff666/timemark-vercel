@@ -163,7 +163,7 @@ export async function sendReminders() {
           reminderTimes = config.reminderTimes || [];
         }
       } catch (e) {
-        console.error(`[Task] Failed to parse reminder_config for event ${event.id}:`, e);
+        console.error(`[Task] failed to parse reminder_config for event ${event.id}:`, e);
       }
       
       // Fallback to legacy reminder_time field
@@ -172,13 +172,17 @@ export async function sendReminders() {
         reminderTimes = [eventReminderTime];
       }
       
+      // Debug logging
+      console.log(`[Task] Event ${event.id} (${event.name}): date=${event.date}, today=${today}, diff=${diffDays(today, event.date)}, allDays=[${allDays}], reminderTimes=[${reminderTimes}], currentTime=${currentTime}`);
+      
       // Check if current time matches any reminder time (within 15-minute window)
       const shouldRemind = reminderTimes.some(time => {
         const [targetHour, targetMinute] = time.split(':').map(Number);
         const targetTotalMinutes = targetHour * 60 + targetMinute;
         const currentTotalMinutes = parseInt(currentHour) * 60 + parseInt(currentMinute);
-        // Allow 15-minute window for triggering
-        return Math.abs(currentTotalMinutes - targetTotalMinutes) < 15;
+        const diff = Math.abs(currentTotalMinutes - targetTotalMinutes);
+        console.log(`[Task] Checking time ${time}: target=${targetTotalMinutes}, current=${currentTotalMinutes}, diff=${diff}, match=${diff < 15}`);
+        return diff < 15;
       });
       
       if (!shouldRemind) {
