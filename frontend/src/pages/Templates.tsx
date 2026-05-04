@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Edit2, Trash2, Calendar, Save, X } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, Trash2, Calendar, Save, X, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -77,6 +77,34 @@ export default function Templates() {
     setEditingTemplate(template);
     setFormData({ event_type: template.event_type, template_content: template.template_content });
     setShowModal(true);
+  };
+
+  // 预览模板内容
+  const previewTemplate = (content: string): string => {
+    if (!content) return '';
+    
+    const sampleData: Record<string, string> = {
+      '{{事件名}}': '妈妈生日',
+      '{{日期}}': '2026-05-04',
+      '{{类型}}': '生日',
+      '{{被提醒人}}': '妈妈',
+      '{{天数}}': '3',
+      '{{祝福语}}': '生日快乐',
+      '{{时间}}': '09:00',
+      '{{event_name}}': '妈妈生日',
+      '{{event_date}}': '2026-05-04',
+      '{{event_type}}': '生日',
+      '{{person_name}}': '妈妈',
+      '{{days_until}}': '3',
+      '{{blessing}}': '生日快乐',
+      '{{reminder_time}}': '09:00',
+    };
+    
+    let result = content;
+    for (const [key, value] of Object.entries(sampleData)) {
+      result = result.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), value);
+    }
+    return result;
   };
 
   return (
@@ -186,6 +214,20 @@ export default function Templates() {
                 onChange={(e) => setFormData({ ...formData, template_content: e.target.value })}
                 className="w-full h-32 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
               />
+              
+              {/* 实时预览 */}
+              {formData.template_content && (
+                <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Eye size={14} className="text-green-600 dark:text-green-400" />
+                    <span className="text-xs font-semibold text-green-600 dark:text-green-400">预览效果</span>
+                  </div>
+                  <p className="text-sm text-green-700 dark:text-green-300 whitespace-pre-wrap">
+                    {previewTemplate(formData.template_content)}
+                  </p>
+                </div>
+              )}
+              
               <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                 <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">💡 智能变量（可选，系统会自动替换）</p>
                 <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-500">

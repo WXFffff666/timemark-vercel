@@ -25,6 +25,7 @@ export const AVAILABLE_VARIABLES = [
 
 // 预设模板
 export const PRESET_TEMPLATES: NotificationTemplate[] = [
+  // 生日模板
   {
     id: 'birthday',
     name: '生日提醒',
@@ -34,6 +35,23 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
     description: '适用于生日提醒，包含被提醒人和祝福语',
   },
   {
+    id: 'birthday_simple',
+    name: '生日简洁版',
+    content: '🎂 {{event_name}} 还有 {{days_until}} 天',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '简洁的生日提醒',
+  },
+  {
+    id: 'birthday_detailed',
+    name: '生日详细版',
+    content: '🎂 {{person_name}} 的生日还有 {{days_until}} 天！\n📅 日期：{{event_date}}\n🎉 {{blessing}}',
+    isPreset: true,
+    variables: ['person_name', 'days_until', 'event_date', 'blessing'],
+    description: '详细的生日提醒，包含日期和祝福语',
+  },
+  // 纪念日模板
+  {
     id: 'anniversary',
     name: '纪念日提醒',
     content: '💍 {{event_name}} 还有 {{days_until}} 天！{{blessing}}',
@@ -41,6 +59,15 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
     variables: ['event_name', 'days_until', 'blessing'],
     description: '适用于结婚纪念日、恋爱纪念日等',
   },
+  {
+    id: 'anniversary_simple',
+    name: '纪念日简洁版',
+    content: '💍 {{event_name}} 还有 {{days_until}} 天',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '简洁的纪念日提醒',
+  },
+  // 考试模板
   {
     id: 'exam',
     name: '考试提醒',
@@ -50,6 +77,15 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
     description: '适用于考试、面试等重要日期',
   },
   {
+    id: 'exam_urgent',
+    name: '考试紧急提醒',
+    content: '🚨 {{event_name}} 还有 {{days_until}} 天！抓紧复习！',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '紧急考试提醒',
+  },
+  // 节日模板
+  {
     id: 'holiday',
     name: '节日提醒',
     content: '🎊 {{event_name}} 还有 {{days_until}} 天！{{blessing}}',
@@ -57,6 +93,15 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
     variables: ['event_name', 'days_until', 'blessing'],
     description: '适用于传统节日、法定假日等',
   },
+  {
+    id: 'holiday_family',
+    name: '节日家庭版',
+    content: '🎊 {{event_name}} 还有 {{days_until}} 天！\n👨‍👩‍👧‍👦 记得准备团聚哦！{{blessing}}',
+    isPreset: true,
+    variables: ['event_name', 'days_until', 'blessing'],
+    description: '适合家庭聚会的节日提醒',
+  },
+  // 通用模板
   {
     id: 'generic',
     name: '通用提醒',
