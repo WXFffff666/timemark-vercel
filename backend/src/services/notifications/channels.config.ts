@@ -268,14 +268,6 @@ const tokenChannels: ChannelTemplate[] = [
         required: true,
         placeholder: 'onboarding@resend.dev',
         description: '发件人邮箱地址（需在 Resend 中验证）'
-      },
-      {
-        name: 'chat_id',
-        label: '接收邮箱',
-        type: 'text',
-        required: true,
-        placeholder: 'user@example.com',
-        description: '收件人邮箱地址'
       }
     ],
     docsUrl: 'https://resend.com/docs'

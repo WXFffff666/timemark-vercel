@@ -397,11 +397,34 @@ export async function sendNotifications(event: any, userId: number, channels: st
           await retryWithBackoff(() => sendWxPusherNotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if (ch === 'qq' && chConfig.token)
           await retryWithBackoff(() => sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id));
-        else if ((ch === 'email' || ch === 'resend') && chConfig.apiKey && chConfig.emails?.length > 0) {
+        else if ((ch === 'email' || ch === 'resend') && chConfig.apiKey) {
           // 为每个收件人单独发送邮件，应用不同的关系映射（per-recipient）
           const fromEmail = chConfig.fromEmail || 'TimeMark <noreply@timemark.app>';
-          console.log(`[sendNotifications] Sending email from ${fromEmail} to ${chConfig.emails.length} recipients...`);
-          const results = await Promise.allSettled(chConfig.emails.map(async (email: string) => {
+          
+          // 获取收件人邮箱：优先使用事件级别的配置，回退到渠道配置
+          let recipientEmails: string[] = [];
+          
+          // 1. 优先使用事件的 reminderRecipientEmail
+          if (event.reminder_recipient_email) {
+            recipientEmails = [event.reminder_recipient_email];
+          }
+          // 2. 其次使用 reminderConfig.emailRecipients
+          else if (event.reminderConfig?.emailRecipients?.length > 0) {
+            recipientEmails = event.reminderConfig.emailRecipients;
+          }
+          // 3. 回退到渠道配置的 emails（向后兼容）
+          else if (chConfig.emails?.length > 0) {
+            recipientEmails = chConfig.emails;
+          }
+          
+          if (recipientEmails.length === 0) {
+            console.warn(`[sendNotifications] No recipient emails found for event ${event.id}, skipping email channel`);
+            // Skip to next channel - use return instead of continue
+            return;
+          }
+          
+          console.log(`[sendNotifications] Sending email from ${fromEmail} to ${recipientEmails.length} recipients...`);
+          const results = await Promise.allSettled(recipientEmails.map(async (email: string) => {
             const emailMappedEvent = {
               ...event,
               name: applyRelationshipMapping(event.name, mappings, email)
@@ -431,7 +454,20 @@ export async function sendNotifications(event: any, userId: number, channels: st
           const smtpPort = parseInt(chConfig.secret || '587', 10);
           const password = chConfig.token;
           const fromEmail = chConfig.chat_id;
-          await retryWithBackoff(() => sendSmtpNotification(mappedEvent, smtpHost, smtpPort, password, fromEmail, fromEmail));
+          
+          // 获取收件人邮箱：优先使用事件级别的配置
+          let smtpRecipients: string[] = [];
+          if (event.reminder_recipient_email) {
+            smtpRecipients = [event.reminder_recipient_email];
+          } else if (event.reminderConfig?.emailRecipients?.length > 0) {
+            smtpRecipients = event.reminderConfig.emailRecipients;
+          } else {
+            smtpRecipients = [fromEmail]; // 回退到发件人邮箱
+          }
+          
+          for (const recipient of smtpRecipients) {
+            await retryWithBackoff(() => sendSmtpNotification(mappedEvent, smtpHost, smtpPort, password, fromEmail, recipient));
+          }
         }
         else if (genericWebhookChannels.has(ch) && chConfig.webhook)
           await retryWithBackoff(() => sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch));

@@ -78,7 +78,25 @@ export async function sendReminders() {
     let eventTargetDate: Date | null = null;
     
     // 获取此事件的提前提醒天数列表
-    const daysBeforeList = await getDaysBeforeList(event.user_id, event.reminder_days_before);
+    // 优先从 reminder_config.daysBeforeList 读取，回退到 reminder_days_before
+    let daysBeforeList: number[] = [];
+    try {
+      const rawConfig = event.reminder_config;
+      if (rawConfig) {
+        const config = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
+        if (config.daysBeforeList && Array.isArray(config.daysBeforeList) && config.daysBeforeList.length > 0) {
+          daysBeforeList = config.daysBeforeList;
+        }
+      }
+    } catch (e) {
+      console.error(`[Task] Failed to parse reminder_config for event ${event.id}:`, e);
+    }
+    
+    // 回退到 reminder_days_before 字段
+    if (daysBeforeList.length === 0) {
+      daysBeforeList = await getDaysBeforeList(event.user_id, event.reminder_days_before);
+    }
+    
     // 包含 0 表示当天也提醒
     const allDays = daysBeforeList.includes(0) ? daysBeforeList : [0, ...daysBeforeList];
     
