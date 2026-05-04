@@ -120,6 +120,21 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
   },
 ];
 
+// 事件类型到模板的映射
+export const EVENT_TYPE_TEMPLATES: Record<string, string[]> = {
+  birthday: ['birthday', 'birthday_simple', 'birthday_detailed', 'generic', 'detailed'],
+  exam: ['exam', 'exam_urgent', 'generic', 'detailed'],
+  anniversary: ['anniversary', 'anniversary_simple', 'generic', 'detailed'],
+  holiday: ['holiday', 'holiday_family', 'generic', 'detailed'],
+  meeting: ['generic', 'detailed'],
+  deadline: ['generic', 'detailed'],
+  travel: ['generic', 'detailed'],
+  graduation: ['generic', 'detailed'],
+  wedding: ['anniversary', 'anniversary_simple', 'generic', 'detailed'],
+  medical: ['generic', 'detailed'],
+  other: ['generic', 'detailed'],
+};
+
 /**
  * 替换模板变量（支持中英文变量）
  */

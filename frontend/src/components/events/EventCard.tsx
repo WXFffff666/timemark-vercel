@@ -106,8 +106,8 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
     return null;
   };
 
-  // 格式化显示日期（优先显示下一个提醒时间）
-  const displayDate = nextReminder ? nextReminder.toLocaleString('zh-CN') : formattedDate;
+  // 格式化显示日期 - 始终显示事件的实际日期
+  const displayDate = formattedDate;
 
   useEffect(() => {
     const calculateTimeLeft = () => {

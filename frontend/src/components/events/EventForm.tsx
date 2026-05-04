@@ -10,7 +10,7 @@ import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, Gra
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lunar, Solar } from 'lunar-javascript';
 import { api } from '@/lib/api';
-import { PRESET_TEMPLATES, renderTemplate } from '@timemark/shared/templates';
+import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
 import { getBlessing } from '@timemark/shared/blessings';
 import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate } from '@timemark/shared';
 
@@ -213,6 +213,15 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     ...PRESET_TEMPLATES.map(t => ({ id: t.id, name: t.name, content: t.content })),
     ...userTemplates
   ];
+
+  // 根据当前事件类型过滤模板
+  const getTemplatesForEventType = (eventType: string) => {
+    const templateIds = EVENT_TYPE_TEMPLATES[eventType] || EVENT_TYPE_TEMPLATES.other;
+    return allTemplates.filter(t => templateIds.includes(t.id));
+  };
+
+  // 当前事件类型的模板列表
+  const currentEventTypeTemplates = getTemplatesForEventType(formData.type);
 
   // 生成预览内容
   const generatePreview = () => {
@@ -1185,11 +1194,13 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
             </DialogHeader>
             
             <div className="space-y-4">
-              {/* 模板选择 */}
+              {/* 模板选择 - 按事件类型分组 */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">选择模板</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  选择模板（{eventTypes.find(t => t.value === formData.type)?.label || '其他'}类型）
+                </label>
                 <div className="flex flex-wrap gap-2">
-                  {allTemplates.map(template => (
+                  {currentEventTypeTemplates.map(template => (
                     <button
                       key={template.id}
                       type="button"
