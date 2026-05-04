@@ -77,8 +77,53 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
   const targetDate = safeParseDate(event.date);
   const formattedDate = targetDate ? targetDate.toLocaleString('zh-CN') : '无效日期';
 
+  // 计算下一个提醒时间
+  const getNextReminderTime = (): Date | null => {
+    if (!event.reminderConfig?.enabled || !event.reminderConfig?.reminderTimes?.length) {
+      return null;
+    }
+
+    const now = new Date();
+    const reminderTimes = event.reminderConfig.reminderTimes;
+    
+    // 找到今天或明天的下一个提醒时间
+    for (let dayOffset = 0; dayOffset <= 1; dayOffset++) {
+      const targetDay = new Date(now);
+      targetDay.setDate(targetDay.getDate() + dayOffset);
+      
+      for (const time of reminderTimes) {
+        const [hours, minutes] = time.split(':').map(Number);
+        const reminderTime = new Date(targetDay);
+        reminderTime.setHours(hours, minutes, 0, 0);
+        
+        if (reminderTime > now) {
+          return reminderTime;
+        }
+      }
+    }
+    
+    return null;
+  };
+
   useEffect(() => {
     const calculateTimeLeft = () => {
+      // 优先计算到下一个提醒时间的倒计时
+      const nextReminder = getNextReminderTime();
+      if (nextReminder) {
+        const difference = nextReminder.getTime() - new Date().getTime();
+        if (difference > 0) {
+          setTimeLeft({
+            days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+            hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+            minutes: Math.floor((difference / 1000 / 60) % 60),
+            seconds: Math.floor((difference / 1000) % 60),
+          });
+          setIsPast(false);
+          return;
+        }
+      }
+      
+      // 如果没有提醒时间或提醒时间已过，使用事件日期
       const safeTarget = safeParseDate(event.date);
       if (!safeTarget) {
         setTimeLeft(null);
@@ -103,7 +148,7 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
     calculateTimeLeft();
     const timer = setInterval(calculateTimeLeft, 1000);
     return () => clearInterval(timer);
-  }, [event.date]);
+  }, [event.date, event.reminderConfig]);
 
   return (
     <div className={`relative group glass-panel rounded-[2.5rem] p-6 overflow-hidden h-full ${selected ? 'ring-2 ring-primary-500 shadow-xl shadow-primary-500/20' : 'ring-1 ring-black/5 dark:ring-white/10'}`} onClick={() => selectable && onSelectToggle && onSelectToggle(event.id, !selected)}>

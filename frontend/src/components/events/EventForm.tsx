@@ -49,6 +49,13 @@ const eventTypes: { value: EventType; label: string; icon: React.ReactNode; colo
   { value: 'other', label: '其他', icon: <Sparkles size={18} />, color: 'bg-purple-500' },
 ];
 
+// 自定义模板类型（从 API 加载）
+interface CustomTemplate {
+  id: string;
+  event_type: string;
+  template_content: string;
+}
+
 const calendarTypes: { value: CalendarType; label: string }[] = [
   { value: 'gregorian', label: '公历' },
   { value: 'lunar', label: '农历' },
@@ -167,6 +174,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   const [customTime, setCustomTime] = useState('');
   const [accounts, setAccounts] = useState<NotificationAccountResponse[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(false);
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
 
   // 账号选择弹窗状态
   const [accountPickerOpen, setAccountPickerOpen] = useState(false);
@@ -179,12 +187,14 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('birthday');
   const [userTemplates, setUserTemplates] = useState<Array<{id: string; name: string; content: string}>>([]);
 
-  // 加载用户自定义模板
+  // 加载自定义模板
   useEffect(() => {
     if (open) {
-      api.get<Array<{event_type: string; template_content: string}>>('/config/templates')
+      api.get<CustomTemplate[]>('/config/templates')
         .then(data => {
           if (data) {
+            setCustomTemplates(data);
+            // 同时更新通知模板列表
             const templates = data.map(t => ({
               id: t.event_type,
               name: t.event_type,
@@ -580,6 +590,36 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                 </button>
               ))}
             </div>
+            
+            {/* 自定义模板二级选择（当选择"其他"时显示） */}
+            {formData.type === 'other' && customTemplates.length > 0 && (
+              <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 block">
+                  自定义模板
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {customTemplates.map((template) => (
+                    <button
+                      key={template.event_type}
+                      type="button"
+                      onClick={() => {
+                        setFormData({
+                          ...formData,
+                          name: template.event_type,
+                        });
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        formData.name === template.event_type
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'
+                      }`}
+                    >
+                      {template.event_type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.div>
 
           {/* 事件名称 */}
