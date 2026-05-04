@@ -225,6 +225,46 @@ export default function Settings() {
             </div>
           </motion.section>
 
+          {/* 浏览器推送 */}
+          <motion.section variants={itemVariants}>
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">浏览器推送</h2>
+            <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10">
+              <div className="flex items-center justify-between p-4 rounded-[2rem]">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center shadow-inner border border-blue-100 dark:border-blue-800/50">
+                    <Bell size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">浏览器推送通知</h3>
+                    <p className="text-xs text-slate-500">即使关闭页面也能收到提醒</p>
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      if (!('Notification' in window)) {
+                        alert('您的浏览器不支持推送通知');
+                        return;
+                      }
+                      const permission = await Notification.requestPermission();
+                      if (permission === 'granted') {
+                        alert('✅ 浏览器推送已开启！');
+                      } else {
+                        alert('❌ 请在浏览器设置中允许通知权限');
+                      }
+                    } catch (error) {
+                      alert('开启推送失败: ' + (error instanceof Error ? error.message : '未知错误'));
+                    }
+                  }}
+                >
+                  开启推送
+                </Button>
+              </div>
+            </div>
+          </motion.section>
+
           {/* 安全与数据 */}
           <motion.section variants={itemVariants}>
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">安全与数据</h2>
