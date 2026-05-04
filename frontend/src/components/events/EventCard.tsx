@@ -73,6 +73,7 @@ const getEventTypeLabel = (type: EventType): string => {
 export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, selected, onSelectToggle }: EventCardProps) {
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
   const [isPast, setIsPast] = useState(false);
+  const [nextReminder, setNextReminder] = useState<Date | null>(null);
 
   const targetDate = safeParseDate(event.date);
   const formattedDate = targetDate ? targetDate.toLocaleString('zh-CN') : '无效日期';
@@ -86,7 +87,7 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
     const now = new Date();
     const reminderTimes = event.reminderConfig.reminderTimes;
     
-    // 找到今天或明天的下一个提醒时间
+    // 找到今天或未来7天的下一个提醒时间
     for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
       const targetDay = new Date(now);
       targetDay.setDate(targetDay.getDate() + dayOffset);
@@ -105,12 +106,17 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
     return null;
   };
 
+  // 格式化显示日期（优先显示下一个提醒时间）
+  const displayDate = nextReminder ? nextReminder.toLocaleString('zh-CN') : formattedDate;
+
   useEffect(() => {
     const calculateTimeLeft = () => {
       // 优先计算到下一个提醒时间的倒计时
-      const nextReminder = getNextReminderTime();
-      if (nextReminder) {
-        const difference = nextReminder.getTime() - new Date().getTime();
+      const nextReminderTime = getNextReminderTime();
+      setNextReminder(nextReminderTime);
+      
+      if (nextReminderTime) {
+        const difference = nextReminderTime.getTime() - new Date().getTime();
         if (difference > 0) {
           setTimeLeft({
             days: Math.floor(difference / (1000 * 60 * 60 * 24)),
@@ -170,7 +176,7 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
           </div>
           <div className="flex items-center gap-2 mt-2 text-sm text-slate-500 dark:text-slate-400 font-medium">
             <Calendar size={14} /> 
-            <span>{formattedDate}</span>
+            <span>{displayDate}</span>
             <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">{event.calendarType === 'lunar' ? '农历' : event.calendarType === 'both' ? '双历' : '公历'}</Badge>
           </div>
         </div>

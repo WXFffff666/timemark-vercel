@@ -400,18 +400,31 @@ export async function sendNotifications(event: any, userId: number, channels: st
         else if ((ch === 'email' || ch === 'resend') && chConfig.apiKey && chConfig.emails?.length > 0) {
           // 为每个收件人单独发送邮件，应用不同的关系映射（per-recipient）
           const fromEmail = chConfig.fromEmail || 'TimeMark <noreply@timemark.app>';
-          await Promise.allSettled(chConfig.emails.map(async (email: string) => {
+          console.log(`[sendNotifications] Sending email from ${fromEmail} to ${chConfig.emails.length} recipients...`);
+          const results = await Promise.allSettled(chConfig.emails.map(async (email: string) => {
             const emailMappedEvent = {
               ...event,
               name: applyRelationshipMapping(event.name, mappings, email)
             };
-            await retryWithBackoff(() => sendEmailNotification(
-              emailMappedEvent,
-              chConfig.apiKey,
-              fromEmail,
-              email
-            ));
+            console.log(`[sendNotifications] Sending to ${email}...`);
+            try {
+              await retryWithBackoff(() => sendEmailNotification(
+                emailMappedEvent,
+                chConfig.apiKey,
+                fromEmail,
+                email
+              ));
+              console.log(`[sendNotifications] ✅ Email sent to ${email}`);
+            } catch (error) {
+              console.error(`[sendNotifications] ❌ Failed to send email to ${email}:`, error);
+              throw error;
+            }
           }));
+          // Log any failures
+          const failures = results.filter(r => r.status === 'rejected');
+          if (failures.length > 0) {
+            console.error(`[sendNotifications] ${failures.length} email(s) failed to send`);
+          }
         }
         else if (ch === 'smtp' && chConfig.webhook && chConfig.token && chConfig.chat_id) {
           const smtpHost = chConfig.webhook;
