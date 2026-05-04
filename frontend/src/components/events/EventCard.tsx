@@ -87,7 +87,7 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
     const reminderTimes = event.reminderConfig.reminderTimes;
     
     // 找到今天或明天的下一个提醒时间
-    for (let dayOffset = 0; dayOffset <= 1; dayOffset++) {
+    for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
       const targetDay = new Date(now);
       targetDay.setDate(targetDay.getDate() + dayOffset);
       

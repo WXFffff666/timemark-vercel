@@ -366,6 +366,18 @@ export async function updateEvent(id: string, userId: string, data: UpdateEventD
     const accountIds = (data.reminderConfig.accountIds || []).map((id: string) => Number(id)).filter((id: number) => !isNaN(id));
     updates.push(`notification_account_ids = $${paramIndex++}`);
     values.push(JSON.stringify(accountIds));
+    
+    // Clear today's trigger log when reminder config changes
+    // This allows the scheduler to re-trigger with the new configuration
+    try {
+      await query(
+        `DELETE FROM event_trigger_logs WHERE event_id = $1 AND trigger_date = date('now')`,
+        [id]
+      );
+      console.log(`[updateEvent] Cleared trigger logs for event ${id} due to config change`);
+    } catch (e) {
+      console.error('[updateEvent] Failed to clear trigger logs:', e);
+    }
   }
   if (data.relationshipMappingId !== undefined) { updates.push(`relationship_mapping_id = $${paramIndex++}`); values.push(data.relationshipMappingId || null); }
   if (data.personName !== undefined) { updates.push(`person_name = $${paramIndex++}`); values.push(data.personName || null); }
