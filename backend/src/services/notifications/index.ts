@@ -401,6 +401,17 @@ export async function sendNotifications(event: any, userId: number, channels: st
           // 为每个收件人单独发送邮件，应用不同的关系映射（per-recipient）
           const fromEmail = chConfig.fromEmail || 'TimeMark <noreply@timemark.app>';
           
+          // 解析 reminderConfig（可能是 JSON 字符串）
+          let parsedReminderConfig: any = {};
+          try {
+            const rawConfig = event.reminder_config || event.reminderConfig;
+            if (rawConfig) {
+              parsedReminderConfig = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
+            }
+          } catch (e) {
+            console.error('[sendNotifications] Failed to parse reminder_config:', e);
+          }
+          
           // 获取收件人邮箱：优先使用事件级别的配置，回退到渠道配置
           let recipientEmails: string[] = [];
           
@@ -409,8 +420,8 @@ export async function sendNotifications(event: any, userId: number, channels: st
             recipientEmails = [event.reminder_recipient_email];
           }
           // 2. 其次使用 reminderConfig.emailRecipients
-          else if (event.reminderConfig?.emailRecipients?.length > 0) {
-            recipientEmails = event.reminderConfig.emailRecipients;
+          else if (parsedReminderConfig.emailRecipients?.length > 0) {
+            recipientEmails = parsedReminderConfig.emailRecipients;
           }
           // 3. 回退到渠道配置的 emails（向后兼容）
           else if (chConfig.emails?.length > 0) {

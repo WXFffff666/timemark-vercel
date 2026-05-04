@@ -172,6 +172,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   const [lunarInputValue, setLunarInputValue] = useState('');
 
   const [customTime, setCustomTime] = useState('');
+  const [customEmail, setCustomEmail] = useState('');
   const [accounts, setAccounts] = useState<NotificationAccountResponse[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
@@ -778,18 +779,90 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                 <p className="text-[10px] text-slate-400">谁会收到这条提醒通知</p>
               </div>
               
-              {/* 提醒人邮箱（可选） */}
+              {/* 提醒人邮箱（可多个） */}
               <div className="space-y-1.5">
                 <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  提醒人邮箱（可选）
+                  提醒人邮箱（可添加多个）
                 </span>
-                <Input
-                  type="email"
-                  placeholder="不填则使用通知渠道配置的邮箱"
-                  value={formData.reminderRecipientEmail || ''}
-                  onChange={(e) => setFormData({ ...formData, reminderRecipientEmail: e.target.value })}
-                  className="h-10"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    type="email"
+                    placeholder="输入邮箱地址，如 user@example.com"
+                    value={customEmail}
+                    onChange={(e) => setCustomEmail(e.target.value)}
+                    className="h-10 flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (customEmail && customEmail.includes('@')) {
+                          const currentEmails = formData.reminderConfig.emailRecipients || [];
+                          if (!currentEmails.includes(customEmail)) {
+                            setFormData({
+                              ...formData,
+                              reminderConfig: {
+                                ...formData.reminderConfig,
+                                emailRecipients: [...currentEmails, customEmail]
+                              }
+                            });
+                          }
+                          setCustomEmail('');
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-10 px-3"
+                    onClick={() => {
+                      if (customEmail && customEmail.includes('@')) {
+                        const currentEmails = formData.reminderConfig.emailRecipients || [];
+                        if (!currentEmails.includes(customEmail)) {
+                          setFormData({
+                            ...formData,
+                            reminderConfig: {
+                              ...formData.reminderConfig,
+                              emailRecipients: [...currentEmails, customEmail]
+                            }
+                          });
+                        }
+                        setCustomEmail('');
+                      }
+                    }}
+                  >
+                    <Plus size={14} />
+                    添加
+                  </Button>
+                </div>
+                
+                {/* 已添加的邮箱列表 */}
+                {formData.reminderConfig.emailRecipients && formData.reminderConfig.emailRecipients.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {formData.reminderConfig.emailRecipients.map((email, index) => (
+                      <Badge key={index} variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                        📧 {email}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              reminderConfig: {
+                                ...formData.reminderConfig,
+                                emailRecipients: formData.reminderConfig.emailRecipients?.filter((_, i) => i !== index)
+                              }
+                            });
+                          }}
+                          className="ml-1 hover:text-red-500"
+                        >
+                          <X size={12} />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                
+                <p className="text-[10px] text-slate-400">不填则使用通知渠道的默认邮箱，支持添加多个收件人</p>
               </div>
             </div>
           </motion.div>
