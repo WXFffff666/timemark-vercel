@@ -123,16 +123,48 @@ export async function sendReminders() {
     }
     
     if (eventTargetDate) {
-      // Check if current hour matches event's reminder_time
+      // Check if current time matches any of the event's reminder times
       const currentHour = new Intl.DateTimeFormat('en-US', {
         timeZone: 'Asia/Shanghai',
         hour: '2-digit',
         hour12: false
       }).format(now);
-      const eventReminderTime = event.reminder_time || '09:00';
-      const eventHour = eventReminderTime.split(':')[0].padStart(2, '0');
-      if (currentHour !== eventHour) {
-        continue; // Skip - not the right hour for this event
+      const currentMinute = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Shanghai',
+        minute: '2-digit',
+        hour12: false
+      }).format(now);
+      const currentTime = `${currentHour.padStart(2, '0')}:${currentMinute.padStart(2, '0')}`;
+      
+      // Get reminder times from reminderConfig
+      let reminderTimes: string[] = [];
+      try {
+        const rawConfig = event.reminder_config;
+        if (rawConfig) {
+          const config = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
+          reminderTimes = config.reminderTimes || [];
+        }
+      } catch (e) {
+        console.error(`[Task] Failed to parse reminder_config for event ${event.id}:`, e);
+      }
+      
+      // Fallback to legacy reminder_time field
+      if (reminderTimes.length === 0) {
+        const eventReminderTime = event.reminder_time || '09:00';
+        reminderTimes = [eventReminderTime];
+      }
+      
+      // Check if current time matches any reminder time (within 15-minute window)
+      const shouldRemind = reminderTimes.some(time => {
+        const [targetHour, targetMinute] = time.split(':').map(Number);
+        const targetTotalMinutes = targetHour * 60 + targetMinute;
+        const currentTotalMinutes = parseInt(currentHour) * 60 + parseInt(currentMinute);
+        // Allow 15-minute window for triggering
+        return Math.abs(currentTotalMinutes - targetTotalMinutes) < 15;
+      });
+      
+      if (!shouldRemind) {
+        continue; // Skip - not the right time for this event
       }
       eventsToRemind.push({ ...event, targetDate: eventTargetDate });
     }

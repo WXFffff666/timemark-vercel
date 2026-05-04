@@ -76,14 +76,41 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
 ];
 
 /**
- * 替换模板变量
+ * 替换模板变量（支持中英文变量）
  */
 export function renderTemplate(template: string, data: Record<string, string>): string {
   let result = template;
   
-  for (const [key, value] of Object.entries(data)) {
-    const placeholder = `{{${key}}}`;
-    result = result.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value || '');
+  // 英文变量映射
+  const enVarMap: Record<string, string> = {
+    '{{event_name}}': data.event_name || '',
+    '{{event_date}}': data.event_date || '',
+    '{{event_type}}': data.event_type || '',
+    '{{person_name}}': data.person_name || '',
+    '{{days_until}}': data.days_until || '',
+    '{{blessing}}': data.blessing || '',
+    '{{reminder_time}}': data.reminder_time || '',
+  };
+  
+  // 中文变量映射
+  const cnVarMap: Record<string, string> = {
+    '{{事件名}}': data.event_name || '',
+    '{{日期}}': data.event_date || '',
+    '{{类型}}': data.event_type || '',
+    '{{被提醒人}}': data.person_name || '',
+    '{{天数}}': data.days_until || '',
+    '{{祝福语}}': data.blessing || '',
+    '{{时间}}': data.reminder_time || '',
+  };
+  
+  // 替换英文变量
+  for (const [key, value] of Object.entries(enVarMap)) {
+    result = result.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), value);
+  }
+  
+  // 替换中文变量
+  for (const [key, value] of Object.entries(cnVarMap)) {
+    result = result.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), value);
   }
   
   return result;

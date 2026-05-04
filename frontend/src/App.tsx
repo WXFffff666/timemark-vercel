@@ -7,6 +7,7 @@ import Settings from './pages/Settings';
 import Reminders from './pages/Reminders';
 import LoginHistory from './pages/LoginHistory';
 import Channels from './pages/Channels';
+import Templates from './pages/Templates';
 import { useEffect } from 'react';
 import { TimezoneProvider } from './components/RealtimeClock';
 
@@ -80,8 +81,9 @@ function AnimatedRoutes() {
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/reminders" element={<ProtectedRoute><Reminders /></ProtectedRoute>} />
         <Route path="/login-history" element={<ProtectedRoute><LoginHistory /></ProtectedRoute>} />
-        <Route path="/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
-        <Route path="/" element={<Navigate to="/dashboard" />} />
+<Route path="/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
+<Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+<Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>
     </AnimatePresence>
   );

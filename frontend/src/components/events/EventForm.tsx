@@ -177,10 +177,35 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   // 通知预览状态
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('birthday');
+  const [userTemplates, setUserTemplates] = useState<Array<{id: string; name: string; content: string}>>([]);
+
+  // 加载用户自定义模板
+  useEffect(() => {
+    if (open) {
+      api.get<Array<{event_type: string; template_content: string}>>('/config/templates')
+        .then(data => {
+          if (data) {
+            const templates = data.map(t => ({
+              id: t.event_type,
+              name: t.event_type,
+              content: t.template_content
+            }));
+            setUserTemplates(templates);
+          }
+        })
+        .catch(err => console.error('Failed to load templates:', err));
+    }
+  }, [open]);
+
+  // 合并预设模板和用户模板
+  const allTemplates = [
+    ...PRESET_TEMPLATES.map(t => ({ id: t.id, name: t.name, content: t.content })),
+    ...userTemplates
+  ];
 
   // 生成预览内容
   const generatePreview = () => {
-    const template = PRESET_TEMPLATES.find(t => t.id === selectedTemplateId);
+    const template = allTemplates.find(t => t.id === selectedTemplateId);
     if (!template) return '请选择模板';
     
     const blessing = getBlessing(formData.type, undefined, formData.personName, formData.reminderRecipientName);
@@ -1051,7 +1076,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">选择模板</label>
                 <div className="flex flex-wrap gap-2">
-                  {PRESET_TEMPLATES.map(template => (
+                  {allTemplates.map(template => (
                     <button
                       key={template.id}
                       type="button"

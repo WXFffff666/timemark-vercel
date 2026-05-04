@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera } from 'lucide-react';
+import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -256,6 +256,28 @@ export default function Settings() {
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">登录日志</h3>
                     <p className="text-xs text-slate-500">查看近期登录历史与设备</p>
+                  </div>
+                </div>
+                <ChevronRight className="text-slate-400" />
+              </div>
+            </div>
+          </motion.section>
+
+          {/* 事件模板 */}
+          <motion.section variants={itemVariants}>
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">事件模板</h2>
+            <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10">
+              <div 
+                className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer"
+                onClick={() => navigate('/templates')}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center shadow-inner border border-indigo-100 dark:border-indigo-800/50">
+                    <CalendarClock size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">管理事件模板</h3>
+                    <p className="text-xs text-slate-500">创建常用事件模板（如驾照到期、保险续费）</p>
                   </div>
                 </div>
                 <ChevronRight className="text-slate-400" />
