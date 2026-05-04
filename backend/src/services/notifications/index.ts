@@ -256,6 +256,19 @@ function getChannelConfigFromAccount(
   }
 }
 
+/**
+ * Send notifications for an event through specified channels
+ * 
+ * This is the main notification dispatcher. It:
+ * 1. Loads user configuration and notification accounts
+ * 2. Applies relationship mapping to the event name
+ * 3. Routes to appropriate channel handlers (email, webhook, plugin)
+ * 4. Handles retries with exponential backoff
+ * 
+ * @param event - The event object from database (raw row)
+ * @param userId - The user's ID
+ * @param channels - Array of channel IDs to send through (e.g., ['resend', 'telegram'])
+ */
 export async function sendNotifications(event: any, userId: number, channels: string[]): Promise<void> {
   const config = await getUserConfig(userId);
   const channelWebhooks = config?.channel_webhooks || {};

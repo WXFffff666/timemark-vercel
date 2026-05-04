@@ -1,6 +1,10 @@
 import { query } from '../db/index.js';
 import type { Event, CreateEventRequest, RecurringConfig, ReminderConfig, EventType, CalendarType } from '@timemark/shared';
 
+/**
+ * Database row structure for events table
+ * Note: Uses snake_case to match SQLite column names
+ */
 interface EventRow {
   id: number;
   user_id: number;
@@ -23,6 +27,9 @@ interface EventRow {
   created_at: string;
 }
 
+/**
+ * Structure for updating an event (all fields optional)
+ */
 interface UpdateEventData {
   name?: string;
   type?: string;
@@ -39,6 +46,14 @@ interface UpdateEventData {
   relationshipMappingId?: string | null;
 }
 
+/**
+ * Create a new event for a user
+ * 
+ * @param userId - The user's ID (as string, will be parsed to integer)
+ * @param data - Event creation data including name, date, type, and reminder config
+ * @returns The created event object
+ * @throws Error if userId is invalid or database insert fails
+ */
 export async function createEvent(userId: string, data: CreateEventRequest): Promise<Event> {
   // Convert userId from string to integer
   const numericUserId = parseInt(userId, 10);
@@ -103,6 +118,13 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
 /**
  * 计算下次发生日期
  */
+/**
+ * Calculate the next occurrence date for a recurring event
+ * 
+ * @param date - Base event date in YYYY-MM-DD format
+ * @param config - Recurring configuration (frequency, interval, end type)
+ * @returns Next occurrence date in YYYY-MM-DD format, or null if no more occurrences
+ */
 function calculateNextOccurrence(date: string, config: RecurringConfig): string | null {
   try {
     const baseDate = new Date(date + 'T00:00:00');
@@ -146,6 +168,12 @@ function calculateNextOccurrence(date: string, config: RecurringConfig): string 
   }
 }
 
+/**
+ * Get all events for a user (non-paginated)
+ * 
+ * @param userId - The user's ID
+ * @returns Array of events sorted by date
+ */
 export async function getEventsByUserId(userId: string): Promise<Event[]> {
   // Convert userId from UUID string to integer
   const numericUserId = parseInt(userId, 10);
@@ -243,6 +271,14 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
   });
 }
 
+/**
+ * Get events for a user with pagination support
+ * 
+ * @param userId - The user's ID
+ * @param limit - Maximum number of events to return
+ * @param offset - Number of events to skip
+ * @returns Object containing events array and total count
+ */
 export async function getEventsByUserIdPaginated(userId: string, limit: number, offset: number): Promise<{ events: Event[]; total: number }> {
   const numericUserId = parseInt(userId, 10);
   if (isNaN(numericUserId)) {
@@ -339,6 +375,14 @@ export async function getEventsByUserIdPaginated(userId: string, limit: number, 
   return { events, total };
 }
 
+/**
+ * Update an existing event
+ * 
+ * @param id - Event ID
+ * @param userId - User ID (for authorization)
+ * @param data - Partial event data to update
+ * @returns true if event was updated, false if not found
+ */
 export async function updateEvent(id: string, userId: string, data: UpdateEventData): Promise<boolean> {
   const numericUserId = parseInt(userId, 10);
   const updates: string[] = [];
@@ -406,11 +450,25 @@ export async function updateEvent(id: string, userId: string, data: UpdateEventD
   return (result.rowCount ?? 0) > 0;
 }
 
+/**
+ * Delete a single event
+ * 
+ * @param id - Event ID
+ * @param userId - User ID (for authorization)
+ * @returns true if event was deleted
+ */
 export async function deleteEvent(id: string, userId: string): Promise<boolean> {
   const result = await query('DELETE FROM events WHERE id = $1 AND user_id = $2', [id, userId]);
   return (result.rowCount ?? 0) > 0;
 }
 
+/**
+ * Delete multiple events by IDs
+ * 
+ * @param ids - Array of event IDs to delete
+ * @param userId - User ID (for authorization)
+ * @returns Number of events deleted
+ */
 export async function deleteEventsByIds(ids: string[], userId: string): Promise<number> {
   if (ids.length === 0) return 0;
 
