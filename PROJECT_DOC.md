@@ -2,11 +2,11 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/Version-2.4.2-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
+[![Version](https://img.shields.io/badge/Version-2.5.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
 [![Docker Pulls](https://img.shields.io/docker/pulls/xfffff666/timemark?style=flat&color=0ea5e9)](https://hub.docker.com/r/xfffff666/timemark)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
 
-**智能事件提醒系统** · **35+ 通知渠道** · **农历转换** · **关系映射** · **通知模板** · **重复事件**
+**智能事件提醒系统** · **38+ 通知渠道** · **农历转换** · **关系映射** · **通知模板** · **重复事件**
 
 ---
 
@@ -34,23 +34,24 @@
 
 ## 📖 项目简介
 
-TimeMark Docker 是一款功能强大的智能事件提醒系统，专为管理生日、纪念日等重要事件而设计。v2.0 版本进行了彻底的架构重构，从三容器方案（PostgreSQL + Redis + App）精简为单容器部署（SQLite 内置），大幅降低了部署复杂度和资源占用。v2.4.x 版本在此基础上增加了通知模板、重复事件、多邮箱支持等重要功能。
+TimeMark Docker 是一款功能强大的智能事件提醒系统，专为管理生日、纪念日等重要事件而设计。v2.0 版本进行了彻底的架构重构，从三容器方案（PostgreSQL + Redis + App）精简为单容器部署（SQLite 内置），大幅降低了部署复杂度和资源占用。v2.4.x 版本增加了通知模板、重复事件、多邮箱支持等功能。v2.5.0 版本新增 Ntfy/Pushover/Apprise 渠道、用户时区配置、模板接入发送流程，并强化了安全机制（JWT 密钥自动生成、API Key 哈希存储、CSRF 保护升级）。
 
 ### 核心特性
 
 | 特性 | 说明 |
 |------|------|
 | 🗓️ 农历支持 | 支持公历/农历双重日历，智能闰月转换 |
-| 📢 35+ 通知渠道 | 覆盖国内外主流通讯平台，同渠道多账户 |
+| 📢 38+ 通知渠道 | 覆盖国内外主流通讯平台，同渠道多账户 |
 | 👨‍👩‍👧‍👦 关系映射 | 40+ 称呼智能转换（如「我爸」→「父亲」） |
 | 🔒 企业级安全 | AES-256 加密 + JWT 会话 + CSRF 保护 + 登录锁定 |
-| 🌍 全球时区 | NTP 自动时间同步，支持任意时区 |
+| 🌍 全球时区 | NTP 自动时间同步，支持用户自定义时区（默认 Asia/Shanghai） |
 | 📊 触发日志 | 完整的事件触发记录，方便排查问题 |
 | 💾 数据导出 | 支持用户数据完整导出/导入，ICS 日历导出 |
-| 📝 通知模板 | 6 种预设模板按事件类型分组，支持自定义模板 |
+| 📝 通知模板 | 6 种预设模板按事件类型分组，支持自定义模板，已接入发送流程 |
 | 🔄 重复事件 | 支持每天/每周/每月/每年重复，自动创建下次事件 |
 | 📧 多邮箱支持 | 事件支持添加多个收件人邮箱 |
 | 🎯 11 种事件类型 | 生日/纪念日/节日/考试/会议/截止日期/旅行/毕业/婚礼/医疗/自定义 |
+| 🕐 用户时区 | 支持自定义时区，默认 Asia/Shanghai |
 
 ### v2.0 vs v1.x
 
@@ -145,6 +146,7 @@ Croner Scheduler (每分钟检查)
 | 数据库 | sql.js | - | SQLite 的纯 JS/WASM 实现 |
 | 定时任务 | Croner | - | 轻量级 Cron 调度器 |
 | 认证 | jose | - | JWT (HS256) 实现 |
+| 通知 | nostr-tools | - | Nostr 协议客户端库 |
 | 加密 | Node.js crypto | - | AES-256 + bcrypt |
 | 构建 | esbuild | - | 高速 TypeScript 编译 |
 | 容器 | Docker | - | 单容器部署 |
@@ -325,7 +327,7 @@ TimeMark 使用 SQLite 数据库，包含以下核心表：
 
 ### 渠道分类
 
-TimeMark 将 35+ 通知渠道分为三种配置方式：
+TimeMark 将 38+ 通知渠道分为三种配置方式：
 
 | 配置方式 | 说明 | 渠道数量 |
 |:--------:|------|:--------:|
@@ -365,6 +367,9 @@ TimeMark 将 35+ 通知渠道分为三种配置方式：
 | LINE | `line.service.ts` | token | ✅ |
 | Microsoft Teams | `msteams.service.ts` | webhook | ✅ |
 | Nostr | `nostr.service.ts` | token | ✅ |
+| Ntfy | `ntfy.service.ts` | token | ✅ |
+| Pushover | `pushover.service.ts` | token | ✅ |
+| Apprise | `apprise.service.ts` | token | ✅ |
 | WhatsApp | `whatsapp.service.ts` | plugin | ❌ |
 | 微信 (OpenClaw) | `wechat-openclaw.service.ts` | plugin | ❌ |
 | 微信 (Wechaty) | `wechaty.service.ts` | plugin | ❌ |
@@ -380,11 +385,12 @@ TimeMark 将 35+ 通知渠道分为三种配置方式：
   → 获取事件关联的通知渠道 IDs
   → 查询 notification_accounts 表
   → 解密凭证 (AES-256, MASTER_KEY)
+  → 应用通知模板（用户自定义模板优先，无则使用默认格式）
   → 根据渠道类型调用对应 service
     → webhook: HTTP POST 到 Webhook URL
     → token: 使用 Bot Token 调用 API
     → plugin: 通过已授权的会话发送
-  → 记录发送结果到 event_trigger_logs
+  → 逐渠道记录发送结果（成功/失败/错误信息）到 event_trigger_logs
 ```
 
 ### 多账户支持
@@ -448,7 +454,7 @@ MASTER_KEY 是 v2.0 的核心安全组件：
 | Refresh Token | 7 天 | 刷新 Access Token |
 
 - 签名算法：HS256
-- JWT_SECRET 最小长度：32 字符（生产环境强制检查）
+- JWT_SECRET 在运行时动态读取，首次启动自动生成
 - 支持设备指纹和信任设备机制
 
 ### 登录安全
@@ -465,11 +471,19 @@ MASTER_KEY 是 v2.0 的核心安全组件：
 | 数据类型 | 加密方式 |
 |----------|----------|
 | 用户密码 | bcrypt (cost=10) 哈希 |
+| API Key | SHA-256 哈希存储 |
 | TOTP 密钥 | 数据库明文（仅管理员可见） |
 | 通知 Webhook URL | AES-256 加密 (MASTER_KEY) |
 | 通知 Bot Token | AES-256 加密 (MASTER_KEY) |
 | 通知 Secret | AES-256 加密 (MASTER_KEY) |
 | 插件会话数据 | AES-256 加密 (MASTER_KEY) |
+
+### 请求保护
+
+| 机制 | 说明 |
+|------|------|
+| CSRF 保护 | 验证 Origin/Referer 或 JWT Bearer token |
+| API Key | SHA-256 哈希存储，支持外部系统集成 |
 
 ---
 
@@ -512,6 +526,22 @@ type CalendarType = 'gregorian' | 'lunar' | 'both';
 | 我妈 | 母亲 | 发送给其他家庭成员时 |
 | 老婆 | 妻子 | 统一正式称呼 |
 | 爷爷 | 外公 | 家庭成员关系映射 |
+
+### 通知模板集成
+
+自定义模板自动应用到通知发送，支持变量替换。事件触发时根据事件类型匹配对应模板，渲染后发送到各通知渠道。
+
+### 用户时区
+
+每个用户可设置独立时区，影响提醒时间计算。默认 `Asia/Shanghai`，支持全球所有 IANA 时区。
+
+### 渠道连接状态
+
+实时显示每个通知渠道的连接状态。配置渠道后可一键测试连通性，UI 直观展示在线/离线状态。
+
+### 发送结果追踪
+
+触发日志显示每个渠道的发送成功/失败状态。事件触发后按渠道逐一记录结果，方便定位通知失败原因。
 
 ---
 

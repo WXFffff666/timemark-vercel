@@ -1,6 +1,6 @@
 # Notification Channels
 
-This directory contains implementations for 35+ notification channels.
+This directory contains implementations for 38+ notification channels.
 
 ## File Structure
 

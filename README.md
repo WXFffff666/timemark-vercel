@@ -4,13 +4,13 @@
 
 <h1>🎂 TimeMark</h1>
 
-<h3>智能事件提醒系统 | 35+ 通知渠道 | 农历转换 | 关系映射</h3>
+<h3>智能事件提醒系统 | 38+ 通知渠道 | 农历转换 | 关系映射</h3>
 
 <p>一个为生日、纪念日等重要日期打造的全功能提醒系统。<br/>单容器部署，开箱即用，支持飞牛OS / 群晖 / 威联通 / 铁威马等 NAS 平台。</p>
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-2.4.2-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
+[![Version](https://img.shields.io/badge/Version-2.5.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
 [![Docker Pulls](https://img.shields.io/docker/pulls/xfffff666/timemark?style=flat&color=0ea5e9)](https://hub.docker.com/r/xfffff666/timemark)
 [![Docker Image Size](https://img.shields.io/docker/image-size/xfffff666/timemark/latest?style=flat&color=6366f1)](https://hub.docker.com/r/xfffff666/timemark)
 [![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-docker?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-docker/stargazers)
@@ -31,7 +31,7 @@
 
 v2.0 是一次彻底的架构重构，从三容器方案精简为单容器部署，同时大幅强化了安全性和性能。v2.4.x 在此基础上增加了通知模板、重复事件等重要功能。
 
-| 对比项 | v1.x | v2.4.2 |
+| 对比项 | v1.x | v2.5.0 |
 |:------:|:----:|:------:|
 | 数据库 | PostgreSQL + Redis | **SQLite (内置，零配置)** |
 | 容器数量 | 3 个 | **1 个** |
@@ -66,7 +66,7 @@ v2.0 是一次彻底的架构重构，从三容器方案精简为单容器部署
 
 | 🗓️ 精准农历 | 📢 多渠道通知 | 👨‍👩‍👧‍👦 智能关系映射 | 🔒 安全防护 | 🌍 全球时区 |
 |:----------:|:----------:|:---------------:|:----------:|:--------:|
-| 闰月自动转换 | 35+ 通知渠道 | 40+ 称呼映射 | 登录锁定 + 告警 | NTP 自动同步 |
+| 闰月自动转换 | 38+ 通知渠道 | 40+ 称呼映射 | 登录锁定 + 告警 | NTP 自动同步 |
 | 公历/农历双历 | 同渠道多账户 | 家庭关系映射 | AES-256 凭证加密 | 自定义时区 |
 
 | 📝 通知模板 | 🔄 重复事件 | 📧 多邮箱支持 | 📅 日历导出 | 🎯 11 种事件类型 |
@@ -127,7 +127,7 @@ docker compose up -d
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                TimeMark v2.4.2                   │
+│                TimeMark v2.5.0                   │
 │            单容器 · 零依赖 · 开箱即用             │
 ├─────────────────────────────────────────────────┤
 │                                                  │
@@ -200,7 +200,7 @@ docker compose up -d
 |--------|--------|
 | 提醒时间 | 06:00 - 22:00 + 自定义任意时间 (可多选) |
 | 提前天数 | 1天 / 3天 / 7天 / 14天 / 30天 (可多选) |
-| 通知渠道 | 35+ 渠道任意组合 (可多选) |
+| 通知渠道 | 38+ 渠道任意组合 (可多选) |
 | 重复事件 | 每天 / 每周 / 每月 / 每年 |
 | 通知模板 | 6 种预设模板 + 自定义模板 |
 | 收件人邮箱 | 支持多个收件人邮箱 |
@@ -232,9 +232,9 @@ docker compose up -d
 
 ---
 
-## 📢 通知渠道 (35+)
+## 📢 通知渠道 (38+)
 
-TimeMark 支持 35+ 通知渠道，覆盖国内外主流通讯平台。所有渠道（含邮箱）统一通过「通知账户」管理，支持同渠道多账户配置，创建事件时可选择发送给哪些账户。
+TimeMark 支持 38+ 通知渠道，覆盖国内外主流通讯平台。所有渠道（含邮箱）统一通过「通知账户」管理，支持同渠道多账户配置，创建事件时可选择发送给哪些账户。
 
 ### 💬 即时通讯 (11 个)
 

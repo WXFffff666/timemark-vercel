@@ -10,7 +10,7 @@ src/
 ├── queue/           # Cron job scheduler
 ├── routes/          # API endpoint handlers
 ├── services/        # Business logic layer
-│   └── notifications/  # Notification channel implementations (35+)
+│   └── notifications/  # Notification channel implementations (38+)
 ├── types/           # TypeScript type definitions
 └── utils/           # Helper utilities (crypto, logging, etc.)
 ```
