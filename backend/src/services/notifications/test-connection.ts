@@ -124,6 +124,30 @@ async function testTokenChannel(
       }
       return { success: true, message: `${type} 配置格式正确（实际连通性将在发送时验证）` };
     
+    case 'serverchan':
+      return await testServerChanChannel(token);
+    
+    case 'pushplus':
+      return await testPushPlusChannel(token, chatId);
+    
+    case 'bark':
+      return await testBarkChannel(fromEmail!, token);
+    
+    case 'gotify':
+      return await testGotifyChannel(fromEmail!, token);
+    
+    case 'meow':
+      return await testMeowChannel(token);
+    
+    case 'pushme':
+      return await testPushMeChannel(token);
+    
+    case 'ntfy':
+      return await testNtfyChannel(fromEmail!, token);
+    
+    case 'pushover':
+      return await testPushoverChannel(token, chatId!);
+    
     default:
       return { success: false, message: `暂不支持测试 ${type} 渠道` };
   }
@@ -332,6 +356,216 @@ async function testPluginChannel(type: string, sessionData?: string): Promise<Te
   }
 }
 
+async function testServerChanChannel(sendKey: string): Promise<TestConnectionResult> {
+  if (!sendKey) {
+    return { success: false, message: 'SendKey 不能为空' };
+  }
+
+  try {
+    const response = await axios.post(
+      `https://sctapi.ftqq.com/${sendKey}.send`,
+      new URLSearchParams({ title: 'TimeMark 连接测试', desp: '您的 Server酱 渠道配置正确。' }),
+      { timeout: 10000 }
+    );
+
+    if (response.data?.code === 0) {
+      return { success: true, message: 'Server酱 连接成功' };
+    } else {
+      return { success: false, message: `发送失败: ${response.data?.message || '未知错误'}` };
+    }
+  } catch (error: any) {
+    if (error.response?.status === 401 || error.response?.data?.code === 40001) {
+      return { success: false, message: 'SendKey 无效' };
+    }
+    return { success: false, message: `连接失败: ${error.message}` };
+  }
+}
+
+async function testPushPlusChannel(token: string, topic?: string): Promise<TestConnectionResult> {
+  if (!token) {
+    return { success: false, message: 'Token 不能为空' };
+  }
+
+  try {
+    const payload: any = {
+      token,
+      title: 'TimeMark 连接测试',
+      content: '您的 PushPlus 渠道配置正确。',
+    };
+    if (topic) payload.topic = topic;
+
+    const response = await axios.post('http://www.pushplus.plus/send', payload, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+    });
+
+    if (response.data?.code === 200) {
+      return { success: true, message: 'PushPlus 连接成功' };
+    } else {
+      return { success: false, message: `发送失败: ${response.data?.msg || '未知错误'}` };
+    }
+  } catch (error: any) {
+    return { success: false, message: `连接失败: ${error.message}` };
+  }
+}
+
+async function testBarkChannel(serverUrl: string, deviceKey: string): Promise<TestConnectionResult> {
+  if (!serverUrl || !deviceKey) {
+    return { success: false, message: '服务器地址和设备密钥不能为空' };
+  }
+
+  try {
+    const baseUrl = serverUrl.replace(/\/+$/, '');
+    const response = await axios.get(
+      `${baseUrl}/${encodeURIComponent(deviceKey)}/TimeMark+连接测试/渠道配置正确`,
+      { timeout: 10000 }
+    );
+
+    if (response.data?.code === 200) {
+      return { success: true, message: 'Bark 连接成功' };
+    } else {
+      return { success: false, message: `发送失败: ${response.data?.message || '未知错误'}` };
+    }
+  } catch (error: any) {
+    if (error.response?.status === 400) {
+      return { success: false, message: '设备密钥无效' };
+    }
+    return { success: false, message: `连接失败: ${error.message}` };
+  }
+}
+
+async function testGotifyChannel(serverUrl: string, appToken: string): Promise<TestConnectionResult> {
+  if (!serverUrl || !appToken) {
+    return { success: false, message: '服务器地址和 App Token 不能为空' };
+  }
+
+  try {
+    const baseUrl = serverUrl.replace(/\/+$/, '');
+    const response = await axios.post(
+      `${baseUrl}/message`,
+      { title: 'TimeMark 连接测试', message: '您的 Gotify 渠道配置正确。', priority: 5 },
+      {
+        headers: { 'X-Gotify-Key': appToken, 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
+
+    if (response.status >= 200 && response.status < 300) {
+      return { success: true, message: 'Gotify 连接成功' };
+    } else {
+      return { success: false, message: `服务器返回状态码: ${response.status}` };
+    }
+  } catch (error: any) {
+    if (error.response?.status === 401) {
+      return { success: false, message: 'App Token 无效' };
+    }
+    return { success: false, message: `连接失败: ${error.message}` };
+  }
+}
+
+async function testMeowChannel(pushKey: string): Promise<TestConnectionResult> {
+  if (!pushKey) {
+    return { success: false, message: 'Push Key 不能为空' };
+  }
+
+  try {
+    const response = await axios.get(
+      `https://api.day.app/${encodeURIComponent(pushKey)}/TimeMark+连接测试/渠道配置正确`,
+      { timeout: 10000 }
+    );
+
+    if (response.data?.code === 200) {
+      return { success: true, message: 'Meow 连接成功' };
+    } else {
+      return { success: false, message: `发送失败: ${response.data?.message || '未知错误'}` };
+    }
+  } catch (error: any) {
+    if (error.response?.status === 400) {
+      return { success: false, message: 'Push Key 无效' };
+    }
+    return { success: false, message: `连接失败: ${error.message}` };
+  }
+}
+
+async function testPushMeChannel(pushKey: string): Promise<TestConnectionResult> {
+  if (!pushKey) {
+    return { success: false, message: 'Push Key 不能为空' };
+  }
+
+  try {
+    const response = await axios.post(
+      'https://push.i-i.me/',
+      new URLSearchParams({ push_key: pushKey, title: 'TimeMark 连接测试', content: '您的 PushMe 渠道配置正确。' }),
+      { timeout: 10000 }
+    );
+
+    if (response.data?.code === 200 || response.data?.success === true) {
+      return { success: true, message: 'PushMe 连接成功' };
+    } else {
+      return { success: false, message: `发送失败: ${response.data?.msg || response.data?.message || '未知错误'}` };
+    }
+  } catch (error: any) {
+    return { success: false, message: `连接失败: ${error.message}` };
+  }
+}
+
+async function testNtfyChannel(serverUrl: string, topic: string): Promise<TestConnectionResult> {
+  if (!serverUrl || !topic) {
+    return { success: false, message: '服务器地址和 Topic 不能为空' };
+  }
+
+  try {
+    const baseUrl = serverUrl.replace(/\/+$/, '');
+    const response = await axios.post(
+      `${baseUrl}/${encodeURIComponent(topic)}`,
+      'TimeMark 连接测试 - 渠道配置正确',
+      {
+        headers: { Title: 'TimeMark Test', Priority: '3' },
+        timeout: 10000,
+      }
+    );
+
+    if (response.status >= 200 && response.status < 300) {
+      return { success: true, message: 'Ntfy 连接成功' };
+    } else {
+      return { success: false, message: `服务器返回状态码: ${response.status}` };
+    }
+  } catch (error: any) {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      return { success: false, message: '认证失败，请检查 Topic 权限' };
+    }
+    return { success: false, message: `连接失败: ${error.message}` };
+  }
+}
+
+async function testPushoverChannel(userKey: string, appToken: string): Promise<TestConnectionResult> {
+  if (!userKey || !appToken) {
+    return { success: false, message: 'User Key 和 App Token 不能为空' };
+  }
+
+  try {
+    const response = await axios.post(
+      'https://api.pushover.net/1/users/validate.json',
+      new URLSearchParams({ token: appToken, user: userKey }),
+      { timeout: 10000 }
+    );
+
+    if (response.data?.status === 1) {
+      return { success: true, message: 'Pushover 连接成功' };
+    } else {
+      return { success: false, message: `验证失败: ${response.data?.errors?.join(', ') || '未知错误'}` };
+    }
+  } catch (error: any) {
+    if (error.response?.status === 401) {
+      return { success: false, message: 'App Token 无效' };
+    }
+    if (error.response?.data?.errors) {
+      return { success: false, message: `验证失败: ${error.response.data.errors.join(', ')}` };
+    }
+    return { success: false, message: `连接失败: ${error.message}` };
+  }
+}
+
 async function testSmtpChannel(smtpHost: string, password: string, fromEmail: string): Promise<TestConnectionResult> {
   if (!smtpHost || !password || !fromEmail) {
     return { success: false, message: 'SMTP 服务器、密码和发件邮箱都不能为空' };
@@ -361,3 +595,4 @@ async function testSmtpChannel(smtpHost: string, password: string, fromEmail: st
     return { success: false, message: `SMTP 连接失败: ${error.message}` };
   }
 }
+
