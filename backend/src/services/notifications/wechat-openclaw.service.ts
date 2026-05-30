@@ -240,23 +240,19 @@ export async function sendNotification(event: any, sessionData: any, toUser: str
     throw new Error('Session not authenticated. Please complete QR login.');
   }
 
-  // Get blessing message
-  const blessing = getBlessing(
-    event.type,
-    event.reminderConfig?.customMessage,
-    event.personName,
-    event.reminderRecipientName
-  );
-
   // Format message
-  const message = `📅 ${event.name}
-
-📆 日期: ${event.date}
-🏷️ 类型: ${event.type}
-
-🎉 ${blessing}
-
-——来自 TimeMark 提醒`;
+  let message: string;
+  if (event.customMessage) {
+    message = event.customMessage;
+  } else {
+    const blessing = getBlessing(
+      event.type,
+      event.reminderConfig?.customMessage,
+      event.personName,
+      event.reminderRecipientName
+    );
+    message = `📅 ${event.name}\n\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}\n\n——来自 TimeMark 提醒`;
+  }
 
   try {
     // Send text message using OpenClaw API

@@ -176,13 +176,18 @@ export async function sendClawBotNotification(
   toUserId: string,
   baseUrl: string = ILINK_BASE
 ): Promise<void> {
-  const blessing = getBlessing(
-    event.type,
-    event.reminderConfig?.customMessage,
-    event.personName,
-    event.reminderRecipientName
-  );
-  const text = `📅 ${event.name}\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
+  let text: string;
+  if (event.customMessage) {
+    text = event.customMessage;
+  } else {
+    const blessing = getBlessing(
+      event.type,
+      event.reminderConfig?.customMessage,
+      event.personName,
+      event.reminderRecipientName
+    );
+    text = `📅 ${event.name}\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
+  }
   await axios.post(`${baseUrl}/ilink/bot/sendmessage`, {
     toUserId,
     text,

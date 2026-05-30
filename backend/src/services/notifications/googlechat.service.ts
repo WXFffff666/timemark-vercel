@@ -6,47 +6,53 @@ import { getBlessing } from '../../../../shared/src/blessings.js';
  * https://developers.google.com/chat/how-tos/webhooks
  */
 export async function sendGoogleChatNotification(event: any, webhook: string): Promise<void> {
-  const blessing = getBlessing(
-    event.type,
-    event.reminderConfig?.customMessage,
-    event.personName,
-    event.reminderRecipientName
-  );
-  
-  const message = {
-    text: `📅 *${event.name}*\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`,
-    cards: [
-      {
-        header: {
-          title: '📅 TimeMark 提醒',
-          subtitle: event.name,
-        },
-        sections: [
-          {
-            widgets: [
-              {
-                keyValue: {
-                  topLabel: '日期',
-                  content: event.date,
+  let message: any;
+  if (event.customMessage) {
+    message = {
+      text: event.customMessage,
+    };
+  } else {
+    const blessing = getBlessing(
+      event.type,
+      event.reminderConfig?.customMessage,
+      event.personName,
+      event.reminderRecipientName
+    );
+    message = {
+      text: `📅 *${event.name}*\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`,
+      cards: [
+        {
+          header: {
+            title: '📅 TimeMark 提醒',
+            subtitle: event.name,
+          },
+          sections: [
+            {
+              widgets: [
+                {
+                  keyValue: {
+                    topLabel: '日期',
+                    content: event.date,
+                  }
+                },
+                {
+                  keyValue: {
+                    topLabel: '类型',
+                    content: event.type,
+                  }
+                },
+                {
+                  textParagraph: {
+                    text: `🎉 ${blessing}`
+                  }
                 }
-              },
-              {
-                keyValue: {
-                  topLabel: '类型',
-                  content: event.type,
-                }
-              },
-              {
-                textParagraph: {
-                  text: `🎉 ${blessing}`
-                }
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  };
+              ]
+            }
+          ]
+        }
+      ]
+    };
+  }
 
   await axios.post(webhook, message, { timeout: 10000 });
 }

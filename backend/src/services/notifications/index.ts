@@ -21,6 +21,9 @@ import { sendMattermostNotification } from './mattermost.service.js';
 import { sendMicrosoftTeamsNotification } from './msteams.service.js';
 import { sendNextcloudTalkNotification } from './nextcloudtalk.service.js';
 import { sendNostrNotification } from './nostr.service.js';
+import { sendNtfyNotification } from './ntfy.service.js';
+import { sendPushoverNotification } from './pushover.service.js';
+import { sendAppriseNotification } from './apprise.service.js';
 // New token-based channels (batch 2)
 import { sendClawBotNotification } from './clawbot.service.js';
 import { sendServerChanNotification } from './serverchan.service.js';
@@ -41,6 +44,8 @@ import { sendNotification as sendBlueBubblesNotification } from './bluebubbles.s
 
 import { getUserConfig, getRelationshipMappings, getNotificationAccounts, getEventTemplate } from '../config.service.js';
 import { applyRelationshipMapping } from '@timemark/shared/relationship';
+import { getBlessing } from '../../../../shared/src/blessings.js';
+import { generateNotificationContent } from '../../../../shared/src/templates.js';
 
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
@@ -71,13 +76,9 @@ const genericWebhookChannels = new Set([
   'zalo',
   'zalo_personal',
   'network_chat',
-  'nostr',
   'irc',
   'synologychat',
   'twitch',
-  'matrix',
-  'msteams',
-  'line',
   'googlechat',
 ]);
 
@@ -109,6 +110,9 @@ const channelToAccountType: Record<string, string> = {
   'signal': 'signal',
   'zalo': 'zalo',
   // New channels (batch 2)
+  'ntfy': 'ntfy',
+  'pushover': 'pushover',
+  'apprise': 'apprise',
   'clawbot': 'clawbot',
   'serverchan': 'serverchan',
   'pushplus': 'pushplus',
@@ -228,6 +232,26 @@ function getChannelConfigFromAccount(
         ? { token: account.token, secret: account.secret, chat_id: account.chat_id, webhook: account.webhook }
         : null;
     
+    case 'nostr':
+      return (account.token && account.chat_id)
+        ? { token: account.token, chat_id: account.chat_id, webhook: account.webhook }
+        : null;
+    
+    case 'ntfy':
+      return (account.webhook && account.token)
+        ? { webhook: account.webhook, token: account.token }
+        : null;
+    
+    case 'pushover':
+      return (account.token && account.secret)
+        ? { token: account.token, secret: account.secret }
+        : null;
+    
+    case 'apprise':
+      return account.webhook
+        ? { webhook: account.webhook, token: account.token }
+        : null;
+    
     // Plugin-based channels
     case 'wechat_personal':
     case 'whatsapp':
@@ -270,7 +294,7 @@ function getChannelConfigFromAccount(
  * @param userId - The user's ID
  * @param channels - Array of channel IDs to send through (e.g., ['resend', 'telegram'])
  */
-export async function sendNotifications(event: any, userId: number, channels: string[]): Promise<void> {
+export async function sendNotifications(event: any, userId: number, channels: string[]): Promise<Record<string, { success: boolean; error?: string }>> {
   const config = await getUserConfig(userId);
   const channelWebhooks = config?.channel_webhooks || {};
   
@@ -278,7 +302,24 @@ export async function sendNotifications(event: any, userId: number, channels: st
   const mappings = await getRelationshipMappings(userId, event.id);
   // Apply default relationship mapping for all channels
   const defaultMappedName = applyRelationshipMapping(event.name, mappings);
-  const mappedEvent = { ...event, name: defaultMappedName };
+  const mappedEvent: any = { ...event, name: defaultMappedName };
+  
+  // Try to get user-customized template for this event type
+  const userTemplate = await getEventTemplate(userId, event.type);
+  if (userTemplate) {
+    const blessing = getBlessing(event.type, event.reminderConfig?.customMessage, event.personName, event.reminderRecipientName);
+    const today = new Date();
+    const eventDate = new Date(event.date);
+    const daysUntil = Math.max(0, Math.ceil((eventDate.getTime() - today.getTime()) / (86400 * 1000)));
+    const renderedContent = generateNotificationContent(
+      userTemplate.template_content,
+      { name: mappedEvent.name, date: event.date, type: event.type, personName: event.personName },
+      daysUntil,
+      blessing,
+      event.reminder_time
+    );
+    mappedEvent.customMessage = renderedContent;
+  }
   
   // 获取事件绑定的通知账户ID
   const boundAccountIds: number[] = (() => {
@@ -391,12 +432,16 @@ export async function sendNotifications(event: any, userId: number, channels: st
   }
   
   // 发送通知（每个渠道可能有多个账号配置，独立发送）
-  await Promise.allSettled(channels.flatMap((ch) => {
+  const channelResults: Record<string, { success: boolean; error?: string }> = {};
+  
+  const sendTasks: Array<{ channel: string; promise: Promise<void> }> = channels.flatMap((ch) => {
     const configs = channelConfigsMap[ch];
     if (!configs || configs.length === 0) return [];
     
-    return configs.map(async (chConfig) => {
-      try {
+    return configs.map((chConfig) => ({
+      channel: ch,
+      promise: (async () => {
+        try {
         if (ch === 'feishu' && chConfig.webhook) await retryWithBackoff(() => sendFeishuNotification(mappedEvent, chConfig.webhook));
         else if (ch === 'wecom' && chConfig.webhook) await retryWithBackoff(() => sendWeComNotification(mappedEvent, chConfig.webhook));
         else if (ch === 'dingtalk' && chConfig.webhook && chConfig.secret)
@@ -515,6 +560,13 @@ export async function sendNotifications(event: any, userId: number, channels: st
           await retryWithBackoff(() => sendPushMeNotification(mappedEvent, chConfig.token));
         else if (ch === 'wecomapp' && chConfig.token && chConfig.secret && chConfig.chat_id && chConfig.webhook)
           await retryWithBackoff(() => sendWeComAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id, chConfig.webhook));
+        // Ntfy, Pushover, Apprise
+        else if (ch === 'ntfy' && chConfig.webhook && chConfig.token)
+          await retryWithBackoff(() => sendNtfyNotification(mappedEvent, chConfig.webhook, chConfig.token));
+        else if (ch === 'pushover' && chConfig.token && chConfig.secret)
+          await retryWithBackoff(() => sendPushoverNotification(mappedEvent, chConfig.token, chConfig.secret));
+        else if (ch === 'apprise' && chConfig.webhook)
+          await retryWithBackoff(() => sendAppriseNotification(mappedEvent, chConfig.webhook, chConfig.token));
         // Plugin-based channels
         else if (ch === 'wechat_personal' && chConfig.sessionData) {
           const toUser = chConfig.toUser || mappedEvent.personName || 'me';
@@ -558,7 +610,24 @@ export async function sendNotifications(event: any, userId: number, channels: st
         }
       } catch (e) {
         console.error(`Failed ${ch}:`, e);
+        throw e;
       }
-    });
-  }));
+      })(),
+    }));
+  });
+  
+  const settled = await Promise.allSettled(sendTasks.map(t => t.promise));
+  
+  for (let i = 0; i < settled.length; i++) {
+    const result = settled[i];
+    const ch = sendTasks[i].channel;
+    if (result.status === 'fulfilled') {
+      channelResults[ch] = { success: true };
+    } else {
+      const errMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      channelResults[ch] = { success: false, error: errMsg };
+    }
+  }
+  
+  return channelResults;
 }

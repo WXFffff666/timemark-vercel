@@ -6,15 +6,18 @@ import { getBlessing } from '../../../../shared/src/blessings.js';
  * https://dev.twitch.tv/docs/eventsub
  */
 export async function sendTwitchNotification(event: any, webhook: string): Promise<void> {
-  const blessing = getBlessing(
-    event.type,
-    event.reminderConfig?.customMessage,
-    event.personName,
-    event.reminderRecipientName
-  );
-  
-  // Twitch 风格的简洁消息
-  const message = `📅 TimeMark 提醒: ${event.name} | 📆 ${event.date} | 🎉 ${blessing}`;
+  let message: string;
+  if (event.customMessage) {
+    message = event.customMessage;
+  } else {
+    const blessing = getBlessing(
+      event.type,
+      event.reminderConfig?.customMessage,
+      event.personName,
+      event.reminderRecipientName
+    );
+    message = `📅 TimeMark 提醒: ${event.name} | 📆 ${event.date} | 🎉 ${blessing}`;
+  }
   
   await axios.post(webhook, {
     content: message,

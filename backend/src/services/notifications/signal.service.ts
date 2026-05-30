@@ -222,19 +222,18 @@ export async function sendNotification(
     throw new Error('Invalid recipient phone number. Must be in format +1xxxxxxxxxx');
   }
   
-  const blessing = getBlessing(
-    event.type,
-    event.reminderConfig?.customMessage,
-    event.personName,
-    event.reminderRecipientName
-  );
-  
-  const message = `📅 *${event.name}*
-
-📆 日期: ${event.date}
-🏷️ 类型: ${event.type}
-
-🎉 ${blessing}`;
+  let message: string;
+  if (event.customMessage) {
+    message = event.customMessage;
+  } else {
+    const blessing = getBlessing(
+      event.type,
+      event.reminderConfig?.customMessage,
+      event.personName,
+      event.reminderRecipientName
+    );
+    message = `📅 *${event.name}*\n\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
+  }
   
   const dataDir = getSignalDataDir(sessionData.phoneNumber, sessionData.sessionId);
   

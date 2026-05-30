@@ -8,14 +8,21 @@ export async function sendBarkNotification(
   group?: string,
   sound?: string
 ): Promise<void> {
-  const blessing = getBlessing(
-    event.type,
-    event.reminderConfig?.customMessage,
-    event.personName,
-    event.reminderRecipientName
-  );
-  const title = `📅 ${event.name}`;
-  const body = `📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
+  let title: string;
+  let body: string;
+  if (event.customMessage) {
+    title = `📅 ${event.name}`;
+    body = event.customMessage;
+  } else {
+    const blessing = getBlessing(
+      event.type,
+      event.reminderConfig?.customMessage,
+      event.personName,
+      event.reminderRecipientName
+    );
+    title = `📅 ${event.name}`;
+    body = `📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
+  }
   const response = await axios.post(`${serverUrl}/push`, {
     device_key: deviceKey,
     title,

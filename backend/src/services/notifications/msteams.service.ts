@@ -10,16 +10,22 @@ export async function sendMicrosoftTeamsNotification(
   botToken: string, 
   conversationId: string
 ): Promise<void> {
-  const blessing = getBlessing(
-    event.type,
-    event.reminderConfig?.customMessage,
-    event.personName,
-    event.reminderRecipientName
-  );
+  let text: string;
+  if (event.customMessage) {
+    text = event.customMessage;
+  } else {
+    const blessing = getBlessing(
+      event.type,
+      event.reminderConfig?.customMessage,
+      event.personName,
+      event.reminderRecipientName
+    );
+    text = `📅 **${event.name}**\n\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
+  }
   
   const message = {
     type: 'message',
-    text: `📅 **${event.name}**\n\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`
+    text
   };
   
   await axios.post(

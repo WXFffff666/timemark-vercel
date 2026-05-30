@@ -6,14 +6,18 @@ import { getBlessing } from '../../../../shared/src/blessings.js';
  * https://www.synology.com/zh-cn/dsm/feature/chat
  */
 export async function sendSynologyChatNotification(event: any, webhook: string): Promise<void> {
-  const blessing = getBlessing(
-    event.type,
-    event.reminderConfig?.customMessage,
-    event.personName,
-    event.reminderRecipientName
-  );
-  
-  const message = `📅 *${event.name}*\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
+  let message: string;
+  if (event.customMessage) {
+    message = event.customMessage;
+  } else {
+    const blessing = getBlessing(
+      event.type,
+      event.reminderConfig?.customMessage,
+      event.personName,
+      event.reminderRecipientName
+    );
+    message = `📅 *${event.name}*\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
+  }
   
   // Synology Chat 使用 payload 格式
   const payload = JSON.stringify({

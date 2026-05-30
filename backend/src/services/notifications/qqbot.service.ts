@@ -190,16 +190,19 @@ export async function sendNotification(event: any, sessionData: any, toUser: str
     throw new Error('Session not authenticated');
   }
 
-  // Get blessing message
-  const blessing = getBlessing(
-    event.type,
-    event.reminderConfig?.customMessage,
-    event.personName,
-    event.reminderRecipientName
-  );
-
-  // Format message similar to other services
-  const message = `📅 ${event.name}\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
+  // Format message
+  let message: string;
+  if (event.customMessage) {
+    message = event.customMessage;
+  } else {
+    const blessing = getBlessing(
+      event.type,
+      event.reminderConfig?.customMessage,
+      event.personName,
+      event.reminderRecipientName
+    );
+    message = `📅 ${event.name}\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
+  }
 
   try {
     // Send private message to the target user
