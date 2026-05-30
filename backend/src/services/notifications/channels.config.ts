@@ -499,24 +499,32 @@ const tokenChannels: ChannelTemplate[] = [
   {
     id: 'nostr',
     name: 'Nostr',
-    description: 'Nostr 协议消息推送',
+    description: 'Nostr 协议加密私信推送 (NIP-04)',
     icon: 'Zap',
     configMethod: 'token',
     isBuiltIn: true,
     fields: [
       {
         name: 'token',
-        label: '私钥 (nsec)',
+        label: '私钥 (hex)',
         type: 'password',
         required: true,
-        description: 'Nostr 私钥（请妥善保管）'
+        description: 'Nostr 私钥（hex 格式，请妥善保管）'
       },
       {
         name: 'chat_id',
-        label: '目标公钥 (npub)',
+        label: '目标公钥 (hex)',
         type: 'text',
         required: true,
-        description: '接收消息的公钥'
+        description: '接收消息的公钥（hex 格式）'
+      },
+      {
+        name: 'webhook',
+        label: '中继地址 (可选)',
+        type: 'text',
+        required: false,
+        placeholder: 'wss://relay.damus.io',
+        description: '自定义 Nostr 中继地址，留空使用默认中继'
       }
     ],
     docsUrl: 'https://github.com/nostr-protocol/nostr'
@@ -770,6 +778,85 @@ const tokenChannels: ChannelTemplate[] = [
       }
     ],
     docsUrl: 'https://developer.work.weixin.qq.com/document/path/90236'
+  },
+  {
+    id: 'ntfy',
+    name: 'Ntfy',
+    description: 'Ntfy 自托管推送通知服务',
+    icon: 'Bell',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: '服务器地址',
+        type: 'text',
+        required: true,
+        placeholder: 'https://ntfy.sh',
+        description: 'Ntfy 服务器地址（默认 https://ntfy.sh 或自托管地址）'
+      },
+      {
+        name: 'token',
+        label: 'Topic',
+        type: 'text',
+        required: true,
+        placeholder: 'my-timemark-topic',
+        description: '订阅的 Topic 名称'
+      }
+    ],
+    docsUrl: 'https://docs.ntfy.sh/'
+  },
+  {
+    id: 'pushover',
+    name: 'Pushover',
+    description: 'Pushover 跨平台推送通知',
+    icon: 'BellRing',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'User Key',
+        type: 'password',
+        required: true,
+        description: 'Pushover 用户密钥'
+      },
+      {
+        name: 'secret',
+        label: 'App Token',
+        type: 'password',
+        required: true,
+        description: 'Pushover 应用 API Token'
+      }
+    ],
+    docsUrl: 'https://pushover.net/api'
+  },
+  {
+    id: 'apprise',
+    name: 'Apprise',
+    description: 'Apprise 统一通知网关（支持 80+ 服务）',
+    icon: 'Globe',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: 'Apprise 服务器地址',
+        type: 'text',
+        required: true,
+        placeholder: 'http://localhost:8000',
+        description: 'Apprise API 服务器地址'
+      },
+      {
+        name: 'token',
+        label: '通知 URLs (可选)',
+        type: 'textarea',
+        required: false,
+        placeholder: 'tgram://bottoken/ChatID\nslack://TokenA/TokenB/TokenC',
+        description: '通知服务 URL 列表（每行一个），留空使用服务器默认配置'
+      }
+    ],
+    docsUrl: 'https://github.com/caronc/apprise-api'
   }
 ];
 
