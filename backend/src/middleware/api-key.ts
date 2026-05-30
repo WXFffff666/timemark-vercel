@@ -1,4 +1,5 @@
 import { Context, Next } from 'hono';
+import { createHash } from 'crypto';
 import { query } from '../db/index.js';
 import { getUserById } from '../services/auth.service.js';
 import type { User } from '@timemark/shared';
@@ -15,11 +16,22 @@ export async function apiKeyMiddleware(c: Context<{ Variables: { user: User } }>
     return c.json({ success: false, error: 'Invalid API key format' }, 401);
   }
 
-  // Look up user by API key (stored in user_configs)
-  const result = await query(
-    'SELECT user_id FROM user_configs WHERE api_key = $1',
-    [apiKey]
+  // Hash the incoming API key with SHA-256 before DB lookup
+  const hashedKey = createHash('sha256').update(apiKey).digest('hex');
+
+  // Look up user by hashed API key (stored in user_configs)
+  let result = await query(
+    'SELECT user_id FROM user_configs WHERE api_key_hash = $1',
+    [hashedKey]
   );
+
+  // Backward compatibility: check legacy plaintext column
+  if (result.rows.length === 0) {
+    result = await query(
+      'SELECT user_id FROM user_configs WHERE api_key = $1',
+      [apiKey]
+    );
+  }
 
   if (result.rows.length === 0) {
     return c.json({ success: false, error: 'Invalid API key' }, 401);
