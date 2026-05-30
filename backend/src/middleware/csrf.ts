@@ -94,12 +94,6 @@ export function csrfProtection() {
         return next();
       }
       
-      // 检查 Content-Type 是否为 application/json（API 调用）
-      const contentType = c.req.header('Content-Type');
-      if (contentType && contentType.includes('application/json')) {
-        // JSON 请求通常来自 API 调用，允许通过
-        return next();
-      }
       
       // 没有认证信息，拒绝请求
       return c.json(
