@@ -165,6 +165,7 @@ CREATE TABLE IF NOT EXISTS event_trigger_logs (
   status TEXT NOT NULL,
   channels TEXT,
   error_message TEXT,
+  channel_results TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_event ON event_trigger_logs(event_id);

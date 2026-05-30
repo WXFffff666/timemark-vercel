@@ -1,3 +1,4 @@
+import { randomBytes, createHash } from 'crypto';
 import { query } from '../db/index.js';
 import { encrypt, decrypt } from '@timemark/shared/crypto';
 
@@ -24,9 +25,10 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
       encrypted_channel_webhooks,
       telegram_chat_id,
       reminder_emails,
-      alert_channels
+      alert_channels,
+      timezone
     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
      ON CONFLICT (user_id) DO UPDATE SET
        encrypted_resend_key = EXCLUDED.encrypted_resend_key,
        encrypted_github_token = EXCLUDED.encrypted_github_token,
@@ -44,7 +46,8 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
        encrypted_channel_webhooks = EXCLUDED.encrypted_channel_webhooks,
        telegram_chat_id = EXCLUDED.telegram_chat_id,
        reminder_emails = EXCLUDED.reminder_emails,
-       alert_channels = EXCLUDED.alert_channels`,
+       alert_channels = EXCLUDED.alert_channels,
+       timezone = EXCLUDED.timezone`,
     [
       userId,
       e(config.resend_api_key),
@@ -64,6 +67,7 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
       config.telegram_chat_id || null,
       config.reminder_emails ? JSON.stringify(config.reminder_emails) : null,
       config.alert_channels ? JSON.stringify(config.alert_channels) : null,
+      config.timezone || 'Asia/Shanghai',
     ]
   );
 }
@@ -103,6 +107,7 @@ export async function getUserConfig(userId: number): Promise<any> {
       if (!raw) return ['email'];
       try { return JSON.parse(raw); } catch { return ['email']; }
     })(),
+    timezone: r.timezone || 'Asia/Shanghai',
   };
 }
 
@@ -471,4 +476,34 @@ export async function deleteEventTemplate(userId: number, eventType: string): Pr
     [userId, eventType]
   );
   return (result.rowCount ?? 0) > 0;
+}
+
+// ============ API Key 管理 ============
+
+/**
+ * Generate a new API key for a user.
+ * Stores SHA-256 hash in DB, returns plaintext once for user to save.
+ */
+export async function generateApiKey(userId: number): Promise<string> {
+  const plaintext = `tm_${randomBytes(32).toString('hex')}`;
+  const hash = createHash('sha256').update(plaintext).digest('hex');
+
+  await query(
+    `INSERT INTO user_configs (user_id, api_key_hash)
+     VALUES ($1, $2)
+     ON CONFLICT (user_id) DO UPDATE SET api_key_hash = EXCLUDED.api_key_hash`,
+    [userId, hash]
+  );
+
+  return plaintext;
+}
+
+/**
+ * Revoke (delete) the API key for a user.
+ */
+export async function revokeApiKey(userId: number): Promise<void> {
+  await query(
+    `UPDATE user_configs SET api_key_hash = NULL, api_key = NULL WHERE user_id = $1`,
+    [userId]
+  );
 }

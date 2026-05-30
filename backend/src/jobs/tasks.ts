@@ -1,7 +1,7 @@
 import { query } from '../db/index.js';
 import { Lunar, Solar } from 'lunar-javascript';
 import { sendNotifications } from '../services/notifications/index.js';
-import { getReminderSettings } from '../services/config.service.js';
+import { getReminderSettings, getUserConfig } from '../services/config.service.js';
 
 /** Get today's date string (YYYY-MM-DD) in the given timezone, robust on Alpine Linux */
 function getTodayString(now: Date, timeZone: string): string {
@@ -36,10 +36,7 @@ function parseReminderDays(raw: any): number[] | null {
 export async function sendReminders() {
   console.log('[Task] Checking reminders...');
   
-  // 获取今天日期（使用北京时间，Intl.DateTimeFormat 在 Alpine Linux 上更可靠）
   const now = new Date();
-  const timeZone = 'Asia/Shanghai';
-  const today = getTodayString(now, timeZone);
   
   // 查询所有事件
   const allEvents = await query('SELECT * FROM events');
@@ -47,6 +44,15 @@ export async function sendReminders() {
   // 缓存每个用户的提醒设置（避免重复查询）
   const userReminderSettingsCache = new Map<number, number[]>();
   const userEnabledCache = new Map<number, boolean>();
+  const userTimezoneCache = new Map<number, string>();
+
+  async function getUserTimezone(userId: number): Promise<string> {
+    if (userTimezoneCache.has(userId)) return userTimezoneCache.get(userId)!;
+    const config = await getUserConfig(userId);
+    const tz = config?.timezone || 'Asia/Shanghai';
+    userTimezoneCache.set(userId, tz);
+    return tz;
+  }
   
   async function getDaysBeforeList(userId: number, eventReminderDaysBefore: any): Promise<number[]> {
     // 优先使用事件级别的 reminder_days_before
@@ -73,6 +79,10 @@ export async function sendReminders() {
       userEnabledCache.set(event.user_id, settings?.enabled !== false);
     }
     if (!userEnabledCache.get(event.user_id)) continue;
+
+    // Get per-user timezone and calculate today's date in that timezone
+    const timeZone = await getUserTimezone(event.user_id);
+    const today = getTodayString(now, timeZone);
 
     const calendarType = event.calendar_type;
     let eventTargetDate: Date | null = null;
@@ -143,12 +153,12 @@ export async function sendReminders() {
     if (eventTargetDate) {
       // Check if current time matches any of the event's reminder times
       const currentHour = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Shanghai',
+        timeZone,
         hour: '2-digit',
         hour12: false
       }).format(now);
       const currentMinute = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Shanghai',
+        timeZone,
         minute: '2-digit',
         hour12: false
       }).format(now);
@@ -199,6 +209,8 @@ export async function sendReminders() {
     const channels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
     if (channels.length > 0) {
       // Check if already sent today
+      const timeZone = await getUserTimezone(event.user_id);
+      const today = getTodayString(now, timeZone);
       const alreadySent = await query(
         `SELECT id FROM event_trigger_logs 
          WHERE event_id = $1 AND trigger_date = $2 AND status = 'success'
@@ -211,12 +223,20 @@ export async function sendReminders() {
       }
       try {
         // Relationship mapping is handled inside sendNotifications() per-recipient
-        await sendNotifications(event, event.user_id, channels);
-        console.log(`[Task] Sent notifications for event ${event.id}`);
+        const channelResults = await sendNotifications(event, event.user_id, channels);
+        console.log(`[Task] Sent notifications for event ${event.id}`, channelResults);
+        
+        // Determine overall status from per-channel results
+        const hasFailure = Object.values(channelResults).some(r => !r.success);
+        const allFailed = Object.values(channelResults).every(r => !r.success);
+        const status = allFailed && Object.keys(channelResults).length > 0 ? 'failed' : 'success';
+        const errorMessage = hasFailure
+          ? Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => `${ch}: ${r.error}`).join('; ')
+          : undefined;
         
         // 记录事件触发日志
         const triggerDate = 'targetDate' in event ? (event as any).targetDate : new Date(event.date);
-        await recordEventTrigger(event.id, event.user_id, 'scheduled', triggerDate);
+        await recordEventTrigger(event.id, event.user_id, 'scheduled', triggerDate, status, errorMessage, JSON.stringify(channelResults));
       } catch (error) {
         console.error(`[Task] Failed to send notifications for event ${event.id}:`, error);
         const triggerDate2 = 'targetDate' in event ? (event as any).targetDate : new Date(event.date);
@@ -233,14 +253,15 @@ async function recordEventTrigger(
   triggerType: string, 
   triggerDate: Date,
   status: string = 'success',
-  errorMessage?: string
+  errorMessage?: string,
+  channelResults?: string
 ) {
   try {
     await query(
       `INSERT INTO event_trigger_logs 
-       (event_id, user_id, trigger_type, trigger_date, status, error_message) 
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [eventId, userId, triggerType, triggerDate.toISOString().split('T')[0], status, errorMessage || null]
+       (event_id, user_id, trigger_type, trigger_date, status, error_message, channel_results) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [eventId, userId, triggerType, triggerDate.toISOString().split('T')[0], status, errorMessage || null, channelResults || null]
     );
   } catch (error) {
     console.error('[Task] Failed to record event trigger log:', error);

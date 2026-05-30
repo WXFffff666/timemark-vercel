@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
 import { getDb, waitForDb } from './index.js';
 
@@ -69,7 +70,7 @@ export async function runMigrations(): Promise<void> {
 }
 
 async function applyIncrementalMigrations(db: any, currentVersion: number): Promise<void> {
-  const migrations = [
+  const migrations: Array<{ version: number; name: string; sql: string; postMigrate?: (db: any) => void }> = [
     {
       version: 2,
       name: 'add_api_key_column',
@@ -123,6 +124,39 @@ async function applyIncrementalMigrations(db: any, currentVersion: number): Prom
       );
       CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);`
     },
+    {
+      version: 8,
+      name: 'add_timezone_column',
+      sql: `ALTER TABLE user_configs ADD COLUMN timezone TEXT DEFAULT 'Asia/Shanghai';`
+    },
+    {
+      version: 9,
+      name: 'hash_existing_api_keys',
+      sql: `SELECT 1;`,
+      postMigrate: (db: any) => {
+        // Hash existing plaintext API keys in-place (SHA-256)
+        const stmt = db.prepare('SELECT user_id, api_key FROM user_configs WHERE api_key IS NOT NULL');
+        const rows: Array<{ user_id: number; api_key: string }> = [];
+        while (stmt.step()) {
+          rows.push(stmt.getAsObject() as any);
+        }
+        stmt.free();
+        for (const row of rows) {
+          // Skip if already hashed (64 hex chars = SHA-256 hash)
+          if (row.api_key.length === 64 && /^[0-9a-f]+$/.test(row.api_key)) continue;
+          const hash = createHash('sha256').update(row.api_key).digest('hex');
+          db.run('UPDATE user_configs SET api_key = ? WHERE user_id = ?', [hash, row.user_id]);
+        }
+        if (rows.length > 0) {
+          console.log(`[DB] Hashed ${rows.length} existing API key(s)`);
+        }
+      },
+    },
+    {
+      version: 10,
+      name: 'add_channel_results_column',
+      sql: `ALTER TABLE event_trigger_logs ADD COLUMN channel_results TEXT;`
+    },
   ];
 
   for (const migration of migrations) {
@@ -130,6 +164,9 @@ async function applyIncrementalMigrations(db: any, currentVersion: number): Prom
       try {
         console.log(`[DB] Applying migration v${migration.version}: ${migration.name}`);
         db.exec(migration.sql);
+        if (migration.postMigrate) {
+          migration.postMigrate(db);
+        }
         db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [migration.version]);
         console.log(`[DB] Migration v${migration.version} applied successfully`);
       } catch (error) {
