@@ -9,6 +9,11 @@ import { api } from '@/lib/api';
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
 
+interface ChannelResult {
+  success: boolean;
+  error?: string;
+}
+
 interface TriggerLog {
   id: number;
   event_id: number;
@@ -18,6 +23,7 @@ interface TriggerLog {
   trigger_date: string;
   status: string;
   channels?: string;
+  channel_results?: string;
   error_message?: string;
   created_at: string;
 }
@@ -117,6 +123,16 @@ export default function TriggerLogs() {
     }
   };
 
+  const parseChannelResults = (resultsStr?: string): Record<string, ChannelResult> => {
+    if (!resultsStr) return {};
+    try {
+      const parsed = typeof resultsStr === 'string' ? JSON.parse(resultsStr) : resultsStr;
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
       <header className="sticky top-6 z-40 px-4 max-w-4xl mx-auto">
@@ -167,6 +183,7 @@ export default function TriggerLogs() {
               {logs.map((log) => {
                 const StatusIcon = getStatusIcon(log.status);
                 const channels = parseChannels(log.channels);
+                const channelResults = parseChannelResults(log.channel_results);
                 const isSuccess = log.status === 'success';
 
                 return (
@@ -190,12 +207,29 @@ export default function TriggerLogs() {
                               <Calendar size={14} /> {log.trigger_date}
                             </span>
                             <span>{getEventTypeLabel(log.event_type)}</span>
-                            {channels.length > 0 && (
+                            {channelResults ? (
+                              <span className="flex items-center gap-1.5 flex-wrap">
+                                <Bell size={14} />
+                                {Object.entries(channelResults).map(([ch, result]) => (
+                                  <span
+                                    key={ch}
+                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                      result.success
+                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                        : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                    }`}
+                                    title={result.error || ''}
+                                  >
+                                    {result.success ? '✓' : '✗'} {ch}
+                                  </span>
+                                ))}
+                              </span>
+                            ) : channels.length > 0 ? (
                               <span className="flex items-center gap-1.5">
                                 <Bell size={14} /> {channels.join(', ')}
                               </span>
-                            )}
-                            {!isSuccess && log.error_message && (
+                            ) : null}
+                            {!isSuccess && log.error_message && !channelResults && (
                               <span className="text-red-500 text-xs">{log.error_message}</span>
                             )}
                           </div>

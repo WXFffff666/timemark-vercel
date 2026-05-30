@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Edit2, Trash2, Calendar, Save, X, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,46 @@ export default function Templates() {
   const [showModal, setShowModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<EventTemplate | null>(null);
   const [formData, setFormData] = useState({ event_type: '', template_content: '' });
+  const [debouncedPreview, setDebouncedPreview] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Debounced preview update
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedPreview(previewTemplate(formData.template_content));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [formData.template_content]);
+
+  // Available template variables as clickable chips
+  const templateVariables = [
+    { key: '{{事件名}}', label: '事件名' },
+    { key: '{{日期}}', label: '日期' },
+    { key: '{{类型}}', label: '类型' },
+    { key: '{{被提醒人}}', label: '被提醒人' },
+    { key: '{{天数}}', label: '天数' },
+    { key: '{{祝福语}}', label: '祝福语' },
+    { key: '{{时间}}', label: '时间' },
+  ];
+
+  // Insert variable at cursor position in textarea
+  const insertVariable = useCallback((variable: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setFormData(prev => ({ ...prev, template_content: prev.template_content + variable }));
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const content = formData.template_content;
+    const newContent = content.substring(0, start) + variable + content.substring(end);
+    setFormData(prev => ({ ...prev, template_content: newContent }));
+    // Restore cursor position after insertion
+    setTimeout(() => {
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = start + variable.length;
+    }, 0);
+  }, [formData.template_content]);
 
   useEffect(() => {
     loadTemplates();
@@ -209,12 +249,31 @@ export default function Templates() {
                 模板内容
               </label>
               <textarea
+                ref={textareaRef}
                 placeholder="例如：妈妈的生日还有3天，记得准备礼物哦！"
                 value={formData.template_content}
                 onChange={(e) => setFormData({ ...formData, template_content: e.target.value })}
                 className="w-full h-32 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
               />
               
+              {/* 可点击变量标签 */}
+              <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">💡 点击插入变量（系统会自动替换）</p>
+                <div className="flex flex-wrap gap-2">
+                  {templateVariables.map((v) => (
+                    <button
+                      key={v.key}
+                      type="button"
+                      onClick={() => insertVariable(v.key)}
+                      className="px-2.5 py-1 text-xs rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-800/60 transition-colors cursor-pointer border border-primary-200 dark:border-primary-700"
+                    >
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">不写变量也行，直接写文字也可以！</p>
+              </div>
+
               {/* 实时预览 */}
               {formData.template_content && (
                 <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
@@ -223,23 +282,10 @@ export default function Templates() {
                     <span className="text-xs font-semibold text-green-600 dark:text-green-400">预览效果</span>
                   </div>
                   <p className="text-sm text-green-700 dark:text-green-300 whitespace-pre-wrap">
-                    {previewTemplate(formData.template_content)}
+                    {debouncedPreview}
                   </p>
                 </div>
               )}
-              
-              <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">💡 智能变量（可选，系统会自动替换）</p>
-                <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-500">
-                  <span><code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">{'{{事件名}}'}</code> → 妈妈生日</span>
-                  <span><code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">{'{{日期}}'}</code> → 2026-05-04</span>
-                  <span><code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">{'{{类型}}'}</code> → 生日</span>
-                  <span><code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">{'{{被提醒人}}'}</code> → 妈妈</span>
-                  <span><code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">{'{{天数}}'}</code> → 3</span>
-                  <span><code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">{'{{祝福语}}'}</code> → 生日快乐</span>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-2">不写变量也行，直接写文字也可以！</p>
-              </div>
             </div>
             <div className="flex gap-3 pt-4">
               <Button variant="secondary" className="flex-1 h-12 rounded-2xl font-bold" onClick={() => setShowModal(false)}>

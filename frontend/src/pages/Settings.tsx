@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock } from 'lucide-react';
+import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -9,6 +9,21 @@ import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/lib/api';
+
+const TIMEZONES = [
+  { value: 'Asia/Shanghai', label: '中国标准时间 (UTC+8)' },
+  { value: 'Asia/Tokyo', label: '日本标准时间 (UTC+9)' },
+  { value: 'Asia/Singapore', label: '新加坡时间 (UTC+8)' },
+  { value: 'Asia/Kolkata', label: '印度标准时间 (UTC+5:30)' },
+  { value: 'Europe/London', label: '格林威治时间 (UTC+0)' },
+  { value: 'Europe/Paris', label: '中欧时间 (UTC+1)' },
+  { value: 'Europe/Moscow', label: '莫斯科时间 (UTC+3)' },
+  { value: 'America/New_York', label: '美国东部时间 (UTC-5)' },
+  { value: 'America/Chicago', label: '美国中部时间 (UTC-6)' },
+  { value: 'America/Los_Angeles', label: '美国太平洋时间 (UTC-8)' },
+  { value: 'Australia/Sydney', label: '澳大利亚东部时间 (UTC+10)' },
+  { value: 'Pacific/Auckland', label: '新西兰时间 (UTC+12)' },
+];
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
@@ -41,6 +56,24 @@ export default function Settings() {
     confirmPassword: '',
   });
   
+  // Timezone setting
+  const [timezone, setTimezone] = useState('Asia/Shanghai');
+
+  useEffect(() => {
+    api.get<{ timezone?: string }>('/config').then((config) => {
+      if (config?.timezone) setTimezone(config.timezone);
+    }).catch(() => {});
+  }, []);
+
+  const handleTimezoneChange = async (value: string) => {
+    setTimezone(value);
+    try {
+      await api.post('/config', { timezone: value });
+    } catch (error) {
+      console.error('Failed to save timezone:', error);
+    }
+  };
+
   // Sound setting with localStorage persistence
   const [soundEnabled, setSoundEnabled] = useState(() => {
     return localStorage.getItem('timemark_sound_enabled') !== 'false';
@@ -221,6 +254,33 @@ export default function Settings() {
                   </div>
                 </div>
                 <Switch checked={soundEnabled} onCheckedChange={handleSoundToggle} />
+              </div>
+            </div>
+          </motion.section>
+
+          {/* 时区设置 */}
+          <motion.section variants={itemVariants}>
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">时区设置</h2>
+            <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10">
+              <div className="flex items-center justify-between p-4 rounded-[2rem]">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-teal-50 dark:bg-teal-900/30 text-teal-600 flex items-center justify-center shadow-inner border border-teal-100 dark:border-teal-800/50">
+                    <Globe size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">系统时区</h3>
+                    <p className="text-xs text-slate-500">用于事件提醒的时间计算</p>
+                  </div>
+                </div>
+                <select
+                  value={timezone}
+                  onChange={(e) => handleTimezoneChange(e.target.value)}
+                  className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </motion.section>

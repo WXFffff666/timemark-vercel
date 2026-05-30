@@ -92,6 +92,15 @@ export default function Channels() {
   const [saving, setSaving] = useState(false);
   const [testingConnection, setTestingConnection] = useState<number | null>(null);
 
+  // Connection status tracking
+  interface ConnectionTestResult {
+    status: 'connected' | 'error' | 'testing' | 'untested';
+    message?: string;
+    timestamp?: number;
+  }
+  const [connectionStatus, setConnectionStatus] = useState<Record<number, ConnectionTestResult>>({});
+  const [testingAll, setTestingAll] = useState(false);
+
   // QR code state for plugins
   const [qrCodeData, setQrCodeData] = useState<string>('');
   const [qrSessionId, setQrSessionId] = useState<string>('');
@@ -120,6 +129,59 @@ export default function Channels() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Test a single account and update status
+  const testAccountStatus = async (account: Account): Promise<ConnectionTestResult> => {
+    setConnectionStatus(prev => ({ ...prev, [account.id]: { status: 'testing' } }));
+    try {
+      const result = await api.post<{ success: boolean; message: string }>(
+        '/channels/test',
+        {
+          type: account.type,
+          configMethod: (account as any).configMethod || (account as any).config_method || 'webhook',
+          webhook: account.webhook,
+          token: account.token,
+          chatId: (account as any).chatId || (account as any).chat_id,
+          secret: (account as any).secret,
+          sessionData: (account as any).sessionData,
+        }
+      );
+      const status: ConnectionTestResult = result?.success
+        ? { status: 'connected', message: result.message, timestamp: Date.now() }
+        : { status: 'error', message: result?.message || '测试失败', timestamp: Date.now() };
+      setConnectionStatus(prev => ({ ...prev, [account.id]: status }));
+      return status;
+    } catch (error: any) {
+      const status: ConnectionTestResult = { status: 'error', message: error.message || '连接失败', timestamp: Date.now() };
+      setConnectionStatus(prev => ({ ...prev, [account.id]: status }));
+      return status;
+    }
+  };
+
+  // Test all non-plugin accounts sequentially
+  const testAllAccounts = async () => {
+    const testableAccounts = accounts.filter(a => {
+      const tpl = templates.find(t => t.id === a.type);
+      return tpl?.configMethod !== 'plugin' && a.is_active !== false;
+    });
+    setTestingAll(true);
+    for (const account of testableAccounts) {
+      await testAccountStatus(account);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    setTestingAll(false);
+  };
+
+
+
+  // Get status indicator for an account
+  const getStatusIndicator = (accountId: number) => {
+    const result = connectionStatus[accountId];
+    if (!result || result.status === 'untested') return { dot: '⚪', color: 'text-slate-400', label: '未测试' };
+    if (result.status === 'testing') return { dot: '🟡', color: 'text-amber-500', label: '测试中...' };
+    if (result.status === 'connected') return { dot: '🟢', color: 'text-green-500', label: '已连接' };
+    return { dot: '🔴', color: 'text-red-500', label: '连接失败' };
   };
 
   const getMethodIcon = (method: ConfigMethod) => {
@@ -309,30 +371,12 @@ export default function Channels() {
 
   const testConnection = async (account: Account) => {
     setTestingConnection(account.id);
-    try {
-      const result = await api.post<{ success: boolean; message: string }>(
-        '/channels/test',
-        {
-          type: account.type,
-          configMethod: (account as any).configMethod || (account as any).config_method || 'webhook',
-          webhook: account.webhook,
-          token: account.token,
-          chatId: (account as any).chatId || (account as any).chat_id,
-          secret: (account as any).secret,
-          sessionData: (account as any).sessionData,
-        }
-      );
-      
-      if (result?.success) {
-        alert(`✅ ${result.message}`);
-      } else {
-        alert(`❌ ${result?.message || '测试失败'}`);
-      }
-    } catch (error: any) {
-      console.error('Failed to test connection:', error);
-      alert(`❌ 测试失败: ${error.message || '未知错误'}`);
-    } finally {
-      setTestingConnection(null);
+    const result = await testAccountStatus(account);
+    setTestingConnection(null);
+    if (result.status === 'connected') {
+      alert(`✅ ${result.message || '连接成功'}`);
+    } else {
+      alert(`❌ ${result.message || '测试失败'}`);
     }
   };
 
@@ -376,10 +420,7 @@ export default function Channels() {
     } catch (error: any) {
       console.error('[Channels] Failed to start auth:', error);
       setAuthStatus('error');
-      // For demo purposes, show a mock QR code if backend fails
-      if (!qrCodeData) {
-        setQrCodeData('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
-      }
+      setQrCodeData('');
     }
   };
 
@@ -387,9 +428,14 @@ export default function Channels() {
   const checkAuthStatus = async (type: string, sessionId: string) => {
     const maxAttempts = 120; // 2 minutes
     let attempts = 0;
+    let consecutiveErrors = 0;
 
     const poll = async () => {
-      if (attempts >= maxAttempts || authStatus === 'authenticated') {
+      if (attempts >= maxAttempts) {
+        setAuthStatus('error');
+        return;
+      }
+      if (authStatus === 'authenticated') {
         return;
       }
 
@@ -399,6 +445,8 @@ export default function Channels() {
           `/channels/plugin/${type}/check-auth`,
           { sessionData: pendingSessionData }
         );
+
+        consecutiveErrors = 0; // Reset on success
 
         if (result?.authenticated) {
           setAuthStatus('authenticated');
@@ -412,7 +460,12 @@ export default function Channels() {
         }
       } catch (error) {
         console.error('Error checking auth status:', error);
+        consecutiveErrors++;
         attempts++;
+        if (consecutiveErrors >= 3) {
+          setAuthStatus('error');
+          return;
+        }
         setTimeout(poll, 2000);
       }
     };
@@ -440,13 +493,26 @@ export default function Channels() {
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">配置您的提醒接收方式</p>
             </div>
           </div>
-          <Button 
-            variant="vision" 
-            className="shadow-md shadow-primary-500/20 flex rounded-full px-5" 
-            onClick={openTemplateModal}
-          >
-            <Plus size={16} className="mr-1.5"/> 添加渠道
-          </Button>
+          <div className="flex items-center gap-2">
+            {accounts.length > 0 && (
+              <Button
+                variant="secondary"
+                className="rounded-full px-4"
+                onClick={testAllAccounts}
+                disabled={testingAll}
+              >
+                {testingAll ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <CheckCircle2 size={14} className="mr-1.5" />}
+                {testingAll ? '测试中...' : '全部测试'}
+              </Button>
+            )}
+            <Button 
+              variant="vision" 
+              className="shadow-md shadow-primary-500/20 flex rounded-full px-5" 
+              onClick={openTemplateModal}
+            >
+              <Plus size={16} className="mr-1.5"/> 添加渠道
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -485,12 +551,20 @@ export default function Channels() {
                               <div>
                                 <h3 className="font-semibold text-slate-900 dark:text-white">{account.name}</h3>
                                 <div className="flex items-center gap-2 mt-1">
+                                  <span className={`text-xs ${getStatusIndicator(account.id).color}`} title={connectionStatus[account.id]?.message || getStatusIndicator(account.id).label}>
+                                    {getStatusIndicator(account.id).dot}
+                                  </span>
                                   <Badge variant="success" className="gap-1 text-xs">
                                     <CheckCircle2 size={12} /> 已连接
                                   </Badge>
                                   {template && (
                                     <span className={`text-xs px-2 py-0.5 rounded-full ${getMethodColor(template.configMethod)}`}>
                                       {getMethodLabel(template.configMethod)}
+                                    </span>
+                                  )}
+                                  {connectionStatus[account.id]?.timestamp && (
+                                    <span className="text-[10px] text-slate-400" title={connectionStatus[account.id]?.message}>
+                                      {new Date(connectionStatus[account.id].timestamp!).toLocaleTimeString()}
                                     </span>
                                   )}
                                 </div>
@@ -946,7 +1020,18 @@ export default function Channels() {
           
           <div className="text-center py-8">
             <div className="w-48 h-48 mx-auto mb-6 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center overflow-hidden">
-              {qrCodeData ? (
+              {authStatus === 'error' ? (
+                <div className="text-center p-4">
+                  <AlertCircle className="w-12 h-12 mx-auto mb-2 text-red-400" />
+                  <p className="text-sm text-red-500">加载失败</p>
+                  <button
+                    className="mt-2 text-xs text-primary-500 hover:text-primary-600 underline"
+                    onClick={() => selectedTemplate && startPluginAuth(selectedTemplate)}
+                  >
+                    重试
+                  </button>
+                </div>
+              ) : qrCodeData ? (
                 <img src={qrCodeData} alt="QR Code" className="w-full h-full object-contain" />
               ) : (
                 <div className="text-center p-4">
@@ -956,10 +1041,10 @@ export default function Channels() {
               )}
             </div>
             <p className="text-slate-600 dark:text-slate-300 mb-2">
-              请使用 {selectedTemplate?.name} 扫描二维码
+              {authStatus === 'error' ? '二维码加载失败' : `请使用 ${selectedTemplate?.name} 扫描二维码`}
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              {authStatus === 'authenticating' ? '正在验证...' : authStatus === 'authenticated' ? '授权成功！' : '扫码后将自动完成授权并启用此渠道'}
+              {authStatus === 'authenticating' ? '等待扫码中...' : authStatus === 'authenticated' ? '授权成功！' : authStatus === 'error' ? '请检查后端服务状态后重试' : '扫码后将自动完成授权并启用此渠道'}
             </p>
           </div>
 
@@ -983,9 +1068,17 @@ export default function Channels() {
 
           {authStatus === 'error' && (
             <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 mb-4">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-red-500" />
-                <span className="text-sm text-red-700 dark:text-red-300">认证启动失败，请检查后端服务是否正常运行</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-red-500" />
+                  <span className="text-sm text-red-700 dark:text-red-300">认证失败，请检查后端服务或网络连接</span>
+                </div>
+                <button
+                  className="text-xs text-red-600 dark:text-red-400 hover:underline font-medium"
+                  onClick={() => selectedTemplate && startPluginAuth(selectedTemplate)}
+                >
+                  重试
+                </button>
               </div>
             </div>
           )}
