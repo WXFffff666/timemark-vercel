@@ -1,6 +1,9 @@
 import { Cron } from 'croner';
 import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions } from '../jobs/tasks.js';
 import { query } from '../db/index.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('scheduler');
 
 let jobs: Cron[] = [];
 
@@ -31,7 +34,7 @@ export function getSchedulerStatus() {
 
 async function runJob(name: string, fn: () => Promise<void>): Promise<void> {
   try {
-    console.log(`[Scheduler] Running ${name}...`);
+    log.info({ job: name }, 'Running job');
     await fn();
     schedulerState.lastRun = new Date();
     schedulerState.lastResult = 'success';
@@ -42,7 +45,7 @@ async function runJob(name: string, fn: () => Promise<void>): Promise<void> {
     schedulerState.lastResult = 'error';
     schedulerState.consecutiveFailures++;
     schedulerState.totalRuns++;
-    console.error(`[Scheduler] ${name} failed:`, error);
+    log.error({ job: name, err: error }, 'Job failed');
   }
 }
 
@@ -74,11 +77,11 @@ export async function startScheduler(): Promise<void> {
   jobs.push(new Cron('30 * * * *', { timezone: 'Asia/Shanghai', name: 'plugin-session-cleanup' }, async () => {
     await runJob('plugin-session-cleanup', async () => {
       const result = await query("DELETE FROM plugin_sessions WHERE expires_at < datetime('now')");
-      console.log(`[Scheduler] Cleaned up ${result.rowCount ?? 0} expired plugin sessions`);
+      log.info({ count: result.rowCount ?? 0 }, 'Cleaned up expired plugin sessions');
     });
   }));
 
-  console.log(`[Scheduler] Started with ${jobs.length} recurring jobs (Asia/Shanghai timezone)`);
+  log.info({ jobCount: jobs.length, timezone: 'Asia/Shanghai' }, 'Scheduler started');
 }
 
 export async function stopScheduler(): Promise<void> {
@@ -87,5 +90,5 @@ export async function stopScheduler(): Promise<void> {
   }
   jobs = [];
   schedulerState.startedAt = null;
-  console.log('[Scheduler] Stopped');
+  log.info('Scheduler stopped');
 }

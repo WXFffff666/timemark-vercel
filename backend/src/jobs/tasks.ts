@@ -1,6 +1,9 @@
 import { query } from '../db/index.js';
 import { Lunar, Solar } from 'lunar-javascript';
 import { sendNotifications } from '../services/notifications/index.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('tasks');
 // Batch query replaces per-user getReminderSettings/getUserConfig calls
 
 /** Get today's date string (YYYY-MM-DD) in the given timezone, robust on Alpine Linux */
@@ -34,7 +37,7 @@ function parseReminderDays(raw: any): number[] | null {
 }
 
 export async function sendReminders() {
-  console.log('[Task] Checking reminders...');
+  log.info('Checking reminders...');
   
   const now = new Date();
   
@@ -111,7 +114,7 @@ export async function sendReminders() {
         }
       }
     } catch (e) {
-      console.error(`[Task] Failed to parse reminder_config for event ${event.id}:`, e);
+      log.error({ eventId: event.id, err: e }, 'Failed to parse reminder_config');
     }
     
     // 回退到 reminder_days_before 字段
@@ -156,7 +159,7 @@ export async function sendReminders() {
           }
         }
       } catch (error) {
-        console.error(`[Task] Failed to parse lunar date for event ${event.id}:`, error);
+        log.error({ eventId: event.id, err: error }, 'Failed to parse lunar date');
         // 记录农历转换失败到事件触发日志
         await recordEventTrigger(event.id, event.user_id, 'scheduled', new Date(), 'failed', `Lunar date conversion failed: ${String(error)}`);
       }
@@ -185,7 +188,7 @@ export async function sendReminders() {
           reminderTimes = config.reminderTimes || [];
         }
       } catch (e) {
-        console.error(`[Task] failed to parse reminder_config for event ${event.id}:`, e);
+        log.error({ eventId: event.id, err: e }, 'Failed to parse reminder_config');
       }
       
       // Fallback to legacy reminder_time field
@@ -195,7 +198,7 @@ export async function sendReminders() {
       }
       
       // Debug logging
-      console.log(`[Task] Event ${event.id} (${event.name}): date=${event.date}, today=${today}, diff=${diffDays(today, event.date)}, allDays=[${allDays}], reminderTimes=[${reminderTimes}], currentTime=${currentTime}`);
+      log.debug({ eventId: event.id, name: event.name, date: event.date, today, diff: diffDays(today, event.date), allDays, reminderTimes, currentTime }, 'Event check');
       
       // Check if current time matches any reminder time (within 15-minute window)
       const shouldRemind = reminderTimes.some(time => {
@@ -203,7 +206,7 @@ export async function sendReminders() {
         const targetTotalMinutes = targetHour * 60 + targetMinute;
         const currentTotalMinutes = parseInt(currentHour) * 60 + parseInt(currentMinute);
         const diff = Math.abs(currentTotalMinutes - targetTotalMinutes);
-        console.log(`[Task] Checking time ${time}: target=${targetTotalMinutes}, current=${currentTotalMinutes}, diff=${diff}, match=${diff < 15}`);
+        log.debug({ time, targetTotalMinutes, currentTotalMinutes, diff, match: diff < 15 }, 'Checking time');
         return diff < 15;
       });
       
@@ -214,7 +217,7 @@ export async function sendReminders() {
     }
   }
   
-  console.log(`[Task] Found ${eventsToRemind.length} events to remind`);
+  log.info({ count: eventsToRemind.length }, 'Events to remind');
   
   for (const event of eventsToRemind) {
     const rawChannels = event.notification_channels;
@@ -230,13 +233,13 @@ export async function sendReminders() {
         [event.id, today]
       );
       if (alreadySent.rows.length > 0) {
-        console.log(`[Task] Event ${event.id} already reminded today, skipping`);
+        log.debug({ eventId: event.id }, 'Already reminded today, skipping');
         continue;
       }
       try {
         // Relationship mapping is handled inside sendNotifications() per-recipient
         const channelResults = await sendNotifications(event, event.user_id, channels);
-        console.log(`[Task] Sent notifications for event ${event.id}`, channelResults);
+        log.info({ eventId: event.id, channelResults }, 'Sent notifications');
         
         // Determine overall status from per-channel results
         const hasFailure = Object.values(channelResults).some(r => !r.success);
@@ -258,7 +261,7 @@ export async function sendReminders() {
         const triggerDate = 'targetDate' in event ? (event as any).targetDate : new Date(event.date);
         await recordEventTrigger(event.id, event.user_id, 'scheduled', triggerDate, status, errorMessage, JSON.stringify(channelResults), errorDetails);
       } catch (error) {
-        console.error(`[Task] Failed to send notifications for event ${event.id}:`, error);
+        log.error({ eventId: event.id, err: error }, 'Failed to send notifications');
         const triggerDate2 = 'targetDate' in event ? (event as any).targetDate : new Date(event.date);
         await recordEventTrigger(event.id, event.user_id, 'scheduled', triggerDate2, 'failed', String(error));
       }
@@ -291,40 +294,38 @@ async function recordEventTrigger(
       ]
     );
   } catch (error) {
-    console.error('[Task] Failed to record event trigger log:', error);
+    log.error({ err: error }, 'Failed to record event trigger log');
   }
 }
 
 export async function githubBackup() {
-  console.log('[Task] Backing up email logs...');
+  log.info('Backing up email logs...');
   const result = await query('SELECT COUNT(*) as count FROM email_logs');
-  console.log(`[Task] Backed up ${result.rows[0].count} email logs`);
+  log.info({ count: result.rows[0].count }, 'Backed up email logs');
 }
 
 export async function archiveLoginHistory() {
-  console.log('[Task] Archiving login history...');
+  log.info('Archiving login history...');
   const result = await query('SELECT COUNT(*) as count FROM login_attempts');
-  console.log(`[Task] Archived ${result.rows[0].count} login attempts`);
+  log.info({ count: result.rows[0].count }, 'Archived login attempts');
 }
 
 export async function cleanupSessions() {
-  console.log('[Task] Cleaning up expired sessions...');
+  log.info('Cleaning up expired sessions...');
   const result = await query("DELETE FROM sessions WHERE expires_at < datetime('now')");
-  console.log(`[Task] Cleaned up ${result.rowCount ?? 0} expired sessions`);
+  log.info({ count: result.rowCount ?? 0 }, 'Cleaned up expired sessions');
   
   // 清理30天前的登录日志
-  console.log('[Task] Cleaning up old login logs...');
   const loginLogsResult = await query(
     "DELETE FROM login_logs WHERE login_time < datetime('now', '-30 days')"
   );
-  console.log(`[Task] Cleaned up ${loginLogsResult.rowCount ?? 0} old login logs`);
+  log.info({ count: loginLogsResult.rowCount ?? 0 }, 'Cleaned up old login logs');
   
   // 清理30天前的事件触发日志
-  console.log('[Task] Cleaning up old event trigger logs...');
   const triggerResult = await query(
     "DELETE FROM event_trigger_logs WHERE created_at < datetime('now', '-30 days')"
   );
-  console.log(`[Task] Cleaned up ${triggerResult.rowCount ?? 0} old event trigger logs`);
+  log.info({ count: triggerResult.rowCount ?? 0 }, 'Cleaned up old event trigger logs');
 }
 
 function addDays(dateStr: string, days: number): string {
