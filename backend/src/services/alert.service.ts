@@ -1,5 +1,5 @@
 import { sendSecurityAlertEmail } from './notifications/email.service.js';
-import { getUserConfig } from './config.service.js';
+import { getUserConfig, getNotificationAccounts } from './config.service.js';
 import { sendNotifications } from './notifications/index.js';
 
 export type AlertType = 'login_failure' | 'new_device' | 'password_change';
@@ -96,80 +96,61 @@ function buildAlertContent(params: {
 }
 
 async function sendAlertToChannels(userId: number, channels: string[], alertContent: any): Promise<void> {
-  const userConfig = await getUserConfig(userId);
-  if (!userConfig) return;
+  const accounts = await getNotificationAccounts(userId);
+  if (!accounts || accounts.length === 0) return;
 
-  await Promise.allSettled(channels.map(async (ch) => {
-    if (ch === 'email') return;
+  // Filter accounts by type matching the channels parameter, only active ones
+  const matchingAccounts = accounts.filter(a => a.is_active && channels.includes(a.type));
+  if (matchingAccounts.length === 0) return;
 
+  await Promise.allSettled(matchingAccounts.map(async (account) => {
     try {
-      let config: any = null;
-
-      switch (ch) {
-        case 'feishu':
-          if (userConfig.feishu_webhook) config = { webhook: userConfig.feishu_webhook };
+      switch (account.type) {
+        case 'feishu': {
+          const { sendFeishuNotification } = await import('./notifications/feishu.service.js');
+          if (account.webhook) await sendFeishuNotification(alertContent, account.webhook);
           break;
-        case 'wecom':
-          if (userConfig.wecom_webhook) config = { webhook: userConfig.wecom_webhook };
+        }
+        case 'wecom': {
+          const { sendWeComNotification } = await import('./notifications/wecom.service.js');
+          if (account.webhook) await sendWeComNotification(alertContent, account.webhook);
           break;
-        case 'dingtalk':
-          if (userConfig.dingtalk_webhook) {
-            config = { webhook: userConfig.dingtalk_webhook };
-            if (userConfig.dingtalk_secret) config.secret = userConfig.dingtalk_secret;
-          }
+        }
+        case 'dingtalk': {
+          const { sendDingTalkNotification } = await import('./notifications/dingtalk.service.js');
+          if (account.webhook && account.secret) await sendDingTalkNotification(alertContent, account.webhook, account.secret);
           break;
-        case 'telegram':
-          if (userConfig.telegram_bot_token && userConfig.telegram_chat_id) {
-            config = { token: userConfig.telegram_bot_token, chat_id: userConfig.telegram_chat_id };
-          }
+        }
+        case 'telegram': {
+          const { sendTelegramNotification } = await import('./notifications/telegram.service.js');
+          if (account.token && account.chat_id) await sendTelegramNotification(alertContent, account.token, account.chat_id);
           break;
-        case 'discord':
-          if (userConfig.discord_webhook) config = { webhook: userConfig.discord_webhook };
+        }
+        case 'discord': {
+          const { sendDiscordNotification } = await import('./notifications/discord.service.js');
+          if (account.webhook) await sendDiscordNotification(alertContent, account.webhook);
           break;
-        case 'slack':
-          if (userConfig.slack_webhook) config = { webhook: userConfig.slack_webhook };
+        }
+        case 'slack': {
+          const { sendSlackNotification } = await import('./notifications/slack.service.js');
+          if (account.webhook) await sendSlackNotification(alertContent, account.webhook);
           break;
-        case 'wechat':
-          if (userConfig.wxpusher_app_token && userConfig.wxpusher_uid) {
-            config = { token: userConfig.wxpusher_app_token, chat_id: userConfig.wxpusher_uid };
-          }
+        }
+        case 'wechat': {
+          const { sendWxPusherNotification } = await import('./notifications/wxpusher.service.js');
+          if (account.token && account.chat_id) await sendWxPusherNotification(alertContent, account.token, account.chat_id);
           break;
-        case 'qq':
-          if (userConfig.qmsg_key) {
-            config = { token: userConfig.qmsg_key, chat_id: userConfig.qmsg_qq };
-          }
+        }
+        case 'qq': {
+          const { sendQmsgNotification } = await import('./notifications/qmsg.service.js');
+          if (account.token) await sendQmsgNotification(alertContent, account.token, account.chat_id || undefined);
           break;
+        }
       }
 
-      if (!config) return;
-
-      const { sendFeishuNotification } = await import('./notifications/feishu.service.js');
-      const { sendWeComNotification } = await import('./notifications/wecom.service.js');
-      const { sendDingTalkNotification } = await import('./notifications/dingtalk.service.js');
-      const { sendTelegramNotification } = await import('./notifications/telegram.service.js');
-      const { sendDiscordNotification } = await import('./notifications/discord.service.js');
-      const { sendSlackNotification } = await import('./notifications/slack.service.js');
-      const { sendWxPusherNotification } = await import('./notifications/wxpusher.service.js');
-      const { sendQmsgNotification } = await import('./notifications/qmsg.service.js');
-
-      if (ch === 'feishu' && config.webhook) await sendFeishuNotification(alertContent, config.webhook);
-      else if (ch === 'wecom' && config.webhook) await sendWeComNotification(alertContent, config.webhook);
-      else if (ch === 'dingtalk' && config.webhook && config.secret)
-        await sendDingTalkNotification(alertContent, config.webhook, config.secret);
-      else if (ch === 'telegram' && config.token && config.chat_id)
-        await sendTelegramNotification(alertContent, config.token, config.chat_id);
-      else if (ch === 'discord' && config.webhook)
-        await sendDiscordNotification(alertContent, config.webhook);
-      else if (ch === 'slack' && config.webhook)
-        await sendSlackNotification(alertContent, config.webhook);
-      else if (ch === 'wechat' && config.token && config.chat_id)
-        await sendWxPusherNotification(alertContent, config.token, config.chat_id);
-      else if (ch === 'qq' && config.token)
-        await sendQmsgNotification(alertContent, config.token, config.chat_id);
-
-      console.log(`[Security Alert] ${ch} notification sent`);
+      console.log(`[Security Alert] ${account.type} notification sent via account "${account.name}"`);
     } catch (e) {
-      console.error(`[Security Alert] Failed to send to ${ch}:`, e);
+      console.error(`[Security Alert] Failed to send to ${account.type} (${account.name}):`, e);
     }
   }));
 }

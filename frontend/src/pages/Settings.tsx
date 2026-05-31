@@ -56,12 +56,29 @@ export default function Settings() {
     confirmPassword: '',
   });
   
+  // Alert channel states
+  const [alertAccounts, setAlertAccounts] = useState<any[]>([]);
+  const [selectedAlertChannels, setSelectedAlertChannels] = useState<string[]>([]);
+  const [alertSaving, setAlertSaving] = useState(false);
+
   // Timezone setting
   const [timezone, setTimezone] = useState('Asia/Shanghai');
 
   useEffect(() => {
     api.get<{ timezone?: string }>('/config').then((config) => {
       if (config?.timezone) setTimezone(config.timezone);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    api.get('/config/accounts').then((accounts: any) => {
+      setAlertAccounts(accounts || []);
+    }).catch(() => {});
+    api.get('/config').then((config: any) => {
+      if (config?.alert_channels) {
+        const channels = typeof config.alert_channels === 'string' ? JSON.parse(config.alert_channels) : config.alert_channels;
+        setSelectedAlertChannels(channels || []);
+      }
     }).catch(() => {});
   }, []);
 
@@ -82,6 +99,16 @@ export default function Settings() {
   const handleSoundToggle = (checked: boolean) => {
     setSoundEnabled(checked);
     localStorage.setItem('timemark_sound_enabled', String(checked));
+  };
+
+  const toggleAlertChannel = (type: string) => {
+    setSelectedAlertChannels(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
+  };
+
+  const saveAlertChannels = async () => {
+    setAlertSaving(true);
+    try { await api.post('/config', { alert_channels: selectedAlertChannels }); } catch (e) { console.error(e); }
+    setAlertSaving(false);
   };
 
   const handleSaveProfile = async () => {
@@ -360,6 +387,32 @@ export default function Settings() {
                 </div>
                 <ChevronRight className="text-slate-400" />
               </div>
+            </div>
+          </motion.section>
+
+          {/* 安全告警渠道 */}
+          <motion.section variants={itemVariants}>
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider flex items-center gap-2">
+              <Shield className="w-4 h-4" /> 安全告警渠道
+            </h2>
+            <div className="glass-panel rounded-[2.5rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
+              <p className="text-sm text-slate-500 mb-4">选择接收安全告警的通知渠道（登录失败、账户锁定等）</p>
+              {alertAccounts.length === 0 ? (
+                <p className="text-sm text-slate-400">请先<a href="/channels" className="text-indigo-500 underline ml-1">配置通知渠道</a></p>
+              ) : (
+                <div className="space-y-3">
+                  {alertAccounts.filter((a: any) => a.is_active).map((account: any) => (
+                    <label key={account.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
+                      <input type="checkbox" checked={selectedAlertChannels.includes(account.type)} onChange={() => toggleAlertChannel(account.type)} className="w-4 h-4 rounded border-slate-300" />
+                      <span className="text-sm font-medium">{account.name}</span>
+                      <span className="text-xs text-slate-400">({account.type})</span>
+                    </label>
+                  ))}
+                  <button onClick={saveAlertChannels} disabled={alertSaving} className="mt-4 px-4 py-2 bg-indigo-500 text-white rounded-xl text-sm hover:bg-indigo-600 disabled:opacity-50">
+                    {alertSaving ? '保存中...' : '保存告警渠道'}
+                  </button>
+                </div>
+              )}
             </div>
           </motion.section>
 
