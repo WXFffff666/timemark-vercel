@@ -114,7 +114,7 @@ channels.post('/plugin/:type/start-auth', async (c) => {
         result = await startQQAuth(parsed.data.qqNumber);
         break;
       case 'signal':
-        result = await startSignalAuth(parsed.data.phoneNumber);
+        result = await startSignalAuth(parsed.data.phoneNumber || '');
         break;
       case 'zalo':
         result = await startZaloAuth(parsed.data.credentials);

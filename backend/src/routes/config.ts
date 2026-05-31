@@ -215,7 +215,7 @@ config.post('/reminders', async (c) => {
   
   await saveReminderSettings(Number(user.id), {
     enabled: parsed.data.enabled,
-    dailyTime: parsed.data.dailyTime,
+    dailyTime: parsed.data.dailyTime ?? undefined,
     daysBeforeList: parsed.data.daysBeforeList,
     emailAddresses: parsed.data.emailAddresses,
   });

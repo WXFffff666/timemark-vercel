@@ -101,6 +101,122 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
     variables: ['event_name', 'days_until', 'blessing'],
     description: '适合家庭聚会的节日提醒',
   },
+  // 会议模板
+  {
+    id: 'meeting',
+    name: '会议提醒',
+    content: '📋 {{event_name}} 还有 {{days_until}} 天\n⏰ 请提前准备会议材料',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于会议、面试等',
+  },
+  // 截止日期模板
+  {
+    id: 'deadline',
+    name: '截止日期提醒',
+    content: '⏰ {{event_name}} 还有 {{days_until}} 天截止！请尽快完成',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于项目截止、报名截止等',
+  },
+  // 旅行模板
+  {
+    id: 'travel',
+    name: '旅行提醒',
+    content: '✈️ {{event_name}} 还有 {{days_until}} 天\n🧳 记得准备行李和证件',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于旅行、出差等',
+  },
+  // 毕业模板
+  {
+    id: 'graduation',
+    name: '毕业提醒',
+    content: '🎓 {{event_name}} 还有 {{days_until}} 天！{{blessing}}',
+    isPreset: true,
+    variables: ['event_name', 'days_until', 'blessing'],
+    description: '适用于毕业典礼等',
+  },
+  // 婚礼模板
+  {
+    id: 'wedding',
+    name: '婚礼提醒',
+    content: '💒 {{event_name}} 还有 {{days_until}} 天！{{blessing}}',
+    isPreset: true,
+    variables: ['event_name', 'days_until', 'blessing'],
+    description: '适用于婚礼、订婚等',
+  },
+  // 医疗模板
+  {
+    id: 'medical',
+    name: '医疗提醒',
+    content: '🏥 {{event_name}} 还有 {{days_until}} 天\n📋 请带好病历和医保卡',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于体检、复诊、手术等',
+  },
+  // 会议模板
+  {
+    id: 'meeting',
+    name: '会议提醒',
+    content: '📋 {{event_name}} 还有 {{days_until}} 天\n⏰ 请提前准备会议材料',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于会议、面试等',
+  },
+  // 截止日期模板
+  {
+    id: 'deadline',
+    name: '截止日期提醒',
+    content: '⏰ {{event_name}} 还有 {{days_until}} 天截止！\n📌 请尽快完成',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于项目截止、报名截止等',
+  },
+  {
+    id: 'deadline_urgent',
+    name: '截止日期紧急',
+    content: '🚨 {{event_name}} 仅剩 {{days_until}} 天！请立即处理！',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '紧急截止日期提醒',
+  },
+  // 旅行模板
+  {
+    id: 'travel',
+    name: '旅行提醒',
+    content: '✈️ {{event_name}} 还有 {{days_until}} 天\n🧳 记得提前准备行李和证件',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于旅行、出差等',
+  },
+  // 毕业模板
+  {
+    id: 'graduation',
+    name: '毕业提醒',
+    content: '🎓 {{event_name}} 还有 {{days_until}} 天！\n🎉 {{blessing}}',
+    isPreset: true,
+    variables: ['event_name', 'days_until', 'blessing'],
+    description: '适用于毕业典礼等',
+  },
+  // 婚礼模板
+  {
+    id: 'wedding',
+    name: '婚礼提醒',
+    content: '💒 {{event_name}} 还有 {{days_until}} 天！\n💍 {{blessing}}',
+    isPreset: true,
+    variables: ['event_name', 'days_until', 'blessing'],
+    description: '适用于婚礼、订婚等',
+  },
+  // 医疗模板
+  {
+    id: 'medical',
+    name: '医疗提醒',
+    content: '🏥 {{event_name}} 还有 {{days_until}} 天\n📋 请带好病历和医保卡',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于体检、复诊、手术等',
+  },
   // 通用模板
   {
     id: 'generic',
@@ -126,12 +242,12 @@ export const EVENT_TYPE_TEMPLATES: Record<string, string[]> = {
   exam: ['exam', 'exam_urgent', 'generic', 'detailed'],
   anniversary: ['anniversary', 'anniversary_simple', 'generic', 'detailed'],
   holiday: ['holiday', 'holiday_family', 'generic', 'detailed'],
-  meeting: ['generic', 'detailed'],
-  deadline: ['generic', 'detailed'],
-  travel: ['generic', 'detailed'],
-  graduation: ['generic', 'detailed'],
-  wedding: ['anniversary', 'anniversary_simple', 'generic', 'detailed'],
-  medical: ['generic', 'detailed'],
+  meeting: ['meeting', 'generic', 'detailed'],
+  deadline: ['deadline', 'deadline_urgent', 'generic', 'detailed'],
+  travel: ['travel', 'generic', 'detailed'],
+  graduation: ['graduation', 'generic', 'detailed'],
+  wedding: ['wedding', 'anniversary', 'generic', 'detailed'],
+  medical: ['medical', 'generic', 'detailed'],
   other: ['generic', 'detailed'],
 };
 

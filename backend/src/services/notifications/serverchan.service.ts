@@ -17,7 +17,13 @@ export async function sendServerChanNotification(event: any, sendKey: string): P
     title = `📅 ${event.name}`;
     desp = `📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
   }
-  await axios.post(`https://sctapi.ftqq.com/${sendKey}.send`, {
+  // ServerChan3 新版 key (sctp开头) 使用 ft07.com 域名
+  const matchResult = sendKey.match(/^sctp(\d+)t/i);
+  const url = matchResult && matchResult[1]
+    ? `https://${matchResult[1]}.push.ft07.com/send/${sendKey}.send`
+    : `https://sctapi.ftqq.com/${sendKey}.send`;
+
+  await axios.post(url, {
     title,
     desp,
   }, { timeout: 15000 });
