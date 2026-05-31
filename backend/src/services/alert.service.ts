@@ -146,6 +146,24 @@ async function sendAlertToChannels(userId: number, channels: string[], alertCont
           if (account.token) await sendQmsgNotification(alertContent, account.token, account.chat_id || undefined);
           break;
         }
+        case 'resend': {
+          const { sendEmailNotification } = await import('./notifications/email.service.js');
+          if (account.token && account.chat_id) {
+            await sendEmailNotification(alertContent, account.token, account.webhook || 'onboarding@resend.dev', account.chat_id);
+          }
+          break;
+        }
+        case 'smtp': {
+          const { sendSmtpNotification } = await import('./notifications/smtp.service.js');
+          if (account.webhook && account.token && account.chat_id) {
+            const smtpHost = account.webhook;
+            const smtpPort = parseInt(account.secret || '587', 10);
+            const password = account.token;
+            const fromEmail = account.chat_id;
+            await sendSmtpNotification(alertContent, smtpHost, smtpPort, password, fromEmail, fromEmail);
+          }
+          break;
+        }
       }
 
       console.log(`[Security Alert] ${account.type} notification sent via account "${account.name}"`);

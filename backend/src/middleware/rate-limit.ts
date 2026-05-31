@@ -80,9 +80,11 @@ export function rateLimit(maxRequests: number, windowMs: number) {
 }
 
 /**
- * Strict rate limiter for auth endpoints (5 requests per minute)
+ * Rate limiter for auth endpoints (15 requests per minute).
+ * Must exceed the account lockout threshold (5 failures) to ensure
+ * lockout logic in the route handler always has room to trigger.
  */
-export const authRateLimit = rateLimit(5, 60 * 1000);
+export const authRateLimit = rateLimit(15, 60 * 1000);
 
 /**
  * General API rate limiter (100 requests per minute)
