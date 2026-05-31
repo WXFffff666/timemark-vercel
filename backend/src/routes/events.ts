@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { createEvent, getEventsByUserId, getEventsByUserIdPaginated, updateEvent, deleteEvent, deleteEventsByIds } from '../services/event.service.js';
-import { createEventSchema, updateEventSchema } from '@timemark/shared';
+import { createEventSchema, updateEventSchema, batchDeleteSchema, csvImportSchema } from '@timemark/shared';
 import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
 
@@ -119,13 +119,13 @@ events.put('/:id', async (c) => {
 events.delete('/batch', async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
-  const ids = Array.isArray(body?.ids) ? body.ids.filter((item: unknown) => typeof item === 'string') : [];
+  const parsed = batchDeleteSchema.safeParse(body);
 
-  if (ids.length === 0) {
-    return c.json({ success: false, error: 'Invalid ids' }, 400);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
   }
 
-  const deleted = await deleteEventsByIds(ids, user.id);
+  const deleted = await deleteEventsByIds(parsed.data.ids, user.id);
   return c.json({ success: true, data: { deleted } });
 });
 
@@ -148,11 +148,13 @@ events.post('/import-csv', async (c) => {
   
   try {
     const body = await c.req.json();
-    const { csvData } = body;
+    const parsed = csvImportSchema.safeParse(body);
     
-    if (!csvData || typeof csvData !== 'string') {
-      return c.json({ success: false, error: 'csvData is required' }, 400);
+    if (!parsed.success) {
+      return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
     }
+    
+    const { csvData } = parsed.data;
     
     const lines = csvData.split('\n').filter((line: string) => line.trim());
     const headers = lines[0].split(',').map((h: string) => h.trim().toLowerCase());

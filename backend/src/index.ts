@@ -4,10 +4,13 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { requestIdMiddleware } from './middleware/request-id.js';
+import { securityHeaders } from './middleware/security-headers.js';
 import { csrfProtection } from './middleware/csrf.js';
+import { authRateLimit, apiRateLimit, rateLimit } from './middleware/rate-limit.js';
 import 'dotenv/config';
 import { waitForDb, query } from './db/index.js';
-import { runMigrations } from './db/migrate.js';
+import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
+import { randomBytes } from 'crypto';
 import { hashPassword } from './utils/password.js';
 import { initSecretKeys } from './utils/secrets.js';
 import authRoutes from './routes/auth.js';
@@ -35,11 +38,14 @@ async function bootstrap() {
   // 2. 执行 schema 迁移
   await runMigrations();
 
+  // 2.5 迁移旧密钥加密的数据到新密钥
+  await migrateEncryptionKey();
+
   // 3. 初始化管理员用户
   const userResult = await query('SELECT id FROM users LIMIT 1');
   if (userResult.rows.length === 0) {
     const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
-    const password = process.env.DEFAULT_ADMIN_PASSWORD || 'TimeMark@2026';
+    const password = process.env.DEFAULT_ADMIN_PASSWORD || randomBytes(16).toString('hex');
     const passwordHash = await hashPassword(password);
 
     await query(
@@ -48,6 +54,10 @@ async function bootstrap() {
     );
 
     console.log(`✅ 默认用户已创建 (${username})`);
+    if (!process.env.DEFAULT_ADMIN_PASSWORD) {
+      console.log(`🔑 Generated admin password: ${password}`);
+      console.log(`⚠️  Please save this password! It will not be shown again.`);
+    }
 
   } else {
     console.log('✅ 数据库已初始化，已存在用户');
@@ -57,6 +67,7 @@ async function bootstrap() {
   const app = new Hono();
 
   app.use('*', logger());
+  app.use('*', securityHeaders);
   const corsOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
     : ['http://localhost:5173', 'http://localhost:3000'];
@@ -66,6 +77,12 @@ async function bootstrap() {
   }));
   app.use('*', requestIdMiddleware);
   app.use('*', csrfProtection());
+
+  // Rate limiting: specific limits before general
+  const notifyRateLimit = rateLimit(10, 60 * 1000);
+  app.use('/api/auth/*', authRateLimit);
+  app.use('/api/channels/test', notifyRateLimit);
+  app.use('/api/*', apiRateLimit);
 
   app.route('/api/auth', authRoutes);
   app.route('/api/events', eventRoutes);

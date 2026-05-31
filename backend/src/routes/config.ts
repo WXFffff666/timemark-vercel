@@ -22,6 +22,10 @@ import {
   createNotificationAccountSchema,
   updateNotificationAccountSchema,
   saveUserConfigSchema,
+  createRelationshipMappingSchema,
+  updateRelationshipMappingSchema,
+  saveReminderSettingsSchema,
+  saveEventTemplateSchema,
 } from '@timemark/shared';
 import type { User } from '@timemark/shared';
 
@@ -39,7 +43,11 @@ config.get('/', async (c) => {
 config.post('/', async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
-  await saveUserConfig(Number(user.id), body || {});
+  const parsed = saveUserConfigSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+  await saveUserConfig(Number(user.id), parsed.data);
   return c.json({ success: true });
 });
 
@@ -135,16 +143,17 @@ config.post('/relationships', async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
   
-  if (!body.event_id || !body.from_relation || !body.to_relation) {
-    return c.json({ success: false, error: 'event_id, from_relation, and to_relation are required' }, 400);
+  const parsed = createRelationshipMappingSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
   }
   
   const mapping = await createRelationshipMapping(Number(user.id), {
-    event_id: body.event_id,
-    from_relation: body.from_relation,
-    to_relation: body.to_relation,
-    recipient_email: body.recipient_email,
-    recipient_type: body.recipient_type,
+    event_id: parsed.data.event_id,
+    from_relation: parsed.data.from_relation,
+    to_relation: parsed.data.to_relation,
+    recipient_email: parsed.data.recipient_email || undefined,
+    recipient_type: parsed.data.recipient_type || undefined,
   });
   
   return c.json({ success: true, data: mapping }, 201);
@@ -155,11 +164,16 @@ config.put('/relationships/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const body = await c.req.json().catch(() => ({}));
   
+  const parsed = updateRelationshipMappingSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+  
   const mapping = await updateRelationshipMapping(id, Number(user.id), {
-    from_relation: body.from_relation,
-    to_relation: body.to_relation,
-    recipient_email: body.recipient_email,
-    recipient_type: body.recipient_type,
+    from_relation: parsed.data.from_relation,
+    to_relation: parsed.data.to_relation,
+    recipient_email: parsed.data.recipient_email || undefined,
+    recipient_type: parsed.data.recipient_type || undefined,
   });
   
   if (!mapping) {
@@ -194,11 +208,16 @@ config.post('/reminders', async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
   
+  const parsed = saveReminderSettingsSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+  
   await saveReminderSettings(Number(user.id), {
-    enabled: body.enabled,
-    dailyTime: body.dailyTime,
-    daysBeforeList: body.daysBeforeList,
-    emailAddresses: body.emailAddresses,
+    enabled: parsed.data.enabled,
+    dailyTime: parsed.data.dailyTime,
+    daysBeforeList: parsed.data.daysBeforeList,
+    emailAddresses: parsed.data.emailAddresses,
   });
   
   return c.json({ success: true });
@@ -224,14 +243,15 @@ config.post('/templates', async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
   
-  if (!body.event_type || !body.template_content) {
-    return c.json({ success: false, error: 'event_type and template_content are required' }, 400);
+  const parsed = saveEventTemplateSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
   }
   
   const template = await saveEventTemplate(
     Number(user.id),
-    body.event_type,
-    body.template_content
+    parsed.data.event_type,
+    parsed.data.template_content
   );
   
   return c.json({ success: true, data: template }, 201);

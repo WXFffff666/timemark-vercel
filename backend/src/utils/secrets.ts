@@ -113,10 +113,13 @@ export function initSecretKeys(): KeyConfig {
 
 /**
  * 获取当前密钥配置（用于测试）
+ * 必须在 initSecretKeys() 之后调用
  */
 export function getSecretKeys(): KeyConfig {
-  return {
-    JWT_SECRET: process.env.JWT_SECRET || 'change-this-secret-in-production',
-    MASTER_KEY: process.env.MASTER_KEY || 'timemark-default-master-key-change-in-production-2026',
-  };
+  const jwtSecret = process.env.JWT_SECRET;
+  const masterKey = process.env.MASTER_KEY;
+  if (!jwtSecret || !masterKey) {
+    throw new Error('Secret keys not initialized. Call initSecretKeys() first.');
+  }
+  return { JWT_SECRET: jwtSecret, MASTER_KEY: masterKey };
 }

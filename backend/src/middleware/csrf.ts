@@ -84,18 +84,26 @@ export function csrfProtection() {
       }
     }
 
-    // 如果没有 Origin 和 Referer，检查自定义头部
+    // API Key 认证不受 CSRF 影响（API Key 不会被浏览器自动发送）
+    const apiKeyHeader = c.req.header('X-API-Key');
+    if (apiKeyHeader) {
+      return next();
+    }
+
+    // 检查是否有自定义头部 X-Requested-With（浏览器跨域请求无法伪造自定义头部）
+    const xRequestedWith = c.req.header('X-Requested-With');
+    const hasCustomHeader = xRequestedWith === 'XMLHttpRequest';
+
+    // 如果没有 Origin 和 Referer，需要额外验证
     if (!requestOrigin) {
-      // 对于 API 调用，检查是否有 Authorization 头部（JWT 认证）
+      // JWT Bearer token 不再单独绕过 CSRF 保护
+      // 必须同时具有自定义头部（证明请求来自合法客户端，而非浏览器自动发送）
       const authHeader = c.req.header('Authorization');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        // 有 JWT token，允许通过
-        // 这是因为 JWT 本身已经提供了 CSRF 保护
+      if (authHeader && authHeader.startsWith('Bearer ') && hasCustomHeader) {
         return next();
       }
-      
-      
-      // 没有认证信息，拒绝请求
+
+      // 没有有效的 Origin/Referer 且没有自定义头部，拒绝请求
       return c.json(
         { success: false, error: 'Missing origin or authorization' },
         403

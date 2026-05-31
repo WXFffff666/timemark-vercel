@@ -3,6 +3,7 @@ import path from 'path';
 import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
 import { getDb, waitForDb } from './index.js';
+import { encrypt, decrypt } from '@timemark/shared/crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -173,5 +174,136 @@ async function applyIncrementalMigrations(db: any, currentVersion: number): Prom
         console.error(`[DB] Migration v${migration.version} failed:`, error);
       }
     }
+  }
+}
+
+// The old hardcoded default key used before auto-generation was implemented.
+const LEGACY_MASTER_KEY = 'timemark-default-master-key-change-in-production-2026';
+
+/**
+ * One-time migration: re-encrypt notification_accounts from legacy key to new key.
+ * Runs on startup after schema migrations. Safe to run multiple times (idempotent).
+ */
+export async function migrateEncryptionKey(): Promise<void> {
+  const currentKey = process.env.MASTER_KEY;
+  if (!currentKey) {
+    console.warn('[Migration] MASTER_KEY not set, skipping encryption migration');
+    return;
+  }
+
+  // If the current key IS the legacy key, no migration needed
+  if (currentKey === LEGACY_MASTER_KEY) {
+    return;
+  }
+
+  const db = getDb();
+
+  // Migrate notification_accounts
+  const encryptedFields = ['webhook', 'token', 'secret', 'chat_id', 'session_data'];
+  const stmt = db.prepare('SELECT id, webhook, token, secret, chat_id, session_data FROM notification_accounts');
+  const rows: Array<{ id: number; [key: string]: any }> = [];
+  while (stmt.step()) {
+    rows.push(stmt.getAsObject() as any);
+  }
+  stmt.free();
+
+  let migratedCount = 0;
+  for (const row of rows) {
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    for (const field of encryptedFields) {
+      const value = row[field];
+      if (!value) continue;
+
+      // Try decrypting with current key - if it works, already migrated
+      try {
+        decrypt(value, currentKey);
+        continue; // Already encrypted with current key
+      } catch {
+        // Current key failed
+      }
+
+      // Try legacy key
+      try {
+        const plaintext = decrypt(value, LEGACY_MASTER_KEY);
+        const reEncrypted = encrypt(plaintext, currentKey);
+        updates.push(`${field} = ?`);
+        values.push(reEncrypted);
+      } catch {
+        // Both keys failed - might be plaintext or corrupted, skip
+        continue;
+      }
+    }
+
+    if (updates.length > 0) {
+      values.push(row.id);
+      db.run(`UPDATE notification_accounts SET ${updates.join(', ')} WHERE id = ?`, values);
+      migratedCount++;
+    }
+  }
+
+  if (migratedCount > 0) {
+    console.log(`[Migration] Migrated ${migratedCount} notification account(s) from legacy key`);
+  }
+
+  // Migrate user_configs
+  const configFields = [
+    'encrypted_resend_key', 'encrypted_github_token', 'encrypted_feishu_webhook',
+    'encrypted_wecom_webhook', 'encrypted_dingtalk_webhook', 'encrypted_dingtalk_secret',
+    'encrypted_telegram_bot_token', 'encrypted_discord_webhook', 'encrypted_slack_webhook',
+    'encrypted_wxpusher_app_token', 'encrypted_wxpusher_uid', 'encrypted_qmsg_key',
+    'encrypted_qmsg_qq', 'encrypted_channel_webhooks'
+  ];
+
+  const configStmt = db.prepare(`SELECT user_id, ${configFields.join(', ')} FROM user_configs`);
+  const configRows: Array<{ user_id: number; [key: string]: any }> = [];
+  while (configStmt.step()) {
+    configRows.push(configStmt.getAsObject() as any);
+  }
+  configStmt.free();
+
+  let configMigratedCount = 0;
+  for (const row of configRows) {
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    for (const field of configFields) {
+      const value = row[field];
+      if (!value) continue;
+
+      // Try decrypting with current key
+      try {
+        decrypt(value, currentKey);
+        continue; // Already encrypted with current key
+      } catch {
+        // Current key failed
+      }
+
+      // Try legacy key
+      try {
+        const plaintext = decrypt(value, LEGACY_MASTER_KEY);
+        const reEncrypted = encrypt(plaintext, currentKey);
+        updates.push(`${field} = ?`);
+        values.push(reEncrypted);
+      } catch {
+        // Both keys failed, skip
+        continue;
+      }
+    }
+
+    if (updates.length > 0) {
+      values.push(row.user_id);
+      db.run(`UPDATE user_configs SET ${updates.join(', ')} WHERE user_id = ?`, values);
+      configMigratedCount++;
+    }
+  }
+
+  if (configMigratedCount > 0) {
+    console.log(`[Migration] Migrated ${configMigratedCount} user config(s) from legacy key`);
+  }
+
+  if (migratedCount === 0 && configMigratedCount === 0) {
+    console.log('[Migration] No legacy-encrypted data found, encryption migration complete');
   }
 }

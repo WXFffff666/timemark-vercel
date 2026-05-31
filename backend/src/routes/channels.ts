@@ -6,6 +6,7 @@ import {
   getChannelsByMethod,
   type ChannelConfigMethod 
 } from '../services/notifications/channels.config.js';
+import { testConnectionSchema, pluginStartAuthSchema, pluginCheckAuthSchema } from '@timemark/shared';
 import type { User } from '@timemark/shared';
 
 // Plugin service imports
@@ -72,7 +73,11 @@ channels.get('/template/:id', async (c) => {
 channels.post('/plugin/:type/start-auth', async (c) => {
   const type = c.req.param('type');
   const body = await c.req.json().catch(() => ({}));
-  const qqNumber = body.qqNumber;
+  
+  const parsed = pluginStartAuthSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
   
   try {
     let result: { qrcode: string; sessionId: string };
@@ -85,19 +90,19 @@ channels.post('/plugin/:type/start-auth', async (c) => {
         result = await startWhatsappAuth();
         break;
       case 'qq_bot':
-        if (!qqNumber) {
+        if (!parsed.data.qqNumber) {
           return c.json({ success: false, error: 'QQ号码不能为空' }, 400);
         }
-        result = await startQQAuth(qqNumber);
+        result = await startQQAuth(parsed.data.qqNumber);
         break;
       case 'signal':
-        result = await startSignalAuth(body.phoneNumber);
+        result = await startSignalAuth(parsed.data.phoneNumber);
         break;
       case 'zalo':
-        result = await startZaloAuth(body.credentials);
+        result = await startZaloAuth(parsed.data.credentials);
         break;
       case 'imessage':
-        result = await startBlueBubblesAuth(body.config);
+        result = await startBlueBubblesAuth(parsed.data.config);
         break;
       case 'clawbot':
         result = await startClawBotAuth();
@@ -116,11 +121,14 @@ channels.post('/plugin/:type/start-auth', async (c) => {
 // Check plugin authentication status
 channels.post('/plugin/:type/check-auth', async (c) => {
   const type = c.req.param('type');
-  const { sessionData } = await c.req.json().catch(() => ({ sessionData: null }));
+  const body = await c.req.json().catch(() => ({}));
   
-  if (!sessionData) {
+  const parsed = pluginCheckAuthSchema.safeParse(body);
+  if (!parsed.success || !parsed.data.sessionData) {
     return c.json({ success: false, error: '缺少会话数据' }, 400);
   }
+  
+  const { sessionData } = parsed.data;
   
   try {
     let result: { authenticated: boolean; user?: string };
@@ -161,11 +169,14 @@ channels.post('/plugin/:type/check-auth', async (c) => {
 // Logout plugin session
 channels.delete('/plugin/:type/logout', async (c) => {
   const type = c.req.param('type');
-  const { sessionData } = await c.req.json().catch(() => ({ sessionData: null }));
+  const body = await c.req.json().catch(() => ({}));
   
-  if (!sessionData) {
+  const logoutParsed = pluginCheckAuthSchema.safeParse(body);
+  if (!logoutParsed.success || !logoutParsed.data.sessionData) {
     return c.json({ success: false, error: '缺少会话数据' }, 400);
   }
+  
+  const { sessionData } = logoutParsed.data;
   
   try {
     switch (type) {
@@ -205,21 +216,20 @@ channels.delete('/plugin/:type/logout', async (c) => {
 channels.post('/test', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   
-  const { type, configMethod, webhook, token, chatId, secret, sessionData } = body;
-  
-  if (!type) {
-    return c.json({ success: false, error: '渠道类型不能为空' }, 400);
+  const parsed = testConnectionSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
   }
   
   try {
     const result = await testConnection({
-      type,
-      configMethod: configMethod || 'webhook',
-      webhook,
-      token,
-      chatId,
-      secret,
-      sessionData
+      type: parsed.data.type,
+      configMethod: parsed.data.configMethod || 'webhook',
+      webhook: parsed.data.webhook || undefined,
+      token: parsed.data.token || undefined,
+      chatId: parsed.data.chatId || undefined,
+      secret: parsed.data.secret || undefined,
+      sessionData: parsed.data.sessionData
     });
     
     return c.json({ 

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
+import { backupImportSchema } from '@timemark/shared';
 import type { User } from '@timemark/shared';
 
 const backup = new Hono<{ Variables: { user: User } }>();
@@ -35,10 +36,16 @@ backup.post('/import', async (c) => {
   
   try {
     const body = await c.req.json();
+    const parsed = backupImportSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+    }
+    
+    const data = parsed.data;
     let imported = { events: 0, mappings: 0, templates: 0 };
     
-    if (Array.isArray(body.events)) {
-      for (const event of body.events) {
+    if (Array.isArray(data.events)) {
+      for (const event of data.events) {
         await query(
           `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, notification_channels, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -52,8 +59,8 @@ backup.post('/import', async (c) => {
       }
     }
     
-    if (Array.isArray(body.relationshipMappings)) {
-      for (const mapping of body.relationshipMappings) {
+    if (Array.isArray(data.relationshipMappings)) {
+      for (const mapping of data.relationshipMappings) {
         await query(
           `INSERT INTO relationship_mappings (user_id, event_id, from_relation, to_relation, recipient_email, recipient_type)
            VALUES (?, ?, ?, ?, ?, ?)`,
@@ -63,8 +70,8 @@ backup.post('/import', async (c) => {
       }
     }
     
-    if (Array.isArray(body.eventTemplates)) {
-      for (const template of body.eventTemplates) {
+    if (Array.isArray(data.eventTemplates)) {
+      for (const template of data.eventTemplates) {
         await query(
           `INSERT OR REPLACE INTO event_templates (user_id, event_type, template_content) VALUES (?, ?, ?)`,
           [userId, template.event_type, template.template_content]

@@ -2,10 +2,65 @@ import { randomBytes, createHash } from 'crypto';
 import { query } from '../db/index.js';
 import { encrypt, decrypt } from '@timemark/shared/crypto';
 
-const MASTER_KEY: string = process.env.MASTER_KEY || 'timemark-default-master-key-change-in-production-2026';
+// The old hardcoded default key used before auto-generation was implemented.
+// Existing Docker users who never set MASTER_KEY have data encrypted with this.
+const LEGACY_MASTER_KEY = 'timemark-default-master-key-change-in-production-2026';
+
+function getMasterKey(): string {
+  const key = process.env.MASTER_KEY;
+  if (!key) {
+    throw new Error('MASTER_KEY is not set. Ensure initSecretKeys() is called before using config service.');
+  }
+  return key;
+}
+
+// Lazy getter - MASTER_KEY is resolved on first use, not at module load time.
+// This is critical because initSecretKeys() sets process.env.MASTER_KEY at runtime,
+// AFTER all module imports have been resolved.
+let _masterKeyCache: string | null = null;
+function MASTER_KEY(): string {
+  if (!_masterKeyCache) {
+    _masterKeyCache = getMasterKey();
+  }
+  return _masterKeyCache;
+}
+
+/**
+ * Decrypt with fallback to legacy key. Used during migration period when
+ * data may be encrypted with either the new auto-generated key or the old default.
+ * If legacy key works, re-encrypts with new key and calls updateFn to persist.
+ */
+function decryptWithFallback(
+  value: string,
+  updateFn?: (reEncrypted: string) => void
+): string {
+  // Try current key first
+  try {
+    return decrypt(value, MASTER_KEY());
+  } catch {
+    // Current key failed
+  }
+
+  // Try legacy key
+  try {
+    const plaintext = decrypt(value, LEGACY_MASTER_KEY);
+    // Legacy key worked - re-encrypt with new key
+    const reEncrypted = encrypt(plaintext, MASTER_KEY());
+    if (updateFn) {
+      updateFn(reEncrypted);
+    }
+    console.log('[Migration] Re-encrypted a field from legacy key to new key');
+    return plaintext;
+  } catch {
+    // Both keys failed
+  }
+
+  console.error('[Migration] Failed to decrypt value with both current and legacy keys');
+  return '';
+}
 
 export async function saveUserConfig(userId: number, config: any): Promise<void> {
-  const e = (v: string | undefined) => v ? encrypt(v, MASTER_KEY) : null;
+  const e = (v: string | undefined) => v ? encrypt(v, MASTER_KEY()) : null;
   await query(
     `INSERT INTO user_configs (
       user_id,
@@ -76,23 +131,32 @@ export async function getUserConfig(userId: number): Promise<any> {
   const result = await query(`SELECT * FROM user_configs WHERE user_id = $1`, [userId]);
   if (result.rows.length === 0) return null;
   const r = result.rows[0];
-  const d = (v: string | null) => v ? decrypt(v, MASTER_KEY) : null;
-  return {
-    resend_api_key: d(r.encrypted_resend_key),
-    github_token: d(r.encrypted_github_token),
-    feishu_webhook: d(r.encrypted_feishu_webhook),
-    wecom_webhook: d(r.encrypted_wecom_webhook),
-    dingtalk_webhook: d(r.encrypted_dingtalk_webhook),
-    dingtalk_secret: d(r.encrypted_dingtalk_secret),
-    telegram_bot_token: d(r.encrypted_telegram_bot_token),
-    discord_webhook: d(r.encrypted_discord_webhook),
-    slack_webhook: d(r.encrypted_slack_webhook),
-    wxpusher_app_token: d(r.encrypted_wxpusher_app_token),
-    wxpusher_uid: d(r.encrypted_wxpusher_uid),
-    qmsg_key: d(r.encrypted_qmsg_key),
-    qmsg_qq: d(r.encrypted_qmsg_qq),
+
+  // Decrypt with fallback: if legacy key works, re-encrypt and update the row
+  const pendingUpdates: Record<string, string> = {};
+  const d = (v: string | null, column: string) => {
+    if (!v) return null;
+    return decryptWithFallback(v, (reEncrypted) => {
+      pendingUpdates[column] = reEncrypted;
+    });
+  };
+
+  const config = {
+    resend_api_key: d(r.encrypted_resend_key, 'encrypted_resend_key'),
+    github_token: d(r.encrypted_github_token, 'encrypted_github_token'),
+    feishu_webhook: d(r.encrypted_feishu_webhook, 'encrypted_feishu_webhook'),
+    wecom_webhook: d(r.encrypted_wecom_webhook, 'encrypted_wecom_webhook'),
+    dingtalk_webhook: d(r.encrypted_dingtalk_webhook, 'encrypted_dingtalk_webhook'),
+    dingtalk_secret: d(r.encrypted_dingtalk_secret, 'encrypted_dingtalk_secret'),
+    telegram_bot_token: d(r.encrypted_telegram_bot_token, 'encrypted_telegram_bot_token'),
+    discord_webhook: d(r.encrypted_discord_webhook, 'encrypted_discord_webhook'),
+    slack_webhook: d(r.encrypted_slack_webhook, 'encrypted_slack_webhook'),
+    wxpusher_app_token: d(r.encrypted_wxpusher_app_token, 'encrypted_wxpusher_app_token'),
+    wxpusher_uid: d(r.encrypted_wxpusher_uid, 'encrypted_wxpusher_uid'),
+    qmsg_key: d(r.encrypted_qmsg_key, 'encrypted_qmsg_key'),
+    qmsg_qq: d(r.encrypted_qmsg_qq, 'encrypted_qmsg_qq'),
     channel_webhooks: (() => {
-      const raw = d(r.encrypted_channel_webhooks);
+      const raw = d(r.encrypted_channel_webhooks, 'encrypted_channel_webhooks');
       if (!raw) return {};
       try { return JSON.parse(raw); } catch { return {}; }
     })(),
@@ -109,6 +173,20 @@ export async function getUserConfig(userId: number): Promise<any> {
     })(),
     timezone: r.timezone || 'Asia/Shanghai',
   };
+
+  // Persist re-encrypted values if any fields were migrated
+  if (Object.keys(pendingUpdates).length > 0) {
+    const setClauses = Object.keys(pendingUpdates).map((col, i) => `${col} = $${i + 1}`);
+    const values = Object.values(pendingUpdates);
+    values.push(userId as any);
+    await query(
+      `UPDATE user_configs SET ${setClauses.join(', ')} WHERE user_id = $${values.length}`,
+      values
+    );
+    console.log(`[Migration] Re-encrypted ${Object.keys(pendingUpdates).length} field(s) in user_configs for user ${userId}`);
+  }
+
+  return config;
 }
 
 // ============ 通知账户管理（支持多账号绑定）============
@@ -130,25 +208,42 @@ export interface NotificationAccount {
   updated_at: string;
 }
 
-function decryptNotificationField(value: string | null): string | null {
+function decryptNotificationField(
+  value: string | null,
+  pendingUpdates?: Record<string, string>,
+  column?: string
+): string | null {
   if (!value) return null;
+  // Try current key
   try {
-    return decrypt(value, MASTER_KEY);
+    return decrypt(value, MASTER_KEY());
   } catch {
-    // backward compatibility: plaintext historical data
+    // Current key failed
+  }
+  // Try legacy key
+  try {
+    const plaintext = decrypt(value, LEGACY_MASTER_KEY);
+    // Re-encrypt with new key
+    if (pendingUpdates && column) {
+      pendingUpdates[column] = encrypt(plaintext, MASTER_KEY());
+      console.log('[Migration] Re-encrypted notification_accounts.' + column + ' from legacy key');
+    }
+    return plaintext;
+  } catch {
+    // Both keys failed - backward compatibility: assume plaintext historical data
     return value;
   }
 }
 
-function mapNotificationAccountRow(row: any): NotificationAccount {
+function mapNotificationAccountRow(row: any, pendingUpdates?: Record<string, string>): NotificationAccount {
   return {
     ...row,
-    webhook: decryptNotificationField(row.webhook),
-    token: decryptNotificationField(row.token),
-    secret: decryptNotificationField(row.secret),
-    chat_id: decryptNotificationField(row.chat_id),
+    webhook: decryptNotificationField(row.webhook, pendingUpdates, 'webhook'),
+    token: decryptNotificationField(row.token, pendingUpdates, 'token'),
+    secret: decryptNotificationField(row.secret, pendingUpdates, 'secret'),
+    chat_id: decryptNotificationField(row.chat_id, pendingUpdates, 'chat_id'),
     session_data: (() => {
-      const raw = decryptNotificationField(row.session_data);
+      const raw = decryptNotificationField(row.session_data, pendingUpdates, 'session_data');
       if (!raw) return null;
       try {
         return JSON.parse(raw);
@@ -164,7 +259,27 @@ export async function getNotificationAccounts(userId: number): Promise<Notificat
     'SELECT * FROM notification_accounts WHERE user_id = $1 ORDER BY created_at DESC',
     [userId]
   );
-  return result.rows.map(mapNotificationAccountRow);
+
+  const accounts: NotificationAccount[] = [];
+  for (const row of result.rows) {
+    const pendingUpdates: Record<string, string> = {};
+    const account = mapNotificationAccountRow(row, pendingUpdates);
+    accounts.push(account);
+
+    // Persist re-encrypted values if any fields were migrated
+    if (Object.keys(pendingUpdates).length > 0) {
+      const setClauses = Object.keys(pendingUpdates).map((col, i) => `${col} = $${i + 1}`);
+      const values = Object.values(pendingUpdates);
+      values.push(row.id);
+      await query(
+        `UPDATE notification_accounts SET ${setClauses.join(', ')} WHERE id = $${values.length}`,
+        values
+      );
+      console.log(`[Migration] Re-encrypted ${Object.keys(pendingUpdates).length} field(s) in notification_accounts id=${row.id}`);
+    }
+  }
+
+  return accounts;
 }
 
 export async function createNotificationAccount(
@@ -181,7 +296,7 @@ export async function createNotificationAccount(
     plugin_package?: string;
   }
 ): Promise<NotificationAccount> {
-  const e = (v: string | undefined) => v ? encrypt(v, MASTER_KEY) : null;
+  const e = (v: string | undefined) => v ? encrypt(v, MASTER_KEY()) : null;
   const result = await query(
     `INSERT INTO notification_accounts (user_id, type, name, webhook, token, secret, chat_id, config_method, session_data, plugin_package)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -193,9 +308,9 @@ export async function createNotificationAccount(
       e(data.webhook), 
       e(data.token), 
       e(data.secret), 
-      data.chat_id ? encrypt(data.chat_id, MASTER_KEY) : null,
+      data.chat_id ? encrypt(data.chat_id, MASTER_KEY()) : null,
       data.config_method || 'webhook',
-      data.session_data ? encrypt(JSON.stringify(data.session_data), MASTER_KEY) : null,
+      data.session_data ? encrypt(JSON.stringify(data.session_data), MASTER_KEY()) : null,
       data.plugin_package || null
     ]
   );
@@ -227,19 +342,19 @@ export async function updateNotificationAccount(
   }
   if (data.webhook !== undefined) {
     updates.push(`webhook = $${paramIndex++}`);
-    values.push(data.webhook ? encrypt(data.webhook, MASTER_KEY) : null);
+    values.push(data.webhook ? encrypt(data.webhook, MASTER_KEY()) : null);
   }
   if (data.token !== undefined) {
     updates.push(`token = $${paramIndex++}`);
-    values.push(data.token ? encrypt(data.token, MASTER_KEY) : null);
+    values.push(data.token ? encrypt(data.token, MASTER_KEY()) : null);
   }
   if (data.secret !== undefined) {
     updates.push(`secret = $${paramIndex++}`);
-    values.push(data.secret ? encrypt(data.secret, MASTER_KEY) : null);
+    values.push(data.secret ? encrypt(data.secret, MASTER_KEY()) : null);
   }
   if (data.chat_id !== undefined) {
     updates.push(`chat_id = $${paramIndex++}`);
-    values.push(data.chat_id ? encrypt(data.chat_id, MASTER_KEY) : null);
+    values.push(data.chat_id ? encrypt(data.chat_id, MASTER_KEY()) : null);
   }
   if (data.is_active !== undefined) {
     updates.push(`is_active = $${paramIndex++}`);
@@ -251,7 +366,7 @@ export async function updateNotificationAccount(
   }
   if (data.session_data !== undefined) {
     updates.push(`session_data = $${paramIndex++}`);
-    values.push(data.session_data ? encrypt(JSON.stringify(data.session_data), MASTER_KEY) : null);
+    values.push(data.session_data ? encrypt(JSON.stringify(data.session_data), MASTER_KEY()) : null);
   }
   if (data.plugin_package !== undefined) {
     updates.push(`plugin_package = $${paramIndex++}`);
