@@ -20,6 +20,7 @@ import { startAuth as startBlueBubblesAuth, checkAuth as checkBlueBubblesAuth, l
 import { startAuth as startClawBotAuth, checkAuth as checkClawBotAuth, logout as logoutClawBot, getConnectionStatus as getClawBotConnectionStatus } from '../services/notifications/clawbot.service.js';
 import { getConnectionStatus as getOpenClawConnectionStatus } from '../services/notifications/wechat-openclaw.service.js';
 import { testConnection } from '../services/notifications/test-connection.js';
+import { checkAllChannels, checkChannel } from '../services/notifications/network-check.js';
 
 const channels = new Hono<{ Variables: { user: User } }>();
 
@@ -314,6 +315,21 @@ channels.get('/status/:accountId', async (c) => {
     console.error(`[Channels] Failed to get connection status for account ${accountId}:`, error);
     return c.json({ success: false, error: error.message || '获取连接状态失败' }, 500);
   }
+});
+
+// ============ Network Reachability Check ============
+
+// GET /network-check - 检测所有渠道网络可达性
+channels.get('/network-check', async (c) => {
+  const results = await checkAllChannels();
+  return c.json({ success: true, data: results });
+});
+
+// GET /network-check/:channel - 检测单个渠道
+channels.get('/network-check/:channel', async (c) => {
+  const channel = c.req.param('channel');
+  const result = await checkChannel(channel);
+  return c.json({ success: true, data: result });
 });
 
 export default channels;

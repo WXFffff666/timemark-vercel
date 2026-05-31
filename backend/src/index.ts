@@ -11,7 +11,6 @@ import 'dotenv/config';
 import { createLogger } from './utils/logger.js';
 import { waitForDb, query } from './db/index.js';
 import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
-import { randomBytes } from 'crypto';
 import { hashPassword } from './utils/password.js';
 import { initSecretKeys } from './utils/secrets.js';
 import authRoutes from './routes/auth.js';
@@ -48,7 +47,7 @@ async function bootstrap() {
   const userResult = await query('SELECT id FROM users LIMIT 1');
   if (userResult.rows.length === 0) {
     const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
-    const password = process.env.DEFAULT_ADMIN_PASSWORD || randomBytes(16).toString('hex');
+    const password = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
     const passwordHash = await hashPassword(password);
 
     await query(
@@ -56,10 +55,8 @@ async function bootstrap() {
       [username, passwordHash]
     );
 
-    log.info({ username }, '默认用户已创建');
-    if (!process.env.DEFAULT_ADMIN_PASSWORD) {
-      log.warn({ password }, 'Generated admin password - save it! It will not be shown again.');
-    }
+    console.log(`✅ 默认用户已创建 (用户名: ${username}, 密码: ${password})`);
+    console.log('⚠️  请登录后立即修改默认密码！');
 
   } else {
     log.info('数据库已初始化，已存在用户');
