@@ -1,7 +1,28 @@
-# TimeMark Docker Image
-# Build: pnpm -r build && docker build -t timemark:latest .
-# GitHub Actions handles the build step automatically
+# TimeMark Docker Image - Multi-stage build
+# Build: docker build -t timemark:latest .
+# Or pre-build: pnpm -r build && docker build -t timemark:latest .
 
+# Stage 1: Build (compile TypeScript)
+FROM node:20.18-alpine AS builder
+
+WORKDIR /app
+
+RUN npm install -g pnpm
+
+# Copy package files and install all dependencies (including dev for compilation)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY shared/package.json ./shared/
+COPY backend/package.json ./backend/
+
+RUN pnpm install --frozen-lockfile
+
+# Copy source and compile
+COPY shared/ ./shared/
+COPY backend/ ./backend/
+
+RUN pnpm build:shared && pnpm build:backend
+
+# Stage 2: Runtime (minimal production image)
 FROM node:20.18-alpine
 
 # icu-data-full: Required for correct Chinese date formatting (Intl.DateTimeFormat)
@@ -19,18 +40,21 @@ RUN npm install -g pnpm
 # Create non-root user
 RUN addgroup -S app && adduser -S app -G app
 
-# Copy package files and install production dependencies
+# Copy package files and install production dependencies only (no optional: wechaty/baileys/oicq)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY shared/package.json ./shared/
 COPY backend/package.json ./backend/
 
 # Use shamefully-hoist to flatten node_modules (fixes pnpm symlink issues in Docker)
+# --no-optional excludes heavy optional deps (wechaty, baileys, oicq) for smaller image
 RUN echo "shamefully-hoist=true" > .npmrc && \
-    pnpm install --prod --frozen-lockfile
+    pnpm install --prod --frozen-lockfile --no-optional
 
-# Copy pre-built artifacts (built by CI or locally via `pnpm -r build`)
-COPY shared/dist ./shared/dist
-COPY backend/dist ./backend/dist
+# Copy compiled artifacts from builder stage
+COPY --from=builder /app/shared/dist ./shared/dist
+COPY --from=builder /app/backend/dist ./backend/dist
+
+# Copy pre-built frontend static files
 COPY frontend/dist ./frontend/dist
 
 # Copy schema for database initialization
