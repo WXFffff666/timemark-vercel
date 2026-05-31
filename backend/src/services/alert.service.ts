@@ -53,7 +53,7 @@ export async function sendSecurityAlert(params: {
       // 其他渠道（飞书/企微/钉钉/Telegram等）
       const nonEmailChannels = channels.filter((ch: string) => ch !== 'email');
       if (nonEmailChannels.length > 0) {
-        await sendAlertToChannels(userId, nonEmailChannels, alertContent);
+        await sendAlertToChannels(userId, nonEmailChannels, alertContent, params);
       }
 
       // 没有配置渠道时跳过
@@ -95,7 +95,7 @@ function buildAlertContent(params: {
   return alertEvent;
 }
 
-async function sendAlertToChannels(userId: number, channels: string[], alertContent: any): Promise<void> {
+async function sendAlertToChannels(userId: number, channels: string[], alertContent: any, alertParams: any): Promise<void> {
   const accounts = await getNotificationAccounts(userId);
   if (!accounts || accounts.length === 0) return;
 
@@ -147,9 +147,21 @@ async function sendAlertToChannels(userId: number, channels: string[], alertCont
           break;
         }
         case 'resend': {
-          const { sendEmailNotification } = await import('./notifications/email.service.js');
+          const { sendSecurityAlertEmail } = await import('./notifications/email.service.js');
           if (account.token && account.chat_id) {
-            await sendEmailNotification(alertContent, account.token, account.webhook || 'onboarding@resend.dev', account.chat_id);
+            await sendSecurityAlertEmail(
+              {
+                adminEmails: [account.chat_id],
+                username: alertParams.username,
+                ip: alertParams.ip,
+                userAgent: alertParams.userAgent,
+                failureCount: alertParams.failureCount,
+                locked: alertParams.locked,
+                alertType: alertParams.alertType
+              },
+              account.token,
+              account.webhook || 'onboarding@resend.dev'
+            );
           }
           break;
         }
