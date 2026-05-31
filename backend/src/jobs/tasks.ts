@@ -161,7 +161,7 @@ export async function sendReminders() {
       } catch (error) {
         log.error({ eventId: event.id, err: error }, 'Failed to parse lunar date');
         // 记录农历转换失败到事件触发日志
-        await recordEventTrigger(event.id, event.user_id, 'scheduled', new Date(), 'failed', `Lunar date conversion failed: ${String(error)}`);
+        await recordEventTrigger(event.id, event.user_id, 'scheduled', today, 'failed', `Lunar date conversion failed: ${String(error)}`);
       }
     }
     
@@ -257,13 +257,11 @@ export async function sendReminders() {
           details: failedEntries.map(([ch, r]) => ({ channel: ch, error: r.error, accountId: r.accountId }))
         } : undefined;
         
-        // 记录事件触发日志
-        const triggerDate = 'targetDate' in event ? (event as any).targetDate : new Date(event.date);
-        await recordEventTrigger(event.id, event.user_id, 'scheduled', triggerDate, status, errorMessage, JSON.stringify(channelResults), errorDetails);
+        // 记录事件触发日志 - use timezone-aware today string for dedup consistency
+        await recordEventTrigger(event.id, event.user_id, 'scheduled', today, status, errorMessage, JSON.stringify(channelResults), errorDetails);
       } catch (error) {
         log.error({ eventId: event.id, err: error }, 'Failed to send notifications');
-        const triggerDate2 = 'targetDate' in event ? (event as any).targetDate : new Date(event.date);
-        await recordEventTrigger(event.id, event.user_id, 'scheduled', triggerDate2, 'failed', String(error));
+        await recordEventTrigger(event.id, event.user_id, 'scheduled', today, 'failed', String(error));
       }
     }
   }
@@ -274,7 +272,7 @@ async function recordEventTrigger(
   eventId: number, 
   userId: number, 
   triggerType: string, 
-  triggerDate: Date,
+  triggerDate: string,
   status: string = 'success',
   errorMessage?: string,
   channelResults?: string,
@@ -286,7 +284,7 @@ async function recordEventTrigger(
        (event_id, user_id, trigger_type, trigger_date, status, error_message, channel_results, error_details, channel_type, account_id) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
-        eventId, userId, triggerType, triggerDate.toISOString().split('T')[0], 
+        eventId, userId, triggerType, triggerDate, 
         status, errorMessage || null, channelResults || null,
         errorDetails?.details ? JSON.stringify(errorDetails.details) : null,
         errorDetails?.channel_type || null,
