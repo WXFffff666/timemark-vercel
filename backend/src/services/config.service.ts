@@ -81,9 +81,11 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
       telegram_chat_id,
       reminder_emails,
       alert_channels,
-      timezone
+      timezone,
+      quiet_hours_start,
+      quiet_hours_end
     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
      ON CONFLICT (user_id) DO UPDATE SET
        encrypted_resend_key = EXCLUDED.encrypted_resend_key,
        encrypted_github_token = EXCLUDED.encrypted_github_token,
@@ -102,7 +104,9 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
        telegram_chat_id = EXCLUDED.telegram_chat_id,
        reminder_emails = EXCLUDED.reminder_emails,
        alert_channels = EXCLUDED.alert_channels,
-       timezone = EXCLUDED.timezone`,
+       timezone = EXCLUDED.timezone,
+       quiet_hours_start = EXCLUDED.quiet_hours_start,
+       quiet_hours_end = EXCLUDED.quiet_hours_end`,
     [
       userId,
       e(config.resend_api_key),
@@ -123,6 +127,8 @@ export async function saveUserConfig(userId: number, config: any): Promise<void>
       config.reminder_emails ? JSON.stringify(config.reminder_emails) : null,
       config.alert_channels ? JSON.stringify(config.alert_channels) : null,
       config.timezone || 'Asia/Shanghai',
+      config.quiet_hours_start || null,
+      config.quiet_hours_end || null,
     ]
   );
 }
@@ -172,6 +178,8 @@ export async function getUserConfig(userId: number): Promise<any> {
       try { return JSON.parse(raw); } catch { return ['email']; }
     })(),
     timezone: r.timezone || 'Asia/Shanghai',
+    quiet_hours_start: r.quiet_hours_start || null,
+    quiet_hours_end: r.quiet_hours_end || null,
   };
 
   // Persist re-encrypted values if any fields were migrated

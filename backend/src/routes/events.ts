@@ -41,6 +41,30 @@ events.post('/', async (c) => {
     return c.json({ success: false, error: 'Invalid input', details: parsed.error }, 400);
   }
 
+  // Validate notification_account_ids if provided
+  const accountIds = parsed.data.reminderConfig?.accountIds;
+  if (accountIds && accountIds.length > 0) {
+    const userId = Number(user.id);
+    const numericIds = accountIds.map((id: string) => Number(id)).filter((id: number) => !isNaN(id));
+    
+    if (numericIds.length > 0) {
+      const placeholders = numericIds.map((_: number, i: number) => `$${i + 2}`).join(', ');
+      const result = await query(
+        `SELECT id FROM notification_accounts WHERE user_id = $1 AND is_active = 1 AND id IN (${placeholders})`,
+        [userId, ...numericIds]
+      );
+      const validIds = new Set(result.rows.map((r: any) => r.id));
+      const invalidIds = numericIds.filter((id: number) => !validIds.has(id));
+      
+      if (invalidIds.length > 0) {
+        return c.json({ 
+          success: false, 
+          error: `Invalid notification account IDs: ${invalidIds.join(', ')}. Accounts must exist and be active.` 
+        }, 400);
+      }
+    }
+  }
+
   const event = await createEvent(user.id, parsed.data);
   
   // 事件创建后立即检查是否需要发送提醒
@@ -97,6 +121,30 @@ events.put('/:id', async (c) => {
   if (!parsed.success) {
     console.log('[PUT /events/:id] Zod validation failed:', parsed.error.flatten());
     return c.json({ success: false, error: 'Invalid input', details: parsed.error.flatten() }, 400);
+  }
+
+  // Validate notification_account_ids if provided
+  const accountIds = parsed.data.reminderConfig?.accountIds;
+  if (accountIds && accountIds.length > 0) {
+    const userId = Number(user.id);
+    const numericIds = accountIds.map((id: string) => Number(id)).filter((id: number) => !isNaN(id));
+    
+    if (numericIds.length > 0) {
+      const placeholders = numericIds.map((_: number, i: number) => `$${i + 2}`).join(', ');
+      const result = await query(
+        `SELECT id FROM notification_accounts WHERE user_id = $1 AND is_active = 1 AND id IN (${placeholders})`,
+        [userId, ...numericIds]
+      );
+      const validIds = new Set(result.rows.map((r: any) => r.id));
+      const invalidIds = numericIds.filter((id: number) => !validIds.has(id));
+      
+      if (invalidIds.length > 0) {
+        return c.json({ 
+          success: false, 
+          error: `Invalid notification account IDs: ${invalidIds.join(', ')}. Accounts must exist and be active.` 
+        }, 400);
+      }
+    }
   }
 
   const success = await updateEvent(id, user.id, parsed.data);

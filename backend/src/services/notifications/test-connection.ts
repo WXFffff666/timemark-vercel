@@ -4,7 +4,30 @@ import { getChannelTemplate } from './channels.config.js';
 export interface TestConnectionResult {
   success: boolean;
   message: string;
+  latency?: number;
   details?: string;
+}
+
+function diagnoseError(error: any): { message: string; details?: string } {
+  if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+    return { message: '连接超时', details: '请检查网络连接或服务器地址是否正确' };
+  }
+  if (error.code === 'ECONNREFUSED') {
+    return { message: '无法连接到服务器', details: '请确认服务器正在运行' };
+  }
+  if (error.code === 'ENOTFOUND') {
+    return { message: '域名解析失败', details: '请检查服务器地址是否正确' };
+  }
+  if (error.response?.status === 401 || error.response?.status === 403) {
+    return { message: `认证失败 (HTTP ${error.response.status})`, details: '认证信息无效，请检查 Token/API Key' };
+  }
+  if (error.response?.status === 404) {
+    return { message: 'HTTP 404', details: '服务器地址可能不正确' };
+  }
+  if (error.response) {
+    return { message: `HTTP ${error.response.status}: ${error.response.statusText}` };
+  }
+  return { message: `连接失败: ${error.message}` };
 }
 
 export async function testConnection(config: {
@@ -50,6 +73,7 @@ async function testWebhookChannel(webhook: string, secret?: string): Promise<Tes
     return { success: false, message: 'Webhook URL 不能为空' };
   }
 
+  const start = Date.now();
   try {
     const testMessage = {
       text: '🔔 TimeMark 测试消息',
@@ -66,20 +90,17 @@ async function testWebhookChannel(webhook: string, secret?: string): Promise<Tes
       headers: { 'Content-Type': 'application/json' },
       timeout: 10000
     });
+    const latency = Date.now() - start;
 
     if (response.status >= 200 && response.status < 300) {
-      return { success: true, message: 'Webhook 连接成功' };
+      return { success: true, message: 'Webhook 连接成功', latency };
     } else {
-      return { success: false, message: `服务器返回状态码: ${response.status}` };
+      return { success: false, message: `服务器返回状态码: ${response.status}`, latency };
     }
   } catch (error: any) {
-    if (error.code === 'ECONNABORTED') {
-      return { success: false, message: '连接超时，请检查 URL 是否正确' };
-    }
-    if (error.response) {
-      return { success: false, message: `HTTP ${error.response.status}: ${error.response.statusText}` };
-    }
-    return { success: false, message: `连接失败: ${error.message}` };
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -114,15 +135,19 @@ async function testTokenChannel(
       return await testLineChannel(token, chatId!);
     
     case 'nextcloud_talk':
+      return await testNextcloudTalkChannel(fromEmail!, token, chatId!);
+    
     case 'mattermost':
+      return await testMattermostChannel(fromEmail!, token, chatId!);
+    
     case 'matrix':
+      return await testMatrixChannel(fromEmail!, token, chatId!);
+    
     case 'msteams':
+      return await testMsTeamsChannel(fromEmail!);
+    
     case 'nostr':
-      // These channels require server_url + token + chat_id; validate presence
-      if (!chatId) {
-        return { success: false, message: `${type} 需要提供 Chat ID / Room Token` };
-      }
-      return { success: true, message: `${type} 配置格式正确（实际连通性将在发送时验证）` };
+      return await testNostrChannel(fromEmail!, token);
     
     case 'serverchan':
       return await testServerChanChannel(token);
@@ -161,6 +186,7 @@ async function testEmailChannel(apiKey: string, fromEmail: string, toEmail: stri
   // 如果发件邮箱为空，使用Resend测试地址（仅能发送到自己的邮箱）
   const effectiveFrom = fromEmail || 'onboarding@resend.dev';
 
+  const start = Date.now();
   try {
     const { Resend } = await import('resend');
     const resend = new Resend(apiKey);
@@ -177,17 +203,20 @@ async function testEmailChannel(apiKey: string, fromEmail: string, toEmail: stri
         </div>
       `
     });
+    const latency = Date.now() - start;
 
     if (error) {
-      return { success: false, message: `发送失败: ${error.message}` };
+      return { success: false, message: `发送失败: ${error.message}`, latency };
     }
 
-    return { success: true, message: '测试邮件已发送，请检查收件箱' };
+    return { success: true, message: '测试邮件已发送，请检查收件箱', latency };
   } catch (error: any) {
+    const latency = Date.now() - start;
     if (error.message?.includes('Invalid API key')) {
-      return { success: false, message: 'API Key 无效，请检查是否正确' };
+      return { success: false, message: 'API Key 无效，请检查是否正确', latency, details: '认证信息无效，请检查 Token/API Key' };
     }
-    throw error;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -201,13 +230,14 @@ async function testTelegramChannel(botToken: string, chatId: string): Promise<Te
     return { success: false, message: 'Bot Token 格式不正确，应为数字:字母组合' };
   }
 
+  const start = Date.now();
   try {
     const response = await axios.get(`https://api.telegram.org/bot${botToken}/getMe`, {
       timeout: 10000
     });
 
     if (!response.data.ok) {
-      return { success: false, message: 'Token 无效' };
+      return { success: false, message: 'Token 无效', latency: Date.now() - start };
     }
 
     const botInfo = response.data.result;
@@ -216,22 +246,26 @@ async function testTelegramChannel(botToken: string, chatId: string): Promise<Te
       timeout: 10000
     });
 
+    const latency = Date.now() - start;
     if (!chatResponse.data.ok) {
-      return { success: false, message: 'Chat ID 无效或机器人无权限访问该聊天' };
+      return { success: false, message: 'Chat ID 无效或机器人无权限访问该聊天', latency };
     }
 
     return { 
       success: true, 
-      message: `已连接到机器人 ${botInfo.username}` 
+      message: `已连接到机器人 ${botInfo.username}`,
+      latency
     };
   } catch (error: any) {
+    const latency = Date.now() - start;
     if (error.response?.data?.error_code === 401) {
-      return { success: false, message: 'Bot Token 无效' };
+      return { success: false, message: 'Bot Token 无效', latency, details: '认证信息无效，请检查 Token/API Key' };
     }
     if (error.response?.data?.error_code === 400) {
-      return { success: false, message: 'Chat ID 格式不正确' };
+      return { success: false, message: 'Chat ID 格式不正确', latency };
     }
-    throw error;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -240,6 +274,7 @@ async function testQmsgChannel(key: string, qq?: string): Promise<TestConnection
     return { success: false, message: 'Qmsg Key 不能为空' };
   }
 
+  const start = Date.now();
   try {
     const url = qq 
       ? `https://qmsg.zendee.cn/send/${key}?qq=${qq}`
@@ -250,14 +285,17 @@ async function testQmsgChannel(key: string, qq?: string): Promise<TestConnection
     }, {
       timeout: 10000
     });
+    const latency = Date.now() - start;
 
     if (response.data.code === 0) {
-      return { success: true, message: 'Qmsg 连接成功' };
+      return { success: true, message: 'Qmsg 连接成功', latency };
     } else {
-      return { success: false, message: `发送失败: ${response.data.text}` };
+      return { success: false, message: `发送失败: ${response.data.text}`, latency };
     }
   } catch (error: any) {
-    return { success: false, message: `连接失败: ${error.message}` };
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -266,6 +304,7 @@ async function testWxpusherChannel(appToken: string, uid: string): Promise<TestC
     return { success: false, message: 'AppToken 和 UID 都不能为空' };
   }
 
+  const start = Date.now();
   try {
     const response = await axios.post('http://wxpusher.zjiecode.com/api/send/message', {
       appToken,
@@ -274,18 +313,21 @@ async function testWxpusherChannel(appToken: string, uid: string): Promise<TestC
     }, {
       timeout: 10000
     });
+    const latency = Date.now() - start;
 
     if (response.data.code === 1000) {
-      return { success: true, message: 'WxPusher 连接成功' };
+      return { success: true, message: 'WxPusher 连接成功', latency };
     } else if (response.data.code === 1001) {
-      return { success: false, message: 'AppToken 无效' };
+      return { success: false, message: 'AppToken 无效', latency, details: '认证信息无效，请检查 Token/API Key' };
     } else if (response.data.code === 1002) {
-      return { success: false, message: 'UID 无效' };
+      return { success: false, message: 'UID 无效', latency };
     } else {
-      return { success: false, message: `发送失败: ${response.data.msg}` };
+      return { success: false, message: `发送失败: ${response.data.msg}`, latency };
     }
   } catch (error: any) {
-    return { success: false, message: `连接失败: ${error.message}` };
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -294,6 +336,7 @@ async function testLineChannel(channelToken: string, userId: string): Promise<Te
     return { success: false, message: 'Channel Access Token 和 User ID 都不能为空' };
   }
 
+  const start = Date.now();
   try {
     const response = await axios.post(
       'https://api.line.me/v2/bot/message/push',
@@ -306,20 +349,23 @@ async function testLineChannel(channelToken: string, userId: string): Promise<Te
         timeout: 10000
       }
     );
+    const latency = Date.now() - start;
 
     if (response.status === 200) {
-      return { success: true, message: 'LINE 连接成功' };
+      return { success: true, message: 'LINE 连接成功', latency };
     } else {
-      return { success: false, message: `HTTP ${response.status}` };
+      return { success: false, message: `HTTP ${response.status}`, latency };
     }
   } catch (error: any) {
+    const latency = Date.now() - start;
     if (error.response?.status === 401) {
-      return { success: false, message: 'Channel Access Token 无效' };
+      return { success: false, message: 'Channel Access Token 无效', latency, details: '认证信息无效，请检查 Token/API Key' };
     }
     if (error.response?.status === 400 && error.response?.data?.message?.includes('Invalid destination')) {
-      return { success: false, message: 'User ID 无效' };
+      return { success: false, message: 'User ID 无效', latency };
     }
-    throw error;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -361,23 +407,27 @@ async function testServerChanChannel(sendKey: string): Promise<TestConnectionRes
     return { success: false, message: 'SendKey 不能为空' };
   }
 
+  const start = Date.now();
   try {
     const response = await axios.post(
       `https://sctapi.ftqq.com/${sendKey}.send`,
       new URLSearchParams({ title: 'TimeMark 连接测试', desp: '您的 Server酱 渠道配置正确。' }),
       { timeout: 10000 }
     );
+    const latency = Date.now() - start;
 
     if (response.data?.code === 0) {
-      return { success: true, message: 'Server酱 连接成功' };
+      return { success: true, message: 'Server酱 连接成功', latency };
     } else {
-      return { success: false, message: `发送失败: ${response.data?.message || '未知错误'}` };
+      return { success: false, message: `发送失败: ${response.data?.message || '未知错误'}`, latency };
     }
   } catch (error: any) {
+    const latency = Date.now() - start;
     if (error.response?.status === 401 || error.response?.data?.code === 40001) {
-      return { success: false, message: 'SendKey 无效' };
+      return { success: false, message: 'SendKey 无效', latency, details: '认证信息无效，请检查 Token/API Key' };
     }
-    return { success: false, message: `连接失败: ${error.message}` };
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -386,6 +436,7 @@ async function testPushPlusChannel(token: string, topic?: string): Promise<TestC
     return { success: false, message: 'Token 不能为空' };
   }
 
+  const start = Date.now();
   try {
     const payload: any = {
       token,
@@ -398,14 +449,17 @@ async function testPushPlusChannel(token: string, topic?: string): Promise<TestC
       headers: { 'Content-Type': 'application/json' },
       timeout: 10000,
     });
+    const latency = Date.now() - start;
 
     if (response.data?.code === 200) {
-      return { success: true, message: 'PushPlus 连接成功' };
+      return { success: true, message: 'PushPlus 连接成功', latency };
     } else {
-      return { success: false, message: `发送失败: ${response.data?.msg || '未知错误'}` };
+      return { success: false, message: `发送失败: ${response.data?.msg || '未知错误'}`, latency };
     }
   } catch (error: any) {
-    return { success: false, message: `连接失败: ${error.message}` };
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -414,23 +468,27 @@ async function testBarkChannel(serverUrl: string, deviceKey: string): Promise<Te
     return { success: false, message: '服务器地址和设备密钥不能为空' };
   }
 
+  const start = Date.now();
   try {
     const baseUrl = serverUrl.replace(/\/+$/, '');
     const response = await axios.get(
       `${baseUrl}/${encodeURIComponent(deviceKey)}/TimeMark+连接测试/渠道配置正确`,
       { timeout: 10000 }
     );
+    const latency = Date.now() - start;
 
     if (response.data?.code === 200) {
-      return { success: true, message: 'Bark 连接成功' };
+      return { success: true, message: 'Bark 连接成功', latency };
     } else {
-      return { success: false, message: `发送失败: ${response.data?.message || '未知错误'}` };
+      return { success: false, message: `发送失败: ${response.data?.message || '未知错误'}`, latency };
     }
   } catch (error: any) {
+    const latency = Date.now() - start;
     if (error.response?.status === 400) {
-      return { success: false, message: '设备密钥无效' };
+      return { success: false, message: '设备密钥无效', latency };
     }
-    return { success: false, message: `连接失败: ${error.message}` };
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -439,6 +497,7 @@ async function testGotifyChannel(serverUrl: string, appToken: string): Promise<T
     return { success: false, message: '服务器地址和 App Token 不能为空' };
   }
 
+  const start = Date.now();
   try {
     const baseUrl = serverUrl.replace(/\/+$/, '');
     const response = await axios.post(
@@ -449,17 +508,20 @@ async function testGotifyChannel(serverUrl: string, appToken: string): Promise<T
         timeout: 10000,
       }
     );
+    const latency = Date.now() - start;
 
     if (response.status >= 200 && response.status < 300) {
-      return { success: true, message: 'Gotify 连接成功' };
+      return { success: true, message: 'Gotify 连接成功', latency };
     } else {
-      return { success: false, message: `服务器返回状态码: ${response.status}` };
+      return { success: false, message: `服务器返回状态码: ${response.status}`, latency };
     }
   } catch (error: any) {
+    const latency = Date.now() - start;
     if (error.response?.status === 401) {
-      return { success: false, message: 'App Token 无效' };
+      return { success: false, message: 'App Token 无效', latency, details: '认证信息无效，请检查 Token/API Key' };
     }
-    return { success: false, message: `连接失败: ${error.message}` };
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -468,22 +530,26 @@ async function testMeowChannel(pushKey: string): Promise<TestConnectionResult> {
     return { success: false, message: 'Push Key 不能为空' };
   }
 
+  const start = Date.now();
   try {
     const response = await axios.get(
       `https://api.day.app/${encodeURIComponent(pushKey)}/TimeMark+连接测试/渠道配置正确`,
       { timeout: 10000 }
     );
+    const latency = Date.now() - start;
 
     if (response.data?.code === 200) {
-      return { success: true, message: 'Meow 连接成功' };
+      return { success: true, message: 'Meow 连接成功', latency };
     } else {
-      return { success: false, message: `发送失败: ${response.data?.message || '未知错误'}` };
+      return { success: false, message: `发送失败: ${response.data?.message || '未知错误'}`, latency };
     }
   } catch (error: any) {
+    const latency = Date.now() - start;
     if (error.response?.status === 400) {
-      return { success: false, message: 'Push Key 无效' };
+      return { success: false, message: 'Push Key 无效', latency };
     }
-    return { success: false, message: `连接失败: ${error.message}` };
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -492,20 +558,24 @@ async function testPushMeChannel(pushKey: string): Promise<TestConnectionResult>
     return { success: false, message: 'Push Key 不能为空' };
   }
 
+  const start = Date.now();
   try {
     const response = await axios.post(
       'https://push.i-i.me/',
       new URLSearchParams({ push_key: pushKey, title: 'TimeMark 连接测试', content: '您的 PushMe 渠道配置正确。' }),
       { timeout: 10000 }
     );
+    const latency = Date.now() - start;
 
     if (response.data?.code === 200 || response.data?.success === true) {
-      return { success: true, message: 'PushMe 连接成功' };
+      return { success: true, message: 'PushMe 连接成功', latency };
     } else {
-      return { success: false, message: `发送失败: ${response.data?.msg || response.data?.message || '未知错误'}` };
+      return { success: false, message: `发送失败: ${response.data?.msg || response.data?.message || '未知错误'}`, latency };
     }
   } catch (error: any) {
-    return { success: false, message: `连接失败: ${error.message}` };
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -514,6 +584,7 @@ async function testNtfyChannel(serverUrl: string, topic: string): Promise<TestCo
     return { success: false, message: '服务器地址和 Topic 不能为空' };
   }
 
+  const start = Date.now();
   try {
     const baseUrl = serverUrl.replace(/\/+$/, '');
     const response = await axios.post(
@@ -524,17 +595,20 @@ async function testNtfyChannel(serverUrl: string, topic: string): Promise<TestCo
         timeout: 10000,
       }
     );
+    const latency = Date.now() - start;
 
     if (response.status >= 200 && response.status < 300) {
-      return { success: true, message: 'Ntfy 连接成功' };
+      return { success: true, message: 'Ntfy 连接成功', latency };
     } else {
-      return { success: false, message: `服务器返回状态码: ${response.status}` };
+      return { success: false, message: `服务器返回状态码: ${response.status}`, latency };
     }
   } catch (error: any) {
+    const latency = Date.now() - start;
     if (error.response?.status === 401 || error.response?.status === 403) {
-      return { success: false, message: '认证失败，请检查 Topic 权限' };
+      return { success: false, message: '认证失败，请检查 Topic 权限', latency, details: '认证信息无效，请检查 Token/API Key' };
     }
-    return { success: false, message: `连接失败: ${error.message}` };
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -543,26 +617,264 @@ async function testPushoverChannel(userKey: string, appToken: string): Promise<T
     return { success: false, message: 'User Key 和 App Token 不能为空' };
   }
 
+  const start = Date.now();
   try {
     const response = await axios.post(
       'https://api.pushover.net/1/users/validate.json',
       new URLSearchParams({ token: appToken, user: userKey }),
       { timeout: 10000 }
     );
+    const latency = Date.now() - start;
 
     if (response.data?.status === 1) {
-      return { success: true, message: 'Pushover 连接成功' };
+      return { success: true, message: 'Pushover 连接成功', latency };
     } else {
-      return { success: false, message: `验证失败: ${response.data?.errors?.join(', ') || '未知错误'}` };
+      return { success: false, message: `验证失败: ${response.data?.errors?.join(', ') || '未知错误'}`, latency };
     }
   } catch (error: any) {
+    const latency = Date.now() - start;
     if (error.response?.status === 401) {
-      return { success: false, message: 'App Token 无效' };
+      return { success: false, message: 'App Token 无效', latency, details: '认证信息无效，请检查 Token/API Key' };
     }
     if (error.response?.data?.errors) {
-      return { success: false, message: `验证失败: ${error.response.data.errors.join(', ')}` };
+      return { success: false, message: `验证失败: ${error.response.data.errors.join(', ')}`, latency };
     }
-    return { success: false, message: `连接失败: ${error.message}` };
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
+  }
+}
+
+async function testMatrixChannel(serverUrl: string, accessToken: string, roomId: string): Promise<TestConnectionResult> {
+  if (!serverUrl) {
+    return { success: false, message: 'Matrix 服务器地址不能为空' };
+  }
+  if (!accessToken) {
+    return { success: false, message: 'Access Token 不能为空' };
+  }
+  if (!roomId) {
+    return { success: false, message: 'Room ID 不能为空' };
+  }
+
+  const baseUrl = serverUrl.replace(/\/+$/, '');
+  const start = Date.now();
+
+  try {
+    // Test server reachability by hitting the login endpoint
+    const response = await axios.post(
+      `${baseUrl}/_matrix/client/v3/login`,
+      {},
+      { timeout: 10000, validateStatus: () => true }
+    );
+    const latency = Date.now() - start;
+
+    // 401 or 400 means server is reachable (auth required)
+    if (response.status === 401 || response.status === 400 || response.status === 403) {
+      // Now verify the access token by checking whoami
+      const whoamiStart = Date.now();
+      try {
+        const whoami = await axios.get(`${baseUrl}/_matrix/client/v3/account/whoami`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          timeout: 10000,
+        });
+        const totalLatency = Date.now() - start;
+        if (whoami.status === 200) {
+          return { success: true, message: `Matrix 连接成功 (${whoami.data.user_id})`, latency: totalLatency };
+        }
+      } catch (tokenErr: any) {
+        const totalLatency = Date.now() - start;
+        if (tokenErr.response?.status === 401) {
+          return { success: false, message: 'Access Token 无效', latency: totalLatency, details: '认证信息无效，请检查 Token/API Key' };
+        }
+        return { success: false, message: `Token 验证失败: ${tokenErr.message}`, latency: totalLatency };
+      }
+    }
+
+    if (response.status === 404) {
+      return { success: false, message: 'Matrix API 端点未找到', latency, details: '服务器地址可能不正确，请确认是 Matrix homeserver 地址' };
+    }
+
+    return { success: true, message: 'Matrix 服务器可达', latency };
+  } catch (error: any) {
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
+  }
+}
+
+async function testMattermostChannel(serverUrl: string, token: string, channelId: string): Promise<TestConnectionResult> {
+  if (!serverUrl) {
+    return { success: false, message: 'Mattermost 服务器地址不能为空' };
+  }
+  if (!token) {
+    return { success: false, message: 'Token 不能为空' };
+  }
+  if (!channelId) {
+    return { success: false, message: 'Channel ID 不能为空' };
+  }
+
+  const baseUrl = serverUrl.replace(/\/+$/, '');
+  const start = Date.now();
+
+  try {
+    // Test server reachability with ping endpoint
+    const pingResponse = await axios.get(`${baseUrl}/api/v4/system/ping`, {
+      timeout: 10000,
+    });
+    const latency = Date.now() - start;
+
+    if (pingResponse.status === 200) {
+      // Verify token by getting current user
+      try {
+        const meResponse = await axios.get(`${baseUrl}/api/v4/users/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 10000,
+        });
+        const totalLatency = Date.now() - start;
+        if (meResponse.status === 200) {
+          return { success: true, message: `Mattermost 连接成功 (${meResponse.data.username})`, latency: totalLatency };
+        }
+      } catch (tokenErr: any) {
+        const totalLatency = Date.now() - start;
+        if (tokenErr.response?.status === 401) {
+          return { success: false, message: 'Token 无效', latency: totalLatency, details: '认证信息无效，请检查 Token/API Key' };
+        }
+        return { success: false, message: `Token 验证失败: ${tokenErr.message}`, latency: totalLatency };
+      }
+    }
+
+    return { success: false, message: `服务器返回状态码: ${pingResponse.status}`, latency };
+  } catch (error: any) {
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
+  }
+}
+
+async function testNextcloudTalkChannel(serverUrl: string, token: string, roomToken: string): Promise<TestConnectionResult> {
+  if (!serverUrl) {
+    return { success: false, message: 'Nextcloud 服务器地址不能为空' };
+  }
+  if (!token) {
+    return { success: false, message: 'Token 不能为空' };
+  }
+  if (!roomToken) {
+    return { success: false, message: 'Room Token 不能为空' };
+  }
+
+  const baseUrl = serverUrl.replace(/\/+$/, '');
+  const start = Date.now();
+
+  try {
+    // Test server reachability via Talk API
+    const response = await axios.get(
+      `${baseUrl}/ocs/v2.php/apps/spreed/api/v1/room`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'OCS-APIRequest': 'true',
+          'Accept': 'application/json',
+        },
+        timeout: 10000,
+        validateStatus: () => true,
+      }
+    );
+    const latency = Date.now() - start;
+
+    if (response.status === 200) {
+      return { success: true, message: 'Nextcloud Talk 连接成功', latency };
+    }
+    if (response.status === 401) {
+      // Server is reachable but auth failed - check if it's basic auth
+      // Try with basic auth (username:token format)
+      return { success: false, message: '认证失败', latency, details: '认证信息无效，请检查 Token/API Key' };
+    }
+    if (response.status === 404) {
+      return { success: false, message: 'Talk 应用未找到', latency, details: '请确认 Nextcloud 已安装 Talk 应用' };
+    }
+
+    return { success: false, message: `服务器返回状态码: ${response.status}`, latency };
+  } catch (error: any) {
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
+  }
+}
+
+async function testMsTeamsChannel(webhookUrl: string): Promise<TestConnectionResult> {
+  if (!webhookUrl) {
+    return { success: false, message: 'Webhook URL 不能为空' };
+  }
+
+  const start = Date.now();
+
+  try {
+    // Send an empty adaptive card to test connectivity
+    // MS Teams webhooks return 400 for invalid payload but that proves connectivity
+    const response = await axios.post(
+      webhookUrl,
+      { type: 'message', text: '' },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+        validateStatus: () => true,
+      }
+    );
+    const latency = Date.now() - start;
+
+    // 200 = sent successfully, 400 = bad payload but server reachable
+    if (response.status === 200 || response.status === 202) {
+      return { success: true, message: 'MS Teams Webhook 连接成功', latency };
+    }
+    if (response.status === 400) {
+      // 400 means the webhook endpoint is reachable
+      return { success: true, message: 'MS Teams Webhook 可达', latency };
+    }
+    if (response.status === 404) {
+      return { success: false, message: 'Webhook URL 无效或已过期', latency, details: '服务器地址可能不正确' };
+    }
+    if (response.status === 429) {
+      return { success: true, message: 'MS Teams Webhook 可达（请求频率受限）', latency };
+    }
+
+    return { success: false, message: `服务器返回状态码: ${response.status}`, latency };
+  } catch (error: any) {
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
+  }
+}
+
+async function testNostrChannel(relayUrl: string, privateKey: string): Promise<TestConnectionResult> {
+  if (!relayUrl) {
+    return { success: false, message: 'Relay URL 不能为空' };
+  }
+  if (!privateKey) {
+    return { success: false, message: '私钥不能为空' };
+  }
+
+  const start = Date.now();
+
+  try {
+    // Test relay reachability via HTTP GET (most relays respond to HTTP)
+    // Convert wss:// to https:// for HTTP probe
+    const httpUrl = relayUrl.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
+    const response = await axios.get(httpUrl, {
+      timeout: 10000,
+      headers: { Accept: 'text/html,application/json' },
+      validateStatus: () => true,
+    });
+    const latency = Date.now() - start;
+
+    // Any response means the relay is reachable
+    if (response.status >= 200 && response.status < 500) {
+      return { success: true, message: 'Nostr Relay 可达', latency };
+    }
+
+    return { success: false, message: `Relay 返回状态码: ${response.status}`, latency };
+  } catch (error: any) {
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
   }
 }
 
@@ -571,6 +883,7 @@ async function testSmtpChannel(smtpHost: string, password: string, fromEmail: st
     return { success: false, message: 'SMTP 服务器、密码和发件邮箱都不能为空' };
   }
 
+  const start = Date.now();
   try {
     const nodemailer = await import('nodemailer');
     const transporter = nodemailer.default.createTransport({
@@ -584,15 +897,17 @@ async function testSmtpChannel(smtpHost: string, password: string, fromEmail: st
     });
 
     await transporter.verify();
-    return { success: true, message: 'SMTP 连接成功' };
+    const latency = Date.now() - start;
+    return { success: true, message: 'SMTP 连接成功', latency };
   } catch (error: any) {
+    const latency = Date.now() - start;
     if (error.code === 'EAUTH') {
-      return { success: false, message: 'SMTP 认证失败，请检查邮箱和密码/授权码' };
+      return { success: false, message: 'SMTP 认证失败，请检查邮箱和密码/授权码', latency, details: '认证信息无效，请检查 Token/API Key' };
     }
     if (error.code === 'ECONNREFUSED') {
-      return { success: false, message: 'SMTP 服务器连接被拒绝，请检查服务器地址' };
+      return { success: false, message: 'SMTP 服务器连接被拒绝，请检查服务器地址', latency, details: '请确认服务器正在运行' };
     }
-    return { success: false, message: `SMTP 连接失败: ${error.message}` };
+    return { success: false, message: `SMTP 连接失败: ${error.message}`, latency };
   }
 }
 

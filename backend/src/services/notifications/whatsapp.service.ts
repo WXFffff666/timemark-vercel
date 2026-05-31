@@ -1,13 +1,39 @@
 import { getBlessing } from '../../../../shared/src/blessings.js';
 import QRCode from 'qrcode';
-import * as Baileys from 'baileys';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
 
-const makeWASocket = (Baileys as any).makeWASocket || (Baileys as any).default?.makeWASocket;
-const useMultiFileAuthState = (Baileys as any).useMultiFileAuthState;
-const DisconnectReason = (Baileys as any).DisconnectReason;
+// Lazy-loaded baileys module
+let _baileys: any = null;
+let _baileysLoadError: Error | null = null;
+
+async function getBaileys() {
+  if (_baileysLoadError) throw _baileysLoadError;
+  if (!_baileys) {
+    try {
+      _baileys = await import('baileys');
+    } catch {
+      _baileysLoadError = new Error(
+        '此渠道需要额外安装 baileys 包。请运行: pnpm add baileys，或参考文档: docs/CHANNEL_COMPATIBILITY.md'
+      );
+      throw _baileysLoadError;
+    }
+  }
+  return _baileys;
+}
+
+function getMakeWASocket(Baileys: any) {
+  return Baileys.makeWASocket || Baileys.default?.makeWASocket;
+}
+
+function getUseMultiFileAuthState(Baileys: any) {
+  return Baileys.useMultiFileAuthState;
+}
+
+function getDisconnectReason(Baileys: any) {
+  return Baileys.DisconnectReason;
+}
 
 // Active socket instances (in-memory only)
 const activeSockets = new Map<string, any>();
@@ -22,11 +48,12 @@ function generateSessionId(): string {
   return `whatsapp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-async function createTempAuthState(sessionId: string) {
+async function createTempAuthState(sessionId: string, Baileys: any) {
   const tempDir = path.join(tmpdir(), 'timemark', 'whatsapp', sessionId);
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
+  const useMultiFileAuthState = getUseMultiFileAuthState(Baileys);
   return useMultiFileAuthState(tempDir);
 }
 
@@ -42,11 +69,15 @@ function cleanupTempDir(sessionId: string) {
  * Returns QR code data URL and session ID
  */
 export async function startAuth(): Promise<{ qrcode: string; sessionId: string }> {
+  const Baileys = await getBaileys();
+  const makeWASocket = getMakeWASocket(Baileys);
+  const DisconnectReason = getDisconnectReason(Baileys);
+
   return new Promise(async (resolve, reject) => {
     const sessionId = generateSessionId();
     
     try {
-      const { state, saveCreds } = await createTempAuthState(sessionId);
+      const { state, saveCreds } = await createTempAuthState(sessionId, Baileys);
       
       const sock = makeWASocket({
         auth: state,
@@ -122,6 +153,10 @@ export async function checkAuth(sessionData: any): Promise<{ authenticated: bool
   }
 
   try {
+    const Baileys = await getBaileys();
+    const makeWASocket = getMakeWASocket(Baileys);
+    const useMultiFileAuthState = getUseMultiFileAuthState(Baileys);
+
     // Create temporary directory and restore auth state
     const sessionId = sessionData.sessionId || generateSessionId();
     const tempDir = path.join(tmpdir(), 'timemark', 'whatsapp', sessionId);
@@ -255,6 +290,10 @@ export async function sendNotification(
   if (!sessionData || !sessionData.authState) {
     throw new Error('Invalid session data');
   }
+
+  const Baileys = await getBaileys();
+  const makeWASocket = getMakeWASocket(Baileys);
+  const useMultiFileAuthState = getUseMultiFileAuthState(Baileys);
 
   let message: string;
   if (event.customMessage) {

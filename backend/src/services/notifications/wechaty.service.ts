@@ -1,9 +1,27 @@
-import { WechatyBuilder, ScanStatus, type Wechaty, Contact } from 'wechaty';
 import QRCode from 'qrcode';
 import { getBlessing } from '../../../../shared/src/blessings.js';
 
+// Lazy-loaded wechaty module
+let _wechaty: typeof import('wechaty') | null = null;
+let _wechatyLoadError: Error | null = null;
+
+async function getWechaty() {
+  if (_wechatyLoadError) throw _wechatyLoadError;
+  if (!_wechaty) {
+    try {
+      _wechaty = await import('wechaty');
+    } catch {
+      _wechatyLoadError = new Error(
+        '此渠道需要额外安装 wechaty 包。请运行: pnpm add wechaty，或参考文档: docs/CHANNEL_COMPATIBILITY.md'
+      );
+      throw _wechatyLoadError;
+    }
+  }
+  return _wechaty;
+}
+
 // Store active bot instances by session ID
-const botInstances = new Map<string, Wechaty>();
+const botInstances = new Map<string, any>();
 const authStatus = new Map<string, { authenticated: boolean; user?: string }>();
 
 export interface WechatySessionData {
@@ -17,19 +35,20 @@ export interface WechatySessionData {
  * Returns QR code as data URL and session ID for tracking
  */
 export async function startAuth(): Promise<{ qrcode: string; sessionId: string }> {
+  const { WechatyBuilder, ScanStatus } = await getWechaty();
   const sessionId = `wechaty_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   
   console.log(`[WeChaty] Starting auth for session ${sessionId}`);
   
   return new Promise((resolve, reject) => {
-    const bot: Wechaty = WechatyBuilder.build({
+    const bot = WechatyBuilder.build({
       name: `timemark-${sessionId}`,
     });
 
     let qrCodeData: string | null = null;
 
     bot
-      .on('scan', async (qrcode: string, status: ScanStatus) => {
+      .on('scan', async (qrcode: string, status: number) => {
         console.log(`[WeChaty] Scan event: status=${status}, qrcode length=${qrcode?.length}`);
         if (status === ScanStatus.Waiting || status === ScanStatus.Timeout) {
           // Generate QR code data URL

@@ -186,6 +186,18 @@ ALTER TABLE event_trigger_logs ADD COLUMN account_id INTEGER;`
       name: 'add_connection_status',
       sql: `ALTER TABLE notification_accounts ADD COLUMN connection_status TEXT;`
     },
+    {
+      version: 14,
+      name: 'add_test_result_columns',
+      sql: `ALTER TABLE notification_accounts ADD COLUMN last_test_result TEXT;
+ALTER TABLE notification_accounts ADD COLUMN last_test_at TEXT;`
+    },
+    {
+      version: 15,
+      name: 'add_quiet_hours',
+      sql: `ALTER TABLE user_configs ADD COLUMN quiet_hours_start TEXT;
+ALTER TABLE user_configs ADD COLUMN quiet_hours_end TEXT;`
+    },
   ];
 
   for (const migration of migrations) {

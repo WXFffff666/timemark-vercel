@@ -6,10 +6,11 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, ChevronDown, Clock, Eye } from 'lucide-react';
+import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, ChevronDown, Clock, Eye, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lunar, Solar } from 'lunar-javascript';
-import { api } from '@/lib/api';
+import { useNavigate } from 'react-router-dom';
+import { api, fetchAvailableChannels, type AvailableChannel } from '@/lib/api';
 import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
 import { getBlessing } from '@timemark/shared/blessings';
 import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate } from '@timemark/shared';
@@ -159,7 +160,9 @@ const defaultReminderConfig: ReminderConfig = {
 };
 
 export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [availableChannels, setAvailableChannels] = useState<AvailableChannel[]>([]);
   const [formData, setFormData] = useState<CreateEventRequest>({
     name: '',
     type: 'birthday',
@@ -299,6 +302,11 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
       api.get<NotificationAccountResponse[]>('/config/accounts')
         .then(data => setAccounts(data.filter(a => a.is_active)))
         .catch(err => console.error('Failed to load accounts:', err));
+      
+      // 加载可用渠道状态
+      fetchAvailableChannels()
+        .then(data => setAvailableChannels(data))
+        .catch(err => console.error('Failed to load available channels:', err));
     }
   }, [open]);
 
@@ -1006,21 +1014,57 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">通知渠道</label>
                     <div className="grid grid-cols-4 gap-2">
-                      {notificationChannels.map((channel) => (
-                        <button
-                          key={channel.value}
-                          type="button"
-                          onClick={() => toggleChannel(channel.value)}
-                          className={`h-full min-h-[48px] w-full rounded-xl text-xs font-medium transition-all duration-300 alive-interactive flex flex-col items-center justify-center gap-1 p-1.5 ${
-                            formData.reminderConfig.channels?.includes(channel.value)
-                              ? 'bg-primary-500/20 text-primary-600 dark:text-primary-400 border border-primary-500/30'
-                              : 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-transparent'
-                          }`}
-                        >
-                          <span className="text-base leading-none">{channel.icon}</span>
-                          <span className="text-center leading-tight line-clamp-2">{channel.label}</span>
-                        </button>
-                      ))}
+                      {notificationChannels.map((channel) => {
+                        const accountType = channelToAccountType[channel.value];
+                        const configuredAccounts = availableChannels.filter(a => a.type === accountType);
+                        const hasActive = configuredAccounts.some(a => a.is_active && a.last_test_result !== 'failed');
+                        const hasWarning = configuredAccounts.some(a => a.is_active && a.last_test_result === 'failed');
+                        const isConfigured = configuredAccounts.length > 0;
+                        const isSelected = formData.reminderConfig.channels?.includes(channel.value);
+                        const isDisabled = !isConfigured;
+
+                        return (
+                          <button
+                            key={channel.value}
+                            type="button"
+                            onClick={() => {
+                              if (isDisabled) {
+                                navigate('/channels');
+                                onClose();
+                              } else {
+                                toggleChannel(channel.value);
+                              }
+                            }}
+                            className={`relative h-full min-h-[48px] w-full rounded-xl text-xs font-medium transition-all duration-300 flex flex-col items-center justify-center gap-1 p-1.5 ${
+                              isSelected
+                                ? 'bg-primary-500/20 text-primary-600 dark:text-primary-400 border border-primary-500/30'
+                                : isDisabled
+                                  ? 'bg-slate-50/60 dark:bg-slate-900/40 text-slate-300 dark:text-slate-600 border border-dashed border-slate-200 dark:border-slate-700 cursor-pointer'
+                                  : hasWarning
+                                    ? 'bg-yellow-50/80 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800/50 alive-interactive'
+                                    : 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-transparent alive-interactive'
+                            }`}
+                            title={isDisabled ? '未配置，点击去配置' : hasWarning ? '已配置但测试失败' : hasActive ? '已配置且可用' : ''}
+                          >
+                            {/* 状态指示点 */}
+                            <span className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
+                              isDisabled
+                                ? 'bg-slate-300 dark:bg-slate-600'
+                                : hasWarning
+                                  ? 'bg-yellow-500'
+                                  : 'bg-green-500'
+                            }`} />
+                            <span className={`text-base leading-none ${isDisabled ? 'opacity-40' : ''}`}>{channel.icon}</span>
+                            <span className="text-center leading-tight line-clamp-2">{channel.label}</span>
+                            {isDisabled && (
+                              <span className="flex items-center gap-0.5 text-[9px] text-slate-400 dark:text-slate-500">
+                                <ExternalLink size={8} />
+                                去配置
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 

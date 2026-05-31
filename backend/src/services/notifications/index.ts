@@ -48,6 +48,42 @@ import { getBlessing } from '../../../../shared/src/blessings.js';
 import { generateNotificationContent } from '../../../../shared/src/templates.js';
 import { query } from '../../db/index.js';
 
+/**
+ * Check if current time is within quiet hours for the user's timezone.
+ * Handles overnight ranges (e.g., "22:00" to "07:00").
+ */
+function isInQuietHours(quietStart: string | null, quietEnd: string | null, timezone: string): boolean {
+  if (!quietStart || !quietEnd) return false;
+
+  const [startH, startM] = quietStart.split(':').map(Number);
+  const [endH, endM] = quietEnd.split(':').map(Number);
+  if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) return false;
+
+  // Get current time in user's timezone
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const currentH = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+  const currentM = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+
+  const currentMinutes = currentH * 60 + currentM;
+  const startMinutes = startH * 60 + startM;
+  const endMinutes = endH * 60 + endM;
+
+  if (startMinutes <= endMinutes) {
+    // Same-day range (e.g., 09:00 to 17:00)
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+  } else {
+    // Overnight range (e.g., 22:00 to 07:00)
+    return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+  }
+}
+
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
@@ -297,6 +333,14 @@ function getChannelConfigFromAccount(
  */
 export async function sendNotifications(event: any, userId: number, channels: string[]): Promise<Record<string, { success: boolean; error?: string; accountId?: number }>> {
   const config = await getUserConfig(userId);
+
+  // Quiet hours check: skip sending, scheduler will retry next minute
+  const userTimezone = config?.timezone || 'Asia/Shanghai';
+  if (isInQuietHours(config?.quiet_hours_start, config?.quiet_hours_end, userTimezone)) {
+    console.log(`[Notifications] Skipping send during quiet hours for user ${userId}`);
+    return { _quiet_hours: { success: false, error: 'quiet_hours' } };
+  }
+
   const channelWebhooks = config?.channel_webhooks || {};
   
   // 获取关系映射
@@ -665,7 +709,98 @@ export async function sendNotifications(event: any, userId: number, channels: st
     }
   }
   
+  // Channel fallback: when primary channel fails, try other active accounts (max 2 fallback attempts)
+  const failedChannels = Object.entries(channelResults).filter(([, r]) => !r.success);
+  if (failedChannels.length > 0 && allAccounts.length > 1) {
+    // Collect account IDs already tried
+    const triedAccountIds = new Set<number>();
+    for (const task of sendTasks) {
+      if (task.accountId) triedAccountIds.add(task.accountId);
+    }
+    
+    // Find other active accounts not already tried
+    const fallbackCandidates = allAccounts.filter(
+      a => a.is_active && !triedAccountIds.has(a.id)
+    );
+    
+    let fallbackAttempts = 0;
+    const maxFallbacks = 2;
+    
+    for (const [failedCh] of failedChannels) {
+      if (fallbackAttempts >= maxFallbacks) break;
+      
+      for (const candidate of fallbackCandidates) {
+        if (fallbackAttempts >= maxFallbacks) break;
+        
+        const candidateChannel = Object.entries(channelToAccountType).find(
+          ([, type]) => type === candidate.type
+        )?.[0];
+        if (!candidateChannel) continue;
+        
+        // Skip if this channel type was already tried and succeeded
+        if (channelResults[candidateChannel]?.success) continue;
+        
+        const fallbackConfig = getChannelConfigFromAccount(candidate, candidateChannel);
+        if (!fallbackConfig) continue;
+        
+        console.log(`[Fallback] Primary channel ${failedCh} failed, trying ${candidateChannel} (account ${candidate.id})`);
+        fallbackAttempts++;
+        
+        try {
+          await retryWithBackoff(async () => {
+            await sendSingleChannel(candidateChannel, fallbackConfig, mappedEvent);
+          }, 2, 500); // Fewer retries for fallback
+          
+          channelResults[candidateChannel] = { success: true, accountId: candidate.id };
+          console.log(`[Fallback] Successfully sent via ${candidateChannel} (account ${candidate.id})`);
+          break; // One successful fallback is enough for this failed channel
+        } catch (fallbackErr) {
+          const fbErrMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+          console.error(`[Fallback] ${candidateChannel} (account ${candidate.id}) also failed: ${fbErrMsg}`);
+          channelResults[`${candidateChannel}_fallback`] = { success: false, error: fbErrMsg, accountId: candidate.id };
+        }
+      }
+    }
+  }
+  
   return channelResults;
+}
+
+/**
+ * Send a notification through a single channel with given config.
+ * Used by fallback logic to dispatch to the correct channel handler.
+ */
+async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any): Promise<void> {
+  if (ch === 'feishu' && chConfig.webhook) await sendFeishuNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'wecom' && chConfig.webhook) await sendWeComNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'dingtalk' && chConfig.webhook && chConfig.secret)
+    await sendDingTalkNotification(mappedEvent, chConfig.webhook, chConfig.secret);
+  else if (ch === 'telegram' && chConfig.token && chConfig.chat_id)
+    await sendTelegramNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'discord' && chConfig.webhook) await sendDiscordNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'slack' && chConfig.webhook) await sendSlackNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'wechat' && chConfig.token && chConfig.chat_id)
+    await sendWxPusherNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'qq' && chConfig.token) await sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'serverchan' && chConfig.token) await sendServerChanNotification(mappedEvent, chConfig.token);
+  else if (ch === 'pushplus' && chConfig.token) await sendPushPlusNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'bark' && chConfig.webhook && chConfig.token)
+    await sendBarkNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id, chConfig.secret);
+  else if (ch === 'gotify' && chConfig.webhook && chConfig.token)
+    await sendGotifyNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id ? Number(chConfig.chat_id) : 5);
+  else if (ch === 'meow' && chConfig.token) await sendMeowNotification(mappedEvent, chConfig.token);
+  else if (ch === 'pushme' && chConfig.token) await sendPushMeNotification(mappedEvent, chConfig.token);
+  else if (ch === 'wecomapp' && chConfig.token && chConfig.secret && chConfig.chat_id && chConfig.webhook)
+    await sendWeComAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id, chConfig.webhook);
+  else if (ch === 'ntfy' && chConfig.webhook && chConfig.token)
+    await sendNtfyNotification(mappedEvent, chConfig.webhook, chConfig.token);
+  else if (ch === 'pushover' && chConfig.token && chConfig.secret)
+    await sendPushoverNotification(mappedEvent, chConfig.token, chConfig.secret);
+  else if (ch === 'apprise' && chConfig.webhook)
+    await sendAppriseNotification(mappedEvent, chConfig.webhook, chConfig.token);
+  else if (genericWebhookChannels.has(ch) && chConfig.webhook)
+    await sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch);
+  else throw new Error(`No valid config for channel ${ch}`);
 }
 
 /**

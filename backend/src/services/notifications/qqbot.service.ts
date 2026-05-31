@@ -10,7 +10,7 @@ async function loadOicq() {
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       console.error('[QQBot] Failed to load oicq module:', errMsg);
-      oicqLoadError = new Error(`认证启动失败: npm包oicq未正确安装，请确保已执行 pnpm install。详细信息: ${errMsg}`);
+      oicqLoadError = new Error(`此渠道需要额外安装 oicq 包。请运行: pnpm add oicq，或参考文档: docs/CHANNEL_COMPATIBILITY.md。详细信息: ${errMsg}`);
       throw oicqLoadError;
     }
   }
@@ -21,7 +21,7 @@ function getOicq() {
     throw oicqLoadError;
   }
   if (!oicq) {
-    throw new Error('认证启动失败: npm包oicq未正确安装，请确保已执行 pnpm install');
+    throw new Error('此渠道需要额外安装 oicq 包。请运行: pnpm add oicq，或参考文档: docs/CHANNEL_COMPATIBILITY.md');
   }
   return oicq;
 }

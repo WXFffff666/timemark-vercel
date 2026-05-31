@@ -8,6 +8,7 @@ import {
 } from '../services/notifications/channels.config.js';
 import { testConnectionSchema, pluginStartAuthSchema, pluginCheckAuthSchema } from '@timemark/shared';
 import type { User } from '@timemark/shared';
+import { query } from '../db/index.js';
 
 // Plugin service imports
 import { startAuth as startWechatAuth, checkAuth as checkWechatAuth, logout as logoutWechat } from '../services/notifications/wechaty.service.js';
@@ -65,6 +66,22 @@ channels.get('/template/:id', async (c) => {
   return c.json({ 
     success: true, 
     data: template 
+  });
+});
+
+// Get available (configured + active) channels for the current user
+channels.get('/available', async (c) => {
+  const user = c.get('user');
+  const userId = Number(user.id);
+
+  const result = await query(
+    'SELECT id, type, name, config_method, is_active, last_test_result, last_test_at, connection_status FROM notification_accounts WHERE user_id = $1 AND is_active = 1',
+    [userId]
+  );
+
+  return c.json({
+    success: true,
+    data: result.rows
   });
 });
 
@@ -222,6 +239,9 @@ channels.post('/test', async (c) => {
     return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
   }
   
+  // Optional accountId to update test result in DB
+  const accountId = typeof body.accountId === 'number' ? body.accountId : null;
+  
   try {
     const result = await testConnection({
       type: parsed.data.type,
@@ -233,6 +253,15 @@ channels.post('/test', async (c) => {
       sessionData: parsed.data.sessionData
     });
     
+    // Update last_test_result in DB if accountId provided
+    if (accountId) {
+      const testResult = result.success ? 'success' : 'failed';
+      await query(
+        "UPDATE notification_accounts SET last_test_result = $1, last_test_at = datetime('now') WHERE id = $2",
+        [testResult, accountId]
+      );
+    }
+    
     return c.json({ 
       success: true, 
       data: {
@@ -243,6 +272,19 @@ channels.post('/test', async (c) => {
     });
   } catch (error: any) {
     console.error('[TestConnection] Failed:', error);
+    
+    // Update last_test_result as failed if accountId provided
+    if (accountId) {
+      try {
+        await query(
+          "UPDATE notification_accounts SET last_test_result = $1, last_test_at = datetime('now') WHERE id = $2",
+          ['failed', accountId]
+        );
+      } catch (dbError) {
+        console.error('[TestConnection] Failed to update test result:', dbError);
+      }
+    }
+    
     return c.json({ 
       success: false, 
       error: error.message || '测试连接失败' 
