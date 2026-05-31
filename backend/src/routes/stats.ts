@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
+import { getSchedulerStatus } from '../queue/scheduler.js';
+import { sendReminders } from '../jobs/tasks.js';
 import type { User } from '@timemark/shared';
 
 const stats = new Hono<{ Variables: { user: User } }>();
@@ -26,6 +28,20 @@ stats.get('/', async (c) => {
       channelUsage: accounts.rows,
     },
   });
+});
+
+stats.get('/scheduler', async (c) => {
+  const status = getSchedulerStatus();
+  return c.json({ success: true, data: status });
+});
+
+stats.post('/trigger-reminders', async (c) => {
+  try {
+    await sendReminders();
+    return c.json({ success: true, message: 'Reminders triggered successfully' });
+  } catch (error) {
+    return c.json({ success: false, message: `Trigger failed: ${String(error)}` }, 500);
+  }
 });
 
 export default stats;

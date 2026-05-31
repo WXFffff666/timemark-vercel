@@ -1,7 +1,7 @@
 import { query } from '../db/index.js';
 import { Lunar, Solar } from 'lunar-javascript';
 import { sendNotifications } from '../services/notifications/index.js';
-import { getReminderSettings, getUserConfig } from '../services/config.service.js';
+// Batch query replaces per-user getReminderSettings/getUserConfig calls
 
 /** Get today's date string (YYYY-MM-DD) in the given timezone, robust on Alpine Linux */
 function getTodayString(now: Date, timeZone: string): string {
@@ -41,47 +41,59 @@ export async function sendReminders() {
   // 查询所有事件
   const allEvents = await query('SELECT * FROM events');
   
-  // 缓存每个用户的提醒设置（避免重复查询）
+  // Batch load ALL user configs upfront to avoid N+1 queries
+  const allUserConfigs = await query(
+    `SELECT user_id, timezone, reminders_enabled, daily_check_time, days_before_list, reminder_emails 
+     FROM user_configs`
+  );
+  const userConfigMap = new Map<number, any>();
+  for (const row of allUserConfigs.rows) {
+    userConfigMap.set(row.user_id, row);
+  }
+
+  // Caches derived from batch-loaded data
   const userReminderSettingsCache = new Map<number, number[]>();
   const userEnabledCache = new Map<number, boolean>();
   const userTimezoneCache = new Map<number, string>();
 
-  async function getUserTimezone(userId: number): Promise<string> {
+  // Pre-populate caches from batch data
+  for (const [userId, config] of userConfigMap) {
+    userTimezoneCache.set(userId, config.timezone || 'Asia/Shanghai');
+    userEnabledCache.set(userId, config.reminders_enabled !== false);
+    const daysList = config.days_before_list || [1, 3, 7];
+    userReminderSettingsCache.set(userId, Array.isArray(daysList) ? daysList : [1, 3, 7]);
+  }
+
+  function getUserTimezone(userId: number): string {
     if (userTimezoneCache.has(userId)) return userTimezoneCache.get(userId)!;
-    const config = await getUserConfig(userId);
-    const tz = config?.timezone || 'Asia/Shanghai';
-    userTimezoneCache.set(userId, tz);
-    return tz;
+    // User not in user_configs table - use defaults
+    return 'Asia/Shanghai';
   }
   
-  async function getDaysBeforeList(userId: number, eventReminderDaysBefore: any): Promise<number[]> {
+  function getDaysBeforeList(userId: number, eventReminderDaysBefore: any): number[] {
     // 优先使用事件级别的 reminder_days_before
     const eventDays = parseReminderDays(eventReminderDaysBefore);
     if (eventDays) return eventDays;
     
-    // 回退到用户级别的 days_before_list
+    // 回退到用户级别的 days_before_list (already batch-loaded)
     if (userReminderSettingsCache.has(userId)) {
       return userReminderSettingsCache.get(userId)!;
     }
-    const settings = await getReminderSettings(userId);
-    const days = settings?.daysBeforeList ?? [1, 3, 7];
-    userReminderSettingsCache.set(userId, days);
-    return days;
+    return [1, 3, 7];
   }
   
   // 筛选需要提醒的事件
   const eventsToRemind: Array<{ id: number; user_id: number; name: string; date: string; lunar_date: any; calendar_type: string; notification_channels: string[]; notification_account_ids: any }> = [];
   
   for (const event of allEvents.rows) {
-    // Check if user has reminders enabled (cached to avoid repeated queries)
+    // Check if user has reminders enabled (batch-loaded, default to true)
     if (!userEnabledCache.has(event.user_id)) {
-      const settings = await getReminderSettings(event.user_id);
-      userEnabledCache.set(event.user_id, settings?.enabled !== false);
+      userEnabledCache.set(event.user_id, true); // Default: enabled
     }
     if (!userEnabledCache.get(event.user_id)) continue;
 
     // Get per-user timezone and calculate today's date in that timezone
-    const timeZone = await getUserTimezone(event.user_id);
+    const timeZone = getUserTimezone(event.user_id);
     const today = getTodayString(now, timeZone);
 
     const calendarType = event.calendar_type;
@@ -104,7 +116,7 @@ export async function sendReminders() {
     
     // 回退到 reminder_days_before 字段
     if (daysBeforeList.length === 0) {
-      daysBeforeList = await getDaysBeforeList(event.user_id, event.reminder_days_before);
+      daysBeforeList = getDaysBeforeList(event.user_id, event.reminder_days_before);
     }
     
     // 包含 0 表示当天也提醒
@@ -209,7 +221,7 @@ export async function sendReminders() {
     const channels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
     if (channels.length > 0) {
       // Check if already sent today
-      const timeZone = await getUserTimezone(event.user_id);
+      const timeZone = getUserTimezone(event.user_id);
       const today = getTodayString(now, timeZone);
       const alreadySent = await query(
         `SELECT id FROM event_trigger_logs 
@@ -234,9 +246,17 @@ export async function sendReminders() {
           ? Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => `${ch}: ${r.error}`).join('; ')
           : undefined;
         
+        // Build error details for failed channels
+        const failedEntries = Object.entries(channelResults).filter(([, r]) => !r.success);
+        const errorDetails = failedEntries.length > 0 ? {
+          channel_type: failedEntries.map(([ch]) => ch).join(','),
+          account_id: failedEntries[0][1].accountId,
+          details: failedEntries.map(([ch, r]) => ({ channel: ch, error: r.error, accountId: r.accountId }))
+        } : undefined;
+        
         // 记录事件触发日志
         const triggerDate = 'targetDate' in event ? (event as any).targetDate : new Date(event.date);
-        await recordEventTrigger(event.id, event.user_id, 'scheduled', triggerDate, status, errorMessage, JSON.stringify(channelResults));
+        await recordEventTrigger(event.id, event.user_id, 'scheduled', triggerDate, status, errorMessage, JSON.stringify(channelResults), errorDetails);
       } catch (error) {
         console.error(`[Task] Failed to send notifications for event ${event.id}:`, error);
         const triggerDate2 = 'targetDate' in event ? (event as any).targetDate : new Date(event.date);
@@ -254,14 +274,21 @@ async function recordEventTrigger(
   triggerDate: Date,
   status: string = 'success',
   errorMessage?: string,
-  channelResults?: string
+  channelResults?: string,
+  errorDetails?: { channel_type?: string; account_id?: number; details?: any }
 ) {
   try {
     await query(
       `INSERT INTO event_trigger_logs 
-       (event_id, user_id, trigger_type, trigger_date, status, error_message, channel_results) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [eventId, userId, triggerType, triggerDate.toISOString().split('T')[0], status, errorMessage || null, channelResults || null]
+       (event_id, user_id, trigger_type, trigger_date, status, error_message, channel_results, error_details, channel_type, account_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        eventId, userId, triggerType, triggerDate.toISOString().split('T')[0], 
+        status, errorMessage || null, channelResults || null,
+        errorDetails?.details ? JSON.stringify(errorDetails.details) : null,
+        errorDetails?.channel_type || null,
+        errorDetails?.account_id || null
+      ]
     );
   } catch (error) {
     console.error('[Task] Failed to record event trigger log:', error);

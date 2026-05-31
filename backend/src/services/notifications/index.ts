@@ -46,6 +46,7 @@ import { getUserConfig, getRelationshipMappings, getNotificationAccounts, getEve
 import { applyRelationshipMapping } from '@timemark/shared/relationship';
 import { getBlessing } from '../../../../shared/src/blessings.js';
 import { generateNotificationContent } from '../../../../shared/src/templates.js';
+import { query } from '../../db/index.js';
 
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
@@ -294,7 +295,7 @@ function getChannelConfigFromAccount(
  * @param userId - The user's ID
  * @param channels - Array of channel IDs to send through (e.g., ['resend', 'telegram'])
  */
-export async function sendNotifications(event: any, userId: number, channels: string[]): Promise<Record<string, { success: boolean; error?: string }>> {
+export async function sendNotifications(event: any, userId: number, channels: string[]): Promise<Record<string, { success: boolean; error?: string; accountId?: number }>> {
   const config = await getUserConfig(userId);
   const channelWebhooks = config?.channel_webhooks || {};
   
@@ -432,14 +433,35 @@ export async function sendNotifications(event: any, userId: number, channels: st
   }
   
   // 发送通知（每个渠道可能有多个账号配置，独立发送）
-  const channelResults: Record<string, { success: boolean; error?: string }> = {};
+  const channelResults: Record<string, { success: boolean; error?: string; accountId?: number }> = {};
   
-  const sendTasks: Array<{ channel: string; promise: Promise<void> }> = channels.flatMap((ch) => {
+  // Build account ID lookup for bound accounts
+  const configToAccountId = new Map<any, number>();
+  for (const ch of channels) {
+    const configs = channelConfigsMap[ch];
+    if (!configs) continue;
+    const accountType = channelToAccountType[ch];
+    for (const cfg of configs) {
+      // Find matching account by config reference
+      for (const accountId of boundAccountIds) {
+        const account = accountsMap.get(accountId);
+        if (account && account.type === accountType) {
+          const accountConfig = getChannelConfigFromAccount(account, ch);
+          if (accountConfig && JSON.stringify(accountConfig) === JSON.stringify(cfg)) {
+            configToAccountId.set(cfg, accountId);
+          }
+        }
+      }
+    }
+  }
+  
+  const sendTasks: Array<{ channel: string; accountId?: number; promise: Promise<void> }> = channels.flatMap((ch) => {
     const configs = channelConfigsMap[ch];
     if (!configs || configs.length === 0) return [];
     
     return configs.map((chConfig) => ({
       channel: ch,
+      accountId: configToAccountId.get(chConfig),
       promise: (async () => {
         try {
         if (ch === 'feishu' && chConfig.webhook) await retryWithBackoff(() => sendFeishuNotification(mappedEvent, chConfig.webhook));
@@ -620,14 +642,58 @@ export async function sendNotifications(event: any, userId: number, channels: st
   
   for (let i = 0; i < settled.length; i++) {
     const result = settled[i];
-    const ch = sendTasks[i].channel;
+    const task = sendTasks[i];
+    const ch = task.channel;
     if (result.status === 'fulfilled') {
-      channelResults[ch] = { success: true };
+      channelResults[ch] = { success: true, accountId: task.accountId };
+      // Reset consecutive failure count on success
+      if (task.accountId) {
+        try {
+          await query(
+            `UPDATE notification_accounts SET updated_at = datetime('now') WHERE id = ?`,
+            [task.accountId]
+          );
+        } catch { /* ignore */ }
+      }
     } else {
       const errMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
-      channelResults[ch] = { success: false, error: errMsg };
+      channelResults[ch] = { success: false, error: errMsg, accountId: task.accountId };
+      // Track consecutive failures and auto-disable after 3
+      if (task.accountId) {
+        await trackConsecutiveFailure(task.accountId, ch, errMsg);
+      }
     }
   }
   
   return channelResults;
+}
+
+/**
+ * Track consecutive failures for a notification account.
+ * After 3 consecutive failures, auto-disable the account.
+ */
+async function trackConsecutiveFailure(accountId: number, channelType: string, errorMsg: string): Promise<void> {
+  try {
+    // Count recent consecutive failures for this account
+    const result = await query(
+      `SELECT COUNT(*) as fail_count FROM event_trigger_logs 
+       WHERE account_id = ? AND channel_type = ? AND status = 'failed'
+       AND id > COALESCE(
+         (SELECT MAX(id) FROM event_trigger_logs WHERE account_id = ? AND channel_type = ? AND status = 'success'),
+         0
+       )`,
+      [accountId, channelType, accountId, channelType]
+    );
+    const consecutiveFailures = (result.rows[0]?.fail_count || 0) + 1; // +1 for current failure
+    
+    if (consecutiveFailures >= 3) {
+      await query(
+        `UPDATE notification_accounts SET is_active = 0, updated_at = datetime('now') WHERE id = ?`,
+        [accountId]
+      );
+      console.log(`[Notifications] Channel ${channelType} (account ${accountId}) disabled after 3 consecutive failures`);
+    }
+  } catch (error) {
+    console.error('[Notifications] Failed to track consecutive failure:', error);
+  }
 }

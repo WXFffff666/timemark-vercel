@@ -204,6 +204,7 @@ export interface NotificationAccount {
   config_method: 'webhook' | 'token' | 'plugin';
   session_data: any | null;
   plugin_package: string | null;
+  connection_status: 'connected' | 'disconnected' | 'reconnecting' | null;
   created_at: string;
   updated_at: string;
 }

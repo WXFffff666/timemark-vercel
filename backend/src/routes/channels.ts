@@ -16,7 +16,8 @@ import { startAuth as startQQAuth, checkAuth as checkQQAuth, logout as logoutQQ 
 import { startAuth as startSignalAuth, checkAuth as checkSignalAuth, logout as logoutSignal } from '../services/notifications/signal.service.js';
 import { startAuth as startZaloAuth, checkAuth as checkZaloAuth, logout as logoutZalo } from '../services/notifications/zalo.service.js';
 import { startAuth as startBlueBubblesAuth, checkAuth as checkBlueBubblesAuth, logout as logoutBlueBubbles } from '../services/notifications/bluebubbles.service.js';
-import { startAuth as startClawBotAuth, checkAuth as checkClawBotAuth, logout as logoutClawBot } from '../services/notifications/clawbot.service.js';
+import { startAuth as startClawBotAuth, checkAuth as checkClawBotAuth, logout as logoutClawBot, getConnectionStatus as getClawBotConnectionStatus } from '../services/notifications/clawbot.service.js';
+import { getConnectionStatus as getOpenClawConnectionStatus } from '../services/notifications/wechat-openclaw.service.js';
 import { testConnection } from '../services/notifications/test-connection.js';
 
 const channels = new Hono<{ Variables: { user: User } }>();
@@ -246,6 +247,30 @@ channels.post('/test', async (c) => {
       success: false, 
       error: error.message || '测试连接失败' 
     }, 500);
+  }
+});
+
+// Get connection status for a specific notification account
+channels.get('/status/:accountId', async (c) => {
+  const accountId = parseInt(c.req.param('accountId'), 10);
+  if (isNaN(accountId)) {
+    return c.json({ success: false, error: 'Invalid account ID' }, 400);
+  }
+
+  try {
+    // Try ClawBot first, then OpenClaw
+    let status = await getClawBotConnectionStatus(accountId);
+    if (status === null) {
+      status = await getOpenClawConnectionStatus(accountId);
+    }
+
+    return c.json({
+      success: true,
+      data: { accountId, connection_status: status }
+    });
+  } catch (error: any) {
+    console.error(`[Channels] Failed to get connection status for account ${accountId}:`, error);
+    return c.json({ success: false, error: error.message || '获取连接状态失败' }, 500);
   }
 });
 

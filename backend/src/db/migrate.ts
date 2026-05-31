@@ -158,6 +158,34 @@ async function applyIncrementalMigrations(db: any, currentVersion: number): Prom
       name: 'add_channel_results_column',
       sql: `ALTER TABLE event_trigger_logs ADD COLUMN channel_results TEXT;`
     },
+    {
+      version: 11,
+      name: 'add_plugin_sessions',
+      sql: `CREATE TABLE IF NOT EXISTS plugin_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_type TEXT NOT NULL,
+        session_id TEXT UNIQUE NOT NULL,
+        session_data TEXT,
+        status TEXT DEFAULT 'pending',
+        expires_at TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_plugin_sessions_id ON plugin_sessions(session_id);
+      CREATE INDEX IF NOT EXISTS idx_plugin_sessions_expires ON plugin_sessions(expires_at);`
+    },
+    {
+      version: 12,
+      name: 'add_trigger_log_failure_details',
+      sql: `ALTER TABLE event_trigger_logs ADD COLUMN error_details TEXT;
+ALTER TABLE event_trigger_logs ADD COLUMN retry_count INTEGER DEFAULT 0;
+ALTER TABLE event_trigger_logs ADD COLUMN channel_type TEXT;
+ALTER TABLE event_trigger_logs ADD COLUMN account_id INTEGER;`
+    },
+    {
+      version: 13,
+      name: 'add_connection_status',
+      sql: `ALTER TABLE notification_accounts ADD COLUMN connection_status TEXT;`
+    },
   ];
 
   for (const migration of migrations) {
