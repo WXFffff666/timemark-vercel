@@ -50,7 +50,7 @@ events.post('/', async (c) => {
     if (numericIds.length > 0) {
       const placeholders = numericIds.map((_: number, i: number) => `$${i + 2}`).join(', ');
       const result = await query(
-        `SELECT id FROM notification_accounts WHERE user_id = $1 AND is_active = 1 AND id IN (${placeholders})`,
+        `SELECT id FROM notification_accounts WHERE user_id = $1 AND is_active = TRUE AND id IN (${placeholders})`,
         [userId, ...numericIds]
       );
       const validIds = new Set(result.rows.map((r: any) => r.id));
@@ -132,7 +132,7 @@ events.put('/:id', async (c) => {
     if (numericIds.length > 0) {
       const placeholders = numericIds.map((_: number, i: number) => `$${i + 2}`).join(', ');
       const result = await query(
-        `SELECT id FROM notification_accounts WHERE user_id = $1 AND is_active = 1 AND id IN (${placeholders})`,
+        `SELECT id FROM notification_accounts WHERE user_id = $1 AND is_active = TRUE AND id IN (${placeholders})`,
         [userId, ...numericIds]
       );
       const validIds = new Set(result.rows.map((r: any) => r.id));
@@ -223,7 +223,7 @@ events.post('/import-csv', async (c) => {
         
         await query(
           `INSERT INTO events (user_id, name, type, date, calendar_type, reminder_config, notification_channels)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [userId, row.name, row.type || 'other', row.date, row.calendar_type || 'gregorian',
            JSON.stringify({ enabled: true, daysBeforeList: [1, 3, 7] }), JSON.stringify([])]
         );

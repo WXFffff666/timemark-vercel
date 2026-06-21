@@ -63,8 +63,8 @@ push.post('/subscribe', async (c) => {
   try {
     // 保存订阅到数据库
     await query(
-      `INSERT OR REPLACE INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth, created_at)
-       VALUES (?, ?, ?, ?, datetime('now'))`,
+       `INSERT INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth, created_at)
+        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING`,
       [user.id, subscription.endpoint, subscription.keys?.p256dh || '', subscription.keys?.auth || '']
     );
     
@@ -85,7 +85,7 @@ push.post('/unsubscribe', async (c) => {
   
   try {
     await query(
-      'DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?',
+      'DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2',
       [user.id, subscription.endpoint]
     );
     
@@ -108,7 +108,7 @@ push.post('/test', async (c) => {
     
     // 获取用户的订阅
     const subscriptions = await query(
-      'SELECT * FROM push_subscriptions WHERE user_id = ?',
+      'SELECT * FROM push_subscriptions WHERE user_id = $1',
       [user.id]
     );
     
@@ -158,7 +158,7 @@ export async function sendPushNotification(userId: number, title: string, body: 
     const keys = getVapidKeys();
     
     const subscriptions = await query(
-      'SELECT * FROM push_subscriptions WHERE user_id = ?',
+      'SELECT * FROM push_subscriptions WHERE user_id = $1',
       [userId]
     );
     
@@ -189,7 +189,7 @@ export async function sendPushNotification(userId: number, title: string, body: 
           // 如果订阅失效，删除它
           if (error.statusCode === 410) {
             await query(
-              'DELETE FROM push_subscriptions WHERE endpoint = ?',
+              'DELETE FROM push_subscriptions WHERE endpoint = $1',
               [sub.endpoint]
             );
           }

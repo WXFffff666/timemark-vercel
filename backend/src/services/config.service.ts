@@ -341,7 +341,7 @@ export async function updateNotificationAccount(
     plugin_package: string;
   }>
 ): Promise<NotificationAccount | null> {
-  const updates: string[] = ["updated_at = datetime('now')"];
+  const updates: string[] = ["updated_at = CURRENT_TIMESTAMP"];
   const values: any[] = [];
   let paramIndex = 1;
 
@@ -453,7 +453,7 @@ export async function updateRelationshipMapping(
   userId: number,
   data: Partial<{ from_relation: string; to_relation: string; recipient_email: string; recipient_type: string }>
 ): Promise<RelationshipMapping | null> {
-  const updates: string[] = ["updated_at = datetime('now')"];
+  const updates: string[] = ["updated_at = CURRENT_TIMESTAMP"];
   const values: any[] = [];
   let paramIndex = 1;
 
@@ -587,7 +587,7 @@ export async function saveEventTemplate(
      VALUES ($1, $2, $3)
      ON CONFLICT (user_id, event_type) DO UPDATE SET
        template_content = EXCLUDED.template_content,
-       updated_at = datetime('now')
+       updated_at = CURRENT_TIMESTAMP
      RETURNING *`,
     [userId, eventType, templateContent]
   );

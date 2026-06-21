@@ -63,8 +63,8 @@ export async function createLoginLog(userIdOrUsername: string, ip: string, userA
 
     await query(
       `INSERT INTO login_logs (id, user_id, username, ip_address, user_agent, device_fingerprint, success, failure_reason, login_time) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, datetime('now'))`,
-      [id, userId, username, ip, userAgent, fingerprint, success ? 1 : 0, reason || null]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+      [id, userId, username, ip, userAgent, fingerprint, success ? true : false, reason || null]
     );
   } catch (error) {
     console.error('[createLoginLog] Failed:', error);
@@ -93,7 +93,7 @@ export async function getAccountLockStatus(params: { username: string; ip: strin
   // 从最后一次成功登录之后开始计数
   const lastSuccessResult = await query(
     `SELECT MAX(login_time) as last_success FROM login_logs 
-     WHERE ip_address = $1 AND success = 1`,
+     WHERE ip_address = $1 AND success = TRUE`,
     [params.ip]
   );
   const lastSuccess = lastSuccessResult.rows[0]?.last_success || '1970-01-01';
@@ -102,7 +102,7 @@ export async function getAccountLockStatus(params: { username: string; ip: strin
   const failResult = await query(
     `SELECT COUNT(*) as count FROM login_logs 
      WHERE (username = $1 OR ip_address = $2) 
-     AND success = 0 
+     AND success = FALSE 
      AND login_time > $3`,
     [params.username, params.ip, lastSuccess]
   );
@@ -121,7 +121,7 @@ export async function getAccountLockStatus(params: { username: string; ip: strin
   // 检查最后一次失败时间，判断锁定是否还在生效
   const lastFailResult = await query(
     `SELECT MAX(login_time) as last_failure FROM login_logs 
-     WHERE (username = $1 OR ip_address = $2) AND success = 0 AND login_time > $3`,
+     WHERE (username = $1 OR ip_address = $2) AND success = FALSE AND login_time > $3`,
     [params.username, params.ip, lastSuccess]
   );
   const lastFailure = lastFailResult.rows[0]?.last_failure;

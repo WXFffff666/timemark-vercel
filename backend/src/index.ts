@@ -22,6 +22,8 @@ import backupRoutes from './routes/backup.js';
 import calendarRoutes from './routes/calendar.js';
 import pushRoutes from './routes/push.js';
 import cronRoutes from './routes/cron.js';
+import dataRoutes from './routes/data.js';
+import triggerLogRoutes from './routes/trigger-logs.js';
 
 const log = createLogger('bootstrap');
 
@@ -62,6 +64,8 @@ app.route('/api/backup', backupRoutes);
 app.route('/api/calendar', calendarRoutes);
 app.route('/api/push', pushRoutes);
 app.route('/api/cron', cronRoutes);
+app.route('/api/data', dataRoutes);
+app.route('/api/trigger-logs', triggerLogRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 

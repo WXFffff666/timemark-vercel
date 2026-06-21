@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 export type QueryResult = {
   rows: any[];
   rowCount: number;
-  lastInsertRowid?: number;
+  insertedId?: number;
 };
 
 let pool: Pool | null = null;
@@ -94,7 +94,7 @@ export async function query(text: string, params: any[] = []): Promise<QueryResu
       return {
         rows: result.rows,
         rowCount: result.rowCount ?? 0,
-        lastInsertRowid: addedReturning && result.rows.length > 0
+        insertedId: addedReturning && result.rows.length > 0
           ? Number(result.rows[0].id)
           : undefined,
       };
@@ -103,7 +103,7 @@ export async function query(text: string, params: any[] = []): Promise<QueryResu
     return {
       rows: [],
       rowCount: result.rowCount ?? 0,
-      lastInsertRowid: addedReturning && result.rows.length > 0
+      insertedId: addedReturning && result.rows.length > 0
         ? Number(result.rows[0].id)
         : undefined,
     };

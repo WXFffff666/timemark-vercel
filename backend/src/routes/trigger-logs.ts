@@ -20,14 +20,14 @@ triggerLogs.get('/', async (c) => {
       `SELECT tl.*, e.name as event_name, e.type as event_type
        FROM event_trigger_logs tl
        LEFT JOIN events e ON tl.event_id = e.id
-       WHERE tl.user_id = ?
+       WHERE tl.user_id = $1
        ORDER BY tl.created_at DESC
-       LIMIT ? OFFSET ?`,
+       LIMIT $2 OFFSET $3`,
       [userId, limit, offset]
     );
 
     const countResult = await query(
-      'SELECT COUNT(*) as total FROM event_trigger_logs WHERE user_id = ?',
+      'SELECT COUNT(*) as total FROM event_trigger_logs WHERE user_id = $1',
       [userId]
     );
 
@@ -64,7 +64,7 @@ triggerLogs.post('/:id/retry', async (c) => {
               e.person_name, e.reminder_recipient_name, e.reminder_recipient_email
        FROM event_trigger_logs tl
        LEFT JOIN events e ON tl.event_id = e.id
-       WHERE tl.id = ? AND tl.user_id = ?`,
+       WHERE tl.id = $1 AND tl.user_id = $2`,
       [logId, userId]
     );
 
@@ -99,7 +99,7 @@ triggerLogs.post('/:id/retry', async (c) => {
     // Re-activate the account if it was disabled
     if (logEntry.account_id) {
       await query(
-        `UPDATE notification_accounts SET is_active = 1, updated_at = datetime('now') WHERE id = ? AND user_id = ?`,
+        `UPDATE notification_accounts SET is_active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2`,
         [logEntry.account_id, userId]
       );
     }
@@ -133,8 +133,8 @@ triggerLogs.post('/:id/retry', async (c) => {
 
     await query(
       `UPDATE event_trigger_logs 
-       SET status = ?, error_message = ?, channel_results = ?, retry_count = ?, error_details = ?
-       WHERE id = ? AND user_id = ?`,
+       SET status = $1, error_message = $2, channel_results = $3, retry_count = $4, error_details = $5
+       WHERE id = $6 AND user_id = $7`,
       [
         newStatus,
         newErrorMessage,
@@ -166,7 +166,7 @@ triggerLogs.delete('/', async (c) => {
   const userId = Number(user.id);
 
   try {
-    const result = await query('DELETE FROM event_trigger_logs WHERE user_id = ?', [userId]);
+    const result = await query('DELETE FROM event_trigger_logs WHERE user_id = $1', [userId]);
     return c.json({ success: true, data: { deleted: result.rowCount } });
   } catch (error: any) {
     console.error('[TriggerLogs] Failed to clear:', error);

@@ -38,8 +38,8 @@ async function persistSession(session: ClawBotSession): Promise<void> {
   const sessionData = encrypt(JSON.stringify(session), getMasterKey());
 
   await query(
-    `INSERT OR REPLACE INTO plugin_sessions (channel_type, session_id, session_data, status, expires_at)
-     VALUES ($1, $2, $3, $4, $5)`,
+    `INSERT INTO plugin_sessions (channel_type, session_id, session_data, status, expires_at)
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
     ['clawbot', session.sessionId, sessionData, status, expiresAt]
   );
 }
@@ -49,7 +49,7 @@ async function persistSession(session: ClawBotSession): Promise<void> {
  */
 async function loadSessionFromDb(sessionId: string): Promise<ClawBotSession | null> {
   const result = await query(
-    `SELECT session_data, status FROM plugin_sessions WHERE session_id = $1 AND expires_at > datetime('now')`,
+    `SELECT session_data, status FROM plugin_sessions WHERE session_id = $1 AND expires_at > NOW()`,
     [sessionId]
   );
   if (result.rows.length === 0) return null;
@@ -384,7 +384,7 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 async function updateConnectionStatus(accountId: number, status: ConnectionStatus): Promise<void> {
   try {
     await query(
-      `UPDATE notification_accounts SET connection_status = $1, updated_at = datetime('now') WHERE id = $2`,
+      `UPDATE notification_accounts SET connection_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
       [status, accountId]
     );
   } catch (error) {
@@ -475,7 +475,7 @@ function scheduleReconnect(accountId: number, token: string, baseUrl: string): v
 async function runHeartbeat(): Promise<void> {
   try {
     const result = await query(
-      `SELECT id, token, session_data, connection_status FROM notification_accounts WHERE type = 'clawbot' AND config_method = 'plugin' AND is_active = 1`,
+      `SELECT id, token, session_data, connection_status FROM notification_accounts WHERE type = 'clawbot' AND config_method = 'plugin' AND is_active = TRUE`,
       []
     );
 

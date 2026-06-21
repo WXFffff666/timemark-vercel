@@ -76,7 +76,7 @@ channels.get('/available', async (c) => {
   const userId = Number(user.id);
 
   const result = await query(
-    'SELECT id, type, name, config_method, is_active, last_test_result, last_test_at, connection_status FROM notification_accounts WHERE user_id = $1 AND is_active = 1',
+    'SELECT id, type, name, config_method, is_active, last_test_result, last_test_at, connection_status FROM notification_accounts WHERE user_id = $1 AND is_active = TRUE',
     [userId]
   );
 
@@ -258,7 +258,7 @@ channels.post('/test', async (c) => {
     if (accountId) {
       const testResult = result.success ? 'success' : 'failed';
       await query(
-        "UPDATE notification_accounts SET last_test_result = $1, last_test_at = datetime('now') WHERE id = $2",
+        "UPDATE notification_accounts SET last_test_result = $1, last_test_at = CURRENT_TIMESTAMP WHERE id = $2",
         [testResult, accountId]
       );
     }
@@ -278,7 +278,7 @@ channels.post('/test', async (c) => {
     if (accountId) {
       try {
         await query(
-          "UPDATE notification_accounts SET last_test_result = $1, last_test_at = datetime('now') WHERE id = $2",
+          "UPDATE notification_accounts SET last_test_result = $1, last_test_at = CURRENT_TIMESTAMP WHERE id = $2",
           ['failed', accountId]
         );
       } catch (dbError) {

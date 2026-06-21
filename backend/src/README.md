@@ -20,7 +20,7 @@ src/
 | File | Purpose |
 |------|---------|
 | `index.ts` | Application entry point, server setup |
-| `db/index.ts` | SQLite database initialization |
+| `db/index.ts` | PostgreSQL database initialization via pg Pool |
 | `db/migrate.ts` | Database schema migrations |
 | `jobs/tasks.ts` | Scheduled reminder checks |
 | `queue/scheduler.ts` | Cron job configuration |

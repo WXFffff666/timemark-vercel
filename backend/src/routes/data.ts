@@ -14,12 +14,12 @@ data.get('/export', async (c) => {
 
   try {
     const [events, configs, accounts, mappings, templates, triggerLogs] = await Promise.all([
-      query('SELECT * FROM events WHERE user_id = ?', [userId]),
-      query('SELECT * FROM user_configs WHERE user_id = ?', [userId]),
-      query('SELECT * FROM notification_accounts WHERE user_id = ?', [userId]),
-      query('SELECT * FROM relationship_mappings WHERE user_id = ?', [userId]),
-      query('SELECT * FROM event_templates WHERE user_id = ?', [userId]),
-      query('SELECT * FROM event_trigger_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 500', [userId]),
+      query('SELECT * FROM events WHERE user_id = $1', [userId]),
+      query('SELECT * FROM user_configs WHERE user_id = $1', [userId]),
+      query('SELECT * FROM notification_accounts WHERE user_id = $1', [userId]),
+      query('SELECT * FROM relationship_mappings WHERE user_id = $1', [userId]),
+      query('SELECT * FROM event_templates WHERE user_id = $1', [userId]),
+      query('SELECT * FROM event_trigger_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 500', [userId]),
     ]);
 
     const exportData = {
@@ -62,7 +62,7 @@ data.post('/import', async (c) => {
       for (const event of body.events) {
         await query(
           `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, notification_channels, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
           [
             userId,
             event.name,
@@ -88,7 +88,7 @@ data.post('/import', async (c) => {
       for (const mapping of body.relationshipMappings) {
         await query(
           `INSERT INTO relationship_mappings (user_id, event_id, from_relation, to_relation, recipient_email, recipient_type)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [userId, mapping.event_id || 0, mapping.from_relation, mapping.to_relation, mapping.recipient_email || null, mapping.recipient_type || null]
         );
         imported.mappings++;
@@ -99,8 +99,8 @@ data.post('/import', async (c) => {
     if (Array.isArray(body.eventTemplates)) {
       for (const template of body.eventTemplates) {
         await query(
-          `INSERT OR REPLACE INTO event_templates (user_id, event_type, template_content)
-           VALUES (?, ?, ?)`,
+          `INSERT INTO event_templates (user_id, event_type, template_content)
+           VALUES ($1, $2, $3) ON CONFLICT (user_id, event_type) DO NOTHING`,
           [userId, template.event_type, template.template_content]
         );
         imported.templates++;

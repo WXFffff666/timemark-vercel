@@ -17,7 +17,7 @@ export async function createSession(userId: string, deviceFingerprint: string, i
 
   const result = await query(
     'INSERT INTO sessions (user_id, token, device_fingerprint, is_trusted, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-    [numericUserId, token, deviceFingerprint, isTrusted ? 1 : 0, expiresAt]
+    [numericUserId, token, deviceFingerprint, isTrusted ? true : false, expiresAt]
   );
 
   const id = result.rows[0].id;
@@ -33,7 +33,7 @@ export async function createSession(userId: string, deviceFingerprint: string, i
 
 export async function getSessionByToken(token: string): Promise<Session | null> {
   const result = await query(
-    "SELECT * FROM sessions WHERE token = $1 AND expires_at > datetime('now')", 
+    "SELECT * FROM sessions WHERE token = $1 AND expires_at > NOW()", 
     [token]
   );
   if (result.rows.length === 0) return null;
@@ -46,5 +46,5 @@ export async function deleteSession(token: string): Promise<void> {
 }
 
 export async function markDeviceAsTrusted(sessionId: string): Promise<void> {
-  await query('UPDATE sessions SET is_trusted = 1 WHERE id = $1', [sessionId]);
+  await query('UPDATE sessions SET is_trusted = TRUE WHERE id = $1', [sessionId]);
 }

@@ -6,7 +6,14 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      '@vercel/functions':
+        specifier: ^1.0.0
+        version: 1.6.0
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.8
 
   backend:
     dependencies:
@@ -1772,6 +1779,15 @@ packages:
   '@vercel/cli-exec@0.1.1':
     resolution: {integrity: sha512-LMRMEai3Z+BODyxGcU9+KiWrS/UElNiOLKiNRfGNt2Vu3NTEmXgFeXG9wBfocAnTe5yJCX/DY6k3k7S/LkPp/g==}
     engines: {node: '>= 18'}
+
+  '@vercel/functions@1.6.0':
+    resolution: {integrity: sha512-R6FKQrYT5MZs5IE1SqeCJWxMuBdHawFcCZboKKw8p7s+6/mcd55Gx6tWmyKnQTyrSEA04NH73Tc9CbqpEle8RA==}
+    engines: {node: '>= 16'}
+    peerDependencies:
+      '@aws-sdk/credential-provider-web-identity': '*'
+    peerDependenciesMeta:
+      '@aws-sdk/credential-provider-web-identity':
+        optional: true
 
   '@vercel/functions@3.7.1':
     resolution: {integrity: sha512-7PsCL2Vz4MKz4t+Nxu8u4mu/t66y1xv9I0njb3EYoFoFCsXchOChT7YFgXZYFQiUXFEifBpnoLma4e+ep7cKKA==}
@@ -6135,6 +6151,8 @@ snapshots:
   '@vercel/cli-exec@0.1.1':
     dependencies:
       execa: 5.1.1
+
+  '@vercel/functions@1.6.0': {}
 
   '@vercel/functions@3.7.1(ws@8.20.0)':
     dependencies:

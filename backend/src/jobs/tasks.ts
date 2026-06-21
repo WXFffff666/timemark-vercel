@@ -310,18 +310,18 @@ export async function archiveLoginHistory() {
 
 export async function cleanupSessions() {
   log.info('Cleaning up expired sessions...');
-  const result = await query("DELETE FROM sessions WHERE expires_at < datetime('now')");
+  const result = await query("DELETE FROM sessions WHERE expires_at < NOW()");
   log.info({ count: result.rowCount ?? 0 }, 'Cleaned up expired sessions');
   
   // 清理30天前的登录日志
   const loginLogsResult = await query(
-    "DELETE FROM login_logs WHERE login_time < datetime('now', '-30 days')"
+    "DELETE FROM login_logs WHERE login_time < NOW() - INTERVAL '30 days'"
   );
   log.info({ count: loginLogsResult.rowCount ?? 0 }, 'Cleaned up old login logs');
   
   // 清理30天前的事件触发日志
   const triggerResult = await query(
-    "DELETE FROM event_trigger_logs WHERE created_at < datetime('now', '-30 days')"
+    "DELETE FROM event_trigger_logs WHERE created_at < NOW() - INTERVAL '30 days'"
   );
   log.info({ count: triggerResult.rowCount ?? 0 }, 'Cleaned up old event trigger logs');
 }

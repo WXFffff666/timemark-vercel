@@ -12,11 +12,11 @@ stats.get('/', async (c) => {
   const userId = Number(user.id);
   
   const [events, triggers, accounts] = await Promise.all([
-    query('SELECT COUNT(*) as count FROM events WHERE user_id = ?', [userId]),
+    query('SELECT COUNT(*) as count FROM events WHERE user_id = $1', [userId]),
     query(`SELECT status, COUNT(*) as count FROM event_trigger_logs 
-           WHERE user_id = ? AND created_at > datetime('now', '-30 days') 
+           WHERE user_id = $1 AND created_at > NOW() - INTERVAL '30 days' 
            GROUP BY status`, [userId]),
-    query('SELECT type, COUNT(*) as count FROM notification_accounts WHERE user_id = ? AND is_active = 1 GROUP BY type', [userId]),
+    query('SELECT type, COUNT(*) as count FROM notification_accounts WHERE user_id = $1 AND is_active = TRUE GROUP BY type', [userId]),
   ]);
   
   return c.json({

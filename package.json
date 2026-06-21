@@ -7,6 +7,10 @@
     "backend",
     "shared"
   ],
+  "devDependencies": {
+    "hono": "^4.0.0",
+    "@vercel/functions": "^1.0.0"
+  },
   "scripts": {
     "dev:frontend": "pnpm --filter frontend dev",
     "dev:backend": "pnpm --filter backend dev",

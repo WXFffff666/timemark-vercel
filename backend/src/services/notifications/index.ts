@@ -705,7 +705,7 @@ export async function sendNotifications(event: any, userId: number, channels: st
       if (task.accountId) {
         try {
           await query(
-            `UPDATE notification_accounts SET updated_at = datetime('now') WHERE id = ?`,
+            `UPDATE notification_accounts SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
             [task.accountId]
           );
         } catch { /* ignore */ }
@@ -823,9 +823,9 @@ async function trackConsecutiveFailure(accountId: number, channelType: string, e
     // Count recent consecutive failures for this account
     const result = await query(
       `SELECT COUNT(*) as fail_count FROM event_trigger_logs 
-       WHERE account_id = ? AND channel_type = ? AND status = 'failed'
+       WHERE account_id = $1 AND channel_type = $2 AND status = 'failed'
        AND id > COALESCE(
-         (SELECT MAX(id) FROM event_trigger_logs WHERE account_id = ? AND channel_type = ? AND status = 'success'),
+         (SELECT MAX(id) FROM event_trigger_logs WHERE account_id = $3 AND channel_type = $4 AND status = 'success'),
          0
        )`,
       [accountId, channelType, accountId, channelType]
@@ -834,7 +834,7 @@ async function trackConsecutiveFailure(accountId: number, channelType: string, e
     
     if (consecutiveFailures >= 3) {
       await query(
-        `UPDATE notification_accounts SET is_active = 0, updated_at = datetime('now') WHERE id = ?`,
+        `UPDATE notification_accounts SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
         [accountId]
       );
       console.log(`[Notifications] Channel ${channelType} (account ${accountId}) disabled after 3 consecutive failures`);

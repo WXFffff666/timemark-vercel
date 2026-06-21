@@ -13,9 +13,9 @@ backup.get('/export', async (c) => {
   const userId = Number(user.id);
   
   const [events, mappings, templates] = await Promise.all([
-    query('SELECT * FROM events WHERE user_id = ?', [userId]),
-    query('SELECT * FROM relationship_mappings WHERE user_id = ?', [userId]),
-    query('SELECT * FROM event_templates WHERE user_id = ?', [userId]),
+    query('SELECT * FROM events WHERE user_id = $1', [userId]),
+    query('SELECT * FROM relationship_mappings WHERE user_id = $1', [userId]),
+    query('SELECT * FROM event_templates WHERE user_id = $1', [userId]),
   ]);
   
   c.header('Content-Disposition', `attachment; filename="timemark-backup-${new Date().toISOString().split('T')[0]}.json"`);
@@ -48,7 +48,7 @@ backup.post('/import', async (c) => {
       for (const event of data.events) {
         await query(
           `INSERT INTO events (user_id, name, type, date, calendar_type, lunar_date, reminder_config, notification_channels, person_name, birth_date, birth_date_lunar, reminder_recipient_name, reminder_recipient_email)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
           [userId, event.name, event.type, event.date, event.calendar_type || 'gregorian',
            event.lunar_date || null, typeof event.reminder_config === 'string' ? event.reminder_config : JSON.stringify(event.reminder_config || {}),
            typeof event.notification_channels === 'string' ? event.notification_channels : JSON.stringify(event.notification_channels || []),
@@ -63,7 +63,7 @@ backup.post('/import', async (c) => {
       for (const mapping of data.relationshipMappings) {
         await query(
           `INSERT INTO relationship_mappings (user_id, event_id, from_relation, to_relation, recipient_email, recipient_type)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [userId, mapping.event_id || 0, mapping.from_relation, mapping.to_relation, mapping.recipient_email || null, mapping.recipient_type || null]
         );
         imported.mappings++;
@@ -73,7 +73,7 @@ backup.post('/import', async (c) => {
     if (Array.isArray(data.eventTemplates)) {
       for (const template of data.eventTemplates) {
         await query(
-          `INSERT OR REPLACE INTO event_templates (user_id, event_type, template_content) VALUES (?, ?, ?)`,
+          `INSERT INTO event_templates (user_id, event_type, template_content) VALUES ($1, $2, $3) ON CONFLICT (user_id, event_type) DO NOTHING`,
           [userId, template.event_type, template.template_content]
         );
         imported.templates++;
