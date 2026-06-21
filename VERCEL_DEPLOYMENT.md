@@ -114,8 +114,70 @@ Vercel will:
 Once deployed, check:
 
 - `https://<your-project>.vercel.app/health` returns `{ "status": "ok" }`
-- Frontend loads without errors
+- Frontend loads without JavaScript errors
 - Cron job invocations appear in Vercel Dashboard > Cron Jobs
+
+### 4.5. Manual UI End-to-End Test (Cloud Platform)
+
+After deployment, perform these manual click-through tests **as a real user**—not via API calls:
+
+#### 4.5.1. Login Flow Test
+1. Open `https://<your-project>.vercel.app` in Chrome
+2. Verify the login page renders: TimeMark logo, "掌控您的每一个倒数时刻" tagline, username/password fields, login button
+3. **Manually type** default credentials (`admin` / `TimeMark@2026`) character by character
+4. Click "登 录" button
+5. Monitor Network tab in Chrome DevTools:
+   - `POST /api/auth/login` should return **200** with `{ accessToken, refreshToken }`
+   - No 4xx/5xx errors in any API call
+6. After login, verify you're redirected to the events dashboard
+
+#### 4.5.2. Event Management Test
+1. On the events page, verify the event list loads (existing events or empty state)
+2. Click "创建事件" (Create Event) button
+3. Fill in event details:
+   - Event name (e.g., "妈妈的生日")
+   - Event type (e.g., "生日")
+   - Date / Lunar date
+   - Reminder time and days before
+   - Select notification channels
+4. Click "保存" (Save)
+5. Monitor: `POST /api/events` should return **200**
+6. Verify the new event appears in the events list
+
+#### 4.5.3. Notification Channel Test
+1. Navigate to notification channels page
+2. Add a test channel (e.g., a webhook URL)
+3. Click "测试发送" (Test Send) to verify connectivity
+4. Monitor: The test request returns success/failure with clear error messages
+
+#### 4.5.4. SPA Routing & Auth Guard Test
+1. Navigate directly to `/events`, `/config`, `/backup` — all should load without redirect
+2. Open an incognito window and navigate to `/channels` — should **redirect to `/login`** (auth guard)
+3. All page transitions should happen smoothly via client-side routing (no full page reloads)
+
+#### 4.5.5. Cron Job Verification
+1. Go to Vercel Dashboard > your project > Cron Jobs
+2. Verify all 5 cron jobs show status "Active"
+3. Check execution history — each job should have recent successful executions
+4. Manually trigger a cron job if the dashboard allows, then check backend logs
+
+#### 4.5.6. Network Monitoring Checklist
+
+Throughout testing, keep Chrome DevTools Network tab open and verify:
+
+| API Endpoint | Expected Status | Notes |
+|-------------|:---:|-------|
+| `POST /api/auth/login` | 200 | Returns JWT tokens |
+| `GET /api/events` | 200 | Returns events list |
+| `POST /api/events` | 200 | Creates new event |
+| `GET /api/channels` | 200 | Returns channel list |
+| `POST /api/channels/test` | 200/400 | Tests channel connectivity |
+| `GET /api/config` | 200 | Returns user config |
+| `GET /api/backup/export` | 200 | Exports backup JSON |
+| `GET /health` | 200 | `{ "status": "ok" }` |
+| `GET /api/cron/reminder-check` | 200/401 | 401 without CRON_SECRET, 200 with |
+
+> **Red flags**: Any 500 error, any CORS error, any `ERR_CONNECTION_REFUSED`, or any JavaScript console error indicates a deployment issue.
 
 ---
 
@@ -396,3 +458,86 @@ $CRON_SECRET = -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 25
 - `CRON_SECRET` is mandatory in Vercel because cron jobs authenticate via HTTP headers. Without it, scheduled tasks will be rejected.
 - The `VERCEL` and `VERCEL_URL` environment variables are set automatically by Vercel and do not need to be configured.
 - `DATABASE_URL` for Vercel Postgres can be obtained from the Vercel Dashboard under **Storage > Postgres > Quickstart**.
+
+---
+
+## 12. Cloud Platform Troubleshooting
+
+### 12.1. Frontend loads but API calls fail (502/504)
+
+**Symptom**: Frontend loads, but all `/api/*` requests return 502 or timeout.
+
+**Cause**: The Vercel Serverless Function isn't being invoked correctly, or the function crashes on cold start.
+
+**Fix**:
+1. Check `vercel.json` has correct `rewrites` and `functions` configuration
+2. Verify `api/[[route]].ts` exists at project root and exports `default handle(app)`
+3. Check Vercel deployment logs for build errors
+4. Verify all dependencies are installed: `hono`, `@vercel/functions`, `pg`
+5. Check that `DATABASE_URL` is set in Vercel Environment Variables
+
+### 12.2. Database connection errors
+
+**Symptom**: `POST /api/auth/login` returns 500 with database connection error.
+
+**Causes**:
+- `DATABASE_URL` not set or incorrect in Vercel Environment Variables
+- Vercel Postgres database not created or paused
+- Migration script (`scripts/migrate-db.ts`) not yet run
+- Network policy blocking Vercel → Neon connections
+
+**Fix**:
+1. Verify `DATABASE_URL` in Vercel Dashboard > Settings > Environment Variables
+2. Create a Vercel Postgres database in the Vercel Dashboard
+3. Run `npx tsx scripts/migrate-db.ts` after pulling env vars (`vercel env pull .env`)
+4. Test connectivity: `psql "$DATABASE_URL" -c "SELECT 1"`
+
+### 12.3. Cron jobs not executing
+
+**Symptom**: No notifications are sent, backup files aren't generated.
+
+**Causes**:
+- `CRON_SECRET` not set in environment variables
+- Cron job schedule doesn't match expected behavior
+- Backend function throws error during cron execution
+
+**Fix**:
+1. Set `CRON_SECRET` in Vercel Environment Variables
+2. Check Vercel Dashboard > Cron Jobs for execution history and error logs
+3. Verify cron schedule in `vercel.json` matches desired times (UTC)
+4. Test manually: `curl -H "Authorization: Bearer $CRON_SECRET" https://<project>.vercel.app/api/cron/reminder-check`
+
+### 12.4. CORS errors in browser
+
+**Symptom**: Browser console shows CORS errors for API calls.
+
+**Cause**: `CORS_ORIGIN` not set, or custom domain not included.
+
+**Fix**:
+1. Set `CORS_ORIGIN` to your deployment URL(s) in Vercel Environment Variables
+2. The code automatically adds `VERCEL_URL` to allowed origins
+3. For custom domains, add them explicitly: `CORS_ORIGIN=https://timemark.example.com`
+
+### 12.5. "Auth check timeout" on frontend
+
+**Symptom**: Frontend shows auth check errors constantly.
+
+**Cause**: Frontend can't reach the `/api/auth/refresh` or `/api/auth/me` endpoint.
+
+**Fix**:
+1. Verify the backend function is deployed and responding
+2. Check Vercel function logs for errors
+3. Verify `JWT_SECRET` is set correctly
+4. Clear browser cache and cookies
+
+### 12.6. PostgreSQL Syntax Errors (pre-migration)
+
+**Symptom**: Backend returns 500 with PostgreSQL syntax errors.
+
+These issues have been fixed in the current codebase:
+- SQL queries using `?` bind parameters → converted to `$1, $2` ✅
+- `INSERT OR REPLACE` → converted to `ON CONFLICT` ✅
+- `datetime('now')` → converted to `CURRENT_TIMESTAMP` ✅
+- Boolean columns compared with integers → converted to `TRUE`/`FALSE` ✅
+
+If you encounter these, ensure you're running the latest code from the repository.
