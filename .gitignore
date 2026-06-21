@@ -21,3 +21,9 @@ test-api*.ps1
 
 # Sisyphus state
 .sisyphus/
+
+# OpenCode state
+.omo/
+
+# Vercel
+.vercel

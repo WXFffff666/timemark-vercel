@@ -1,6 +1,4 @@
-import fs from 'fs';
-import path from 'path';
-import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
+import { Pool } from 'pg';
 
 export type QueryResult = {
   rows: any[];
@@ -8,128 +6,60 @@ export type QueryResult = {
   lastInsertRowid?: number;
 };
 
-const DB_PATH = process.env.DB_PATH || './data/timemark.db';
-const resolvedDbPath = path.resolve(DB_PATH);
-const dataDir = path.dirname(resolvedDbPath);
+let pool: Pool | null = null;
+let poolReady = false;
+let initPromise: Promise<Pool> | null = null;
 
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
+const LOG_QUERIES = process.env.LOG_QUERIES === 'true';
 
-// In-memory database instance
-let db: SqlJsDatabase | null = null;
-let dbReady = false;
-let initPromise: Promise<SqlJsDatabase> | null = null;
-
-// Initialize database
-async function initDatabase(): Promise<SqlJsDatabase> {
-  const SQL = await initSqlJs();
-  
-  // Load existing database if exists
-  if (fs.existsSync(resolvedDbPath)) {
-    const fileBuffer = fs.readFileSync(resolvedDbPath);
-    db = new SQL.Database(fileBuffer);
-  } else {
-    db = new SQL.Database();
+// Initialize connection pool
+async function initPool(): Promise<Pool> {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error(
+      '[DB] DATABASE_URL environment variable is required for PostgreSQL connection'
+    );
   }
-  
-  dbReady = true;
-  startAutoSave();
-  return db;
+
+  pool = new Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 10_000,
+    max: 10,
+  });
+
+  pool.on('error', (err) => {
+    console.error('[DB] Unexpected pool error:', err);
+  });
+
+  poolReady = true;
+  return pool;
 }
 
-// Get database instance
-export function getDb(): SqlJsDatabase {
-  if (!db || !dbReady) {
-    throw new Error('Database not initialized. Call initDatabase() first.');
-  }
-  return db;
-}
-
-// Save database to file
-function saveDatabase(): void {
-  if (db) {
-    const data = db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(resolvedDbPath, buffer);
-  }
-}
-
-// Wait for database initialization (lazy singleton - no race condition)
-export async function waitForDb(): Promise<SqlJsDatabase> {
+// Wait for pool initialization (lazy singleton - no race condition)
+export async function waitForDb(): Promise<Pool> {
   if (!initPromise) {
-    initPromise = initDatabase();
+    initPromise = initPool();
   }
   await initPromise;
-  return getDb();
-}
-
-// Periodic auto-save (every 5 minutes) as safety net for crash recovery
-const SAVE_INTERVAL = 5 * 60 * 1000;
-let saveTimer: ReturnType<typeof setInterval> | null = null;
-let isDirty = false;
-
-// Debounced save - delays file write by 2 seconds after last write operation
-const DEBOUNCE_SAVE_MS = 2000;
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-function markDirty(): void {
-  isDirty = true;
-}
-
-function debouncedSave(): void {
-  markDirty();
-  if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    saveDatabase();
-    isDirty = false;
-    debounceTimer = null;
-  }, DEBOUNCE_SAVE_MS);
-}
-
-function startAutoSave(): void {
-  if (saveTimer) return;
-  saveTimer = setInterval(() => {
-    if (isDirty && db) {
-      saveDatabase();
-      isDirty = false;
-    }
-  }, SAVE_INTERVAL);
-  // Don't prevent process exit
-  if (saveTimer.unref) saveTimer.unref();
+  if (!pool || !poolReady) {
+    throw new Error('Database pool not initialized.');
+  }
+  return pool;
 }
 
 // Graceful shutdown - exported for unified handler in index.ts
 export function gracefulShutdown(): void {
-  // Cancel pending debounce timer
-  if (debounceTimer) {
-    clearTimeout(debounceTimer);
-    debounceTimer = null;
-  }
-  if (db) {
-    console.log('[DB] Saving database before shutdown...');
-    saveDatabase();
-    console.log('[DB] Database saved.');
-  }
-  if (saveTimer) {
-    clearInterval(saveTimer);
-    saveTimer = null;
+  if (pool) {
+    console.log('[DB] Closing database pool...');
+    pool.end();
+    console.log('[DB] Database pool closed.');
   }
 }
-
-const LOG_QUERIES = process.env.LOG_QUERIES === 'true';
 
 /**
- * Convert PostgreSQL-style $1, $2 params to SQLite ? placeholders.
- * WARNING: This is a simple regex replacement. It does NOT handle:
- * - $N inside string literals (e.g., 'price is $5')
- * - Out-of-order parameters (assumes $1, $2, $3... in order)
- * All current queries use sequential params, so this works.
+ * Check if a query returns rows (SELECT, WITH, EXPLAIN, or has RETURNING clause).
  */
-function convertPgParamsToSqlite(text: string): string {
-  return text.replace(/\$\d+/g, '?');
-}
-
 function isRowReturningQuery(sql: string): boolean {
   const normalized = sql.trim();
   const isSelectLike = /^\s*(SELECT|WITH|PRAGMA|EXPLAIN)\b/i.test(normalized);
@@ -139,55 +69,43 @@ function isRowReturningQuery(sql: string): boolean {
 
 export async function query(text: string, params: any[] = []): Promise<QueryResult> {
   const start = Date.now();
-  const sqliteText = convertPgParamsToSqlite(text);
-  
-  // Ensure database is ready
-  await waitForDb();
-  
+
+  // Ensure pool is ready
+  const client = await waitForDb();
+
+  // Auto-append RETURNING id for INSERT queries without explicit RETURNING clause
+  let sql = text;
+  let addedReturning = false;
+  if (/^\s*INSERT\b/i.test(sql) && !/\bRETURNING\b/i.test(sql)) {
+    sql = sql.trimEnd().replace(/;?\s*$/, '') + ' RETURNING id';
+    addedReturning = true;
+  }
+
   try {
-    const database = getDb();
-    
-    if (isRowReturningQuery(sqliteText)) {
-      const stmt = database.prepare(sqliteText);
-      stmt.bind(params);
-      
-      const rows: any[] = [];
-      while (stmt.step()) {
-        const row = stmt.getAsObject();
-        rows.push(row);
-      }
-      stmt.free();
-      
-      const duration = Date.now() - start;
-      
-      if (LOG_QUERIES) {
-        console.log('Executed query', { text, duration, rows: rows.length });
-      }
-      
+    const result = await client.query(sql, params);
+
+    const duration = Date.now() - start;
+
+    if (LOG_QUERIES) {
+      console.log('Executed query', { text, duration, rows: result.rowCount });
+    }
+
+    if (isRowReturningQuery(sql)) {
       return {
-        rows,
-        rowCount: rows.length,
+        rows: result.rows,
+        rowCount: result.rowCount ?? 0,
+        lastInsertRowid: addedReturning && result.rows.length > 0
+          ? Number(result.rows[0].id)
+          : undefined,
       };
     }
-    
-    database.run(sqliteText, params);
-    
-    const lastId = database.exec('SELECT last_insert_rowid() as id')[0]?.values[0]?.[0];
-    const changes = database.getRowsModified();
-    
-    const duration = Date.now() - start;
-    
-    if (LOG_QUERIES) {
-      console.log('Executed query', { text, duration, rows: changes });
-    }
-    
-    // Debounced save after writes (2-second delay, batches rapid writes)
-    debouncedSave();
-    
+
     return {
       rows: [],
-      rowCount: changes,
-      lastInsertRowid: typeof lastId === 'number' ? lastId : undefined,
+      rowCount: result.rowCount ?? 0,
+      lastInsertRowid: addedReturning && result.rows.length > 0
+        ? Number(result.rows[0].id)
+        : undefined,
     };
   } catch (error) {
     if (LOG_QUERIES) {
@@ -197,8 +115,11 @@ export async function query(text: string, params: any[] = []): Promise<QueryResu
   }
 }
 
-export function getClient(): SqlJsDatabase {
-  return getDb();
+export function getClient(): Pool {
+  if (!pool || !poolReady) {
+    throw new Error('Database not initialized. Call waitForDb() first.');
+  }
+  return pool;
 }
 
 export default { query, db: { getClient }, waitForDb };

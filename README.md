@@ -1,4 +1,4 @@
-# TimeMark Docker
+# TimeMark Vercel
 
 <div align="center">
 
@@ -6,68 +6,48 @@
 
 <h3>智能事件提醒系统 | 43+ 通知渠道 | 农历转换 | 关系映射</h3>
 
-<p>一个为生日、纪念日等重要日期打造的全功能提醒系统。<br/>单容器部署，开箱即用，支持飞牛OS / 群晖 / 威联通 / 铁威马等 NAS 平台。</p>
+<p>一个为生日、纪念日等重要日期打造的全功能提醒系统。<br/>Vercel Serverless 部署，PostgreSQL 数据库，零服务器运维。</p>
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-2.6.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-docker)
-[![Docker Pulls](https://img.shields.io/docker/pulls/xfffff666/timemark?style=flat&color=0ea5e9)](https://hub.docker.com/r/xfffff666/timemark)
-[![Docker Image Size](https://img.shields.io/docker/image-size/xfffff666/timemark/latest?style=flat&color=6366f1)](https://hub.docker.com/r/xfffff666/timemark)
-[![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-docker?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-docker/stargazers)
-[![Last Commit](https://img.shields.io/github/last-commit/WXFffff666/timemark-docker?style=flat&color=10b981)](https://github.com/WXFffff666/timemark-docker/commits/master)
+[![Version](https://img.shields.io/badge/Version-2.6.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
+[![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-vercel?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-vercel/stargazers)
+[![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat&logo=vercel)](https://vercel.com/new)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
 
 ---
 
-[📖 部署文档](DEPLOYMENT.md) · 
-[🐛 问题反馈](https://github.com/WXFffff666/timemark-docker/issues) · 
-[⭐ Star 支持](https://github.com/WXFffff666/timemark-docker/stargazers) · 
-[🌐 在线演示](https://email.the37777777.top/)
+[📖 Vercel 部署文档](VERCEL_DEPLOYMENT.md) · 
+[🐛 问题反馈](https://github.com/WXFffff666/timemark-vercel/issues) · 
+[⭐ Star 支持](https://github.com/WXFffff666/timemark-vercel/stargazers)
 
 </div>
 
 ---
 
-## 🚀 v2.x 重大更新
+## 🚀 Vercel 版本
 
-v2.0 是一次彻底的架构重构，从三容器方案精简为单容器部署，同时大幅强化了安全性和性能。v2.4.x 在此基础上增加了通知模板、重复事件等重要功能。
+TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timemark-docker) 的云原生重构版本，将架构从 Docker 容器迁移到 Vercel Serverless 平台。
 
-| 对比项 | v1.x | v2.6.0 |
-|:------:|:----:|:------:|
-| 数据库 | PostgreSQL + Redis | **SQLite (内置，零配置)** |
-| 容器数量 | 3 个 | **1 个** |
-| 内存占用 | ~800MB | **~256MB** |
-| 部署复杂度 | 需配置数据库连接 | **开箱即用** |
-| 安全加固 | 基础认证 | **登录锁定 + JWT + 限流 + CSRF + XSS 防护** |
-| 通知账户 | 明文存储 | **AES-256 加密存储** |
-| 多账户支持 | 单渠道单账户 | **同渠道多账户 + 多邮箱** |
-| 定时任务 | Redis + Bull | **Croner (每分钟检查)** |
-| 事件类型 | 4 种 | **11 种 (含会议/旅行/婚礼等)** |
-| 通知渠道 | 有限 | **43+ 通知渠道** |
-| 通知模板 | 无 | **13 种预设 + 自定义模板** |
-| 重复事件 | 不支持 | **每天/每周/每月/每年** |
-| 安全告警 | 无 | **登录锁定告警 + 渠道选择 + 独立模板** |
-| 网络检测 | 无 | **渠道可达性检测（中国大陆友好）** |
+| 对比项 | Docker 版 | **Vercel 版** |
+|:------:|:---------:|:-------------:|
+| 部署平台 | Docker / NAS | **Vercel Serverless** |
+| 数据库 | SQLite (sql.js) | **PostgreSQL (Vercel Postgres / Neon)** |
+| 定时任务 | Croner (Node.js) | **Vercel Cron Jobs** |
+| 运维成本 | 需管理服务器 | **零运维，按需付费** |
+| 密钥管理 | data/.env 文件 | **Vercel Environment Variables** |
+| 静态资源 | Docker 镜像内 | **Vercel Edge Network (CDN)** |
+| 免费额度 | 需自备服务器 | **Vercel Hobby 免费套餐可用** |
+| 通知渠道 | 43+ 渠道 | **38+ 渠道（5 个不兼容渠道自动跳过）** |
 
-### v2.x 核心改进
+### 架构优势
 
-- **架构精简**：去掉 PostgreSQL 和 Redis 依赖，SQLite 内置数据库，单容器即可运行
-- **即开即用**：零配置启动，所有环境变量均有内置默认值，`docker compose up -d` 即可运行
-- **安全加固**：登录失败锁定 + 安全告警 + 登录日志 + 通知凭证 AES-256 加密 + CSRF 保护
-- **性能优化**：内存占用降低 70%，启动速度提升，适合 J4125 等低功耗 NAS 处理器
-- **多账户通知**：所有通知渠道（含邮箱）统一通过账户管理，支持同渠道多账户多选
-- **触发日志**：完整记录每次提醒的触发时间、渠道、结果，方便排查问题
-- **通知模板预览**：13 种预设模板按事件类型分组，支持自定义模板，创建事件时实时预览
-- **重复事件**：支持每天/每周/每月/每年重复，自动创建下次事件
-- **多邮箱支持**：事件支持添加多个收件人邮箱，调度器每分钟检查
-- **ICS 日历导出**：Dashboard 一键导出 ICS 文件，支持 Google Calendar、Apple Calendar
-- **更多事件类型**：新增会议、截止日期、旅行、毕业、婚礼、医疗等类型
-- **称呼映射扩展**：扩展到 40+ 常用称呼映射
-- **安全告警**：登录失败自动锁定 + 通过已配置渠道发送安全告警邮件（独立模板）
-- **网络检测**：自动检测通知渠道 API 可达性，中国大陆用户友好
-- **通知降级**：主渠道失败自动尝试备用渠道，支持静默时段配置
-- **渠道绑定**：创建事件时只能选择已配置且测试通过的渠道
-- **Docker 优化**：多阶段构建，镜像大小减少 30%+
+- **云原生**：Vercel Serverless Functions + PostgreSQL + Cron Jobs，无需管理服务器
+- **全球加速**：前端通过 Vercel Edge Network CDN 分发
+- **按需计费**：Vercel Hobby 套餐免费额度足够个人使用
+- **自动扩缩**：Serverless 架构自动处理流量高峰
+- **持续部署**：连接 GitHub 仓库，推送代码自动部署
+- **PostgreSQL**：Vercel Postgres（Neon）提供 0.5GB 免费存储
 
 ---
 
@@ -85,33 +65,52 @@ v2.0 是一次彻底的架构重构，从三容器方案精简为单容器部署
 
 ---
 
-## ⚡ 快速部署
+## ⚡ 快速部署 (Vercel)
 
-> 只需 3 步，60 秒完成部署。
+> 只需 5 步，5 分钟完成部署。需要 Vercel 账号和 GitHub 仓库。
 
-### 镜像拉取方式
+### 前置准备
 
-| 镜像源 | 拉取地址 | 需要登录 | 推荐场景 |
-|:------:|----------|:--------:|:--------:|
-| **Docker Hub** (推荐) | `xfffff666/timemark:latest` | 否 | 个人 / 家庭 / NAS |
-| **GHCR** | `ghcr.io/wfffff666/timemark:latest` | 是 (GitHub) | 开发者 / 企业 |
+1. **Vercel 账号** → 注册 [vercel.com](https://vercel.com)（推荐用 GitHub 登录）
+2. **Vercel Postgres** → 在 Vercel Dashboard 创建 Postgres 数据库
+3. **GitHub 仓库** → Fork 或 Push 本仓库到你的 GitHub
 
-> 💡 **推荐 Docker Hub**，无需任何认证即可拉取。
-
-### 一键部署
+### 一键部署到 Vercel
 
 ```bash
-# 1. 创建目录
-mkdir timemark && cd timemark
+# 1. 安装 Vercel CLI
+npm i -g vercel
 
-# 2. 下载配置
-curl -sSL https://raw.githubusercontent.com/WXFffff666/timemark-docker/master/docker-compose.dockerhub.yml -o docker-compose.yml
+# 2. 克隆仓库
+git clone https://github.com/WXFffff666/timemark-vercel.git
+cd timemark-vercel
 
-# 3. 启动（就这么简单，不需要改任何配置）
-docker compose up -d
+# 3. 链接 Vercel 项目
+vercel link
+
+# 4. 设置环境变量
+vercel env add DATABASE_URL
+vercel env add JWT_SECRET
+vercel env add MASTER_KEY
+vercel env add CRON_SECRET
+
+# 5. 部署
+vercel --prod
 ```
 
-部署完成！访问 `http://服务器IP:3000`
+### 初始化数据库
+
+部署后，执行迁移脚本创建数据库表：
+
+```bash
+# 拉取 Vercel 环境变量
+vercel env pull .env
+
+# 运行迁移
+npx tsx scripts/migrate-db.ts
+```
+
+部署完成！访问 `https://your-project.vercel.app`
 
 | 项目 | 值 |
 |:----:|:--:|
@@ -120,46 +119,42 @@ docker compose up -d
 
 > ⚠️ **首次登录后请立即修改密码！** 进入设置页面即可修改。
 
-### 配置文件说明
+### 详细部署文档
 
-| 文件名 | 适用平台 | 镜像源 | 特点 |
-|--------|:-------:|:------:|------|
-| `docker-compose.dockerhub.yml` | 通用 | Docker Hub | 即拉即用，无需认证，**推荐** |
-| `docker-compose.simple.yml` | 飞牛OS / NAS | Docker Hub | 最简配置 |
-| `docker-compose.nas.yml` | 群晖/威联通/铁威马 | Docker Hub | NAS 专用，自定义存储路径 |
-| `docker-compose.full.yml` | 公网服务器 | Docker Hub | 生产配置，含资源限制 |
-| `docker-compose.ghcr.yml` | 通用 | GHCR | 需要 GitHub 登录，备用 |
+完整的部署指南 → [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)
 
 ---
 
 ## 🏗️ 系统架构
 
 ```
-┌─────────────────────────────────────────────────┐
-│                TimeMark v2.5.0                   │
-│            单容器 · 零依赖 · 开箱即用             │
-├─────────────────────────────────────────────────┤
-│                                                  │
-│   ┌───────────┐       ┌────────────────────┐    │
-│   │  :3000    │       │    SQLite DB        │    │
-│   │  Web UI   │       │  sql.js (内存数据库  │    │
-│   │  (React)  │       │  + 文件持久化)       │    │
-│   └─────┬─────┘       └─────────┬──────────┘    │
-│         │                       │                │
-│         │    ┌──────────────┐   │                │
-│         └───>│   Hono API   │<──┘                │
-│              │  (TypeScript) │                    │
-│              └──────┬───────┘                    │
-│                     │                            │
-│      ┌──────────────┼──────────────┐             │
-│      │              │              │             │
-│  ┌───┴────┐   ┌─────┴─────┐  ┌────┴─────┐      │
-│  │ Croner │   │  Static   │  │  Alert   │      │
-│  │  Cron  │   │  Files    │  │ Service  │      │
-│  │ (定时)  │   │ (前端资源) │  │ (通知分发) │      │
-│  └────────┘   └───────────┘  └──────────┘      │
-│                                                  │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                 TimeMark Vercel                           │
+│         Serverless · PostgreSQL · Cron Jobs               │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│   ┌──────────────┐         ┌─────────────────────────┐  │
+│   │  Vercel CDN  │         │    Vercel Postgres       │  │
+│   │  Static      │         │    (Neon PostgreSQL)     │  │
+│   │  Frontend    │         │    Serverless SQL        │  │
+│   │  (React SPA) │         │    13 张表 · 索引        │  │
+│   └──────┬───────┘         └───────────┬─────────────┘  │
+│          │                             │                │
+│          │    ┌──────────────────┐     │                │
+│          └───>│  Hono API        │<────┘                │
+│               │  Vercel Function │                      │
+│               │  /api/*          │                      │
+│               └────────┬─────────┘                      │
+│                        │                                │
+│          ┌─────────────┼──────────────┐                 │
+│          │             │              │                 │
+│    ┌─────┴─────┐ ┌────┴─────┐  ┌────┴──────┐          │
+│    │  Vercel   │ │  Auth    │  │  Alert    │          │
+│    │  Cron     │ │  JWT     │  │  Service  │          │
+│    │  Jobs x5  │ │  CSRF    │  │  通知分发  │          │
+│    └───────────┘ └─────────┘  └───────────┘           │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### 技术栈
@@ -167,13 +162,12 @@ docker compose up -d
 | 层级 | 技术 | 说明 |
 |:----:|------|------|
 | 前端 | React 18 + TypeScript + TailwindCSS + Radix UI | 现代化响应式界面 |
-| 后端 | Hono + TypeScript + lunar-javascript | 轻量高性能 API 框架 |
-| 数据库 | SQLite 3 (sql.js / 内存数据库 + 文件持久化) | 纯 JS 实现，零外部依赖 |
-| 定时任务 | Croner | 内置调度器，替代 Redis + Bull |
+| 后端 | Hono + TypeScript + lunar-javascript | Vercel Serverless Functions |
+| 数据库 | PostgreSQL (Vercel Postgres / Neon) | Serverless SQL，0.5GB 免费存储 |
+| 定时任务 | Vercel Cron Jobs | 5 个任务，CRON_SECRET 认证 |
 | 认证 | JWT (HS256) | 会话认证 + 登录锁定 |
 | 加密 | AES-256 + bcrypt | 凭证加密 + 密码哈希 |
-
-> 💡 **关于 sql.js**：sql.js 是 SQLite 的纯 JavaScript/WASM 实现，数据库完全在内存中运行，通过定期写入文件实现持久化。无需安装原生 SQLite，跨平台兼容性极佳。
+| 部署 | Vercel | 自动部署，全球 CDN，零运维 |
 
 ---
 

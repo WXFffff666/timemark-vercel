@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
-import { getSchedulerStatus } from '../queue/scheduler.js';
 import { sendReminders } from '../jobs/tasks.js';
 import type { User } from '@timemark/shared';
 
@@ -31,8 +30,14 @@ stats.get('/', async (c) => {
 });
 
 stats.get('/scheduler', async (c) => {
-  const status = getSchedulerStatus();
-  return c.json({ success: true, data: status });
+  // Local/Docker only; Vercel uses Cron Jobs instead
+  if (!process.env.VERCEL) {
+    // @ts-expect-error - scheduler.ts deleted in Vercel migration; guarded by !process.env.VERCEL
+    const { getSchedulerStatus } = await import('../queue/scheduler.js');
+    const status = getSchedulerStatus();
+    return c.json({ success: true, data: status });
+  }
+  return c.json({ success: false, message: 'Scheduler not available in Vercel environment' });
 });
 
 stats.post('/trigger-reminders', async (c) => {

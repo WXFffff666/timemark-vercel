@@ -1,0 +1,39 @@
+{
+  "framework": null,
+  "installCommand": "pnpm install --config.blockExoticSubdeps=false",
+  "buildCommand": "pnpm build",
+  "outputDirectory": "frontend/dist",
+  "crons": [
+    {
+      "path": "/api/cron/reminder-check",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/daily-email-backup",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/daily-login-backup",
+      "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/hourly-cleanup",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/plugin-session-cleanup",
+      "schedule": "30 * * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    }
+  ],
+  "functions": {
+    "api/*.ts": {
+      "maxDuration": 30
+    }
+  }
+}

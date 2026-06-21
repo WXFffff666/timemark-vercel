@@ -21,9 +21,55 @@ import statsRoutes from './routes/stats.js';
 import backupRoutes from './routes/backup.js';
 import calendarRoutes from './routes/calendar.js';
 import pushRoutes from './routes/push.js';
-import { startScheduler, stopScheduler } from './queue/scheduler.js';
+import cronRoutes from './routes/cron.js';
 
 const log = createLogger('bootstrap');
+
+// --- App setup (shared between local Docker and Vercel serverless) ---
+const app = new Hono();
+
+app.use('*', honoLogger());
+app.use('*', securityHeaders);
+
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://localhost:3000'];
+
+// Include Vercel deployment URL when running on Vercel
+if (process.env.VERCEL_URL) {
+  corsOrigins.push(`https://${process.env.VERCEL_URL}`);
+}
+
+app.use('*', cors({
+  origin: corsOrigins,
+  credentials: true,
+}));
+app.use('*', requestIdMiddleware);
+app.use('*', csrfProtection());
+
+// Rate limiting: specific limits before general
+const notifyRateLimit = rateLimit(10, 60 * 1000);
+app.use('/api/auth/*', authRateLimit);
+app.use('/api/channels/test', notifyRateLimit);
+app.use('/api/*', apiRateLimit);
+
+app.route('/api/auth', authRoutes);
+app.route('/api/events', eventRoutes);
+app.route('/api/config', configRoutes);
+app.route('/api/channels', channelsRoutes);
+app.route('/api/stats', statsRoutes);
+app.route('/api/backup', backupRoutes);
+app.route('/api/calendar', calendarRoutes);
+app.route('/api/push', pushRoutes);
+app.route('/api/cron', cronRoutes);
+
+app.get('/health', (c) => c.json({ status: 'ok' }));
+
+// Serve frontend static files (local/Docker only)
+if (!process.env.VERCEL) {
+  app.use('/*', serveStatic({ root: './frontend/dist' }));
+  app.get('*', serveStatic({ path: './frontend/dist/index.html' }));
+}
 
 async function bootstrap() {
 
@@ -51,7 +97,7 @@ async function bootstrap() {
     const passwordHash = await hashPassword(password);
 
     await query(
-      'INSERT INTO users (username, password_hash) VALUES (?, ?)',
+      'INSERT INTO users (username, password_hash) VALUES ($1, $2)',
       [username, passwordHash]
     );
 
@@ -62,51 +108,23 @@ async function bootstrap() {
     log.info('数据库已初始化，已存在用户');
   }
 
-  // 4. 创建 Hono 应用
-  const app = new Hono();
-
-  app.use('*', honoLogger());
-  app.use('*', securityHeaders);
-  const corsOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-    : ['http://localhost:5173', 'http://localhost:3000'];
-  app.use('*', cors({
-    origin: corsOrigins,
-    credentials: true,
-  }));
-  app.use('*', requestIdMiddleware);
-  app.use('*', csrfProtection());
-
-  // Rate limiting: specific limits before general
-  const notifyRateLimit = rateLimit(10, 60 * 1000);
-  app.use('/api/auth/*', authRateLimit);
-  app.use('/api/channels/test', notifyRateLimit);
-  app.use('/api/*', apiRateLimit);
-
-  app.route('/api/auth', authRoutes);
-  app.route('/api/events', eventRoutes);
-  app.route('/api/config', configRoutes);
-  app.route('/api/channels', channelsRoutes);
-  app.route('/api/stats', statsRoutes);
-  app.route('/api/backup', backupRoutes);
-  app.route('/api/calendar', calendarRoutes);
-  app.route('/api/push', pushRoutes);
-
-  app.get('/health', (c) => c.json({ status: 'ok' }));
-
-  // Serve frontend static files
-  app.use('/*', serveStatic({ root: './frontend/dist' }));
-  app.get('*', serveStatic({ path: './frontend/dist/index.html' }));
-
   const port = parseInt(process.env.PORT || '3000');
 
-  // 5. 启动定时任务
-  startScheduler().catch((err) => log.error(err, 'Scheduler failed to start'));
+  // 5. 启动定时任务 (local/Docker only; Vercel uses Cron Jobs instead)
+  if (!process.env.VERCEL) {
+    // @ts-expect-error - scheduler.ts deleted in Vercel migration; guarded by !process.env.VERCEL
+    const { startScheduler } = await import('./queue/scheduler.js');
+    startScheduler().catch((err: unknown) => log.error(err, 'Scheduler failed to start'));
+  }
 
   // 6. 优雅关闭
   process.on('SIGTERM', async () => {
     log.info('SIGTERM received, shutting down...');
-    await stopScheduler();
+    if (!process.env.VERCEL) {
+      // @ts-expect-error - scheduler.ts deleted in Vercel migration; guarded by !process.env.VERCEL
+      const { stopScheduler } = await import('./queue/scheduler.js');
+      await stopScheduler();
+    }
     const { gracefulShutdown } = await import('./db/index.js');
     gracefulShutdown();
     process.exit(0);
@@ -116,7 +134,13 @@ async function bootstrap() {
   serve({ fetch: app.fetch, port });
 }
 
-bootstrap().catch((err) => {
-  log.fatal(err, '启动失败');
-  process.exit(1);
-});
+// Local/Docker: bootstrap the full app (DB init, scheduler, HTTP server)
+if (!process.env.VERCEL) {
+  bootstrap().catch((err) => {
+    log.fatal(err, '启动失败');
+    process.exit(1);
+  });
+}
+
+// Vercel: export the Hono app as default for serverless Functions
+export default app;

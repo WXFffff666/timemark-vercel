@@ -341,6 +341,17 @@ export async function sendNotifications(event: any, userId: number, channels: st
     return { _quiet_hours: { success: false, error: 'quiet_hours' } };
   }
 
+  // Vercel environment: skip channels that require WebSocket, local filesystem, or native binaries
+  if (process.env.VERCEL) {
+    const INCOMPATIBLE_VERCEL_CHANNELS = ['qq_bot', 'signal', 'wechat_personal', 'whatsapp', 'clawbot'];
+    const filtered = channels.filter(ch => !INCOMPATIBLE_VERCEL_CHANNELS.includes(ch));
+    if (filtered.length !== channels.length) {
+      const skipped = channels.filter(ch => INCOMPATIBLE_VERCEL_CHANNELS.includes(ch));
+      console.log(`[Notifications] Skipping incompatible channels in Vercel: ${skipped.join(', ')}`);
+    }
+    channels = filtered;
+  }
+
   const channelWebhooks = config?.channel_webhooks || {};
   
   // 获取关系映射
