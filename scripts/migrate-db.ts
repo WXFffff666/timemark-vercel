@@ -87,6 +87,10 @@ async function migrate(): Promise<void> {
     }
     console.log('✅ Schema applied successfully');
 
+    // Run incremental migrations (v2–v16) for existing deployments
+    const { runMigrations } = await import('../backend/src/db/migrate.js');
+    await runMigrations();
+
     // ---------------------------------------------------------------------------
     // 4. Create default admin user (idempotent)
     // ---------------------------------------------------------------------------

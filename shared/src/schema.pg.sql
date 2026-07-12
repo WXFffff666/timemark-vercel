@@ -84,9 +84,14 @@ CREATE TABLE IF NOT EXISTS events (
   reminder_recipient_email TEXT,
   recurring_config JSONB,
   next_occurrence DATE,
+  tags JSONB DEFAULT '[]',
+  share_token TEXT,
+  event_photo_url TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_events_user_date ON events(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_events_next_occurrence ON events(next_occurrence);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_events_share_token ON events(share_token) WHERE share_token IS NOT NULL;
 
 -- ============================================================
 -- email_logs — email sending history
@@ -156,6 +161,12 @@ CREATE TABLE IF NOT EXISTS user_configs (
   daily_check_time TIME DEFAULT '08:00:00',
   days_before_list JSONB DEFAULT '[1,3,7]',
   alert_channels JSONB DEFAULT '["email"]',
+  api_key TEXT,
+  api_key_hash TEXT,
+  timezone TEXT DEFAULT 'Asia/Shanghai',
+  quiet_hours_start TEXT,
+  quiet_hours_end TEXT,
+  password_changed_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -175,6 +186,9 @@ CREATE TABLE IF NOT EXISTS notification_accounts (
   config_method TEXT DEFAULT 'webhook',
   session_data JSONB,
   plugin_package TEXT,
+  connection_status TEXT,
+  last_test_result TEXT,
+  last_test_at TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -195,6 +209,11 @@ CREATE TABLE IF NOT EXISTS event_trigger_logs (
   channels JSONB,
   error_message TEXT,
   channel_results JSONB,
+  error_details TEXT,
+  retry_count INTEGER DEFAULT 0,
+  channel_type TEXT,
+  account_id INTEGER,
+  read_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_event ON event_trigger_logs(event_id);
@@ -231,6 +250,54 @@ CREATE INDEX IF NOT EXISTS idx_event_templates_user ON event_templates(user_id);
 CREATE INDEX IF NOT EXISTS idx_event_templates_type ON event_templates(event_type);
 
 -- ============================================================
--- Initial schema version
+-- notification_queue — async notification retry queue
 -- ============================================================
-INSERT INTO schema_version (version) VALUES (1) ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS notification_queue (
+  id SERIAL PRIMARY KEY,
+  event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',
+  retry_count INTEGER DEFAULT 0,
+  max_retries INTEGER DEFAULT 3,
+  next_retry_at TIMESTAMP,
+  error_message TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_notification_queue_status ON notification_queue(status);
+CREATE INDEX IF NOT EXISTS idx_notification_queue_user ON notification_queue(user_id);
+
+-- ============================================================
+-- plugin_sessions — plugin channel auth sessions
+-- ============================================================
+CREATE TABLE IF NOT EXISTS plugin_sessions (
+  id SERIAL PRIMARY KEY,
+  channel_type TEXT NOT NULL,
+  session_id TEXT UNIQUE NOT NULL,
+  session_data TEXT,
+  status TEXT DEFAULT 'pending',
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_plugin_sessions_id ON plugin_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_plugin_sessions_expires ON plugin_sessions(expires_at);
+
+-- ============================================================
+-- cron_execution_logs — external/Vercel cron run history
+-- ============================================================
+CREATE TABLE IF NOT EXISTS cron_execution_logs (
+  id SERIAL PRIMARY KEY,
+  job_name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  duration_ms INTEGER,
+  result_summary TEXT,
+  error_message TEXT,
+  executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_cron_logs_job ON cron_execution_logs(job_name, executed_at);
+
+-- ============================================================
+-- Initial schema version (v15 = all incremental migrations merged)
+-- ============================================================
+INSERT INTO schema_version (version) VALUES (16) ON CONFLICT DO NOTHING;

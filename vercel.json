@@ -5,27 +5,16 @@
   "outputDirectory": "frontend/dist",
   "crons": [
     {
-      "path": "/api/cron/reminder-check",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/daily-email-backup",
-      "schedule": "0 18 * * *"
-    },
-    {
-      "path": "/api/cron/daily-login-backup",
-      "schedule": "0 19 * * *"
-    },
-    {
-      "path": "/api/cron/hourly-cleanup",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/plugin-session-cleanup",
-      "schedule": "30 * * * *"
+      "path": "/api/cron/daily-maintenance",
+      "schedule": "0 2 * * *"
     }
   ],
-  "rewrites": [],
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
   "functions": {
     "api/*.ts": {
       "maxDuration": 30

@@ -150,10 +150,23 @@ ALTER TABLE event_trigger_logs ADD COLUMN IF NOT EXISTS account_id INTEGER;`
 ALTER TABLE notification_accounts ADD COLUMN IF NOT EXISTS last_test_at TEXT;`
     },
     {
-      version: 15,
-      name: 'add_quiet_hours',
-      sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS quiet_hours_start TEXT;
-ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS quiet_hours_end TEXT;`
+      version: 16,
+      name: 'vercel_free_tier_features',
+      sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS share_token TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS event_photo_url TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMP;
+ALTER TABLE event_trigger_logs ADD COLUMN IF NOT EXISTS read_at TIMESTAMP;
+CREATE TABLE IF NOT EXISTS cron_execution_logs (
+  id SERIAL PRIMARY KEY,
+  job_name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  duration_ms INTEGER,
+  result_summary TEXT,
+  error_message TEXT,
+  executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_cron_logs_job ON cron_execution_logs(job_name, executed_at);`
     },
   ];
 

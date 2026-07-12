@@ -24,6 +24,9 @@ import pushRoutes from './routes/push.js';
 import cronRoutes from './routes/cron.js';
 import dataRoutes from './routes/data.js';
 import triggerLogRoutes from './routes/trigger-logs.js';
+import userRoutes from './routes/user.js';
+import featuresRoutes from './routes/features.js';
+import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
 
@@ -49,6 +52,14 @@ app.use('*', cors({
 app.use('*', requestIdMiddleware);
 app.use('*', csrfProtection());
 
+// Vercel serverless: ensure DB migrations on cold start (no-op locally until VERCEL set)
+if (process.env.VERCEL) {
+  app.use('/api/*', async (_c, next) => {
+    await ensureVercelReady();
+    await next();
+  });
+}
+
 // Rate limiting: specific limits before general
 const notifyRateLimit = rateLimit(10, 60 * 1000);
 app.use('/api/auth/*', authRateLimit);
@@ -66,8 +77,11 @@ app.route('/api/push', pushRoutes);
 app.route('/api/cron', cronRoutes);
 app.route('/api/data', dataRoutes);
 app.route('/api/trigger-logs', triggerLogRoutes);
+app.route('/api/user', userRoutes);
+app.route('/api/features', featuresRoutes);
 
-app.get('/health', (c) => c.json({ status: 'ok' }));
+app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 
 // Serve frontend static files (local/Docker only)
 if (!process.env.VERCEL) {
@@ -97,7 +111,7 @@ async function bootstrap() {
   const userResult = await query('SELECT id FROM users LIMIT 1');
   if (userResult.rows.length === 0) {
     const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
-    const password = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
+    const password = process.env.DEFAULT_ADMIN_PASSWORD || 'TimeMark@2026';
     const passwordHash = await hashPassword(password);
 
     await query(

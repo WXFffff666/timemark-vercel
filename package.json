@@ -1,5 +1,5 @@
 {
-  "name": "timemark-docker",
+  "name": "timemark-vercel",
   "version": "2.6.0",
   "private": true,
   "workspaces": [
