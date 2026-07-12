@@ -29,6 +29,11 @@ const getAllowedOrigins = (): string[] => {
     origins.push(...corsOrigin.split(',').map(o => o.trim()));
   }
 
+  // Include Vercel deployment URL when running on Vercel
+  if (process.env.VERCEL_URL) {
+    origins.push(`https://${process.env.VERCEL_URL}`);
+  }
+
   return origins;
 };
 

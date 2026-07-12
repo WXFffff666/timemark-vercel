@@ -206,8 +206,8 @@ export async function sendReminders() {
         const targetTotalMinutes = targetHour * 60 + targetMinute;
         const currentTotalMinutes = parseInt(currentHour) * 60 + parseInt(currentMinute);
         const diff = Math.abs(currentTotalMinutes - targetTotalMinutes);
-        log.debug({ time, targetTotalMinutes, currentTotalMinutes, diff, match: diff < 15 }, 'Checking time');
-        return diff < 15;
+        log.debug({ time, targetTotalMinutes, currentTotalMinutes, diff, match: diff < 2 }, 'Checking time');
+        return diff < 2;
       });
       
       if (!shouldRemind) {

@@ -5,6 +5,7 @@ import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils
 import { loginSchema, changePasswordSchema } from '@timemark/shared';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { sendSecurityAlert } from '../services/alert.service.js';
+import { ensureLunarHolidayEvents } from '../services/lunar-holidays.js';
 import { hashPassword } from '../utils/password.js';
 import { query } from '../db/index.js';
 
@@ -229,7 +230,20 @@ auth.post('/login', async (c) => {
     // 3. 登录成功
     await createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', true);
     const { accessToken, refreshToken } = await createSession(user.id, deviceFingerprint || '', false, rememberMe);
-    return c.json({ success: true, data: { accessToken, refreshToken, user } });
+
+    const pwdCheck = await query(
+      'SELECT password_changed_at FROM user_configs WHERE user_id = $1',
+      [user.id],
+    );
+    const mustChangePassword = !pwdCheck.rows[0]?.password_changed_at;
+
+    // Auto-sync lunar holidays in background (non-blocking)
+    ensureLunarHolidayEvents(Number(user.id)).catch(() => {});
+
+    return c.json({
+      success: true,
+      data: { accessToken, refreshToken, user, mustChangePassword },
+    });
   } catch (error: any) {
     console.error('[Login Error]', error);
     return c.json({ success: false, error: error.message || 'Login failed' }, 500);
@@ -288,6 +302,12 @@ auth.post('/change-password', authMiddleware, async (c) => {
     // Hash new password and update
     const newPasswordHash = await hashPassword(newPassword);
     await query('UPDATE users SET password_hash = $1 WHERE id = $2', [newPasswordHash, user.id]);
+    await query(
+      `INSERT INTO user_configs (user_id, password_changed_at)
+       VALUES ($1, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id) DO UPDATE SET password_changed_at = CURRENT_TIMESTAMP`,
+      [user.id],
+    );
 
     return c.json({ success: true, message: 'Password changed successfully' });
   } catch (error: any) {

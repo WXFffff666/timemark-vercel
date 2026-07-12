@@ -79,6 +79,26 @@ events.post('/', async (c) => {
   return c.json({ success: true, data: event }, 201);
 });
 
+events.get('/reminder-logs', async (c) => {
+  const user = c.get('user');
+  const userId = Number(user.id);
+  const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 200);
+
+  const result = await query(
+    `SELECT tl.id, tl.event_id, tl.trigger_type, tl.trigger_date, tl.status,
+            tl.error_message, tl.channel_results, tl.created_at,
+            e.name AS event_name, e.type AS event_type
+     FROM event_trigger_logs tl
+     LEFT JOIN events e ON e.id = tl.event_id
+     WHERE tl.user_id = $1
+     ORDER BY tl.created_at DESC
+     LIMIT $2`,
+    [userId, limit],
+  );
+
+  return c.json({ success: true, data: result.rows });
+});
+
 events.post('/:id/test-send', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
