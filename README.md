@@ -17,7 +17,8 @@
 
 ---
 
-[📖 Vercel 部署文档](VERCEL_DEPLOYMENT.md) · 
+[📖 免费部署指南](FREE_TIER_DEPLOY.md) · 
+[📖 Vercel 完整文档](VERCEL_DEPLOYMENT.md) · 
 [🐛 问题反馈](https://github.com/WXFffff666/timemark-vercel/issues) · 
 [⭐ Star 支持](https://github.com/WXFffff666/timemark-vercel/stargazers)
 
@@ -33,7 +34,7 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 |:------:|:---------:|:-------------:|
 | 部署平台 | Docker / NAS | **Vercel Serverless** |
 | 数据库 | SQLite (sql.js) | **PostgreSQL (Vercel Postgres / Neon)** |
-| 定时任务 | Croner (Node.js) | **Vercel Cron Jobs** |
+| 定时任务 | Croner (Node.js) | **Vercel Cron + cron-job.org（免费）** |
 | 运维成本 | 需管理服务器 | **零运维，按需付费** |
 | 密钥管理 | data/.env 文件 | **Vercel Environment Variables** |
 | 静态资源 | Docker 镜像内 | **Vercel Edge Network (CDN)** |

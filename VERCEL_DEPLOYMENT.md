@@ -1,5 +1,7 @@
 # TimeMark Vercel Deployment Guide
 
+> **免费方案**：见 [FREE_TIER_DEPLOY.md](./FREE_TIER_DEPLOY.md)（Vercel Hobby + Neon + cron-job.org，$0/月）
+
 Deploy TimeMark to Vercel's serverless platform with Vercel Postgres and Cron Jobs. This guide covers architecture, setup, migration, and operations.
 
 ---
