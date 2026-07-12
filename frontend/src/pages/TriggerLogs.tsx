@@ -87,9 +87,9 @@ export default function TriggerLogs() {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const res = await api.get<TriggerLogsResponse>('/trigger-logs?limit=100');
+      const res = await api.getRaw<TriggerLog[]>('/trigger-logs?limit=100');
       setLogs(res.data || []);
-      setTotal(res.pagination?.total || 0);
+      setTotal((res.pagination?.total as number) || 0);
     } catch (error) {
       console.error('Failed to fetch trigger logs:', error);
       setLogs([]);

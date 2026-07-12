@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useNavigate } from 'react-router-dom';
 import { Lock, User } from 'lucide-react';
 import { LockIcon } from '@/components/icons';
 
@@ -18,6 +19,7 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false);
   const[lockoutSeconds, setLockoutSeconds] = useState(0);
   const login = useAuthStore((state) => state.login);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +31,10 @@ export function LoginForm() {
     
     setLoading(true);
     try {
-      await login(trimmedUsername, trimmedPassword, rememberMe);
+      const { mustChangePassword } = await login(trimmedUsername, trimmedPassword, rememberMe);
+      if (mustChangePassword) {
+        navigate('/settings?changePassword=1', { replace: true });
+      }
     } catch (err: any) {
       const message = err.message || '登录失败';
       if (message.includes('429') || message.includes('锁定')) {

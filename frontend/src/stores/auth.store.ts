@@ -80,18 +80,25 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  mustChangePassword: boolean;
   setUser: (user: User | null) => void;
-  login: (username: string, password: string, rememberMe?: boolean) => Promise<void>;
+  login: (username: string, password: string, rememberMe?: boolean) => Promise<{ mustChangePassword: boolean }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  clearMustChangePassword: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+  mustChangePassword: sessionStorage.getItem('mustChangePassword') === 'true',
 
   setUser: (user) => set({ user }),
+  clearMustChangePassword: () => {
+    sessionStorage.removeItem('mustChangePassword');
+    set({ mustChangePassword: false });
+  },
 
   login: async (username, password, rememberMe = false) => {
     console.log('[AuthStore] Login called');
@@ -123,8 +130,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     
     console.log('[AuthStore] Setting isAuthenticated: true');
-    set({ user: response.user, isAuthenticated: true, isLoading: false });
+    const mustChangePassword = !!response.mustChangePassword;
+    if (mustChangePassword) {
+      sessionStorage.setItem('mustChangePassword', 'true');
+    }
+    set({ user: response.user, isAuthenticated: true, isLoading: false, mustChangePassword });
     console.log('[AuthStore] Login complete, isAuthenticated should be true now');
+    return { mustChangePassword };
   },
 
   logout: async () => {
@@ -139,8 +151,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.removeItem('timemark_persistent_login');
       sessionStorage.removeItem('accessToken');
       sessionStorage.removeItem('refreshToken');
-      sessionStorage.removeItem('lastPath'); // Also clear lastPath on logout
-      set({ user: null, isAuthenticated: false, isLoading: false });
+      sessionStorage.removeItem('lastPath');
+      sessionStorage.removeItem('mustChangePassword');
+      set({ user: null, isAuthenticated: false, isLoading: false, mustChangePassword: false });
     }
   },
 

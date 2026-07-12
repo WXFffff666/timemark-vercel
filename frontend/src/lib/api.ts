@@ -44,6 +44,7 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
     ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
     ...options?.headers,
   };
@@ -95,6 +96,21 @@ export const api = {
   post: <T>(url: string, body?: any) => request<T>(url, { method: 'POST', body: JSON.stringify(body) }),
   put: <T>(url: string, body?: any) => request<T>(url, { method: 'PUT', body: JSON.stringify(body) }),
   delete: <T>(url: string, body?: any) => request<T>(url, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) }),
+  getRaw: async <T>(url: string): Promise<{ data: T; pagination?: Record<string, unknown> }> => {
+    const { accessToken } = getTokens();
+    const response = await fetch(`${API_BASE}${url}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
+      },
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const json = await response.json();
+    if (!json.success) throw new Error(json.error || 'Request failed');
+    return { data: json.data as T, pagination: json.pagination };
+  },
 };
 
 // Channel availability types

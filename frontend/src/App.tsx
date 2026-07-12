@@ -8,6 +8,9 @@ import Reminders from './pages/Reminders';
 import LoginHistory from './pages/LoginHistory';
 import Channels from './pages/Channels';
 import Templates from './pages/Templates';
+import TriggerLogs from './pages/TriggerLogs';
+import AnnualReport from './pages/AnnualReport';
+import ShareEvent from './pages/ShareEvent';
 import { useEffect } from 'react';
 import { TimezoneProvider } from './components/RealtimeClock';
 
@@ -83,7 +86,10 @@ function AnimatedRoutes() {
         <Route path="/login-history" element={<ProtectedRoute><LoginHistory /></ProtectedRoute>} />
 <Route path="/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
 <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
-<Route path="/" element={<Navigate to="/dashboard" />} />
+        <Route path="/trigger-logs" element={<ProtectedRoute><TriggerLogs /></ProtectedRoute>} />
+        <Route path="/annual-report" element={<ProtectedRoute><AnnualReport /></ProtectedRoute>} />
+        <Route path="/share/:token" element={<ShareEvent />} />
+        <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>
     </AnimatePresence>
   );

@@ -1,0 +1,17 @@
+{
+  "name": "TimeMark",
+  "short_name": "TimeMark",
+  "description": "智能事件提醒 — 生日、纪念日云端通知",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#6366f1",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { RealtimeClock } from '@/components/RealtimeClock';
 import { TimezoneSelector } from '@/components/TimezoneSelector';
 import type { Event, CreateEventRequest } from '@timemark/shared';
-import { Settings, Bell, Plus, Download, Calendar } from 'lucide-react';
+import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks } from 'lucide-react';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -108,7 +108,13 @@ export function Dashboard() {
               <TimezoneSelector />
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/channels')}>
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/trigger-logs')} title="触发日志">
+                <ListChecks size={20} className="text-slate-600 dark:text-slate-300" />
+              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/annual-report')} title="年度报告">
+                <BarChart2 size={20} className="text-slate-600 dark:text-slate-300" />
+              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/channels')} title="通知渠道">
                 <Bell size={20} className="text-slate-600 dark:text-slate-300" />
               </Button>
               <Button variant="ghost" size="icon" className="rounded-full" title="导出 ICS" onClick={() => handleExportCalendar('ics')}>
