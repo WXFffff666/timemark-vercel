@@ -1,5 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "pnpm install --config.blockExoticSubdeps=false",
+  "buildCommand": "pnpm build",
+  "outputDirectory": "frontend/dist",
   "crons": [
     {
       "path": "/api/cron/daily-maintenance",
@@ -12,18 +16,9 @@
       "destination": "/index.html"
     }
   ],
-  "services": {
-    "timemark": {
-      "root": ".",
-      "framework": "vite",
-      "installCommand": "pnpm install --config.blockExoticSubdeps=false",
-      "buildCommand": "pnpm build",
-      "outputDirectory": "frontend/dist",
-      "functions": {
-        "api/*.ts": {
-          "maxDuration": 30
-        }
-      }
+  "functions": {
+    "api/*.ts": {
+      "maxDuration": 30
     }
   }
 }
