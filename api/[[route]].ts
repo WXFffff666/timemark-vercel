@@ -3,7 +3,8 @@ import app from '../backend/src/index'
 import { ensureVercelReady } from '../backend/src/vercel-init'
 
 export const config = {
-  runtime: 'nodejs20.x',
+  runtime: 'nodejs',
+  maxDuration: 30,
 }
 
 const handler = handle(app)
