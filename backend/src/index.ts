@@ -58,9 +58,13 @@ app.use('*', cors({
 app.use('*', requestIdMiddleware);
 app.use('*', csrfProtection());
 
-// Vercel serverless: ensure DB migrations on cold start (no-op locally until VERCEL set)
+// Vercel serverless: ensure DB migrations on cold start (skip health probes)
 if (process.env.VERCEL) {
-  app.use('/api/*', async (_c, next) => {
+  app.use('/api/*', async (c, next) => {
+    const path = c.req.path;
+    if (path === '/api/health' || path === '/health') {
+      return next();
+    }
     await ensureVercelReady();
     await next();
   });
@@ -94,6 +98,11 @@ app.get('/api/health', async (c) => {
     jwtSecret: !!process.env.JWT_SECRET,
     masterKey: !!process.env.MASTER_KEY,
   };
+  if (!process.env.DATABASE_URL) {
+    checks.database = false;
+    checks.error = 'DATABASE_URL not configured';
+    return c.json({ status: 'degraded', checks }, 503);
+  }
   try {
     await waitForDb();
     await query('SELECT 1');
