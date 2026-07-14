@@ -24,6 +24,9 @@ export function ensureVercelReady(): Promise<void> {
 
 async function bootstrapVercel(): Promise<void> {
   log.info('Vercel cold-start bootstrap...');
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL not configured — set it in Vercel Environment Variables');
+  }
   initSecretKeys();
   await waitForDb();
   await runMigrations();

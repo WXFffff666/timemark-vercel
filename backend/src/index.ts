@@ -7,6 +7,7 @@ import { requestIdMiddleware } from './middleware/request-id.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { csrfProtection } from './middleware/csrf.js';
 import { authRateLimit, apiRateLimit, rateLimit } from './middleware/rate-limit.js';
+import { getConfiguredOrigins, isAllowedOrigin } from './utils/allowed-origins.js';
 import 'dotenv/config';
 import { createLogger } from './utils/logger.js';
 import { waitForDb, query } from './db/index.js';
@@ -36,22 +37,13 @@ const app = new Hono();
 app.use('*', honoLogger());
 app.use('*', securityHeaders);
 
-const corsOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-  : ['http://localhost:5173', 'http://localhost:3000'];
-
-// Include Vercel deployment URL when running on Vercel
-if (process.env.VERCEL_URL) {
-  corsOrigins.push(`https://${process.env.VERCEL_URL}`);
-}
+const configuredOrigins = getConfiguredOrigins();
 
 app.use('*', cors({
   origin: (origin) => {
-    if (!origin) return corsOrigins[0] ?? 'http://localhost:5173';
-    if (corsOrigins.includes(origin)) return origin;
-    // Allow any Vercel preview/production alias for this project
-    if (/^https:\/\/[\w-]+\.vercel\.app$/.test(origin)) return origin;
-    return corsOrigins[0] ?? 'http://localhost:5173';
+    if (!origin) return configuredOrigins[0] ?? 'http://localhost:5173';
+    if (isAllowedOrigin(origin, undefined, configuredOrigins)) return origin;
+    return configuredOrigins[0] ?? 'http://localhost:5173';
   },
   credentials: true,
 }));
