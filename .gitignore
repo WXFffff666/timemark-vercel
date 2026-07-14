@@ -10,6 +10,7 @@ build
 *.js
 *.js.map
 !*.config.js
+!scripts/build-vercel-api.mjs
 
 # Data directories (contains SQLite DB)
 data/

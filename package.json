@@ -9,7 +9,9 @@
   ],
   "devDependencies": {
     "hono": "^4.0.0",
-    "@vercel/functions": "^1.0.0"
+    "@vercel/functions": "^1.0.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.7.0"
   },
   "scripts": {
     "dev:frontend": "pnpm --filter frontend dev",
@@ -17,6 +19,7 @@
     "build:shared": "pnpm --filter @timemark/shared build",
     "build:frontend": "pnpm --filter frontend build",
     "build:backend": "pnpm --filter backend build",
-    "build": "pnpm build:shared && pnpm build:frontend && pnpm build:backend"
+    "build:vercel-api": "node scripts/build-vercel-api.mjs",
+    "build": "pnpm build:shared && pnpm build:backend && pnpm build:frontend && pnpm build:vercel-api"
   }
 }

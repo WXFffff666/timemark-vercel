@@ -37,6 +37,10 @@ const getAllowedOrigins = (): string[] => {
   return origins;
 };
 
+function isVercelAppOrigin(origin: string): boolean {
+  return /^https:\/\/[\w-]+\.vercel\.app$/.test(origin);
+}
+
 /**
  * 检查来源是否允许
  */
@@ -46,6 +50,10 @@ function isOriginAllowed(origin: string | undefined, allowedOrigins: string[]): 
   }
 
   if (allowedOrigins.includes('*')) {
+    return true;
+  }
+
+  if (isVercelAppOrigin(origin)) {
     return true;
   }
 

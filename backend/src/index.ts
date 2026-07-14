@@ -87,7 +87,24 @@ app.route('/api/user', userRoutes);
 app.route('/api/features', featuresRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
-app.get('/api/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
+app.get('/api/health', async (c) => {
+  const checks: Record<string, boolean | string> = {
+    platform: process.env.VERCEL ? 'vercel' : 'local',
+    databaseUrl: !!process.env.DATABASE_URL,
+    jwtSecret: !!process.env.JWT_SECRET,
+    masterKey: !!process.env.MASTER_KEY,
+  };
+  try {
+    await waitForDb();
+    await query('SELECT 1');
+    checks.database = true;
+    return c.json({ status: 'ok', checks });
+  } catch (error) {
+    checks.database = false;
+    checks.error = error instanceof Error ? error.message : 'Database unavailable';
+    return c.json({ status: 'degraded', checks }, 503);
+  }
+});
 
 // Serve frontend static files (local/Docker only)
 if (!process.env.VERCEL) {
