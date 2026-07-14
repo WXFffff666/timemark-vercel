@@ -46,7 +46,13 @@ if (process.env.VERCEL_URL) {
 }
 
 app.use('*', cors({
-  origin: corsOrigins,
+  origin: (origin) => {
+    if (!origin) return corsOrigins[0] ?? 'http://localhost:5173';
+    if (corsOrigins.includes(origin)) return origin;
+    // Allow any Vercel preview/production alias for this project
+    if (/^https:\/\/[\w-]+\.vercel\.app$/.test(origin)) return origin;
+    return corsOrigins[0] ?? 'http://localhost:5173';
+  },
   credentials: true,
 }));
 app.use('*', requestIdMiddleware);
