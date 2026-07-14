@@ -10,6 +10,7 @@ import Channels from './pages/Channels';
 import Templates from './pages/Templates';
 import TriggerLogs from './pages/TriggerLogs';
 import AnnualReport from './pages/AnnualReport';
+import Analytics from './pages/Analytics';
 import ShareEvent from './pages/ShareEvent';
 import { useEffect } from 'react';
 import { TimezoneProvider } from './components/RealtimeClock';
@@ -88,6 +89,7 @@ function AnimatedRoutes() {
 <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
         <Route path="/trigger-logs" element={<ProtectedRoute><TriggerLogs /></ProtectedRoute>} />
         <Route path="/annual-report" element={<ProtectedRoute><AnnualReport /></ProtectedRoute>} />
+        <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
         <Route path="/share/:token" element={<ShareEvent />} />
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>

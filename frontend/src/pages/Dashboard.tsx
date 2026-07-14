@@ -111,8 +111,11 @@ export function Dashboard() {
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/trigger-logs')} title="触发日志">
                 <ListChecks size={20} className="text-slate-600 dark:text-slate-300" />
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/annual-report')} title="年度报告">
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/analytics')} title="数据看板">
                 <BarChart2 size={20} className="text-slate-600 dark:text-slate-300" />
+              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/annual-report')} title="年度报告">
+                <Calendar size={20} className="text-slate-600 dark:text-slate-300" />
               </Button>
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/channels')} title="通知渠道">
                 <Bell size={20} className="text-slate-600 dark:text-slate-300" />

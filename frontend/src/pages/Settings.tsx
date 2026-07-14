@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/lib/api';
+import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed } from '@/lib/push';
 
 const TIMEZONES = [
   { value: 'Asia/Shanghai', label: '中国标准时间 (UTC+8)' },
@@ -63,6 +64,13 @@ export default function Settings() {
 
   // Timezone setting
   const [timezone, setTimezone] = useState('Asia/Shanghai');
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+
+  useEffect(() => {
+    isWebPushSubscribed().then(setPushEnabled).catch(() => {});
+  }, []);
 
   useEffect(() => {
     api.get<{ timezone?: string }>('/config').then((config) => {
@@ -109,6 +117,68 @@ export default function Settings() {
     setAlertSaving(true);
     try { await api.post('/config', { alert_channels: selectedAlertChannels }); } catch (e) { console.error(e); }
     setAlertSaving(false);
+  };
+
+  const handlePushToggle = async () => {
+    setPushLoading(true);
+    try {
+      if (pushEnabled) {
+        await unsubscribeWebPush();
+        setPushEnabled(false);
+        alert('已关闭浏览器推送');
+      } else {
+        const result = await subscribeWebPush();
+        if (result === 'unsupported') {
+          alert('您的浏览器不支持 Web Push');
+        } else if (result === 'denied') {
+          alert('请在浏览器设置中允许通知权限');
+        } else {
+          setPushEnabled(true);
+          alert('浏览器推送已开启');
+        }
+      }
+    } catch (error) {
+      alert('推送设置失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  const handleExportData = async () => {
+    setBackupLoading(true);
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const response = await fetch('/api/data/export', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error('导出失败');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `timemark-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      alert('导出失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleImportData = async (file: File) => {
+    if (!confirm('导入将合并数据到当前账户，是否继续？')) return;
+    setBackupLoading(true);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const result = await api.post<{ events: number; mappings: number; templates: number }>('/data/import', data);
+      alert(`导入完成：事件 ${result.events} 条，关系映射 ${result.mappings} 条，模板 ${result.templates} 条`);
+    } catch (error) {
+      alert('导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setBackupLoading(false);
+    }
   };
 
   const handleSaveProfile = async () => {
@@ -329,24 +399,10 @@ export default function Settings() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={async () => {
-                    try {
-                      if (!('Notification' in window)) {
-                        alert('您的浏览器不支持推送通知');
-                        return;
-                      }
-                      const permission = await Notification.requestPermission();
-                      if (permission === 'granted') {
-                        alert('✅ 浏览器推送已开启！');
-                      } else {
-                        alert('❌ 请在浏览器设置中允许通知权限');
-                      }
-                    } catch (error) {
-                      alert('开启推送失败: ' + (error instanceof Error ? error.message : '未知错误'));
-                    }
-                  }}
+                  disabled={pushLoading}
+                  onClick={handlePushToggle}
                 >
-                  开启推送
+                  {pushLoading ? '处理中...' : pushEnabled ? '关闭推送' : '开启推送'}
                 </Button>
               </div>
             </div>
@@ -378,7 +434,7 @@ export default function Settings() {
               >
                 <div className="flex items-center gap-4">
                   <div className="w-11 h-11 rounded-2xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center shadow-inner border border-purple-100 dark:border-purple-800/50">
-                    <HardDrive size={22} />
+                    <Shield size={22} />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">登录日志</h3>
@@ -386,6 +442,42 @@ export default function Settings() {
                   </div>
                 </div>
                 <ChevronRight className="text-slate-400" />
+              </div>
+              <div className="h-px bg-slate-200/60 dark:bg-slate-700/50 mx-6"></div>
+              <div className="flex items-center justify-between p-4 rounded-[2rem]">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-sky-50 dark:bg-sky-900/30 text-sky-600 flex items-center justify-center shadow-inner border border-sky-100 dark:border-sky-800/50">
+                    <HardDrive size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">数据备份</h3>
+                    <p className="text-xs text-slate-500">导出或导入全部事件与配置</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="secondary" size="sm" disabled={backupLoading} onClick={handleExportData}>
+                    导出
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={backupLoading}
+                    onClick={() => document.getElementById('timemark-import-input')?.click()}
+                  >
+                    导入
+                  </Button>
+                  <input
+                    id="timemark-import-input"
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImportData(file);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </motion.section>

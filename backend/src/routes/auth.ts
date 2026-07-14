@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus } from '../services/auth.service.js';
-import { createSession, deleteSession } from '../services/session.service.js';
+import { createSession, deleteSession, deleteSessionById, deleteAllUserSessions } from '../services/session.service.js';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
 import { loginSchema, changePasswordSchema } from '@timemark/shared';
 import { authMiddleware } from '../middleware/auth.middleware.js';
@@ -229,7 +229,8 @@ auth.post('/login', async (c) => {
 
     // 3. 登录成功
     await createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', true);
-    const { accessToken, refreshToken } = await createSession(user.id, deviceFingerprint || '', false, rememberMe);
+    await query(`DELETE FROM login_attempts WHERE identifier = $1 AND type = 'username'`, [username]);
+    const { session, accessToken, refreshToken } = await createSession(user.id, deviceFingerprint || '', false, rememberMe);
 
     const pwdCheck = await query(
       'SELECT password_changed_at FROM user_configs WHERE user_id = $1',
@@ -242,7 +243,7 @@ auth.post('/login', async (c) => {
 
     return c.json({
       success: true,
-      data: { accessToken, refreshToken, user, mustChangePassword },
+      data: { accessToken, refreshToken, sessionId: session.id, user, mustChangePassword },
     });
   } catch (error: any) {
     console.error('[Login Error]', error);
@@ -253,25 +254,37 @@ auth.post('/login', async (c) => {
 // 2FA endpoints removed - not needed for local deployment
 
 auth.post('/verify-device', authMiddleware, async (c) => {
-  const user = c.get('user');
   const { deviceFingerprint } = await c.req.json();
   
   if (!deviceFingerprint) {
     return c.json({ success: false, error: 'Missing deviceFingerprint' }, 400);
   }
 
+  const bearer = c.req.header('Authorization')?.replace('Bearer ', '');
+  const payload = bearer ? await verifyToken(bearer) : null;
+  if (!payload?.sessionToken) {
+    return c.json({ success: true, data: { trusted: false } });
+  }
+
   const { getSessionByToken } = await import('../services/session.service.js');
-  const token = c.req.header('Authorization')?.replace('Bearer ', '');
-  const session = await getSessionByToken(token || '');
+  const session = await getSessionByToken(payload.sessionToken);
   
   const trusted = session?.isTrusted && session?.deviceFingerprint === deviceFingerprint;
   return c.json({ success: true, data: { trusted } });
 });
 
 auth.post('/logout', authMiddleware, async (c) => {
-  const token = c.req.header('Authorization')?.replace('Bearer ', '');
-  if (token) {
-    deleteSession(token);
+  const bearer = c.req.header('Authorization')?.replace('Bearer ', '');
+  const body = await c.req.json().catch(() => ({}));
+  const sessionId = body?.sessionId as string | undefined;
+
+  if (sessionId) {
+    await deleteSessionById(sessionId);
+  } else if (bearer) {
+    const payload = await verifyToken(bearer);
+    if (payload?.sessionToken) {
+      await deleteSession(payload.sessionToken);
+    }
   }
   return c.json({ success: true });
 });
@@ -309,6 +322,10 @@ auth.post('/change-password', authMiddleware, async (c) => {
       [user.id],
     );
 
+    const bearer = c.req.header('Authorization')?.replace('Bearer ', '');
+    const currentPayload = bearer ? await verifyToken(bearer) : null;
+    await deleteAllUserSessions(user.id, currentPayload?.sessionToken);
+
     return c.json({ success: true, message: 'Password changed successfully' });
   } catch (error: any) {
     console.error('[Change Password Error]', error);
@@ -340,7 +357,7 @@ auth.post('/refresh', async (c) => {
     }
 
     // Generate new access token
-    const accessToken = await generateAccessToken(user.id, undefined, false);
+    const accessToken = await generateAccessToken(user.id, payload.sessionToken, false);
 
     return c.json({ success: true, data: { accessToken, user } });
   } catch (error: any) {

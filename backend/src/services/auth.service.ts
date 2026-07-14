@@ -142,9 +142,26 @@ export async function getAccountLockStatus(params: { username: string; ip: strin
 
 export async function trackLoginFailure(params: { username: string; ip: string }): Promise<{ shouldLock: boolean; failureCount: number; lockTriggerCount: number }> {
   const status = await getAccountLockStatus(params);
+
+  const shouldLock = status.failureCount >= LOCK_THRESHOLD && (status.failureCount % LOCK_THRESHOLD === 0);
+  const lockMinutes = Math.max(status.lockTriggerCount, 1) * LOCK_BASE_MINUTES;
+  const lockedUntil = shouldLock
+    ? new Date(Date.now() + lockMinutes * 60 * 1000).toISOString()
+    : null;
+
+  await query(
+    `INSERT INTO login_attempts (identifier, type, failed_count, locked_until, last_attempt)
+     VALUES ($1, 'username', $2, $3, CURRENT_TIMESTAMP)
+     ON CONFLICT (identifier, type) DO UPDATE SET
+       failed_count = $2,
+       locked_until = COALESCE($3, login_attempts.locked_until),
+       last_attempt = CURRENT_TIMESTAMP`,
+    [params.username, status.failureCount, lockedUntil],
+  );
+
   return {
-    shouldLock: status.failureCount >= LOCK_THRESHOLD && (status.failureCount % LOCK_THRESHOLD === 0),
+    shouldLock,
     failureCount: status.failureCount,
-    lockTriggerCount: status.lockTriggerCount
+    lockTriggerCount: status.lockTriggerCount,
   };
 }

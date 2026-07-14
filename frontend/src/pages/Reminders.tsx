@@ -35,12 +35,7 @@ export default function Reminders() {
       setReminders(data);
     } catch (error) {
       console.error('Failed to fetch reminders:', error);
-      // Use mock data on error
-      setReminders([
-        { id: 1, event_id: 1, event_name: '周年纪念日', channel: '微信公众号', status: 'success', sent_at: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
-        { id: 2, event_id: 2, event_name: '服务器续费', channel: 'Email', status: 'success', sent_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
-        { id: 3, event_id: 3, event_name: 'API证书过期', channel: 'Webhook', status: 'failed', message: 'HTTP 401 Unauthorized', sent_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() },
-      ]);
+      setReminders([]);
     } finally {
       setLoading(false);
     }

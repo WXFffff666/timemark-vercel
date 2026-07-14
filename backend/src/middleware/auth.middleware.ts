@@ -1,10 +1,10 @@
 import { Context, Next } from 'hono';
 import { verifyToken } from '../utils/jwt.js';
 import { getUserById } from '../services/auth.service.js';
+import { getSessionByToken } from '../services/session.service.js';
 import type { User } from '@timemark/shared';
 
 export async function authMiddleware(c: Context<{ Variables: { user: User } }>, next: Next) {
-  // Skip if user already set (e.g. by API key middleware)
   const existingUser = c.get('user');
   if (existingUser) {
     await next();
@@ -19,9 +19,16 @@ export async function authMiddleware(c: Context<{ Variables: { user: User } }>, 
   }
 
   const payload = await verifyToken(token);
-  
+
   if (!payload) {
     return c.json({ success: false, error: 'Invalid token' }, 401);
+  }
+
+  if (payload.sessionToken) {
+    const session = await getSessionByToken(payload.sessionToken);
+    if (!session) {
+      return c.json({ success: false, error: 'Session expired or revoked' }, 401);
+    }
   }
 
   const user = await getUserById(payload.userId);

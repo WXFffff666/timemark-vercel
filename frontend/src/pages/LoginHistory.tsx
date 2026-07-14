@@ -72,12 +72,7 @@ export default function LoginHistory() {
       setLogs(data);
     } catch (error) {
       console.error('Failed to fetch login history:', error);
-      // Use mock data on error
-      setLogs([
-        { id: 1, ip_address: '192.168.1.100', user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0', success: true, login_time: new Date().toISOString() },
-        { id: 2, ip_address: '113.89.23.45', user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/605.1', success: true, login_time: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() },
-        { id: 3, ip_address: '45.33.12.9', user_agent: 'Mozilla/5.0', success: false, failure_reason: 'Invalid credentials', login_time: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() },
-      ]);
+      setLogs([]);
     } finally {
       setLoading(false);
     }
