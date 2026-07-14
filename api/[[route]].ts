@@ -7,9 +7,10 @@ export const config = {
   maxDuration: 30,
 }
 
+const initPromise = ensureVercelReady()
 const handler = handle(app)
 
-export default async function vercelHandler(req: Request, context: unknown) {
-  await ensureVercelReady()
-  return handler(req, context)
+export default async function vercelHandler(req: Request) {
+  await initPromise
+  return handler(req)
 }
