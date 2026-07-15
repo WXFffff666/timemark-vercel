@@ -1,27 +1,36 @@
-# 开启 Vercel Standard Protection：预览 / *.vercel.app 需 Vercel 账号登录，正式自定义域名保持公开
-# 用法: .\scripts\enable-vercel-protection.ps1
+# Enable Vercel Standard Protection: preview *.vercel.app requires Vercel login; custom domain stays public.
+# Usage: .\scripts\enable-vercel-protection.ps1
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 Set-Location (Join-Path $PSScriptRoot "..")
 
-Write-Host "==> 启用 Vercel Authentication（Standard Protection）"
-Write-Host "    效果: timemark.the37777777.top 公开；*.vercel.app 仅团队/本人可访问"
+function Invoke-Npx {
+  param([string[]]$Args)
+  $output = & npx @Args 2>&1
+  $code = $LASTEXITCODE
+  if ($output) { $output | ForEach-Object { Write-Host $_ } }
+  return $code
+}
+
+Write-Host "==> Enable Vercel Authentication (Standard Protection)"
+Write-Host "    Public: timemark.the37777777.top | Protected: *.vercel.app (team login required)"
 Write-Host ""
 
-npx vercel project protection enable timemark-vercel --sso --format json
+$enableCode = Invoke-Npx @("vercel", "project", "protection", "enable", "timemark-vercel", "--sso", "--format", "json")
 
-if ($LASTEXITCODE -ne 0) {
+if ($enableCode -ne 0) {
   Write-Host ""
-  Write-Host "CLI 失败时，请在 Vercel 控制台手动开启："
-  Write-Host "  项目 timemark-vercel → Settings → Deployment Protection"
-  Write-Host "  → Vercel Authentication → Standard Protection（生产自定义域名除外）"
+  Write-Host "CLI failed. Enable manually in Vercel Dashboard:"
+  Write-Host "  Project timemark-vercel -> Settings -> Deployment Protection"
+  Write-Host "  -> Vercel Authentication -> Standard Protection (exclude production custom domain)"
   exit 1
 }
 
 Write-Host ""
-Write-Host "==> 当前保护设置"
-npx vercel project protection timemark-vercel --format json
+Write-Host "==> Current protection settings"
+Invoke-Npx @("vercel", "project", "protection", "timemark-vercel", "--format", "json") | Out-Null
 
 Write-Host ""
-Write-Host "==> 清理多余 vercel.app 别名（保留正式域名）"
+Write-Host "==> Prune extra vercel.app aliases"
 & (Join-Path $PSScriptRoot "prune-vercel-aliases.ps1")
+exit $LASTEXITCODE

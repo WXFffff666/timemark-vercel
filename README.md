@@ -86,6 +86,10 @@ npm i -g vercel
 git clone https://github.com/WXFffff666/timemark-vercel.git
 cd timemark-vercel
 
+# 2.1 安装依赖（本地开发必加此参数，否则 baileys 间接依赖会报 ERR_PNPM_EXOTIC_SUBDEP）
+pnpm run install:deps
+# 等价于：pnpm install --config.blockExoticSubdeps=false
+
 # 3. 链接 Vercel 项目
 vercel link
 
@@ -137,6 +141,19 @@ npx tsx scripts/migrate-db.ts
 ### 详细部署文档
 
 完整的部署指南 → [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)
+
+### 本地开发与装包
+
+本仓库根目录 `.npmrc` 已设置 `blockExoticSubdeps=false`，但部分环境（如通过 `npx pnpm`）仍可能触发 `ERR_PNPM_EXOTIC_SUBDEP`（baileys 的间接依赖含 git 源）。**请始终使用：**
+
+```bash
+pnpm run install:deps
+# 或
+pnpm install --config.blockExoticSubdeps=false
+pnpm add <pkg> --config.blockExoticSubdeps=false
+```
+
+Vercel 远程构建已在 `vercel.json` 的 `installCommand` 中配置相同参数。
 
 ---
 

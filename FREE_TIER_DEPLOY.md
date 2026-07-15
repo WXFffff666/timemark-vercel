@@ -7,6 +7,8 @@
 Vercel **Hobby（免费）** 内置 Cron **每天最多 1 次**，无法每分钟检查提醒。  
 TimeMark 需要 **每分钟** 扫描到期事件，因此用 [cron-job.org](https://cron-job.org)（免费）代替。
 
+> **装包提示**：本地 `pnpm install` / `pnpm add` 请加 `--config.blockExoticSubdeps=false`，或运行 `pnpm run install:deps`（原因见 README「本地开发与装包」）。
+
 提醒精度：**每分钟扫描 + ±2 分钟时间窗口**（设 09:00 会在 08:58–09:02 内触发）。
 
 ---
@@ -22,6 +24,7 @@ TimeMark 需要 **每分钟** 扫描到期事件，因此用 [cron-job.org](http
 
 ```bash
 cd timemark-vercel
+pnpm run install:deps
 vercel login
 vercel link
 vercel --prod
