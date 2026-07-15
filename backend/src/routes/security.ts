@@ -159,8 +159,12 @@ security.delete('/ip-bans/:ip', async (c) => {
 
 security.get('/totp/status', async (c) => {
   const user = c.get('user');
-  const result = await query('SELECT totp_secret FROM users WHERE id = $1', [parseInt(user.id, 10)]);
-  return c.json({ success: true, data: { enabled: !!result.rows[0]?.totp_secret } });
+  const result = await query(
+    'SELECT totp_secret, totp_enabled FROM users WHERE id = $1',
+    [parseInt(user.id, 10)],
+  );
+  const row = result.rows[0] as { totp_secret?: string; totp_enabled?: boolean } | undefined;
+  return c.json({ success: true, data: { enabled: !!(row?.totp_enabled && row?.totp_secret) } });
 });
 
 security.post('/totp/setup', async (c) => {
@@ -168,7 +172,10 @@ security.post('/totp/setup', async (c) => {
   const secret = authenticator.generateSecret();
   const otpauth = authenticator.keyuri(user.username, 'TimeMark', secret);
   const qrDataUrl = await QRCode.toDataURL(otpauth);
-  await query('UPDATE users SET totp_secret = $1 WHERE id = $2', [secret, parseInt(user.id, 10)]);
+  await query(
+    'UPDATE users SET totp_secret = $1, totp_enabled = FALSE WHERE id = $2',
+    [secret, parseInt(user.id, 10)],
+  );
   return c.json({ success: true, data: { secret, qrDataUrl, otpauth } });
 });
 
@@ -181,6 +188,7 @@ security.post('/totp/enable', async (c) => {
   if (!authenticator.verify({ token: String(code || ''), secret })) {
     return c.json({ success: false, error: '验证码错误' }, 401);
   }
+  await query('UPDATE users SET totp_enabled = TRUE WHERE id = $1', [parseInt(user.id, 10)]);
   await logSecurityEvent({
     userId: parseInt(user.id, 10),
     username: user.username,
@@ -202,7 +210,7 @@ security.post('/totp/disable', async (c) => {
   if (secret && !authenticator.verify({ token: String(code || ''), secret })) {
     return c.json({ success: false, error: '验证码错误' }, 401);
   }
-  await query('UPDATE users SET totp_secret = NULL WHERE id = $1', [parseInt(user.id, 10)]);
+  await query('UPDATE users SET totp_secret = NULL, totp_enabled = FALSE WHERE id = $1', [parseInt(user.id, 10)]);
   await logSecurityEvent({
     userId: parseInt(user.id, 10),
     username: user.username,

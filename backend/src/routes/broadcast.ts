@@ -42,8 +42,9 @@ broadcast.post('/email', async (c) => {
     return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
   }
 
-  const totpRow = await query('SELECT totp_secret FROM users WHERE id = $1', [userId]);
-  const totpSecret = totpRow.rows[0]?.totp_secret as string | undefined;
+  const totpRow = await query('SELECT totp_secret, totp_enabled FROM users WHERE id = $1', [userId]);
+  const totpData = totpRow.rows[0] as { totp_secret?: string; totp_enabled?: boolean } | undefined;
+  const totpSecret = totpData?.totp_enabled && totpData?.totp_secret ? totpData.totp_secret : undefined;
   if (totpSecret) {
     if (!parsed.data.totpCode || !(await verifyTotpCode(totpSecret, parsed.data.totpCode))) {
       return c.json({ success: false, error: '批量发送需验证双因素认证码' }, 403);

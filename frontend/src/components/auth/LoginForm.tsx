@@ -143,13 +143,11 @@ export function LoginForm() {
           || parseInt(message.match(/(\d+)\s*秒/)?.[1] || '0', 10);
         if (sec > 0) startLockoutCountdown(sec);
         setError(message.replace(/^HTTP \d+:\s*/, ''));
+      } else if (e.requiresTotp || message.includes('双因素')) {
+        setShowTotp(true);
+        setError('请输入双因素验证码');
       } else if (message.includes('401') || message.includes('Invalid') || message.includes('密码错误')) {
-        if (message.includes('双因素') || e.requiresTotp) {
-          setShowTotp(true);
-          setError('请输入双因素验证码');
-        } else {
-          setError('用户名或密码错误');
-        }
+        setError('用户名或密码错误');
       } else {
         setError(message);
       }

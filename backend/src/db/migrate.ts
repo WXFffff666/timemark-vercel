@@ -254,6 +254,33 @@ CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expires ON webauthn_challenge
 ALTER TABLE webauthn_credentials ADD COLUMN IF NOT EXISTS transports TEXT;
 ALTER TABLE webauthn_credentials ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP;`
     },
+    {
+      version: 20,
+      name: 'totp_enabled_flag_v20',
+      sql: `ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT FALSE;`,
+      postMigrate: async () => {
+        // Users who completed enable flow (logged in security_events)
+        await query(
+          `UPDATE users u SET totp_enabled = TRUE
+           WHERE u.totp_secret IS NOT NULL
+             AND EXISTS (
+               SELECT 1 FROM security_events se
+               WHERE se.user_id = u.id AND se.event_type = 'totp_enabled'
+             )`,
+        );
+        // Incomplete setup: secret written at /totp/setup but never confirmed at /totp/enable
+        const cleared = await query(
+          `UPDATE users SET totp_secret = NULL, totp_enabled = FALSE
+           WHERE totp_secret IS NOT NULL AND COALESCE(totp_enabled, FALSE) = FALSE
+           RETURNING id, username`,
+        );
+        if (cleared.rows.length > 0) {
+          console.log(
+            `[DB] Cleared incomplete TOTP setup for: ${cleared.rows.map((r: { username: string }) => r.username).join(', ')}`,
+          );
+        }
+      },
+    },
   ];
 
   for (const migration of migrations) {

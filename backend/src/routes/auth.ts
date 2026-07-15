@@ -101,9 +101,13 @@ auth.post('/login', async (c) => {
       return c.json({ success: false, error: whitelist.reason || '当前 IP 不在白名单' }, 403);
     }
 
-    const totpRequired = await query('SELECT totp_secret FROM users WHERE id = $1', [user.id]);
-    if (totpRequired.rows[0]?.totp_secret) {
-      const totpOk = verifyTotpCode(totpRequired.rows[0].totp_secret as string, totpCode || '');
+    const totpRequired = await query(
+      'SELECT totp_secret, totp_enabled FROM users WHERE id = $1',
+      [user.id],
+    );
+    const totpRow = totpRequired.rows[0] as { totp_secret?: string; totp_enabled?: boolean } | undefined;
+    if (totpRow?.totp_enabled && totpRow?.totp_secret) {
+      const totpOk = verifyTotpCode(totpRow.totp_secret, totpCode || '');
       if (!totpOk) {
         return c.json({ success: false, error: '需要双因素验证码', requiresTotp: true }, 401);
       }
