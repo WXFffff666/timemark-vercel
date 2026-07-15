@@ -109,7 +109,7 @@ npx tsx scripts/migrate-db.ts
 | 问题 | 解决 |
 |------|------|
 | 登录 403 | 检查 `CORS_ORIGIN` 是否包含你的域名 |
-| 登录 429 | 登录失败次数过多被锁定；等待或运行 `npx tsx scripts/clear-login-lock.ts admin` |
+| 登录 429 | 登录失败次数过多被锁定；**无运维解锁**，仅等待锁定期结束或使用正确密码登录 |
 | 无微信/WhatsApp 渠道 | 云端版已移除插件类渠道，请使用飞书/钉钉/Server酱/Bark 等 HTTP 渠道 |
 | 无通知 | 确认 cron-job.org 已启用且 Header 正确 |
 | API 502 | 检查 `DATABASE_URL` 和 `NODEJS_HELPERS=0` |

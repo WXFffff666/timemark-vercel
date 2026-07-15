@@ -72,15 +72,12 @@ export async function createLoginLog(userIdOrUsername: string, ip: string, userA
 }
 
 // ============ 锁定机制 ============
-// 规则：基于 IP + 设备指纹 进行锁定
-// 5次失败触发锁定，锁定时间线性叠加：
-// 第1次锁定 = 5分钟
-// 第2次锁定 = 10分钟
-// 第3次锁定 = 15分钟
-// ...以此类推
+// 公网部署：无运维解锁后门，仅能通过等待锁定期结束或正确密码登录解除
+// 规则：以用户名为准统计连续失败（跨 IP 生效），5 次失败触发锁定，时间线性叠加
+// 第 1 次锁定 5 分钟，第 2 次 10 分钟，第 3 次 15 分钟……
 
-const LOCK_THRESHOLD = 5; // 5次失败触发锁定
-const LOCK_BASE_MINUTES = 5; // 基础锁定时间5分钟
+const LOCK_THRESHOLD = 5;
+const LOCK_BASE_MINUTES = 5;
 
 export async function getAccountLockStatus(params: { username: string; ip: string }): Promise<{
   isLocked: boolean;
@@ -89,55 +86,72 @@ export async function getAccountLockStatus(params: { username: string; ip: strin
   remainingSeconds: number;
   lockMinutes: number;
 }> {
-  // 统计该IP的总失败次数（不限时间窗口，只看连续失败）
-  // 从最后一次成功登录之后开始计数
+  // 以该用户最后一次成功登录为起点（任意 IP），防止换 IP 绕过计数
   const lastSuccessResult = await query(
-    `SELECT MAX(login_time) as last_success FROM login_logs 
-     WHERE ip_address = $1 AND success = TRUE`,
-    [params.ip]
+    `SELECT MAX(login_time) AS last_success FROM login_logs
+     WHERE success = TRUE
+       AND (
+         user_id = (SELECT id FROM users WHERE username = $1 LIMIT 1)
+         OR username = $1
+       )`,
+    [params.username],
   );
   const lastSuccess = lastSuccessResult.rows[0]?.last_success || '1970-01-01';
 
-  // 统计最后一次成功登录之后的失败次数
   const failResult = await query(
-    `SELECT COUNT(*) as count FROM login_logs 
-     WHERE (username = $1 OR ip_address = $2) 
-     AND success = FALSE 
-     AND login_time > $3`,
-    [params.username, params.ip, lastSuccess]
+    `SELECT COUNT(*) AS count FROM login_logs
+     WHERE username = $1
+       AND success = FALSE
+       AND login_time > $2`,
+    [params.username, lastSuccess],
   );
-  const failureCount = failResult.rows.length > 0 ? parseInt(failResult.rows[0].count) : 0;
+  let failureCount = failResult.rows.length > 0 ? parseInt(failResult.rows[0].count, 10) : 0;
 
-  // 计算触发了几次锁定（每5次触发一次）
+  // 未知用户名：同时按 IP 累计失败（防枚举）
+  if (failureCount === 0) {
+    const ipFailResult = await query(
+      `SELECT COUNT(*) AS count FROM login_logs
+       WHERE ip_address = $1 AND success = FALSE AND login_time > NOW() - INTERVAL '1 hour'`,
+      [params.ip],
+    );
+    failureCount = ipFailResult.rows.length > 0 ? parseInt(ipFailResult.rows[0].count, 10) : 0;
+  }
+
   const lockTriggerCount = Math.floor(failureCount / LOCK_THRESHOLD);
 
   if (lockTriggerCount === 0) {
     return { isLocked: false, failureCount, lockTriggerCount: 0, remainingSeconds: 0, lockMinutes: 0 };
   }
 
-  // 线性叠加锁定时间
   const lockMinutes = lockTriggerCount * LOCK_BASE_MINUTES;
 
-  // 检查最后一次失败时间，判断锁定是否还在生效
   const lastFailResult = await query(
-    `SELECT MAX(login_time) as last_failure FROM login_logs 
-     WHERE (username = $1 OR ip_address = $2) AND success = FALSE AND login_time > $3`,
-    [params.username, params.ip, lastSuccess]
+    `SELECT MAX(login_time) AS last_failure FROM login_logs
+     WHERE username = $1 AND success = FALSE AND login_time > $2`,
+    [params.username, lastSuccess],
   );
-  const lastFailure = lastFailResult.rows[0]?.last_failure;
+  let lastFailure = lastFailResult.rows[0]?.last_failure;
+
+  if (!lastFailure && failureCount > 0) {
+    const ipLastFail = await query(
+      `SELECT MAX(login_time) AS last_failure FROM login_logs
+       WHERE ip_address = $1 AND success = FALSE`,
+      [params.ip],
+    );
+    lastFailure = ipLastFail.rows[0]?.last_failure;
+  }
 
   if (lastFailure) {
-    const lastFailureTime = new Date(lastFailure + 'Z').getTime(); // SQLite datetime is UTC
+    const lastFailureTime = new Date(lastFailure + 'Z').getTime();
     const lockUntilTime = lastFailureTime + lockMinutes * 60 * 1000;
-    const now = Date.now();
-    const remainingSeconds = Math.max(0, Math.floor((lockUntilTime - now) / 1000));
+    const remainingSeconds = Math.max(0, Math.floor((lockUntilTime - Date.now()) / 1000));
 
     if (remainingSeconds > 0) {
       return { isLocked: true, failureCount, lockTriggerCount, remainingSeconds, lockMinutes };
     }
   }
 
-  return { isLocked: false, failureCount, lockTriggerCount, remainingSeconds: 0, lockMinutes };
+  return { isLocked: false, failureCount, lockTriggerCount, remainingSeconds: 0, lockMinutes: 0 };
 }
 
 export async function trackLoginFailure(params: { username: string; ip: string }): Promise<{ shouldLock: boolean; failureCount: number; lockTriggerCount: number }> {

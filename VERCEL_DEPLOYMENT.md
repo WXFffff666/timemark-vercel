@@ -275,14 +275,12 @@ Source of truth: `backend/src/services/notifications/supported-channels.ts` and 
 
 ### Login lockout (429)
 
-After repeated failed logins, the account is temporarily locked (security feature, not disabled). To clear lockout for admin:
+After repeated failed logins, the account is **temporarily locked** (security feature). There is **no operational unlock script or admin backdoor** — the only ways to recover are:
 
-```bash
-vercel env pull .env
-npx tsx scripts/clear-login-lock.ts admin
-```
+1. Wait until the lock period expires (linear backoff: 5 / 10 / 15 … minutes per lock tier)
+2. Log in with the **correct password** after the lock expires (successful login clears the lock state)
 
-The UI shows remaining lock time when login returns HTTP 429.
+Lock state is tracked per username across all IPs to prevent rotation attacks. Configure security alert channels in Settings to receive lockout notifications.
 
 ---
 
