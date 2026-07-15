@@ -20,11 +20,13 @@ const cleanupTimer = setInterval(() => {
 cleanupTimer.unref();
 
 function getClientIP(c: Context): string {
+  const cfIp = c.req.header('cf-connecting-ip')?.trim();
+  if (cfIp) return cfIp.startsWith('::ffff:') ? cfIp.slice(7) : cfIp;
+
   return (
     c.req.header('x-vercel-forwarded-for')?.split(',')[0]?.trim() ||
     c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
     c.req.header('x-real-ip') ||
-    c.req.header('cf-connecting-ip') ||
     '127.0.0.1'
   );
 }
@@ -92,9 +94,15 @@ export function rateLimit(maxRequests: number, windowMs: number) {
 }
 
 /**
- * Auth endpoints: 10 requests/min per IP (tight enough for public internet brute-force resistance).
+ * Login POST only: 20 attempts per 15 minutes per IP.
+ * Session/refresh/turnstile-config are not counted — avoids locking users out while loading the page.
  */
-export const authRateLimit = rateLimit(10, 60 * 1000);
+export const loginRateLimit = rateLimit(20, 15 * 60 * 1000);
+
+/**
+ * Auth mutation endpoints (password change, etc.): 30 requests per 15 minutes per IP.
+ */
+export const authMutationRateLimit = rateLimit(30, 15 * 60 * 1000);
 
 /**
  * General API rate limiter (100 requests per minute)

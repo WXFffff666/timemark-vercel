@@ -111,7 +111,7 @@ async function countPasswordFailuresSinceLastSuccess(username: string): Promise<
     `SELECT COUNT(*) AS count FROM login_logs
      WHERE username = $1
        AND success = FALSE
-       AND COALESCE(failure_reason, '') NOT IN ('locked_attempt', 'rate_limited')
+       AND COALESCE(failure_reason, '') NOT IN ('locked_attempt', 'rate_limited', 'turnstile_failed', 'totp_invalid')
        AND login_time > $2`,
     [username, lastSuccess],
   );
@@ -230,6 +230,7 @@ export async function evaluateIpBlock(ip: string): Promise<void> {
   const countResult = await query(
     `SELECT COUNT(*)::int AS count FROM login_logs
      WHERE ip_address = $1 AND success = FALSE
+       AND COALESCE(failure_reason, '') NOT IN ('turnstile_failed', 'locked_attempt', 'totp_invalid')
        AND login_time > NOW() - INTERVAL '1 hour'`,
     [ip],
   );

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock, getIpBlockStatus, evaluateIpBlock, checkIpWhitelist, verifyTotpCode } from '../services/auth.service.js';
-import { getClientIp } from '../utils/client-ip.js';
+import { getClientIp, getClientIpInfo } from '../utils/client-ip.js';
 import { getTurnstileSiteKey, isTurnstileEnabled, verifyTurnstileToken } from '../utils/turnstile.js';
 import { isSafePublicUrl } from '../utils/url-safety.js';
 import { lookupGeoLabel } from '../utils/geoip.js';
@@ -14,12 +14,13 @@ import { ensureLunarHolidayEvents } from '../services/lunar-holidays.js';
 import { hashPassword } from '../utils/password.js';
 import { query } from '../db/index.js';
 import { setAuthCookies, clearAuthCookies, getRefreshTokenFromCookie, setAccessCookie } from '../utils/auth-cookies.js';
+import { loginRateLimit } from '../middleware/rate-limit.js';
 
 const auth = new Hono();
 
-auth.post('/login', async (c) => {
+auth.post('/login', loginRateLimit, async (c) => {
   try {
-    const ip = getClientIp(c);
+    const { ip, trusted } = getClientIpInfo(c);
     const userAgent = c.req.header('user-agent') || 'unknown';
 
     const body = await c.req.json();
@@ -31,16 +32,33 @@ auth.post('/login', async (c) => {
 
     const { username, password, deviceFingerprint, rememberMe = false, turnstileToken, totpCode } = parsed.data;
 
-    const turnstile = await verifyTurnstileToken(turnstileToken, ip);
+    const turnstile = await verifyTurnstileToken(
+      turnstileToken,
+      trusted ? ip : undefined,
+    );
     if (!turnstile.ok) {
-      return c.json({ success: false, error: turnstile.error || '人机验证失败' }, 400);
+      await createLoginLog(
+        username,
+        ip,
+        userAgent,
+        deviceFingerprint || '',
+        false,
+        'turnstile_failed',
+      );
+      return c.json({
+        success: false,
+        error: turnstile.error || '人机验证失败',
+        code: turnstile.code || 'turnstile_failed',
+      }, 400);
     }
 
     const ipBlock = await getIpBlockStatus(ip);
     if (ipBlock.isBlocked) {
+      await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'locked_attempt');
       return c.json({
         success: false,
         error: `该 IP 已被临时封禁，剩余 ${ipBlock.remainingSeconds} 秒`,
+        code: 'ip_blocked',
         locked: true,
         remainingSeconds: ipBlock.remainingSeconds,
       }, 429);
@@ -48,9 +66,11 @@ auth.post('/login', async (c) => {
 
     const lockStatus = await getAccountLockStatus({ username, ip });
     if (lockStatus.isLocked) {
+      await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'locked_attempt');
       return c.json({
         success: false,
         error: `账户已锁定，剩余 ${lockStatus.remainingSeconds} 秒后可重试`,
+        code: 'account_locked',
         locked: true,
         remainingSeconds: lockStatus.remainingSeconds,
         lockMinutes: lockStatus.lockMinutes,
@@ -86,6 +106,7 @@ auth.post('/login', async (c) => {
         return c.json({
           success: false,
           error: `登录失败次数过多，账户已锁定 ${tracking.lockMinutes} 分钟（剩余 ${newLockStatus.remainingSeconds} 秒）`,
+          code: 'account_locked',
           locked: true,
           remainingSeconds: newLockStatus.remainingSeconds,
           lockMinutes: tracking.lockMinutes,
@@ -93,7 +114,11 @@ auth.post('/login', async (c) => {
       }
 
       const remaining = 5 - (tracking.failureCount % 5);
-      return c.json({ success: false, error: `登录失败，还剩 ${remaining} 次尝试机会` }, 401);
+      return c.json({
+        success: false,
+        error: `登录失败，还剩 ${remaining} 次尝试机会`,
+        code: 'invalid_credentials',
+      }, 401);
     }
 
     const whitelist = await checkIpWhitelist(user.id, ip);
@@ -109,7 +134,13 @@ auth.post('/login', async (c) => {
     if (totpRow?.totp_enabled && totpRow?.totp_secret) {
       const totpOk = verifyTotpCode(totpRow.totp_secret, totpCode || '');
       if (!totpOk) {
-        return c.json({ success: false, error: '需要双因素验证码', requiresTotp: true }, 401);
+        await createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', false, 'totp_invalid');
+        return c.json({
+          success: false,
+          error: '需要双因素验证码',
+          code: 'totp_required',
+          requiresTotp: true,
+        }, 401);
       }
     }
 

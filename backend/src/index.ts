@@ -6,7 +6,7 @@ import { logger as honoLogger } from 'hono/logger';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { csrfProtection } from './middleware/csrf.js';
-import { authRateLimit, apiRateLimit, rateLimit } from './middleware/rate-limit.js';
+import { loginRateLimit, apiRateLimit, rateLimit } from './middleware/rate-limit.js';
 import { getConfiguredOrigins, isAllowedOrigin } from './utils/allowed-origins.js';
 import 'dotenv/config';
 import { createLogger } from './utils/logger.js';
@@ -68,9 +68,8 @@ if (process.env.VERCEL) {
   });
 }
 
-// Rate limiting: specific limits before general
+// Rate limiting: targeted limits before general (login limit is on auth route itself)
 const notifyRateLimit = rateLimit(10, 60 * 1000);
-app.use('/api/auth/*', authRateLimit);
 app.use('/api/channels/test', notifyRateLimit);
 app.use('/api/*', apiRateLimit);
 

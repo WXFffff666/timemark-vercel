@@ -102,6 +102,7 @@ export function LoginForm() {
           callback: (token: string) => setTurnstileToken(token),
           'expired-callback': () => setTurnstileToken(''),
           'error-callback': () => setTurnstileToken(''),
+          'timeout-callback': () => setTurnstileToken(''),
         });
       }
     };
@@ -134,24 +135,35 @@ export function LoginForm() {
         locked?: boolean;
         remainingSeconds?: number;
         requiresTotp?: boolean;
+        code?: string;
       };
       const message = e.message || '登录失败';
+      const code = e.code || '';
 
-      if (e.locked || message.includes('锁定') || message.includes('频繁')) {
+      if (e.locked || code === 'account_locked' || code === 'ip_blocked' || message.includes('锁定') || message.includes('频繁')) {
         const sec = e.remainingSeconds
           || parseInt(message.match(/剩余\s*(\d+)\s*秒/)?.[1] || '0', 10)
           || parseInt(message.match(/(\d+)\s*秒/)?.[1] || '0', 10);
         if (sec > 0) startLockoutCountdown(sec);
         setError(message.replace(/^HTTP \d+:\s*/, ''));
-      } else if (e.requiresTotp || message.includes('双因素')) {
+      } else if (e.requiresTotp || code === 'totp_required' || message.includes('双因素')) {
         setShowTotp(true);
         setError('请输入双因素验证码');
-      } else if (message.includes('401') || message.includes('Invalid') || message.includes('密码错误')) {
+      } else if (code === 'invalid_credentials' || message.includes('密码错误') || message.includes('还剩')) {
         setError('用户名或密码错误');
+      } else if (code.startsWith('turnstile_') || message.includes('人机验证')) {
+        setError(message);
       } else {
         setError(message);
       }
-      if (turnstileSiteKey) resetTurnstile();
+
+      // Turnstile token is single-use once sent to server — refresh widget after consumed attempts
+      const turnstileConsumed = ![
+        'turnstile_required',
+      ].includes(code);
+      if (turnstileSiteKey && turnstileConsumed && turnstileToken) {
+        resetTurnstile();
+      }
     } finally {
       setLoading(false);
     }

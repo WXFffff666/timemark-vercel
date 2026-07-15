@@ -84,12 +84,14 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
     let locked = false;
     let remainingSeconds = 0;
     let requiresTotp = false;
+    let code: string | undefined;
     try {
       const errData = await response.json() as ApiResponse<unknown> & {
         remainingSeconds?: number;
         locked?: boolean;
         lockMinutes?: number;
         requiresTotp?: boolean;
+        code?: string;
       };
       if (errData.error) {
         message = errData.error;
@@ -99,6 +101,7 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
         remainingSeconds = errData.remainingSeconds;
       }
       if (errData.requiresTotp) requiresTotp = true;
+      if (errData.code) code = errData.code;
     } catch {
       // ignore non-JSON error bodies
     }
@@ -106,10 +109,12 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
       locked?: boolean;
       remainingSeconds?: number;
       requiresTotp?: boolean;
+      code?: string;
     };
     err.locked = locked;
     err.remainingSeconds = remainingSeconds;
     if (requiresTotp) err.requiresTotp = true;
+    if (code) err.code = code;
     throw err;
   }
 
