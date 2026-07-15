@@ -162,7 +162,8 @@ export default function Security() {
             <CardHeader><CardTitle className="text-base">部署状态</CardTitle></CardHeader>
             <CardContent className="text-sm space-y-1 text-slate-600 dark:text-slate-300">
               <p>版本: {deployInfo.version} · 平台: {deployInfo.platform}</p>
-              <p>Turnstile: {deployInfo.turnstileConfigured ? '已配置' : '未配置'}</p>
+              <p>数据库结构: v{deployInfo.schemaVersion ?? '?'} / v{deployInfo.expectedSchemaVersion ?? '?'}{deployInfo.schemaUpToDate ? ' ✓' : '（待迁移）'}</p>
+              <p>Turnstile: {deployInfo.turnstileConfigured ? '已配置' : '未配置（可选）'}</p>
               <p>Cron Secret: {deployInfo.cronSecretConfigured ? '已配置' : '未配置'}</p>
             </CardContent>
           </Card>

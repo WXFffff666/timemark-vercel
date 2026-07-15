@@ -222,18 +222,90 @@ security.post('/totp/disable', async (c) => {
 
 // ============ Deploy / system info ============
 
+// Keep in sync with latest migration version in db/migrate.ts
+const EXPECTED_SCHEMA_VERSION = 22;
+
 security.get('/deploy-info', async (c) => {
   const jwtAge = process.env.JWT_SECRET_ROTATED_AT || null;
+
+  let schemaVersion = 0;
+  let databaseOk = false;
+  try {
+    await query('SELECT 1');
+    databaseOk = true;
+    const schemaResult = await query('SELECT MAX(version) AS version FROM schema_version');
+    schemaVersion = Number(schemaResult.rows[0]?.version) || 0;
+  } catch {
+    databaseOk = false;
+  }
+
+  const turnstileConfigured = isTurnstileEnabled();
+  const cronSecretConfigured = !!process.env.CRON_SECRET?.trim();
+  const jwtConfigured = !!process.env.JWT_SECRET?.trim();
+  const masterKeyConfigured = !!process.env.MASTER_KEY?.trim();
+  const databaseUrlConfigured = !!process.env.DATABASE_URL?.trim();
+
   return c.json({
     success: true,
     data: {
-      version: process.env.npm_package_version || '2.7.0',
+      version: process.env.npm_package_version || '2.12.0',
       platform: process.env.VERCEL ? 'vercel' : 'local',
       vercelUrl: process.env.VERCEL_URL || null,
-      turnstileConfigured: isTurnstileEnabled(),
-      cronSecretConfigured: !!process.env.CRON_SECRET,
+      turnstileConfigured,
+      cronSecretConfigured,
+      jwtConfigured,
+      masterKeyConfigured,
+      databaseUrlConfigured,
+      databaseOk,
+      schemaVersion,
+      expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
+      schemaUpToDate: schemaVersion >= EXPECTED_SCHEMA_VERSION,
       jwtSecretRotatedAt: jwtAge,
       buildTime: process.env.VERCEL_GIT_COMMIT_SHA || null,
+      envChecks: [
+        {
+          id: 'database',
+          label: '数据库连接',
+          ok: databaseOk,
+          hint: databaseOk ? 'PostgreSQL 连接正常' : '检查 Vercel 中的 DATABASE_URL',
+        },
+        {
+          id: 'schema',
+          label: '数据库结构版本',
+          ok: schemaVersion >= EXPECTED_SCHEMA_VERSION,
+          hint: schemaVersion >= EXPECTED_SCHEMA_VERSION
+            ? `当前 v${schemaVersion}（已是最新）`
+            : `当前 v${schemaVersion}，期望 v${EXPECTED_SCHEMA_VERSION}。重新部署或访问站点触发迁移`,
+        },
+        {
+          id: 'jwtSecret',
+          label: 'JWT_SECRET',
+          ok: jwtConfigured,
+          hint: '登录会话签名密钥，须在 Vercel 环境变量中配置',
+        },
+        {
+          id: 'masterKey',
+          label: 'MASTER_KEY',
+          ok: masterKeyConfigured,
+          hint: '加密渠道 Token 等敏感数据的密钥',
+        },
+        {
+          id: 'cronSecret',
+          label: 'CRON_SECRET',
+          ok: cronSecretConfigured,
+          hint: '外部 Cron 调用 /api/cron/* 时的 Bearer 令牌',
+        },
+        {
+          id: 'turnstile',
+          label: 'Cloudflare Turnstile（人机验证）',
+          ok: turnstileConfigured,
+          hint: turnstileConfigured
+            ? 'SecretKey / TURNSTILE_SECRET_KEY 已配置'
+            : '可选：在 Vercel 配置 SecretKey 与 SiteKey；未配置则登录不启用人机验证',
+        },
+      ],
+      channelNote:
+        'Resend / Telegram 等通知渠道的 API Key 在「通知渠道」页面按账户填写，不属于此处环境变量检查。',
     },
   });
 });
