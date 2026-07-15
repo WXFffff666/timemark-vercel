@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 const required = ['DATABASE_URL', 'JWT_SECRET', 'MASTER_KEY', 'CRON_SECRET'];
-const optional = ['TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'CORS_ORIGIN', 'ALLOW_VERCEL_PREVIEW'];
+const optional = ['TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'CORS_ORIGIN', 'ALLOW_VERCEL_PREVIEW', 'TZ', 'WEBAUTHN_RP_ID', 'WEBAUTHN_ORIGIN'];
 
 let ok = true;
 for (const key of required) {

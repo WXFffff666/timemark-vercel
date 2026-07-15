@@ -133,6 +133,8 @@ npx tsx scripts/migrate-db.ts
 
 环境变量建议：`CORS_ORIGIN=https://你的正式域名`，`WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` 与正式域名一致。
 
+**登录防爆破（推荐）**：在 Cloudflare 创建 Turnstile 后配置 `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`，步骤见 [docs/TURNSTILE_SETUP.md](docs/TURNSTILE_SETUP.md)。
+
 | 项目 | 值 |
 |:----:|:--:|
 | 默认用户名 | `admin` |
