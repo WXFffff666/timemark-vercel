@@ -29,6 +29,7 @@ import { sendBarkNotification } from './bark.service.js';
 import { sendGotifyNotification } from './gotify.service.js';
 import { sendMeowNotification } from './meow.service.js';
 import { sendPushMeNotification } from './pushme.service.js';
+import { sendPushDeerNotification } from './pushdeer.service.js';
 import { sendWeComAppNotification } from './wecomapp.service.js';
 import { filterSupportedChannels } from './supported-channels.js';
 
@@ -157,6 +158,7 @@ const channelToAccountType: Record<string, string> = {
   'gotify': 'gotify',
   'meow': 'meow',
   'pushme': 'pushme',
+  'pushdeer': 'pushdeer',
   'wecomapp': 'wecomapp',
   // Plugin channels
   'wechat_personal': 'wechat_personal',
@@ -262,6 +264,11 @@ function getChannelConfigFromAccount(
     case 'pushme':
       return account.token
         ? { token: account.token }
+        : null;
+
+    case 'pushdeer':
+      return account.token
+        ? { token: account.token, webhook: account.webhook }
         : null;
     
     case 'wecomapp':
@@ -649,6 +656,8 @@ export async function sendNotifications(
           await retryWithBackoff(() => sendMeowNotification(mappedEvent, chConfig.token));
         else if (ch === 'pushme' && chConfig.token)
           await retryWithBackoff(() => sendPushMeNotification(mappedEvent, chConfig.token));
+        else if (ch === 'pushdeer' && chConfig.token)
+          await retryWithBackoff(() => sendPushDeerNotification(mappedEvent, chConfig.token, chConfig.webhook));
         else if (ch === 'wecomapp' && chConfig.token && chConfig.secret && chConfig.chat_id && chConfig.webhook)
           await retryWithBackoff(() => sendWeComAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id, chConfig.webhook));
         // Ntfy, Pushover, Apprise
@@ -780,6 +789,7 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any): P
     await sendGotifyNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id ? Number(chConfig.chat_id) : 5);
   else if (ch === 'meow' && chConfig.token) await sendMeowNotification(mappedEvent, chConfig.token);
   else if (ch === 'pushme' && chConfig.token) await sendPushMeNotification(mappedEvent, chConfig.token);
+  else if (ch === 'pushdeer' && chConfig.token) await sendPushDeerNotification(mappedEvent, chConfig.token, chConfig.webhook);
   else if (ch === 'wecomapp' && chConfig.token && chConfig.secret && chConfig.chat_id && chConfig.webhook)
     await sendWeComAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id, chConfig.webhook);
   else if (ch === 'ntfy' && chConfig.webhook && chConfig.token)

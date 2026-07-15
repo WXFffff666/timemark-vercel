@@ -166,6 +166,9 @@ async function testTokenChannel(
     
     case 'pushme':
       return await testPushMeChannel(token);
+
+    case 'pushdeer':
+      return await testPushDeerChannel(token, fromEmail);
     
     case 'ntfy':
       return await testNtfyChannel(fromEmail!, token);
@@ -572,6 +575,31 @@ async function testPushMeChannel(pushKey: string): Promise<TestConnectionResult>
     } else {
       return { success: false, message: `发送失败: ${response.data?.msg || response.data?.message || '未知错误'}`, latency };
     }
+  } catch (error: any) {
+    const latency = Date.now() - start;
+    const diag = diagnoseError(error);
+    return { success: false, message: diag.message, latency, details: diag.details };
+  }
+}
+
+async function testPushDeerChannel(pushKey: string, serverUrl?: string): Promise<TestConnectionResult> {
+  if (!pushKey) {
+    return { success: false, message: 'PushKey 不能为空' };
+  }
+
+  const base = (serverUrl || 'https://api2.pushdeer.com').replace(/\/$/, '');
+  const start = Date.now();
+  try {
+    const response = await axios.post(
+      `${base}/message/push`,
+      new URLSearchParams({ pushkey: pushKey, text: 'TimeMark 连接测试：PushDeer 渠道配置正确。', type: 'text' }),
+      { timeout: 10000 },
+    );
+    const latency = Date.now() - start;
+    if (response.data?.code === 0 || !response.data?.error) {
+      return { success: true, message: 'PushDeer 连接成功', latency };
+    }
+    return { success: false, message: `发送失败: ${response.data?.error || '未知错误'}`, latency };
   } catch (error: any) {
     const latency = Date.now() - start;
     const diag = diagnoseError(error);

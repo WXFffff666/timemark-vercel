@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
-import { Shield, Monitor, Globe, Ban, Key, Clock, Trash2 } from 'lucide-react';
+import { Shield, Monitor, Globe, Ban, Key, Clock, Trash2, ArrowLeft } from 'lucide-react';
 
 interface SessionRow {
   id: number;
@@ -30,8 +30,11 @@ export default function Security() {
   const [deployInfo, setDeployInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const [loadError, setLoadError] = useState('');
+
   const load = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const [sess, ev, bans, wl, totp, deploy] = await Promise.all([
         api.get<SessionRow[]>('/security/sessions'),
@@ -41,13 +44,18 @@ export default function Security() {
         api.get<{ enabled: boolean }>('/security/totp/status'),
         api.get<any>('/security/deploy-info'),
       ]);
-      setSessions(sess);
-      setEvents(ev);
-      setIpBans(bans);
-      setWhitelistEnabled(wl.enabled);
-      setWhitelistIps((wl.ips || []).join('\n'));
-      setTotpEnabled(totp.enabled);
-      setDeployInfo(deploy);
+      setSessions(Array.isArray(sess) ? sess : []);
+      setEvents(Array.isArray(ev) ? ev : []);
+      setIpBans(Array.isArray(bans) ? bans : []);
+      setWhitelistEnabled(!!wl?.enabled);
+      setWhitelistIps((wl?.ips || []).join('\n'));
+      setTotpEnabled(!!totp?.enabled);
+      setDeployInfo(deploy ?? null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : '加载失败');
+      setSessions([]);
+      setEvents([]);
+      setIpBans([]);
     } finally {
       setLoading(false);
     }
@@ -91,11 +99,23 @@ export default function Security() {
   return (
     <div className="min-h-screen pb-20 md:pb-8">
       <header className="sticky top-0 z-20 backdrop-blur border-b border-white/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2"><Shield className="w-5 h-5" /><h1 className="font-semibold">安全中心</h1></div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)} title="返回">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <Shield className="w-5 h-5" />
+          <h1 className="font-semibold">安全中心</h1>
+        </div>
         <div className="flex gap-2"><ThemeToggle /><Button variant="outline" size="sm" onClick={() => navigate('/settings')}>设置</Button></div>
       </header>
 
       <main className="max-w-4xl mx-auto p-4 space-y-4">
+        {loadError && (
+          <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            {loadError}
+            <Button variant="link" size="sm" className="ml-2 h-auto p-0" onClick={load}>重试</Button>
+          </div>
+        )}
         {deployInfo && (
           <Card>
             <CardHeader><CardTitle className="text-base">部署状态</CardTitle></CardHeader>

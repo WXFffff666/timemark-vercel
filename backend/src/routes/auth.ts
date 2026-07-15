@@ -13,6 +13,7 @@ import { sendSecurityAlert } from '../services/alert.service.js';
 import { ensureLunarHolidayEvents } from '../services/lunar-holidays.js';
 import { hashPassword } from '../utils/password.js';
 import { query } from '../db/index.js';
+import { setAuthCookies, clearAuthCookies, getRefreshTokenFromCookie, setAccessCookie } from '../utils/auth-cookies.js';
 
 const auth = new Hono();
 
@@ -119,6 +120,8 @@ auth.post('/login', async (c) => {
     });
     const { session, accessToken, refreshToken } = await createSession(user.id, deviceFingerprint || '', false, rememberMe);
 
+    setAuthCookies(c, accessToken, refreshToken, rememberMe);
+
     const pwdCheck = await query(
       'SELECT password_changed_at FROM user_configs WHERE user_id = $1',
       [user.id],
@@ -130,7 +133,7 @@ auth.post('/login', async (c) => {
 
     return c.json({
       success: true,
-      data: { accessToken, refreshToken, sessionId: session.id, user, mustChangePassword },
+      data: { accessToken, refreshToken, sessionId: session.id, user, mustChangePassword, authMode: 'cookie' },
     });
   } catch (error: any) {
     console.error('[Login Error]', error);
@@ -173,6 +176,7 @@ auth.post('/logout', authMiddleware, async (c) => {
       await deleteSession(payload.sessionToken);
     }
   }
+  clearAuthCookies(c);
   return c.json({ success: true });
 });
 
@@ -234,7 +238,7 @@ auth.post('/change-password', authMiddleware, async (c) => {
 auth.post('/refresh', async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { refreshToken } = body;
+    const refreshToken = body.refreshToken || getRefreshTokenFromCookie(c);
 
     if (!refreshToken) {
       return c.json({ success: false, error: 'Refresh token is required' }, 400);
@@ -257,7 +261,9 @@ auth.post('/refresh', async (c) => {
     // Generate new access token
     const accessToken = await generateAccessToken(user.id, payload.sessionToken, false);
 
-    return c.json({ success: true, data: { accessToken, user } });
+    setAccessCookie(c, accessToken, true);
+
+    return c.json({ success: true, data: { accessToken, user, authMode: 'cookie' } });
   } catch (error: any) {
     console.error('[Refresh Token Error]', error);
     return c.json({ success: false, error: error.message || 'Failed to refresh token' }, 500);

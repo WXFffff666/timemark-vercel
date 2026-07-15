@@ -180,6 +180,13 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   // 通知预览状态
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [fixedContacts, setFixedContacts] = useState<{ id: number; name: string; nickname?: string }[]>([]);
+
+  useEffect(() => {
+    api.get<{ id: number; name: string; nickname?: string }[]>('/contacts')
+      .then((data) => setFixedContacts(Array.isArray(data) ? data : []))
+      .catch(() => setFixedContacts([]));
+  }, [open]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('birthday');
   const [userTemplates, setUserTemplates] = useState<Array<{id: string; name: string; content: string}>>([]);
 
@@ -754,6 +761,40 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 💡 设置关联人员后，系统会根据接收人自动转换称呼（如"我爸"→"父亲"）
               </p>
+
+              {fixedContacts.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-[10px] text-slate-400 w-full">从固定联系人快捷填入：</span>
+                  {fixedContacts.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="text-xs px-2 py-1 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:border-primary-400"
+                      onClick={() => setFormData((prev) => ({
+                        ...prev,
+                        personName: c.nickname || c.name,
+                      }))}
+                      title="填入被提醒人"
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                  {fixedContacts.map((c) => (
+                    <button
+                      key={`r-${c.id}`}
+                      type="button"
+                      className="text-xs px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 hover:border-indigo-400"
+                      onClick={() => setFormData((prev) => ({
+                        ...prev,
+                        reminderRecipientName: c.nickname || c.name,
+                      }))}
+                      title="填入提醒人"
+                    >
+                      提醒→{c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
               
               {/* 被提醒人 - 生日/事件所有者 */}
               <div className="space-y-1.5">

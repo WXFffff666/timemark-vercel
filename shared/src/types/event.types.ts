@@ -39,6 +39,7 @@ export type NotificationChannel =
   | 'gotify'
   | 'meow'
   | 'pushme'
+  | 'pushdeer'
   | 'wecomapp'
   // Plugin channels
   | 'whatsapp'

@@ -22,6 +22,7 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
     const response = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ refreshToken }),
     });
 
@@ -49,7 +50,7 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
     ...options?.headers,
   };
 
-  const response = await fetch(`${API_BASE}${url}`, { ...options, headers });
+  const response = await fetch(`${API_BASE}${url}`, { ...options, headers, credentials: 'include' });
 
   // If 401 and not already retried, try to refresh token
   if (response.status === 401 && !retryAfterRefresh && refreshToken) {
@@ -122,6 +123,7 @@ export const api = {
     const { accessToken } = getTokens();
     const response = await fetch(`${API_BASE}${url}`, {
       method: 'GET',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',

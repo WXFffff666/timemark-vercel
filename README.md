@@ -10,7 +10,7 @@
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-2.8.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
+[![Version](https://img.shields.io/badge/Version-2.9.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
 [![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-vercel?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-vercel/stargazers)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat&logo=vercel)](https://vercel.com/new)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)

@@ -2,6 +2,7 @@ import { Context, Next } from 'hono';
 import { verifyToken } from '../utils/jwt.js';
 import { getUserById } from '../services/auth.service.js';
 import { getSessionByToken } from '../services/session.service.js';
+import { getAccessTokenFromCookie } from '../utils/auth-cookies.js';
 import type { User } from '@timemark/shared';
 
 export async function authMiddleware(c: Context<{ Variables: { user: User } }>, next: Next) {
@@ -12,7 +13,7 @@ export async function authMiddleware(c: Context<{ Variables: { user: User } }>, 
   }
 
   const authHeader = c.req.header('Authorization');
-  const token = authHeader?.replace('Bearer ', '');
+  const token = authHeader?.replace('Bearer ', '') || getAccessTokenFromCookie(c);
 
   if (!token) {
     return c.json({ success: false, error: 'Unauthorized' }, 401);

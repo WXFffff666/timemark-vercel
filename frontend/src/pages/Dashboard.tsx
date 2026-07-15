@@ -10,8 +10,9 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { RealtimeClock } from '@/components/RealtimeClock';
 import { TimezoneSelector } from '@/components/TimezoneSelector';
 import type { Event, CreateEventRequest } from '@timemark/shared';
-import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload } from 'lucide-react';
+import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+import { api } from '@/lib/api';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -24,6 +25,13 @@ export function Dashboard() {
   const [editingEvent, setEditingEvent] = useState<Event | undefined>();
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [conflicts, setConflicts] = useState<{ date: string; count: number; names: string[] }[]>([]);
+
+  useEffect(() => {
+    api.get<{ date: string; count: number; names: string[] }[]>('/features/conflicts')
+      .then((data) => setConflicts(Array.isArray(data) ? data : []))
+      .catch(() => setConflicts([]));
+  }, [events.length]);
 
   const upcomingWeek = events.filter((e) => {
     const d = new Date(e.date);
@@ -173,12 +181,36 @@ export function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 mt-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">今日事件</p><p className="text-2xl font-bold">{todayCount}</p></div>
           <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">本周待办</p><p className="text-2xl font-bold">{upcomingWeek}</p></div>
           <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">总事件</p><p className="text-2xl font-bold">{events.length}</p></div>
-          <div className="glass-panel rounded-2xl p-4 cursor-pointer" onClick={() => navigate('/analytics')}><p className="text-xs text-slate-500">数据看板</p><p className="text-sm font-medium text-blue-600">查看统计 →</p></div>
+          <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-emerald-400/50 transition" onClick={() => navigate('/contacts')}>
+            <p className="text-xs text-slate-500 flex items-center gap-1"><Users size={12} />固定联系人</p>
+            <p className="text-sm font-medium text-emerald-600">管理 →</p>
+          </div>
+          <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-blue-400/50 transition" onClick={() => navigate('/broadcast')}>
+            <p className="text-xs text-slate-500 flex items-center gap-1"><Mail size={12} />批量邮件</p>
+            <p className="text-sm font-medium text-blue-600">群发 →</p>
+          </div>
+          <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition" onClick={() => navigate('/calendar')}>
+            <p className="text-xs text-slate-500 flex items-center gap-1"><Calendar size={12} />日历视图</p>
+            <p className="text-sm font-medium text-indigo-600">查看 →</p>
+          </div>
         </div>
+        {conflicts.length > 0 && (
+          <div className="mb-6 glass-panel rounded-2xl p-4 border border-amber-200/60 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-900/10">
+            <p className="text-sm font-bold text-amber-800 dark:text-amber-200 mb-2">⚠️ 日期冲突检测（{conflicts.length} 组）</p>
+            <div className="space-y-1">
+              {conflicts.slice(0, 3).map((c) => (
+                <p key={c.date} className="text-xs text-amber-700 dark:text-amber-300">
+                  {c.date}：{c.names?.join('、') || `${c.count} 个事件`}
+                </p>
+              ))}
+              {conflicts.length > 3 && <p className="text-xs text-amber-600">还有 {conflicts.length - 3} 组冲突…</p>}
+            </div>
+          </div>
+        )}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h2 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">我的倒计时</h2>

@@ -739,6 +739,32 @@ const tokenChannels: ChannelTemplate[] = [
     docsUrl: 'https://push.i-i.me/'
   },
   {
+    id: 'pushdeer',
+    name: 'PushDeer',
+    description: 'PushDeer 跨平台推送（iOS/Android）',
+    icon: 'BellRing',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'PushKey',
+        type: 'password',
+        required: true,
+        description: '从 PushDeer App 或官网获取的 PushKey'
+      },
+      {
+        name: 'webhook',
+        label: 'API 地址（可选）',
+        type: 'text',
+        required: false,
+        placeholder: 'https://api2.pushdeer.com',
+        description: '自建 PushDeer 服务地址，留空使用官方 API'
+      }
+    ],
+    docsUrl: 'https://www.pushdeer.com/'
+  },
+  {
     id: 'wecomapp',
     name: '企微应用 (WeComApp)',
     description: '企业微信应用消息推送',

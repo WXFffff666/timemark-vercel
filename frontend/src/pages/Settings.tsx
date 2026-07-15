@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe } from 'lucide-react';
+import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail } from 'lucide-react';
+import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -27,6 +28,24 @@ const TIMEZONES = [
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
+
+function parseAlertChannels(raw: unknown): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter((x): x is string => typeof x === 'string');
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function ensureArray<T>(data: unknown): T[] {
+  return Array.isArray(data) ? data : [];
+}
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -72,15 +91,14 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
-    api.get('/config/accounts').then((accounts: any) => {
-      setAlertAccounts(accounts || []);
-    }).catch(() => {});
+    api.get('/config/accounts').then((accounts: unknown) => {
+      setAlertAccounts(ensureArray(accounts));
+    }).catch(() => setAlertAccounts([]));
     api.get('/config').then((config: any) => {
-      if (config?.alert_channels) {
-        const channels = typeof config.alert_channels === 'string' ? JSON.parse(config.alert_channels) : config.alert_channels;
-        setSelectedAlertChannels(channels || []);
+      if (config?.alert_channels != null) {
+        setSelectedAlertChannels(parseAlertChannels(config.alert_channels));
       }
-    }).catch(() => {});
+    }).catch(() => setSelectedAlertChannels([]));
   }, []);
 
   const handleTimezoneChange = async (value: string) => {
@@ -498,7 +516,7 @@ export default function Settings() {
               </div>
               <div className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer" onClick={() => navigate('/broadcast')}>
                 <div className="flex items-center gap-4">
-                  <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center"><Bell size={22} /></div>
+                  <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center"><Mail size={22} /></div>
                   <div>
                     <h3 className="text-base font-bold">批量邮件</h3>
                     <p className="text-xs text-slate-500">向联系人或指定邮箱群发</p>
@@ -656,6 +674,7 @@ export default function Settings() {
           </div>
         </DialogContent>
       </Dialog>
+      <MobileBottomNav />
     </motion.div>
   );
 }

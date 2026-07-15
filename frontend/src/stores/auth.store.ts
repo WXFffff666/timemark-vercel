@@ -114,18 +114,28 @@ export const useAuthStore = create<AuthState>((set) => ({
     
     console.log('[AuthStore] Login response:', { hasAccessToken: !!response.accessToken, hasUser: !!response.user });
     
-    // Store tokens based on rememberMe preference
-    if (rememberMe) {
-      // Use localStorage for persistent sessions
+    // Prefer HttpOnly cookies — avoid persisting JWT in localStorage
+    if (response.authMode === 'cookie') {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('refreshToken');
+      if (response.sessionId) {
+        localStorage.setItem(SESSION_ID_KEY, response.sessionId);
+      }
+      if (rememberMe) {
+        localStorage.setItem('timemark_persistent_login', 'true');
+      } else {
+        localStorage.removeItem('timemark_persistent_login');
+      }
+    } else if (rememberMe) {
       localStorage.setItem('accessToken', response.accessToken);
       localStorage.setItem('refreshToken', response.refreshToken);
       if (response.sessionId) {
         localStorage.setItem(SESSION_ID_KEY, response.sessionId);
       }
-      // Also save device fingerprint confirmation
       localStorage.setItem('timemark_persistent_login', 'true');
     } else {
-      // Use sessionStorage for session-only login
       sessionStorage.setItem('accessToken', response.accessToken);
       sessionStorage.setItem('refreshToken', response.refreshToken);
       localStorage.removeItem('timemark_persistent_login');
@@ -255,6 +265,31 @@ export const useAuthStore = create<AuthState>((set) => ({
               set({ user: JSON.parse(storedUser), isAuthenticated: true, isLoading: false });
               return;
             } catch {}
+          }
+        }
+      }
+    } else {
+      // HttpOnly cookie session (no token in storage)
+      try {
+        const user = await Promise.race([
+          api.get<User>('/auth/session'),
+          timeoutPromise,
+        ]);
+        localStorage.setItem('cachedUser', JSON.stringify(user));
+        sessionStorage.setItem('cachedUser', JSON.stringify(user));
+        set({ user, isAuthenticated: true, isLoading: false });
+        return;
+      } catch (error: any) {
+        const errorMsg = error.message || '';
+        const isAuthError = errorMsg.includes('401') || errorMsg.includes('Unauthorized');
+        if (isAuthError) {
+          try {
+            await api.post('/auth/refresh', {});
+            const user = await api.get<User>('/auth/session');
+            set({ user, isAuthenticated: true, isLoading: false });
+            return;
+          } catch {
+            // fall through
           }
         }
       }

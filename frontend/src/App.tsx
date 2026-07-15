@@ -19,6 +19,7 @@ const Security = lazy(() => import('./pages/Security'));
 const DeployWizard = lazy(() => import('./pages/DeployWizard'));
 const Contacts = lazy(() => import('./pages/Contacts'));
 const Broadcast = lazy(() => import('./pages/Broadcast'));
+const CalendarPage = lazy(() => import('./pages/Calendar'));
 
 function PageLoader() {
   return (
@@ -93,6 +94,7 @@ function AnimatedRoutes() {
           <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
           <Route path="/broadcast" element={<ProtectedRoute><Broadcast /></ProtectedRoute>} />
+          <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
           <Route path="/share/:token" element={<ShareEvent />} />
           <Route path="/" element={<Navigate to="/dashboard" />} />
         </Routes>
