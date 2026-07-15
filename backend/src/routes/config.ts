@@ -29,6 +29,9 @@ import {
 } from '@timemark/shared';
 import type { User } from '@timemark/shared';
 import { isSupportedChannel } from '../services/notifications/supported-channels.js';
+import { testConnection } from '../services/notifications/test-connection.js';
+import { getChannelTemplate } from '../services/notifications/channels.config.js';
+import { query } from '../db/index.js';
 
 const config = new Hono<{ Variables: { user: User } }>();
 
@@ -86,6 +89,24 @@ config.post('/accounts', async (c) => {
     session_data: parsed.data.sessionData || undefined,
     plugin_package: parsed.data.pluginPackage || undefined,
   });
+
+  const tpl = getChannelTemplate(parsed.data.type);
+  if (tpl) {
+    testConnection({
+      type: parsed.data.type,
+      configMethod: parsed.data.configMethod || tpl.configMethod,
+      webhook: parsed.data.webhook || undefined,
+      token: parsed.data.token || undefined,
+      chatId: parsed.data.chatId || undefined,
+      secret: parsed.data.secret || undefined,
+    }).then((result) => {
+      const status = result.success ? 'healthy' : 'unhealthy';
+      return query(
+        `UPDATE notification_accounts SET connection_status = $1, last_test_result = $2, last_test_at = CURRENT_TIMESTAMP WHERE id = $3`,
+        [status, result.success ? 'success' : 'failed', account.id],
+      );
+    }).catch(() => {});
+  }
   
   return c.json({ success: true, data: account }, 201);
 });

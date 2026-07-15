@@ -1,5 +1,31 @@
 # TimeMark 优化计划与实施记录
 
+## 已完成（v2.8.0）
+
+### P0 缺陷修复
+- LINE / Microsoft Teams 接入主发送链
+- `calendar_type: both` 双历调度支持
+- Google Chat / IRC 专用 API（不再走 generic）
+- 迁移 v16→v17 顺序修正；新增 v18（联系人、批量邮件）
+
+### 新功能
+- **固定联系人**：`/api/contacts` + `/contacts` 页面，保存时格式验证
+- **批量邮件**：Resend Batch API，`/api/broadcast` + `/broadcast` 页面
+- **渠道健康检测**：保存账户自动 test；Cron `/api/cron/channel-health`
+- **Cron 心跳**：`HEALTHCHECK_URL` 环境变量（Healthchecks.io 等）
+- **模板扩充**：农历/双历/节日/批量邮件预设模板
+
+### 长期可用性
+- `/api/health` 展示最近 Cron 执行记录
+- `cron_execution_logs` + 可选外部心跳
+
+### 环境变量（新增可选）
+| 变量 | 说明 |
+|------|------|
+| `HEALTHCHECK_URL` | Cron 成功后 ping（如 Healthchecks.io） |
+
+---
+
 ## 已完成（v2.7.0）
 
 ### 单账户鉴权加固
@@ -48,8 +74,9 @@
 4. 输出目录：`frontend/dist`
 5. 添加 Neon Postgres 并设置环境变量
 6. 部署后运行：`npx tsx scripts/migrate-db.ts`
-7. 配置 cron-job.org → `GET https://<domain>/api/cron/reminder-check`，Header: `Authorization: Bearer <CRON_SECRET>`
-8. 首次登录后修改默认密码 `TimeMark@2026`
+7. 配置 cron-job.org → `GET /api/cron/reminder-check`（每分钟）
+8. 可选：每日 `GET /api/cron/channel-health`；设置 `HEALTHCHECK_URL` 心跳
+9. 首次登录后修改默认密码 `TimeMark@2026`
 
 ---
 

@@ -150,6 +150,25 @@ ALTER TABLE event_trigger_logs ADD COLUMN IF NOT EXISTS account_id INTEGER;`
 ALTER TABLE notification_accounts ADD COLUMN IF NOT EXISTS last_test_at TEXT;`
     },
     {
+      version: 16,
+      name: 'vercel_free_tier_features',
+      sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS share_token TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS event_photo_url TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMP;
+ALTER TABLE event_trigger_logs ADD COLUMN IF NOT EXISTS read_at TIMESTAMP;
+CREATE TABLE IF NOT EXISTS cron_execution_logs (
+  id SERIAL PRIMARY KEY,
+  job_name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  duration_ms INTEGER,
+  result_summary TEXT,
+  error_message TEXT,
+  executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_cron_logs_job ON cron_execution_logs(job_name, executed_at);`
+    },
+    {
       version: 17,
       name: 'security_features_v17',
       sql: `CREATE TABLE IF NOT EXISTS rate_limits (
@@ -183,23 +202,43 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
 );`
     },
     {
-      version: 16,
-      name: 'vercel_free_tier_features',
-      sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]';
-ALTER TABLE events ADD COLUMN IF NOT EXISTS share_token TEXT;
-ALTER TABLE events ADD COLUMN IF NOT EXISTS event_photo_url TEXT;
-ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMP;
-ALTER TABLE event_trigger_logs ADD COLUMN IF NOT EXISTS read_at TIMESTAMP;
-CREATE TABLE IF NOT EXISTS cron_execution_logs (
+      version: 18,
+      name: 'contacts_broadcast_v18',
+      sql: `CREATE TABLE IF NOT EXISTS fixed_contacts (
   id SERIAL PRIMARY KEY,
-  job_name TEXT NOT NULL,
-  status TEXT NOT NULL,
-  duration_ms INTEGER,
-  result_summary TEXT,
-  error_message TEXT,
-  executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  nickname TEXT,
+  email TEXT,
+  phone TEXT,
+  telegram_chat_id TEXT,
+  qq TEXT,
+  wxpusher_uid TEXT,
+  preferred_channels JSONB DEFAULT '[]',
+  notes TEXT,
+  validation_status TEXT DEFAULT 'pending',
+  last_validated_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_cron_logs_job ON cron_execution_logs(job_name, executed_at);`
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_user ON fixed_contacts(user_id);
+CREATE TABLE IF NOT EXISTS broadcast_campaigns (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  subject TEXT NOT NULL,
+  body_html TEXT NOT NULL,
+  recipient_count INTEGER DEFAULT 0,
+  success_count INTEGER DEFAULT 0,
+  failed_count INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'pending',
+  recipient_source TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_broadcast_campaigns_user ON broadcast_campaigns(user_id);
+ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS broadcast_id INTEGER REFERENCES broadcast_campaigns(id) ON DELETE SET NULL;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS email_opt_out BOOLEAN DEFAULT FALSE;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;`
     },
   ];
 

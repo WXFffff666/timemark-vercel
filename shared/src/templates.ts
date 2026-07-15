@@ -21,6 +21,8 @@ export const AVAILABLE_VARIABLES = [
   { key: '{{days_until}}', label: '距离天数', example: '3' },
   { key: '{{blessing}}', label: '祝福语', example: '生日快乐！' },
   { key: '{{reminder_time}}', label: '提醒时间', example: '09:00' },
+  { key: '{{lunar_date}}', label: '农历日期', example: '正月初一' },
+  { key: '{{calendar_type}}', label: '历法类型', example: '农历' },
 ];
 
 // 预设模板
@@ -199,23 +201,51 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
     variables: ['event_name', 'days_until', 'blessing'],
     description: '适用于毕业典礼等',
   },
-  // 婚礼模板
+  // 农历生日
   {
-    id: 'wedding',
-    name: '婚礼提醒',
-    content: '💒 {{event_name}} 还有 {{days_until}} 天！\n💍 {{blessing}}',
+    id: 'birthday_lunar',
+    name: '农历生日',
+    content: '🎂 {{person_name}} 的农历生日还有 {{days_until}} 天！\n🌙 农历：{{lunar_date}}\n📅 公历：{{event_date}}\n🎉 {{blessing}}',
     isPreset: true,
-    variables: ['event_name', 'days_until', 'blessing'],
-    description: '适用于婚礼、订婚等',
+    variables: ['person_name', 'days_until', 'lunar_date', 'event_date', 'blessing'],
+    description: '农历生日提醒，含双历日期',
   },
-  // 医疗模板
   {
-    id: 'medical',
-    name: '医疗提醒',
-    content: '🏥 {{event_name}} 还有 {{days_until}} 天\n📋 请带好病历和医保卡',
+    id: 'birthday_both',
+    name: '双历生日',
+    content: '🎂 {{person_name}} 生日提醒（公历+农历）\n📅 公历：{{event_date}} | 🌙 农历：{{lunar_date}}\n还有 {{days_until}} 天 · {{blessing}}',
+    isPreset: true,
+    variables: ['person_name', 'days_until', 'event_date', 'lunar_date', 'blessing'],
+    description: '同时记录公历与农历的生日',
+  },
+  // 传统节日
+  {
+    id: 'spring_festival',
+    name: '春节提醒',
+    content: '🧧 {{event_name}} 还有 {{days_until}} 天！记得准备年货和红包～',
     isPreset: true,
     variables: ['event_name', 'days_until'],
-    description: '适用于体检、复诊、手术等',
+  },
+  {
+    id: 'mid_autumn',
+    name: '中秋提醒',
+    content: '🥮 {{event_name}} 还有 {{days_until}} 天！月圆人团圆。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+  },
+  {
+    id: 'dragon_boat',
+    name: '端午提醒',
+    content: '🐲 {{event_name}} 还有 {{days_until}} 天！记得吃粽子。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+  },
+  {
+    id: 'qixi',
+    name: '七夕提醒',
+    content: '💕 {{event_name}} 还有 {{days_until}} 天！',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
   },
   // 通用模板
   {
@@ -236,12 +266,40 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
   },
 ];
 
+/** 批量邮件预设模板 */
+export const BROADCAST_PRESET_TEMPLATES: NotificationTemplate[] = [
+  {
+    id: 'broadcast_notice',
+    name: '系统通知',
+    content: '<h2>{{subject}}</h2><p>您好，</p><p>这是一条来自 TimeMark 的通知消息。</p>',
+    isPreset: true,
+    variables: [],
+    description: '通用系统通知',
+  },
+  {
+    id: 'broadcast_holiday',
+    name: '节日问候',
+    content: '<h2>🎊 节日问候</h2><p>祝您节日快乐，万事如意！</p>',
+    isPreset: true,
+    variables: [],
+    description: '节日批量问候',
+  },
+  {
+    id: 'broadcast_reminder_digest',
+    name: '提醒汇总',
+    content: '<h2>📅 本周提醒汇总</h2><p>以下是您近期需要关注的重要日期，请查收。</p>',
+    isPreset: true,
+    variables: [],
+    description: '周期性提醒_digest',
+  },
+];
+
 // 事件类型到模板的映射
 export const EVENT_TYPE_TEMPLATES: Record<string, string[]> = {
-  birthday: ['birthday', 'birthday_simple', 'birthday_detailed', 'generic', 'detailed'],
+  birthday: ['birthday', 'birthday_lunar', 'birthday_both', 'birthday_simple', 'birthday_detailed', 'generic', 'detailed'],
   exam: ['exam', 'exam_urgent', 'generic', 'detailed'],
   anniversary: ['anniversary', 'anniversary_simple', 'generic', 'detailed'],
-  holiday: ['holiday', 'holiday_family', 'generic', 'detailed'],
+  holiday: ['holiday', 'holiday_family', 'spring_festival', 'mid_autumn', 'dragon_boat', 'qixi', 'generic', 'detailed'],
   meeting: ['meeting', 'generic', 'detailed'],
   deadline: ['deadline', 'deadline_urgent', 'generic', 'detailed'],
   travel: ['travel', 'generic', 'detailed'],
@@ -266,6 +324,8 @@ export function renderTemplate(template: string, data: Record<string, string>): 
     '{{days_until}}': data.days_until || '',
     '{{blessing}}': data.blessing || '',
     '{{reminder_time}}': data.reminder_time || '',
+    '{{lunar_date}}': data.lunar_date || '',
+    '{{calendar_type}}': data.calendar_type || '',
   };
   
   // 中文变量映射
@@ -277,6 +337,8 @@ export function renderTemplate(template: string, data: Record<string, string>): 
     '{{天数}}': data.days_until || '',
     '{{祝福语}}': data.blessing || '',
     '{{时间}}': data.reminder_time || '',
+    '{{农历}}': data.lunar_date || '',
+    '{{历法}}': data.calendar_type || '',
   };
   
   // 替换英文变量
@@ -316,6 +378,8 @@ export function generateNotificationContent(
     date: string;
     type: string;
     personName?: string;
+    lunarDate?: string;
+    calendarType?: string;
   },
   daysUntil: number,
   blessing: string,
@@ -333,6 +397,8 @@ export function generateNotificationContent(
     days_until: String(daysUntil),
     blessing: blessing,
     reminder_time: reminderTime || '',
+    lunar_date: event.lunarDate || '',
+    calendar_type: event.calendarType === 'lunar' ? '农历' : event.calendarType === 'both' ? '双历' : '公历',
   };
   
   return renderTemplate(templateContent, data);

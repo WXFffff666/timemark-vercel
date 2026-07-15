@@ -4,6 +4,8 @@ export * from './types/api.types.js';
 export * from './schemas/auth.schema.js';
 export * from './schemas/event.schema.js';
 export * from './schemas/config.schema.js';
+export * from './schemas/contact.schema.js';
+export * from './schemas/broadcast.schema.js';
 export * from './channels.js';
 export * from './blessings.js';
 export * from './templates.js';

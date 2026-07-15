@@ -482,6 +482,33 @@ export default function Settings() {
             </div>
           </motion.section>
 
+          {/* 联系人与批量邮件 */}
+          <motion.section variants={itemVariants}>
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">联系人与群发</h2>
+            <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10 space-y-1">
+              <div className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer" onClick={() => navigate('/contacts')}>
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center"><User size={22} /></div>
+                  <div>
+                    <h3 className="text-base font-bold">固定联系人</h3>
+                    <p className="text-xs text-slate-500">快捷用于提醒与批量邮件</p>
+                  </div>
+                </div>
+                <ChevronRight className="text-slate-400" />
+              </div>
+              <div className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer" onClick={() => navigate('/broadcast')}>
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center"><Bell size={22} /></div>
+                  <div>
+                    <h3 className="text-base font-bold">批量邮件</h3>
+                    <p className="text-xs text-slate-500">向联系人或指定邮箱群发</p>
+                  </div>
+                </div>
+                <ChevronRight className="text-slate-400" />
+              </div>
+            </div>
+          </motion.section>
+
           {/* 事件模板 */}
           <motion.section variants={itemVariants}>
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">事件模板</h2>

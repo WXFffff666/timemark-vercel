@@ -32,6 +32,18 @@ import { sendPushMeNotification } from './pushme.service.js';
 import { sendWeComAppNotification } from './wecomapp.service.js';
 import { filterSupportedChannels } from './supported-channels.js';
 
+function formatLunarLabel(lunarDateRaw: unknown): string {
+  if (!lunarDateRaw) return '';
+  try {
+    const d = typeof lunarDateRaw === 'string' ? JSON.parse(lunarDateRaw) : lunarDateRaw;
+    if (!d?.month || !d?.day) return '';
+    const prefix = d.isLeap ? '闰' : '';
+    return `农历${prefix}${d.month}月${d.day}日`;
+  } catch {
+    return '';
+  }
+}
+
 import { getUserConfig, getRelationshipMappings, getNotificationAccounts, getEventTemplate } from '../config.service.js';
 import { applyRelationshipMapping } from '@timemark/shared/relationship';
 import { getBlessing } from '../../../../shared/src/blessings.js';
@@ -103,10 +115,8 @@ const genericWebhookChannels = new Set([
   'zalo',
   'zalo_personal',
   'network_chat',
-  'irc',
   'synologychat',
   'twitch',
-  'googlechat',
 ]);
 
 // 渠道类型到通知账户类型的映射
@@ -358,7 +368,14 @@ export async function sendNotifications(
     const daysUntil = Math.max(0, Math.ceil((eventDate.getTime() - today.getTime()) / (86400 * 1000)));
     const renderedContent = generateNotificationContent(
       userTemplate.template_content,
-      { name: mappedEvent.name, date: event.date, type: event.type, personName: event.personName },
+      {
+        name: mappedEvent.name,
+        date: event.date,
+        type: event.type,
+        personName: event.person_name || event.personName,
+        lunarDate: formatLunarLabel(event.lunar_date),
+        calendarType: event.calendar_type,
+      },
       daysUntil,
       blessing,
       event.reminder_time
@@ -518,6 +535,14 @@ export async function sendNotifications(
           await retryWithBackoff(() => sendDiscordNotification(mappedEvent, chConfig.webhook));
         else if (ch === 'slack' && chConfig.webhook)
           await retryWithBackoff(() => sendSlackNotification(mappedEvent, chConfig.webhook));
+        else if (ch === 'googlechat' && chConfig.webhook)
+          await retryWithBackoff(() => sendGoogleChatNotification(mappedEvent, chConfig.webhook));
+        else if (ch === 'irc' && chConfig.webhook)
+          await retryWithBackoff(() => sendIRCNotification(mappedEvent, chConfig.webhook));
+        else if (ch === 'line' && chConfig.token && chConfig.chat_id)
+          await retryWithBackoff(() => sendLINENotification(mappedEvent, chConfig.token, chConfig.chat_id));
+        else if (ch === 'msteams' && chConfig.token && chConfig.chat_id)
+          await retryWithBackoff(() => sendMicrosoftTeamsNotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if (ch === 'wechat' && chConfig.token && chConfig.chat_id)
           await retryWithBackoff(() => sendWxPusherNotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if (ch === 'qq' && chConfig.token)
@@ -738,6 +763,12 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any): P
     await sendTelegramNotification(mappedEvent, chConfig.token, chConfig.chat_id);
   else if (ch === 'discord' && chConfig.webhook) await sendDiscordNotification(mappedEvent, chConfig.webhook);
   else if (ch === 'slack' && chConfig.webhook) await sendSlackNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'googlechat' && chConfig.webhook) await sendGoogleChatNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'irc' && chConfig.webhook) await sendIRCNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'line' && chConfig.token && chConfig.chat_id)
+    await sendLINENotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'msteams' && chConfig.token && chConfig.chat_id)
+    await sendMicrosoftTeamsNotification(mappedEvent, chConfig.token, chConfig.chat_id);
   else if (ch === 'wechat' && chConfig.token && chConfig.chat_id)
     await sendWxPusherNotification(mappedEvent, chConfig.token, chConfig.chat_id);
   else if (ch === 'qq' && chConfig.token) await sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id);

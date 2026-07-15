@@ -78,9 +78,10 @@ channels.post('/test', async (c) => {
 
     if (accountId) {
       const testResult = result.success ? 'success' : 'failed';
+      const connStatus = result.success ? 'healthy' : 'unhealthy';
       await query(
-        'UPDATE notification_accounts SET last_test_result = $1, last_test_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [testResult, accountId],
+        'UPDATE notification_accounts SET last_test_result = $1, last_test_at = CURRENT_TIMESTAMP, connection_status = $2 WHERE id = $3',
+        [testResult, connStatus, accountId],
       );
     }
 

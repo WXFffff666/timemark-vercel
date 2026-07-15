@@ -24,6 +24,39 @@ function diffDays(dateA: string, dateB: string): number {
   return Math.round((b.getTime() - a.getTime()) / (86400 * 1000));
 }
 
+/** Resolve next gregorian occurrence for an event (YYYY-MM-DD date field) */
+function resolveGregorianTarget(today: string, eventDate: string, allDays: number[], now: Date): Date | null {
+  const diff = diffDays(today, eventDate);
+  if (diff >= 0 && allDays.includes(diff)) {
+    return new Date(eventDate + 'T00:00:00Z');
+  }
+  return null;
+}
+
+/** Resolve lunar date to next matching gregorian target within current/next lunar year */
+function resolveLunarTarget(today: string, lunarDateRaw: unknown, allDays: number[], now: Date): Date | null {
+  try {
+    const lunarData = typeof lunarDateRaw === 'string' ? JSON.parse(lunarDateRaw) : lunarDateRaw;
+    if (!lunarData?.month || !lunarData?.day) return null;
+
+    const month = lunarData.isLeap ? -lunarData.month : lunarData.month;
+    const currentYear = now.getFullYear();
+
+    for (const year of [currentYear, currentYear + 1]) {
+      const tryLunarDate = Lunar.fromYmd(year, month, lunarData.day);
+      const trySolar = tryLunarDate.getSolar();
+      const tryDateStr = `${trySolar.getYear()}-${String(trySolar.getMonth()).padStart(2, '0')}-${String(trySolar.getDay()).padStart(2, '0')}`;
+      const diff = diffDays(today, tryDateStr);
+      if (diff >= 0 && allDays.includes(diff)) {
+        return new Date(tryDateStr + 'T00:00:00Z');
+      }
+    }
+  } catch (error) {
+    throw error;
+  }
+  return null;
+}
+
 /** Parse reminder_days_before from an event's JSON field, returns null if invalid */
 function parseReminderDays(raw: any): number[] | null {
   if (!raw) return null;
@@ -125,44 +158,18 @@ export async function sendReminders() {
     // 包含 0 表示当天也提醒
     const allDays = daysBeforeList.includes(0) ? daysBeforeList : [0, ...daysBeforeList];
     
-    if (calendarType === 'gregorian') {
-      // 公历事件：计算今天距事件日期的天数差
-      const eventDate = event.date; // YYYY-MM-DD
-      const diff = diffDays(today, eventDate);
-      if (diff >= 0 && allDays.includes(diff)) {
-        eventTargetDate = new Date(eventDate + 'T00:00:00Z');
+    try {
+      if (calendarType === 'gregorian' || calendarType === 'both') {
+        const gTarget = resolveGregorianTarget(today, event.date, allDays, now);
+        if (gTarget) eventTargetDate = gTarget;
       }
-    } else if (calendarType === 'lunar' && event.lunar_date) {
-      // 农历事件：转换为公历日期后比较
-      try {
-        const lunarData = typeof event.lunar_date === 'string' 
-          ? JSON.parse(event.lunar_date) 
-          : event.lunar_date;
-        
-        if (lunarData && lunarData.year && lunarData.month && lunarData.day) {
-          const month = lunarData.isLeap ? -lunarData.month : lunarData.month;
-          
-          // 计算今年和明年的农历日期对应的公历日期
-          const currentYear = now.getFullYear();
-          
-          for (const year of [currentYear, currentYear + 1]) {
-            const tryLunarDate = Lunar.fromYmd(year, month, lunarData.day);
-            const trySolar = tryLunarDate.getSolar();
-            const tryDate = new Date(Date.UTC(trySolar.getYear(), trySolar.getMonth() - 1, trySolar.getDay()));
-            const tryDateStr = tryDate.toISOString().split('T')[0];
-            
-            const diff = diffDays(today, tryDateStr);
-            if (diff >= 0 && allDays.includes(diff)) {
-              eventTargetDate = tryDate;
-              break;
-            }
-          }
-        }
-      } catch (error) {
-        log.error({ eventId: event.id, err: error }, 'Failed to parse lunar date');
-        // 记录农历转换失败到事件触发日志
-        await recordEventTrigger(event.id, event.user_id, 'scheduled', today, 'failed', `Lunar date conversion failed: ${String(error)}`);
+      if ((calendarType === 'lunar' || calendarType === 'both') && event.lunar_date) {
+        const lTarget = resolveLunarTarget(today, event.lunar_date, allDays, now);
+        if (lTarget) eventTargetDate = lTarget;
       }
+    } catch (error) {
+      log.error({ eventId: event.id, err: error }, 'Failed to parse lunar date');
+      await recordEventTrigger(event.id, event.user_id, 'scheduled', today, 'failed', `Lunar date conversion failed: ${String(error)}`);
     }
     
     if (eventTargetDate) {

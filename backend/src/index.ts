@@ -29,6 +29,8 @@ import userRoutes from './routes/user.js';
 import featuresRoutes from './routes/features.js';
 import securityRoutes from './routes/security.js';
 import calendarImportRoutes from './routes/calendar-import.js';
+import contactsRoutes from './routes/contacts.js';
+import broadcastRoutes from './routes/broadcast.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -85,12 +87,14 @@ app.route('/api/user', userRoutes);
 app.route('/api/features', featuresRoutes);
 app.route('/api/security', securityRoutes);
 app.route('/api/calendar', calendarImportRoutes);
+app.route('/api/contacts', contactsRoutes);
+app.route('/api/broadcast', broadcastRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {
   const checks: Record<string, boolean | string> = {
     platform: process.env.VERCEL ? 'vercel' : 'local',
-    version: '2.7.0',
+    version: '2.8.0',
     commit: process.env.VERCEL_GIT_COMMIT_SHA || 'local',
     databaseUrl: !!process.env.DATABASE_URL,
     jwtSecret: !!process.env.JWT_SECRET,
@@ -104,9 +108,18 @@ app.get('/api/health', async (c) => {
     return c.json({ status: 'degraded', checks }, 503);
   }
   try {
-    await waitForDb();
     await query('SELECT 1');
     checks.database = true;
+
+    const lastCron = await query(
+      `SELECT job_name, status, executed_at FROM cron_execution_logs ORDER BY executed_at DESC LIMIT 1`,
+    ).catch(() => ({ rows: [] }));
+    if (lastCron.rows[0]) {
+      checks.lastCronJob = lastCron.rows[0].job_name;
+      checks.lastCronStatus = lastCron.rows[0].status;
+      checks.lastCronAt = lastCron.rows[0].executed_at;
+    }
+
     return c.json({ status: 'ok', checks });
   } catch (error) {
     checks.database = false;

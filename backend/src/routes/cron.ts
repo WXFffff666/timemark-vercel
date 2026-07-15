@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
 import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions } from '../jobs/tasks.js';
 import { query } from '../db/index.js';
+import { pingHeartbeat } from '../utils/heartbeat.js';
+import { testConnection } from '../services/notifications/test-connection.js';
+import { isSupportedChannel } from '../services/notifications/supported-channels.js';
+import { getChannelTemplate } from '../services/notifications/channels.config.js';
 
 const cronRoutes = new Hono();
 
@@ -61,6 +65,7 @@ cronRoutes.get('/reminder-check', async (c) => {
   try {
     await sendReminders();
     await logCronRun('reminder-check', 'success', startedAt, 'Reminders checked');
+    await pingHeartbeat('reminder-check');
     return c.json({ success: true, job: 'reminder-check', timestamp: new Date().toISOString() });
   } catch (error: any) {
     await logCronRun('reminder-check', 'failed', startedAt, undefined, error.message);
@@ -82,6 +87,7 @@ cronRoutes.get('/daily-maintenance', async (c) => {
       startedAt,
       `sessions cleaned; plugin_sessions deleted: ${pluginResult.rowCount ?? 0}`,
     );
+    await pingHeartbeat('daily-maintenance');
     return c.json({
       success: true,
       job: 'daily-maintenance',
@@ -128,6 +134,55 @@ cronRoutes.get('/plugin-session-cleanup', async (c) => {
     return c.json({ success: true, job: 'plugin-session-cleanup', timestamp: new Date().toISOString(), deleted: result.rowCount ?? 0 });
   } catch (error: any) {
     return c.json({ success: false, error: error.message || 'Job failed' }, 500);
+  }
+});
+
+// Channel health re-check for active accounts (daily via external cron)
+cronRoutes.get('/channel-health', async (c) => {
+  const startedAt = Date.now();
+  let tested = 0;
+  let ok = 0;
+  let failed = 0;
+  try {
+    const accounts = await query(
+      `SELECT id, type, webhook, token, secret, chat_id, config_method
+       FROM notification_accounts WHERE is_active = TRUE`,
+    );
+    for (const row of accounts.rows) {
+      if (!isSupportedChannel(row.type)) continue;
+      const tpl = getChannelTemplate(row.type);
+      if (!tpl) continue;
+      tested++;
+      try {
+        const result = await testConnection({
+          type: row.type,
+          configMethod: row.config_method || tpl.configMethod,
+          webhook: row.webhook || undefined,
+          token: row.token || undefined,
+          chatId: row.chat_id || undefined,
+          secret: row.secret || undefined,
+        });
+        const status = result.success ? 'healthy' : 'unhealthy';
+        if (result.success) ok++; else failed++;
+        await query(
+          `UPDATE notification_accounts SET connection_status = $1, last_test_result = $2, last_test_at = CURRENT_TIMESTAMP WHERE id = $3`,
+          [status, result.success ? 'success' : 'failed', row.id],
+        );
+      } catch {
+        failed++;
+        await query(
+          `UPDATE notification_accounts SET connection_status = 'unhealthy', last_test_result = 'failed', last_test_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [row.id],
+        ).catch(() => {});
+      }
+    }
+    const summary = `tested=${tested} ok=${ok} failed=${failed}`;
+    await logCronRun('channel-health', 'success', startedAt, summary);
+    await pingHeartbeat('channel-health');
+    return c.json({ success: true, job: 'channel-health', tested, ok, failed });
+  } catch (error: any) {
+    await logCronRun('channel-health', 'failed', startedAt, undefined, error.message);
+    return c.json({ success: false, error: error.message }, 500);
   }
 });
 

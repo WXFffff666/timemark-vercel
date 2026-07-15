@@ -56,11 +56,11 @@ All dependencies are already in `package.json`. No extra system packages needed.
 | 8 | Google Chat | `googlechat.service.ts` | `axios` | webhook | ✅ Ready |
 | 9 | Gotify | `gotify.service.ts` | `axios` | token | ✅ Ready |
 | 10 | IRC | `irc.service.ts` | `axios` | webhook/token | ✅ Ready |
-| 11 | LINE | `line.service.ts` | `axios` | token | ✅ Ready |
+| 11 | LINE | `line.service.ts` | `axios` | token | ✅ Ready (v2.8 已接入发送链) |
 | 12 | Matrix | `matrix.service.ts` | `axios` | token | ✅ Ready |
 | 13 | Mattermost | `mattermost.service.ts` | `axios` | token | ✅ Ready |
 | 14 | Meow (喵推送) | `meow.service.ts` | `axios` | token | ✅ Ready |
-| 15 | Microsoft Teams | `msteams.service.ts` | `axios` | token | ✅ Ready |
+| 15 | Microsoft Teams | `msteams.service.ts` | `axios` | token | ✅ Ready (v2.8 已接入发送链) |
 | 16 | Nextcloud Talk | `nextcloudtalk.service.ts` | `axios` | token | ✅ Ready |
 | 17 | Ntfy | `ntfy.service.ts` | `axios` | token | ✅ Ready |
 | 18 | PushMe | `pushme.service.ts` | `axios` | token | ✅ Ready |

@@ -17,6 +17,8 @@ const AnnualReport = lazy(() => import('./pages/AnnualReport'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const Security = lazy(() => import('./pages/Security'));
 const DeployWizard = lazy(() => import('./pages/DeployWizard'));
+const Contacts = lazy(() => import('./pages/Contacts'));
+const Broadcast = lazy(() => import('./pages/Broadcast'));
 
 function PageLoader() {
   return (
@@ -89,6 +91,8 @@ function AnimatedRoutes() {
           <Route path="/trigger-logs" element={<ProtectedRoute><TriggerLogs /></ProtectedRoute>} />
           <Route path="/annual-report" element={<ProtectedRoute><AnnualReport /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+          <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
+          <Route path="/broadcast" element={<ProtectedRoute><Broadcast /></ProtectedRoute>} />
           <Route path="/share/:token" element={<ShareEvent />} />
           <Route path="/" element={<Navigate to="/dashboard" />} />
         </Routes>
