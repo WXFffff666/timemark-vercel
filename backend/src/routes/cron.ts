@@ -32,7 +32,27 @@ cronRoutes.use('*', async (c, next) => {
   if (!authHeader || authHeader !== `Bearer ${cronSecret}`) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
+  const allowedIps = (process.env.CRON_ALLOWED_IPS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (allowedIps.length > 0) {
+    const ip = c.req.header('x-vercel-forwarded-for')?.split(',')[0]?.trim()
+      || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+      || c.req.header('x-real-ip')
+      || '';
+    if (ip && !allowedIps.includes(ip)) {
+      return c.json({ error: 'IP not allowed' }, 403);
+    }
+  }
   await next();
+});
+
+// Warmup — reduce cold start (call from external cron before reminder-check)
+cronRoutes.get('/warmup', async (c) => {
+  try {
+    await query('SELECT 1');
+    return c.json({ success: true, warmed: true, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    return c.json({ success: false, error: error.message }, 500);
+  }
 });
 
 // 1. Reminder check — call every minute via cron-job.org (free) on Vercel Hobby

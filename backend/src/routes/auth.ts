@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
-import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock, getIpBlockStatus, evaluateIpBlock } from '../services/auth.service.js';
+import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock, getIpBlockStatus, evaluateIpBlock, checkIpWhitelist, verifyTotpCode } from '../services/auth.service.js';
 import { getClientIp } from '../utils/client-ip.js';
+import { verifyTurnstileToken } from '../utils/turnstile.js';
+import { isSafePublicUrl } from '../utils/url-safety.js';
+import { lookupGeoLabel } from '../utils/geoip.js';
+import { logSecurityEvent } from '../services/security-event.service.js';
 import { createSession, deleteSession, deleteSessionById, deleteAllUserSessions } from '../services/session.service.js';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
 import { loginSchema, changePasswordSchema } from '@timemark/shared';
@@ -24,7 +28,12 @@ auth.post('/login', async (c) => {
       return c.json({ success: false, error: 'Invalid input' }, 400);
     }
 
-    const { username, password, deviceFingerprint, rememberMe = false } = parsed.data;
+    const { username, password, deviceFingerprint, rememberMe = false, turnstileToken, totpCode } = parsed.data;
+
+    const turnstile = await verifyTurnstileToken(turnstileToken, ip);
+    if (!turnstile.ok) {
+      return c.json({ success: false, error: turnstile.error || '人机验证失败' }, 400);
+    }
 
     const ipBlock = await getIpBlockStatus(ip);
     if (ipBlock.isBlocked) {
@@ -50,8 +59,9 @@ auth.post('/login', async (c) => {
     const user = await verifyUserPassword(username, password);
 
     if (!user) {
-      await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'Invalid credentials');
+      await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, '凭据无效');
       await evaluateIpBlock(ip);
+      await logSecurityEvent({ username, eventType: 'login_failure', ip, userAgent });
 
       const tracking = await trackLoginFailure({ username, ip });
 
@@ -82,11 +92,31 @@ auth.post('/login', async (c) => {
       }
 
       const remaining = 5 - (tracking.failureCount % 5);
-      return c.json({ success: false, error: `密码错误，还剩 ${remaining} 次尝试机会` }, 401);
+      return c.json({ success: false, error: `登录失败，还剩 ${remaining} 次尝试机会` }, 401);
+    }
+
+    const whitelist = await checkIpWhitelist(user.id, ip);
+    if (!whitelist.allowed) {
+      return c.json({ success: false, error: whitelist.reason || '当前 IP 不在白名单' }, 403);
+    }
+
+    const totpRequired = await query('SELECT totp_secret FROM users WHERE id = $1', [user.id]);
+    if (totpRequired.rows[0]?.totp_secret) {
+      const totpOk = verifyTotpCode(totpRequired.rows[0].totp_secret as string, totpCode || '');
+      if (!totpOk) {
+        return c.json({ success: false, error: '需要双因素验证码', requiresTotp: true }, 401);
+      }
     }
 
     await createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', true);
     await clearAccountLock(username);
+    await logSecurityEvent({
+      userId: parseInt(user.id, 10),
+      username: user.username,
+      eventType: 'login_success',
+      ip,
+      userAgent,
+    });
     const { session, accessToken, refreshToken } = await createSession(user.id, deviceFingerprint || '', false, rememberMe);
 
     const pwdCheck = await query(
@@ -253,30 +283,88 @@ function toIsoLoginTime(value: unknown): string | null {
   return new Date(`${s}Z`).toISOString();
 }
 
+auth.get('/turnstile-config', async (c) => {
+  return c.json({
+    success: true,
+    data: {
+      siteKey: process.env.TURNSTILE_SITE_KEY || process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || null,
+      enabled: !!process.env.TURNSTILE_SECRET_KEY,
+    },
+  });
+});
+
 auth.get('/login-history', authMiddleware, async (c) => {
   const user = c.get('user');
   try {
     const numericUserId = parseInt(user.id, 10);
+    const page = Math.max(1, parseInt(c.req.query('page') || '1', 10));
+    const limit = Math.min(100, parseInt(c.req.query('limit') || '50', 10));
+    const offset = (page - 1) * limit;
+    const ipFilter = c.req.query('ip')?.trim();
 
-    const result = await query(
-      `SELECT id, ip_address, username, user_agent, device_fingerprint, success, failure_reason, login_time
+    let sql = `SELECT id, ip_address, username, user_agent, device_fingerprint, success, failure_reason, login_time
        FROM login_logs
-       WHERE user_id = $1 OR (user_id IS NULL AND username = $2)
-       ORDER BY login_time DESC LIMIT 100`,
-      [numericUserId, user.username],
+       WHERE user_id = $1 OR (user_id IS NULL AND username = $2)`;
+    const params: unknown[] = [numericUserId, user.username];
+    if (ipFilter) {
+      sql += ` AND ip_address = $3`;
+      params.push(ipFilter);
+    }
+    sql += ` ORDER BY login_time DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+
+    const result = await query(sql, params);
+
+    const failureMap: Record<string, string> = {
+      'Invalid credentials': '凭据无效',
+      '凭据无效': '凭据无效',
+    };
+
+    const rows = await Promise.all(
+      result.rows.map(async (row: Record<string, unknown>) => ({
+        ...row,
+        success: row.success === true || row.success === 't',
+        login_time: toIsoLoginTime(row.login_time),
+        failure_reason: failureMap[String(row.failure_reason || '')] || row.failure_reason,
+        geo: await lookupGeoLabel(String(row.ip_address || '')),
+      })),
     );
 
-    const rows = result.rows.map((row: Record<string, unknown>) => ({
-      ...row,
-      success: row.success === true || row.success === 't',
-      login_time: toIsoLoginTime(row.login_time),
-    }));
-
-    return c.json({ success: true, data: rows });
+    return c.json({ success: true, data: rows, page, limit });
   } catch (error) {
     console.error('Failed to fetch login history:', error);
     return c.json({ success: false, error: 'Failed to fetch login history' }, 500);
   }
+});
+
+auth.get('/login-history/export', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const numericUserId = parseInt(user.id, 10);
+  const result = await query(
+    `SELECT ip_address, username, success, failure_reason, login_time, user_agent
+     FROM login_logs
+     WHERE user_id = $1 OR (user_id IS NULL AND username = $2)
+     ORDER BY login_time DESC LIMIT 500`,
+    [numericUserId, user.username],
+  );
+  const header = 'time,ip,username,success,failure_reason,user_agent\n';
+  const lines = result.rows.map((row: Record<string, unknown>) => {
+    const cols = [
+      toIsoLoginTime(row.login_time),
+      row.ip_address,
+      row.username,
+      row.success ? 'success' : 'failure',
+      row.failure_reason,
+      String(row.user_agent || '').replace(/"/g, '""'),
+    ];
+    return cols.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
+  });
+  return new Response(header + lines.join('\n'), {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="login-history.csv"',
+    },
+  });
 });
 
 auth.delete('/login-history', authMiddleware, async (c) => {
@@ -311,6 +399,11 @@ auth.post('/avatar', authMiddleware, async (c) => {
       new URL(avatarUrl);
     } catch {
       return c.json({ success: false, error: 'Invalid avatar URL format' }, 400);
+    }
+
+    const safe = await isSafePublicUrl(avatarUrl);
+    if (!safe.safe) {
+      return c.json({ success: false, error: safe.reason || 'Unsafe URL' }, 400);
     }
     
     const numericId = parseInt(user.id, 10);

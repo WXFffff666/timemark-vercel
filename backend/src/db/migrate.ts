@@ -150,6 +150,39 @@ ALTER TABLE event_trigger_logs ADD COLUMN IF NOT EXISTS account_id INTEGER;`
 ALTER TABLE notification_accounts ADD COLUMN IF NOT EXISTS last_test_at TEXT;`
     },
     {
+      version: 17,
+      name: 'security_features_v17',
+      sql: `CREATE TABLE IF NOT EXISTS rate_limits (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 1,
+  window_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS security_events (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  username TEXT,
+  event_type TEXT NOT NULL,
+  ip_address TEXT,
+  user_agent TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_security_events_user ON security_events(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_login_logs_ip_time ON login_logs(ip_address, login_time);
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS ip_whitelist JSONB DEFAULT '[]';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS ip_whitelist_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS refresh_family TEXT;
+CREATE TABLE IF NOT EXISTS webauthn_credentials (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  credential_id TEXT NOT NULL UNIQUE,
+  public_key TEXT NOT NULL,
+  counter INTEGER DEFAULT 0,
+  device_name TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`
+    },
+    {
       version: 16,
       name: 'vercel_free_tier_features',
       sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]';

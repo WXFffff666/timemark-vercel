@@ -10,7 +10,8 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { RealtimeClock } from '@/components/RealtimeClock';
 import { TimezoneSelector } from '@/components/TimezoneSelector';
 import type { Event, CreateEventRequest } from '@timemark/shared';
-import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks } from 'lucide-react';
+import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload } from 'lucide-react';
+import { MobileBottomNav } from '@/components/MobileBottomNav';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -24,7 +25,34 @@ export function Dashboard() {
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+  const upcomingWeek = events.filter((e) => {
+    const d = new Date(e.date);
+    const diff = (d.getTime() - Date.now()) / 86400000;
+    return diff >= 0 && diff <= 7;
+  }).length;
+  const todayCount = events.filter((e) => {
+    const d = new Date(e.date);
+    const t = new Date();
+    return d.toDateString() === t.toDateString();
+  }).length;
+
+  const handleImportIcs = async (file: File) => {
+    const text = await file.text();
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    const res = await fetch('/api/calendar/import-ics', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/calendar' },
+      body: text,
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert(`已导入 ${data.data.imported} 个事件`);
+      fetchEvents();
+    } else {
+      alert(data.error || '导入失败');
+    }
+  };
+
 
   const handleSubmit = async (data: CreateEventRequest) => {
     if (editingEvent) await updateEvent(editingEvent.id, data);
@@ -120,9 +148,16 @@ export function Dashboard() {
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/channels')} title="通知渠道">
                 <Bell size={20} className="text-slate-600 dark:text-slate-300" />
               </Button>
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/security')} title="安全中心">
+                <Shield size={20} className="text-slate-600 dark:text-slate-300" />
+              </Button>
               <Button variant="ghost" size="icon" className="rounded-full" title="导出 ICS" onClick={() => handleExportCalendar('ics')}>
                 <Download size={20} className="text-slate-600 dark:text-slate-300" />
               </Button>
+              <label className="cursor-pointer inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800" title="导入 ICS">
+                <input type="file" accept=".ics,text/calendar" className="hidden" onChange={(e) => e.target.files?.[0] && handleImportIcs(e.target.files[0])} />
+                <Upload size={20} className="text-slate-600 dark:text-slate-300" />
+              </label>
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/settings')}>
                 <Settings size={20} className="text-slate-600 dark:text-slate-300" />
               </Button>
@@ -138,6 +173,12 @@ export function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 mt-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">今日事件</p><p className="text-2xl font-bold">{todayCount}</p></div>
+          <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">本周待办</p><p className="text-2xl font-bold">{upcomingWeek}</p></div>
+          <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">总事件</p><p className="text-2xl font-bold">{events.length}</p></div>
+          <div className="glass-panel rounded-2xl p-4 cursor-pointer" onClick={() => navigate('/analytics')}><p className="text-xs text-slate-500">数据看板</p><p className="text-sm font-medium text-blue-600">查看统计 →</p></div>
+        </div>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h2 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">我的倒计时</h2>
@@ -200,6 +241,7 @@ export function Dashboard() {
       </motion.div>
       
       <EventForm open={showForm} onClose={() => { setShowForm(false); setEditingEvent(undefined); }} onSubmit={handleSubmit} event={editingEvent} />
+      <MobileBottomNav />
     </motion.div>
   );
 }

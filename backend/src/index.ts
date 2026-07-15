@@ -27,6 +27,8 @@ import dataRoutes from './routes/data.js';
 import triggerLogRoutes from './routes/trigger-logs.js';
 import userRoutes from './routes/user.js';
 import featuresRoutes from './routes/features.js';
+import securityRoutes from './routes/security.js';
+import calendarImportRoutes from './routes/calendar-import.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -81,14 +83,20 @@ app.route('/api/data', dataRoutes);
 app.route('/api/trigger-logs', triggerLogRoutes);
 app.route('/api/user', userRoutes);
 app.route('/api/features', featuresRoutes);
+app.route('/api/security', securityRoutes);
+app.route('/api/calendar', calendarImportRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {
   const checks: Record<string, boolean | string> = {
     platform: process.env.VERCEL ? 'vercel' : 'local',
+    version: '2.7.0',
+    commit: process.env.VERCEL_GIT_COMMIT_SHA || 'local',
     databaseUrl: !!process.env.DATABASE_URL,
     jwtSecret: !!process.env.JWT_SECRET,
     masterKey: !!process.env.MASTER_KEY,
+    turnstile: !!process.env.TURNSTILE_SECRET_KEY,
+    cronSecret: !!process.env.CRON_SECRET,
   };
   if (!process.env.DATABASE_URL) {
     checks.database = false;

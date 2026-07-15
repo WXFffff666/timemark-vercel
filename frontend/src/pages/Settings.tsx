@@ -372,6 +372,38 @@ export default function Settings() {
               <div className="h-px bg-slate-200/60 dark:bg-slate-700/50 mx-6"></div>
               <div 
                 className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer"
+                onClick={() => navigate('/security')}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center shadow-inner border border-indigo-100 dark:border-indigo-800/50">
+                    <Shield size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">安全中心</h3>
+                    <p className="text-xs text-slate-500">2FA、会话、IP 白名单与封禁</p>
+                  </div>
+                </div>
+                <ChevronRight className="text-slate-400" />
+              </div>
+              <div className="h-px bg-slate-200/60 dark:bg-slate-700/50 mx-6"></div>
+              <div 
+                className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer"
+                onClick={() => navigate('/deploy-wizard')}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center shadow-inner border border-amber-100 dark:border-amber-800/50">
+                    <Settings size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">部署向导</h3>
+                    <p className="text-xs text-slate-500">环境检查与 Cron 配置</p>
+                  </div>
+                </div>
+                <ChevronRight className="text-slate-400" />
+              </div>
+              <div className="h-px bg-slate-200/60 dark:bg-slate-700/50 mx-6"></div>
+              <div 
+                className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer"
                 onClick={() => navigate('/login-history')}
               >
                 <div className="flex items-center gap-4">

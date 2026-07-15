@@ -1,6 +1,7 @@
 import { query } from '../db/index.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { randomUUID } from 'crypto';
+import { authenticator } from 'otplib';
 import type { User } from '@timemark/shared';
 
 export async function createUser(username: string, password: string): Promise<User> {
@@ -245,4 +246,38 @@ export async function evaluateIpBlock(ip: string): Promise<void> {
        last_attempt = CURRENT_TIMESTAMP`,
     [ip, count, lockedUntil],
   );
+}
+
+// ============ IP 白名单 ============
+
+export async function checkIpWhitelist(
+  userId: string,
+  ip: string,
+): Promise<{ allowed: boolean; reason?: string }> {
+  const numericId = parseInt(userId, 10);
+  if (isNaN(numericId)) return { allowed: true };
+
+  const result = await query(
+    'SELECT ip_whitelist, ip_whitelist_enabled FROM user_configs WHERE user_id = $1',
+    [numericId],
+  );
+  const row = result.rows[0] as { ip_whitelist?: string[]; ip_whitelist_enabled?: boolean } | undefined;
+  if (!row?.ip_whitelist_enabled) return { allowed: true };
+
+  const list = Array.isArray(row.ip_whitelist) ? row.ip_whitelist : [];
+  if (!list.length) return { allowed: true };
+  if (list.includes(ip)) return { allowed: true };
+
+  return { allowed: false, reason: `IP ${ip} 未在白名单中` };
+}
+
+// ============ TOTP ============
+
+export function verifyTotpCode(secret: string, code: string): boolean {
+  if (!secret || !code) return false;
+  try {
+    return authenticator.verify({ token: code, secret });
+  } catch {
+    return false;
+  }
 }

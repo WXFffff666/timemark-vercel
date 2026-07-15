@@ -18,6 +18,7 @@ interface LoginLog {
   success: boolean;
   failure_reason?: string;
   login_time: string;
+  geo?: string;
 }
 
 // Helper to get device icon
@@ -60,6 +61,7 @@ export default function LoginHistory() {
   const [logs, setLogs] = useState<LoginLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
+  const [ipFilter, setIpFilter] = useState('');
 
   useEffect(() => {
     fetchLogs();
@@ -68,7 +70,8 @@ export default function LoginHistory() {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const data = await api.get<LoginLog[]>('/auth/login-history');
+      const q = ipFilter ? `?ip=${encodeURIComponent(ipFilter)}` : '';
+      const data = await api.get<LoginLog[]>(`/auth/login-history${q}`);
       setLogs(data);
     } catch (error) {
       console.error('Failed to fetch login history:', error);
@@ -119,7 +122,9 @@ export default function LoginHistory() {
     return `${year}/${month}/${day} ${hour}:${minute}`;
   };
 
-  const getLocation = (ip: string) => {
+  const getLocation = (log: LoginLog) => {
+    if (log.geo) return log.geo;
+    const ip = log.ip_address;
     if (!ip) return '未知';
     if (ip.startsWith('192.168') || ip.startsWith('10.') || ip.startsWith('172.')) {
       return '内网';
@@ -140,6 +145,8 @@ export default function LoginHistory() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <input className="text-xs px-2 py-1 rounded-full border bg-transparent w-24" placeholder="筛选IP" value={ipFilter} onChange={(e) => setIpFilter(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchLogs()} />
+            <Button variant="ghost" size="sm" className="rounded-full" onClick={() => window.open('/api/auth/login-history/export', '_blank')}>导出</Button>
             <Button variant="ghost" size="icon" className="rounded-full" onClick={fetchLogs} disabled={loading}>
               <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
             </Button>
@@ -196,7 +203,7 @@ export default function LoginHistory() {
                           </div>
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
                             <span className="flex items-center gap-1.5">
-                              <MapPin size={14} /> {getLocation(log.ip_address)}
+                              <MapPin size={14} /> {getLocation(log)}
                             </span>
                             <span className="flex items-center gap-1.5">
                               {deviceName} / {osName}

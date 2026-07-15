@@ -82,7 +82,7 @@ interface AuthState {
   isLoading: boolean;
   mustChangePassword: boolean;
   setUser: (user: User | null) => void;
-  login: (username: string, password: string, rememberMe?: boolean) => Promise<{ mustChangePassword: boolean }>;
+  login: (username: string, password: string, rememberMe?: boolean, extras?: { turnstileToken?: string; totpCode?: string }) => Promise<{ mustChangePassword: boolean }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   clearMustChangePassword: () => void;
@@ -100,14 +100,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ mustChangePassword: false });
   },
 
-  login: async (username, password, rememberMe = false) => {
+  login: async (username, password, rememberMe = false, extras = {}) => {
     console.log('[AuthStore] Login called');
     const fingerprint = await getEnhancedFingerprint();
     const response = await api.post<any>('/auth/login', { 
       username, 
       password, 
       deviceFingerprint: fingerprint, 
-      rememberMe 
+      rememberMe,
+      turnstileToken: extras.turnstileToken,
+      totpCode: extras.totpCode,
     });
     
     console.log('[AuthStore] Login response:', { hasAccessToken: !!response.accessToken, hasUser: !!response.user });

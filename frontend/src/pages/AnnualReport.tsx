@@ -40,7 +40,10 @@ export default function AnnualReport() {
 
   return (
     <div className="min-h-screen p-6 max-w-4xl mx-auto">
-      <Button variant="ghost" onClick={() => navigate('/dashboard')}>← 返回</Button>
+      <div className="flex gap-2">
+        <Button variant="ghost" onClick={() => navigate('/dashboard')}>← 返回</Button>
+        <Button variant="outline" onClick={() => window.print()}>导出 PDF</Button>
+      </div>
       <Card className="mt-4 glass-panel border-0">
         <CardHeader>
           <CardTitle>{data.year} 年度提醒报告</CardTitle>
