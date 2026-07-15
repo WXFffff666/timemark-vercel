@@ -3,6 +3,9 @@ import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions } fro
 import { processNotificationRetries, purgeOldQueueEntries } from '../services/notification-retry.service.js';
 import { purgeOldEmailLogs } from '../services/email-log.service.js';
 import { syncAllExternalCalendars } from '../services/calendar-sync.service.js';
+import { syncAllCalDavSubscriptions } from '../services/caldav-sync.service.js';
+import { sendLunarPhaseReminders } from '../services/lunar-reminders.service.js';
+import { aggregateDailyStats } from '../services/stats-daily.service.js';
 import { purgeExpiredEventCache } from '../services/event-cache.service.js';
 import { purgeOldInboxMessages } from '../services/inbox.service.js';
 import { query } from '../db/index.js';
@@ -66,10 +69,13 @@ cronRoutes.get('/warmup', async (c) => {
 });
 
 // 1. Reminder check — call every minute via cron-job.org (free) on Vercel Hobby
+// B28: warmup 合并进 reminder-check
 cronRoutes.get('/reminder-check', async (c) => {
   const startedAt = Date.now();
   try {
+    await query('SELECT 1'); // warmup DB connection
     await sendReminders();
+    await checkCronGapAlert('reminder-check');
     await logCronRun('reminder-check', 'success', startedAt, 'Reminders checked');
     await pingHeartbeat('reminder-check');
     return c.json({ success: true, job: 'reminder-check', timestamp: new Date().toISOString() });
@@ -78,6 +84,32 @@ cronRoutes.get('/reminder-check', async (c) => {
     return c.json({ success: false, error: error.message || 'Job failed' }, 500);
   }
 });
+
+/** B29: Cron 间隔 >3min 告警 */
+async function checkCronGapAlert(jobName: string): Promise<void> {
+  try {
+    const prev = await query(
+      `SELECT executed_at FROM cron_execution_logs
+       WHERE job_name = $1 AND status = 'success'
+       ORDER BY executed_at DESC LIMIT 1 OFFSET 1`,
+      [jobName],
+    );
+    if (!prev.rows[0]?.executed_at) return;
+    const gapMs = Date.now() - new Date(prev.rows[0].executed_at as string).getTime();
+    if (gapMs > 3 * 60 * 1000) {
+      const admins = await query(`SELECT user_id FROM user_configs WHERE alert_channels IS NOT NULL LIMIT 1`);
+      if (admins.rows[0]) {
+        const { createInboxMessage } = await import('../services/inbox.service.js');
+        await createInboxMessage({
+          userId: admins.rows[0].user_id as number,
+          title: 'Cron 执行间隔异常',
+          body: `${jobName} 距上次成功已超过 ${Math.round(gapMs / 60000)} 分钟`,
+          source: 'broadcast',
+        });
+      }
+    }
+  } catch { /* ignore */ }
+}
 
 // Sync external ICS calendars — call every 15 min via external cron
 cronRoutes.get('/calendar-sync', async (c) => {
@@ -117,12 +149,16 @@ cronRoutes.get('/daily-maintenance', async (c) => {
     const purgedQueue = await purgeOldQueueEntries();
     const purgedCache = await purgeExpiredEventCache();
     const purgedInbox = await purgeOldInboxMessages();
+    const purgedCronLogs = await query(
+      `DELETE FROM cron_execution_logs WHERE executed_at < NOW() - INTERVAL '90 days'`,
+    );
+    const aggregatedStats = await aggregateDailyStats();
     const pluginResult = await query('DELETE FROM plugin_sessions WHERE expires_at < NOW()');
     await logCronRun(
       'daily-maintenance',
       'success',
       startedAt,
-      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged emails: ${purgedEmails}; purged queue: ${purgedQueue}; purged inbox: ${purgedInbox}`,
+      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged emails: ${purgedEmails}; purged queue: ${purgedQueue}; purged inbox: ${purgedInbox}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}`,
     );
     await pingHeartbeat('daily-maintenance');
     return c.json({
@@ -224,6 +260,32 @@ cronRoutes.get('/channel-health', async (c) => {
     return c.json({ success: true, job: 'channel-health', tested, ok, failed });
   } catch (error: any) {
     await logCronRun('channel-health', 'failed', startedAt, undefined, error.message);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+// C1 CalDAV 只读订阅
+cronRoutes.get('/caldav-sync', async (c) => {
+  const startedAt = Date.now();
+  try {
+    const stats = await syncAllCalDavSubscriptions();
+    await logCronRun('caldav-sync', 'success', startedAt, `synced ${stats.synced}`);
+    return c.json({ success: true, job: 'caldav-sync', ...stats });
+  } catch (error: any) {
+    await logCronRun('caldav-sync', 'failed', startedAt, undefined, error.message);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+// C33 农历初一/十五提醒
+cronRoutes.get('/lunar-phase-reminders', async (c) => {
+  const startedAt = Date.now();
+  try {
+    const sent = await sendLunarPhaseReminders();
+    await logCronRun('lunar-phase-reminders', 'success', startedAt, `sent ${sent}`);
+    return c.json({ success: true, job: 'lunar-phase-reminders', sent });
+  } catch (error: any) {
+    await logCronRun('lunar-phase-reminders', 'failed', startedAt, undefined, error.message);
     return c.json({ success: false, error: error.message }, 500);
   }
 });

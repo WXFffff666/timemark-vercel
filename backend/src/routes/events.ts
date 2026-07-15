@@ -66,6 +66,8 @@ events.post('/', async (c) => {
   }
 
   const event = await createEvent(user.id, parsed.data);
+  const { refreshUserEventCache } = await import('../services/event-cache.service.js');
+  refreshUserEventCache(Number(user.id)).catch(() => {});
   
   // 事件创建后立即检查是否需要发送提醒
   // 这样可以确保不会错过即将到来的提醒时间
@@ -202,6 +204,8 @@ events.put('/:id', async (c) => {
   if (!success) {
     return c.json({ success: false, error: 'Event not found' }, 404);
   }
+  const { refreshUserEventCache } = await import('../services/event-cache.service.js');
+  refreshUserEventCache(Number(user.id)).catch(() => {});
 
   // 事件更新后立即检查是否需要发送提醒
   // 这样可以确保不会错过即将到来的提醒时间
@@ -225,6 +229,8 @@ events.delete('/batch', async (c) => {
   }
 
   const deleted = await deleteEventsByIds(parsed.data.ids, user.id);
+  const { refreshUserEventCache } = await import('../services/event-cache.service.js');
+  refreshUserEventCache(Number(user.id)).catch(() => {});
   return c.json({ success: true, data: { deleted } });
 });
 
@@ -236,6 +242,8 @@ events.delete('/:id', async (c) => {
   if (!success) {
     return c.json({ success: false, error: 'Event not found' }, 404);
   }
+  const { refreshUserEventCache } = await import('../services/event-cache.service.js');
+  refreshUserEventCache(Number(user.id)).catch(() => {});
 
   return c.json({ success: true });
 });

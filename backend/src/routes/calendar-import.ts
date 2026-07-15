@@ -70,7 +70,8 @@ calendarImport.get('/webcal-url', async (c) => {
 calendarImport.get('/integrations', async (c) => {
   const user = c.get('user');
   const row = await query(
-    `SELECT webhook_inbound_token, calendar_feed_token, external_calendar_urls, inbox_receive_token
+    `SELECT webhook_inbound_token, calendar_feed_token, calendar_feed_tokens,
+            external_calendar_urls, external_calendar_sync_strategy, inbox_receive_token
      FROM user_configs WHERE user_id = $1`,
     [Number(user.id)],
   );
@@ -79,6 +80,7 @@ calendarImport.get('/integrations', async (c) => {
   const protocol = c.req.header('X-Forwarded-Proto') || 'https';
   const webhookToken = r.webhook_inbound_token as string | undefined;
   const feedToken = r.calendar_feed_token as string | undefined;
+  const feedTokens = Array.isArray(r.calendar_feed_tokens) ? r.calendar_feed_tokens : [];
   const inboxToken = r.inbox_receive_token as string | undefined;
   return c.json({
     success: true,
@@ -86,9 +88,31 @@ calendarImport.get('/integrations', async (c) => {
       webhookUrl: webhookToken ? `${protocol}://${host}/api/webhook/receive/${webhookToken}` : null,
       inboxReceiveUrl: inboxToken ? `${protocol}://${host}/api/inbox/receive/${inboxToken}` : null,
       calendarFeedUrl: feedToken ? `${protocol}://${host}/api/calendar/feed/${feedToken}.ics` : null,
+      calendarFeedTokens: feedTokens.map((t: { name?: string; token: string }) => ({
+        name: t.name || '默认',
+        url: `${protocol}://${host}/api/calendar/feed/${t.token}.ics`,
+      })),
       externalCalendarUrls: Array.isArray(r.external_calendar_urls) ? r.external_calendar_urls : [],
+      externalCalendarSyncStrategy: r.external_calendar_sync_strategy || 'add_only',
     },
   });
+});
+
+calendarImport.post('/feed-tokens', async (c) => {
+  const user = c.get('user');
+  const { name } = await c.req.json().catch(() => ({}));
+  const { randomBytes } = await import('crypto');
+  const token = randomBytes(24).toString('hex');
+  const row = await query('SELECT calendar_feed_tokens FROM user_configs WHERE user_id = $1', [Number(user.id)]);
+  const existing = Array.isArray(row.rows[0]?.calendar_feed_tokens) ? row.rows[0].calendar_feed_tokens : [];
+  const updated = [...existing, { name: String(name || `Feed ${existing.length + 1}`), token }].slice(0, 10);
+  await query(
+    `UPDATE user_configs SET calendar_feed_tokens = $1::jsonb WHERE user_id = $2`,
+    [JSON.stringify(updated), Number(user.id)],
+  );
+  const host = c.req.header('Host') || 'localhost';
+  const protocol = c.req.header('X-Forwarded-Proto') || 'https';
+  return c.json({ success: true, data: { token, url: `${protocol}://${host}/api/calendar/feed/${token}.ics` } });
 });
 
 calendarImport.post('/integrations', async (c) => {
@@ -97,12 +121,20 @@ calendarImport.post('/integrations', async (c) => {
   const urls = Array.isArray(body.externalCalendarUrls)
     ? body.externalCalendarUrls.map((u: unknown) => String(u).trim()).filter(Boolean).slice(0, 5)
     : undefined;
+  const strategy = body.externalCalendarSyncStrategy === 'replace' ? 'replace' : 'add_only';
   if (urls) {
     await query(
-      `INSERT INTO user_configs (user_id, external_calendar_urls)
-       VALUES ($1, $2::jsonb)
-       ON CONFLICT (user_id) DO UPDATE SET external_calendar_urls = $2::jsonb`,
-      [Number(user.id), JSON.stringify(urls)],
+      `INSERT INTO user_configs (user_id, external_calendar_urls, external_calendar_sync_strategy)
+       VALUES ($1, $2::jsonb, $3)
+       ON CONFLICT (user_id) DO UPDATE SET
+         external_calendar_urls = COALESCE($2::jsonb, user_configs.external_calendar_urls),
+         external_calendar_sync_strategy = COALESCE($3, user_configs.external_calendar_sync_strategy)`,
+      [Number(user.id), JSON.stringify(urls), strategy],
+    );
+  } else if (body.externalCalendarSyncStrategy) {
+    await query(
+      `UPDATE user_configs SET external_calendar_sync_strategy = $1 WHERE user_id = $2`,
+      [strategy, Number(user.id)],
     );
   }
   return c.json({ success: true });

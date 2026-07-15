@@ -54,8 +54,10 @@ import { logEmail } from '../email-log.service.js';
 import { enqueueNotificationRetry } from '../notification-retry.service.js';
 import { getConflictHint } from '../conflict-hint.service.js';
 import { createInboxMessage } from '../inbox.service.js';
+import { mapWithConcurrency } from '../../utils/concurrency.js';
+import { classifyErrorForRetry } from '../../utils/retry-classifier.js';
 
-function resolveRecipientEmails(event: Record<string, unknown>, chConfig: { emails?: string[] }, userConfig: Record<string, unknown> | null): string[] {
+export function resolveRecipientEmails(event: Record<string, unknown>, chConfig: { emails?: string[] }, userConfig: Record<string, unknown> | null): string[] {
   if (event.reminder_recipient_email) {
     return [String(event.reminder_recipient_email)];
   }
@@ -132,6 +134,7 @@ async function retryWithBackoff<T>(
       return await fn();
     } catch (error) {
       lastError = error as Error;
+      if (!classifyErrorForRetry(error)) throw lastError;
       if (attempt < maxRetries - 1) {
         const delay = baseDelayMs * Math.pow(2, attempt);
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -436,6 +439,14 @@ export async function sendNotifications(
       || `**日期:** ${event.date}\n**类型:** ${event.type}`;
     mappedEvent.customMessage = `${base}\n\n📅 ${conflictHint}`;
   }
+
+  // C34: 默认模板也追加农历标签
+  const lunarLabel = formatLunarLabel(event.lunar_date);
+  if (lunarLabel && !mappedEvent.customMessage) {
+    mappedEvent.customMessage = `**日期:** ${event.date}（${lunarLabel}）\n**类型:** ${event.type}`;
+  } else if (lunarLabel && mappedEvent.customMessage && !mappedEvent.customMessage.includes(lunarLabel)) {
+    mappedEvent.customMessage = `${mappedEvent.customMessage}\n📅 ${lunarLabel}`;
+  }
   
   // 获取事件绑定的通知账户ID
   const boundAccountIds: number[] = (() => {
@@ -609,46 +620,52 @@ export async function sendNotifications(
             throw new Error('未配置收件邮箱：请在事件、通知渠道或设置中填写默认邮箱');
           }
 
-          const results = await Promise.allSettled(recipientEmails.map(async (email: string) => {
+          // B8: 同分钟合并为一封邮件（按用户）
+          const minuteKey = new Date().toISOString().slice(0, 16);
+          const mergedBody = recipientEmails.map((email) => {
             const emailMappedEvent = {
               ...event,
               name: applyRelationshipMapping(event.name, mappings, email),
             };
-            const todayKey = new Date().toISOString().slice(0, 10);
-            const idempotencyKey = `reminder-${event.id}-${todayKey}-${email}`;
-            try {
-              await retryWithBackoff(() => sendEmailNotification(
-                emailMappedEvent,
-                chConfig.apiKey,
-                fromEmail,
-                email,
-                idempotencyKey,
-              ));
+            return `• ${emailMappedEvent.name} → ${email}`;
+          }).join('\n');
+          const primaryEmail = recipientEmails[0];
+          const todayKey = new Date().toISOString().slice(0, 10);
+          const idempotencyKey = `reminder-${event.id}-${todayKey}-${userId}-${minuteKey}`;
+          const mergedEvent = { ...mappedEvent, customMessage: mergedBody };
+          try {
+            await retryWithBackoff(() => sendEmailNotification(
+              mergedEvent,
+              chConfig.apiKey,
+              fromEmail,
+              primaryEmail,
+              idempotencyKey,
+              recipientEmails.length > 1 ? { bcc: recipientEmails.slice(1) } : undefined,
+            ));
+            for (const email of recipientEmails) {
               await logEmail({
                 userId,
                 eventId: event.id ? Number(event.id) : null,
                 recipient: email,
                 status: 'sent',
-                subject: `TimeMark: ${emailMappedEvent.name}`,
+                subject: `TimeMark: ${event.name}`,
                 channelType: ch,
               });
-            } catch (error) {
-              const errMsg = error instanceof Error ? error.message : String(error);
+            }
+          } catch (error) {
+            const errMsg = error instanceof Error ? error.message : String(error);
+            for (const email of recipientEmails) {
               await logEmail({
                 userId,
                 eventId: event.id ? Number(event.id) : null,
                 recipient: email,
                 status: 'failed',
-                subject: `TimeMark: ${emailMappedEvent.name}`,
+                subject: `TimeMark: ${event.name}`,
                 errorMessage: errMsg,
                 channelType: ch,
               });
-              throw error;
             }
-          }));
-          const failures = results.filter((r) => r.status === 'rejected');
-          if (failures.length > 0) {
-            throw new Error(`${failures.length} 封邮件发送失败`);
+            throw error;
           }
         }
         else if (ch === 'smtp' && chConfig.webhook && chConfig.token && chConfig.chat_id) {
@@ -695,7 +712,7 @@ export async function sendNotifications(
         else if (ch === 'ntfy' && chConfig.webhook && chConfig.token)
           await retryWithBackoff(() => sendNtfyNotification(mappedEvent, chConfig.webhook, chConfig.token));
         else if (ch === 'pushover' && chConfig.token && chConfig.secret)
-          await retryWithBackoff(() => sendPushoverNotification(mappedEvent, chConfig.token, chConfig.secret));
+          await retryWithBackoff(() => sendPushoverNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.priority));
         else if (ch === 'apprise' && chConfig.webhook)
           await retryWithBackoff(() => sendAppriseNotification(mappedEvent, chConfig.webhook, chConfig.token));
       } catch (e) {
@@ -706,11 +723,18 @@ export async function sendNotifications(
     }));
   });
   
-  const settled = await Promise.allSettled(sendTasks.map(t => t.promise));
-  
-  for (let i = 0; i < settled.length; i++) {
-    const result = settled[i];
-    const task = sendTasks[i];
+  // B23: 渠道发送并发限制 5
+  const settled = await mapWithConcurrency(sendTasks, 5, async (task) => {
+    try {
+      await task.promise;
+      return { task, status: 'fulfilled' as const };
+    } catch (reason) {
+      return { task, status: 'rejected' as const, reason };
+    }
+  });
+
+  for (const result of settled) {
+    const task = result.task;
     const ch = task.channel;
     if (result.status === 'fulfilled') {
       channelResults[ch] = { success: true, accountId: task.accountId };
@@ -809,6 +833,15 @@ export async function sendNotifications(
       channel: successfulChannels.join(','),
       eventId: event.id ? Number(event.id) : null,
     }).catch(() => {});
+
+    // C13: 出站 webhook
+    if (config?.outbound_webhook_url) {
+      sendGenericWebhookNotification(
+        { ...mappedEvent, triggerChannels: successfulChannels },
+        config.outbound_webhook_url,
+        'outbound',
+      ).catch(() => {});
+    }
   }
 
   return channelResults;

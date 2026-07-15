@@ -1,9 +1,10 @@
 import pino from 'pino';
+import { AsyncLocalStorage } from 'async_hooks';
+
+const requestContext = new AsyncLocalStorage<{ requestId?: string }>();
 
 /**
  * Structured logger for TimeMark backend using pino.
- * - JSON output in production (ideal for Docker log aggregation)
- * - Sensitive field redaction
  */
 export const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
@@ -11,7 +12,15 @@ export const logger = pino({
     paths: ['*.token', '*.password', '*.secret', '*.apiKey', '*.api_key'],
     censor: '[REDACTED]',
   },
+  mixin() {
+    const ctx = requestContext.getStore();
+    return ctx?.requestId ? { requestId: ctx.requestId } : {};
+  },
 });
+
+export function runWithRequestId<T>(requestId: string, fn: () => T): T {
+  return requestContext.run({ requestId }, fn);
+}
 
 /**
  * Create a child logger scoped to a specific module.

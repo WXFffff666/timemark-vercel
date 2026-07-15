@@ -147,4 +147,11 @@ data.post('/import', async (c) => {
   }
 });
 
+data.post('/import-lunar-holidays', async (c) => {
+  const user = c.get('user');
+  const { ensureLunarHolidayEvents } = await import('../services/lunar-holidays.js');
+  await ensureLunarHolidayEvents(Number(user.id));
+  return c.json({ success: true, message: '农历节日预设已导入' });
+});
+
 export default data;

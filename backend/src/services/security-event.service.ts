@@ -14,7 +14,8 @@ export type SecurityEventType =
   | 'passkey_registered'
   | 'passkey_removed'
   | 'passkey_login_success'
-  | 'passkey_login_failure';
+  | 'passkey_login_failure'
+  | 'master_key_rotation';
 
 export async function logSecurityEvent(params: {
   userId?: number | null;

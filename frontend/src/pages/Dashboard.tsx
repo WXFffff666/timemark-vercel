@@ -30,10 +30,10 @@ export function Dashboard() {
   const [inboxUnread, setInboxUnread] = useState(0);
 
   useEffect(() => {
-    prefetchRoute('/settings');
-    prefetchRoute('/security');
-    prefetchRoute('/analytics');
     prefetchRoute('/inbox');
+    prefetchRoute('/channels');
+    prefetchRoute('/calendar');
+    prefetchRoute('/settings');
   }, []);
 
   useEffect(() => {

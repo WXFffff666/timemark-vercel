@@ -7,5 +7,9 @@ export async function securityHeaders(c: Context, next: Next) {
   c.header('X-XSS-Protection', '1; mode=block');
   c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
   c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  const cspReportUri = process.env.CSP_REPORT_URI;
+  if (cspReportUri) {
+    c.header('Content-Security-Policy-Report-Only', `default-src 'self'; report-uri ${cspReportUri}`);
+  }
   c.res.headers.delete('X-Powered-By');
 }

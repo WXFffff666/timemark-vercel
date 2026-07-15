@@ -4,7 +4,8 @@ import { getBlessing } from '../../../../shared/src/blessings.js';
 export async function sendPushoverNotification(
   event: any,
   userKey: string,
-  appToken: string
+  appToken: string,
+  priority?: number,
 ): Promise<void> {
   const blessing = getBlessing(
     event.type,
@@ -14,11 +15,12 @@ export async function sendPushoverNotification(
   );
   const message = event.customMessage || `📅 ${event.name}\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
 
+  const p = typeof priority === 'number' && priority >= -2 && priority <= 2 ? priority : 0;
   await axios.post('https://api.pushover.net/1/messages.json', {
     token: appToken,
     user: userKey,
     title: `TimeMark: ${event.name}`,
     message,
-    priority: 0,
+    priority: p,
   }, { timeout: 10000 });
 }

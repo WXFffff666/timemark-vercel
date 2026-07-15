@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { createCipheriv, randomBytes, scryptSync } from 'crypto';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
 import { backupImportSchema } from '@timemark/shared';
@@ -7,10 +8,27 @@ import type { User } from '@timemark/shared';
 const backup = new Hono<{ Variables: { user: User } }>();
 backup.use('*', authMiddleware);
 
+function encryptBackupPayload(json: string, password: string): string {
+  const salt = randomBytes(16);
+  const key = scryptSync(password, salt, 32);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const enc = Buffer.concat([cipher.update(json, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return JSON.stringify({
+    v: 1,
+    salt: salt.toString('base64'),
+    iv: iv.toString('base64'),
+    tag: tag.toString('base64'),
+    data: enc.toString('base64'),
+  });
+}
+
 // Export all user data as JSON
 backup.get('/export', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);
+  const encrypt = c.req.query('encrypt') === '1';
   
   const [events, mappings, templates] = await Promise.all([
     query('SELECT * FROM events WHERE user_id = $1', [userId]),
@@ -18,15 +36,45 @@ backup.get('/export', async (c) => {
     query('SELECT * FROM event_templates WHERE user_id = $1', [userId]),
   ]);
   
+  const payload = {
+    version: '1.0',
+    exportedAt: new Date().toISOString(),
+    events: events.rows,
+    relationshipMappings: mappings.rows,
+    eventTemplates: templates.rows,
+  };
+
   c.header('Content-Disposition', `attachment; filename="timemark-backup-${new Date().toISOString().split('T')[0]}.json"`);
   c.header('Content-Type', 'application/json');
-  return c.json({
+  return c.json(payload);
+});
+
+// C27: 加密备份（密码通过 POST body，避免 query 泄露）
+backup.post('/export-encrypted', async (c) => {
+  const user = c.get('user');
+  const userId = Number(user.id);
+  const { password } = await c.req.json().catch(() => ({}));
+  if (!password || String(password).length < 8) {
+    return c.json({ success: false, error: '加密导出需要至少 8 位密码' }, 400);
+  }
+
+  const [events, mappings, templates] = await Promise.all([
+    query('SELECT * FROM events WHERE user_id = $1', [userId]),
+    query('SELECT * FROM relationship_mappings WHERE user_id = $1', [userId]),
+    query('SELECT * FROM event_templates WHERE user_id = $1', [userId]),
+  ]);
+
+  const payload = JSON.stringify({
     version: '1.0',
     exportedAt: new Date().toISOString(),
     events: events.rows,
     relationshipMappings: mappings.rows,
     eventTemplates: templates.rows,
   });
+
+  c.header('Content-Disposition', `attachment; filename="timemark-backup-encrypted-${new Date().toISOString().split('T')[0]}.json"`);
+  c.header('Content-Type', 'application/json');
+  return c.body(encryptBackupPayload(payload, String(password)));
 });
 
 // Import data from JSON

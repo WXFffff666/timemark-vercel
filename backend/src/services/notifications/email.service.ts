@@ -8,6 +8,7 @@ export async function sendEmailNotification(
   fromEmail: string,
   toEmail: string,
   idempotencyKey?: string,
+  options?: { bcc?: string[] },
 ): Promise<void> {
   const resend = new Resend(apiKey);
   
@@ -145,6 +146,7 @@ export async function sendEmailNotification(
   const { error } = await resend.emails.send({
     from: fromEmail,
     to: toEmail,
+    ...(options?.bcc?.length ? { bcc: options.bcc } : {}),
     subject: `📅 TimeMark 提醒: ${event.name}`,
     html,
     ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),

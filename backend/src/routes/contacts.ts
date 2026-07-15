@@ -12,6 +12,7 @@ import {
   deleteFixedContact,
   validateContactFields,
 } from '../services/contact.service.js';
+import { query } from '../db/index.js';
 
 const contacts = new Hono<{ Variables: { user: User } }>();
 contacts.use('*', authMiddleware);
@@ -72,6 +73,64 @@ contacts.post('/validate', async (c) => {
     wxpusher_uid: body.wxpusherUid,
   });
   return c.json({ success: true, data: result });
+});
+
+// C11: 联系人分组
+contacts.get('/groups', async (c) => {
+  const userId = Number(c.get('user').id);
+  const groups = await query('SELECT * FROM contact_groups WHERE user_id = $1 ORDER BY name', [userId]);
+  const members = await query(
+    `SELECT m.* FROM contact_group_members m
+     JOIN contact_groups g ON g.id = m.group_id WHERE g.user_id = $1`,
+    [userId],
+  );
+  return c.json({ success: true, data: { groups: groups.rows, members: members.rows } });
+});
+
+contacts.post('/groups', async (c) => {
+  const userId = Number(c.get('user').id);
+  const { name, emails } = await c.req.json().catch(() => ({}));
+  if (!name) return c.json({ success: false, error: '分组名称必填' }, 400);
+  const g = await query(
+    'INSERT INTO contact_groups (user_id, name) VALUES ($1, $2) RETURNING *',
+    [userId, String(name)],
+  );
+  const groupId = g.rows[0].id as number;
+  if (Array.isArray(emails)) {
+    for (const e of emails.slice(0, 50)) {
+      await query(
+        'INSERT INTO contact_group_members (group_id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [groupId, String(e)],
+      );
+    }
+  }
+  return c.json({ success: true, data: g.rows[0] }, 201);
+});
+
+// C26: vCard 生日导入
+contacts.post('/import-vcard', async (c) => {
+  const userId = Number(c.get('user').id);
+  const text = await c.req.text();
+  const blocks = text.split('BEGIN:VCARD');
+  let imported = 0;
+  for (const block of blocks.slice(1)) {
+    const fn = block.match(/FN[^:]*:([^\r\n]+)/)?.[1]?.trim();
+    const bday = block.match(/BDAY[^:]*:(\d{4}[-]?\d{2}[-]?\d{2})/)?.[1]?.replace(/-/g, '');
+    const email = block.match(/EMAIL[^:]*:([^\r\n]+)/)?.[1]?.trim();
+    if (!fn || !bday || bday.length < 8) continue;
+    const date = `${bday.slice(0, 4)}-${bday.slice(4, 6)}-${bday.slice(6, 8)}`;
+    const { createEvent } = await import('../services/event.service.js');
+    await createEvent(String(userId), {
+      name: `${fn} 生日`,
+      type: 'birthday',
+      date,
+      calendarType: 'gregorian',
+      personName: fn,
+      reminderConfig: { enabled: true, daysBeforeList: [0, 1, 3, 7], emailRecipients: email ? [email] : [], channels: [], accountIds: [] },
+    });
+    imported++;
+  }
+  return c.json({ success: true, data: { imported } });
 });
 
 export default contacts;

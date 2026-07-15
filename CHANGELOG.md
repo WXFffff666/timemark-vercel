@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.14.0 (2026-07-15)
+
+### Phase 0 — 收件箱
+- 完成 inbox 全链路：迁移 v23、路由、CSRF 豁免、通知成功写入收件箱、30 天清理、前端 Inbox 页与未读角标
+
+### Phase 1 — 优化项 B1–B40
+- 数据库连接池、pooler 检测、防重提醒、事件缓存增量刷新、prefetch、ICS ETag、批量 LIMIT 50、邮件合并、Turnstile、Webhook 幂等/限流、MASTER_KEY 轮换 API、CSP report-uri、Cron 监控、健康检查队列深度、stats_daily 聚合、测试与 i18n/PWA 等
+
+### Phase 2 — 功能 C1–C40（排除 AI/多租户/分享/热力图/市场）
+- CalDAV 同步、VALARM、多 feed token、条件规则、联系人分组、集成文档、出站 webhook、年报渠道成功率、Passkey 登录、加密备份、Cron 前端页、嵌入倒计时等
+
+### Phase 3 — Serverless 适用性
+- `serverless-suitability.ts` + `/api/features/serverless-check` 文档化需外部 cron 的功能
+
+### 安全
+- 安全审查修复：Webhook 载荷限制、HMAC 验证、审计日志、幂等键
+
 ## v2.13.0 (2026-07-15)
 
 ### 通知系统修复与完善

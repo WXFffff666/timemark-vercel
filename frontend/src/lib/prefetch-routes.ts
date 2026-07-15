@@ -11,6 +11,8 @@ const loaders: Record<string, () => Promise<unknown>> = {
   '/broadcast': () => import('../pages/Broadcast'),
   '/calendar': () => import('../pages/Calendar'),
   '/inbox': () => import('../pages/Inbox'),
+  '/trigger-logs': () => import('../pages/TriggerLogs'),
+  '/templates': () => import('../pages/Templates'),
 };
 
 const prefetched = new Set<string>();

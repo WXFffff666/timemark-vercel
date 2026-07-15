@@ -223,7 +223,7 @@ security.post('/totp/disable', async (c) => {
 // ============ Deploy / system info ============
 
 // Keep in sync with latest migration version in db/migrate.ts
-const EXPECTED_SCHEMA_VERSION = 23;
+const EXPECTED_SCHEMA_VERSION = 25;
 
 security.get('/deploy-info', async (c) => {
   const jwtAge = process.env.JWT_SECRET_ROTATED_AT || null;
@@ -244,11 +244,14 @@ security.get('/deploy-info', async (c) => {
   const jwtConfigured = !!process.env.JWT_SECRET?.trim();
   const masterKeyConfigured = !!process.env.MASTER_KEY?.trim();
   const databaseUrlConfigured = !!process.env.DATABASE_URL?.trim();
+  const dbUrl = process.env.DATABASE_URL || '';
+  const poolerRecommended = dbUrl.includes('neon.tech') || dbUrl.includes('supabase');
+  const poolerDetected = dbUrl.includes('-pooler') || dbUrl.includes('pooler.');
 
   return c.json({
     success: true,
     data: {
-      version: process.env.npm_package_version || '2.12.0',
+      version: process.env.npm_package_version || '2.14.0',
       platform: process.env.VERCEL ? 'vercel' : 'local',
       vercelUrl: process.env.VERCEL_URL || null,
       turnstileConfigured,
@@ -269,6 +272,14 @@ security.get('/deploy-info', async (c) => {
           ok: databaseOk,
           hint: databaseOk ? 'PostgreSQL 连接正常' : '检查 Vercel 中的 DATABASE_URL',
         },
+        ...(poolerRecommended ? [{
+          id: 'pooler',
+          label: '连接池 (pooler)',
+          ok: poolerDetected,
+          hint: poolerDetected
+            ? 'DATABASE_URL 已使用 pooler 端点，适合 Serverless'
+            : 'Serverless 建议将 DATABASE_URL 换为带 -pooler 的连接串',
+        }] : []),
         {
           id: 'schema',
           label: '数据库结构版本',
@@ -306,6 +317,65 @@ security.get('/deploy-info', async (c) => {
       ],
       channelNote:
         'Resend / Telegram 等通知渠道的 API Key 在「通知渠道」页面按账户填写，不属于此处环境变量检查。',
+    },
+  });
+});
+
+// B13: MASTER_KEY 轮换（仅重加密当前用户账户，需 DEPLOY_TOKEN）
+security.post('/rotate-master-key', async (c) => {
+  const deployToken = c.req.header('x-deploy-token');
+  if (!deployToken || deployToken !== process.env.DEPLOY_TOKEN) {
+    return c.json({ success: false, error: '需要有效的 DEPLOY_TOKEN' }, 403);
+  }
+  const user = c.get('user');
+  const { newMasterKey } = await c.req.json().catch(() => ({}));
+  if (!newMasterKey || String(newMasterKey).length < 32) {
+    return c.json({ success: false, error: '新 MASTER_KEY 至少 32 字符' }, 400);
+  }
+  const oldKey = process.env.MASTER_KEY;
+  if (!oldKey) return c.json({ success: false, error: 'MASTER_KEY 未配置' }, 500);
+
+  const { encrypt, decrypt } = await import('@timemark/shared/crypto');
+  const fields = ['webhook', 'token', 'secret', 'chat_id', 'session_data'];
+  const userId = parseInt(user.id, 10);
+  const accounts = await query(
+    'SELECT id, webhook, token, secret, chat_id, session_data FROM notification_accounts WHERE user_id = $1',
+    [userId],
+  );
+  let migrated = 0;
+  for (const row of accounts.rows as Array<Record<string, unknown>>) {
+    const updates: string[] = [];
+    const values: unknown[] = [];
+    let i = 0;
+    for (const field of fields) {
+      const val = row[field] as string | null;
+      if (!val) continue;
+      try {
+        const plain = decrypt(val, oldKey);
+        i++;
+        updates.push(`${field} = $${i}`);
+        values.push(encrypt(plain, String(newMasterKey)));
+      } catch { /* skip */ }
+    }
+    if (updates.length) {
+      i++;
+      values.push(row.id);
+      await query(`UPDATE notification_accounts SET ${updates.join(', ')} WHERE id = $${i}`, values);
+      migrated++;
+    }
+  }
+  await logSecurityEvent({
+    userId: parseInt(user.id, 10),
+    username: user.username,
+    eventType: 'master_key_rotation',
+    ip: getClientIp(c),
+    metadata: { accountsMigrated: migrated },
+  });
+  return c.json({
+    success: true,
+    data: {
+      accountsMigrated: migrated,
+      note: '请在 Vercel 环境变量中更新 MASTER_KEY 后重新部署',
     },
   });
 });

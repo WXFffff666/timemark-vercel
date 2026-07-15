@@ -38,6 +38,9 @@ import webhookInboundRoutes from './routes/webhook-inbound.js';
 import calendarPublicRoutes from './routes/calendar-public.js';
 import inboxRoutes from './routes/inbox.js';
 import inboxPublicRoutes from './routes/inbox-public.js';
+import cronMonitorRoutes from './routes/cron-monitor.js';
+import resendWebhookRoutes from './routes/resend-webhook.js';
+import conditionalRulesRoutes from './routes/conditional-rules.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -101,13 +104,16 @@ app.route('/api/webhook', webhookInboundRoutes);
 app.route('/api/calendar', calendarPublicRoutes);
 app.route('/api/inbox', inboxRoutes);
 app.route('/api/inbox', inboxPublicRoutes);
+app.route('/api/cron-monitor', cronMonitorRoutes);
+app.route('/api/webhook/resend', resendWebhookRoutes);
+app.route('/api/conditional-rules', conditionalRulesRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {
   const detailed = c.req.query('detailed') === '1' && c.req.header('x-health-token') === process.env.HEALTH_DETAIL_TOKEN;
   const checks: Record<string, boolean | string> = {
     platform: process.env.VERCEL ? 'vercel' : 'local',
-    version: '2.12.0',
+    version: '2.14.0',
     database: false,
     turnstile: isTurnstileEnabled(),
   };
@@ -134,6 +140,21 @@ app.get('/api/health', async (c) => {
       checks.lastCronJob = lastCron.rows[0].job_name;
       checks.lastCronStatus = lastCron.rows[0].status;
       checks.lastCronAt = lastCron.rows[0].executed_at;
+    }
+
+    if (detailed && process.env.HEALTH_DETAIL_TOKEN) {
+      const queueDepth = await query(
+        `SELECT COUNT(*)::int AS pending FROM notification_queue WHERE status = 'pending'`,
+      ).catch(() => ({ rows: [{ pending: 0 }] }));
+      const successRate = await query(
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE status = 'success')::int AS success
+         FROM event_trigger_logs WHERE created_at > NOW() - INTERVAL '24 hours'`,
+      ).catch(() => ({ rows: [{ total: 0, success: 0 }] }));
+      checks.queueDepth = String(queueDepth.rows[0]?.pending ?? 0);
+      const total = successRate.rows[0]?.total ?? 0;
+      const success = successRate.rows[0]?.success ?? 0;
+      checks.successRate24h = String(total > 0 ? Math.round((success / total) * 100) : 100);
     }
 
     return c.json({ status: 'ok', checks });

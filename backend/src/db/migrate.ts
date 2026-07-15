@@ -366,6 +366,76 @@ ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS inbox_receive_secret TEXT;`,
         }
       },
     },
+    {
+      version: 24,
+      name: 'optimizations_v24',
+      sql: `CREATE TABLE IF NOT EXISTS webhook_idempotency_keys (
+  id SERIAL PRIMARY KEY,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  response_body TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_idempotency_created ON webhook_idempotency_keys(created_at);
+CREATE TABLE IF NOT EXISTS stats_daily (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  stat_date DATE NOT NULL,
+  events_count INTEGER DEFAULT 0,
+  triggers_total INTEGER DEFAULT 0,
+  triggers_success INTEGER DEFAULT 0,
+  triggers_failed INTEGER DEFAULT 0,
+  UNIQUE(user_id, stat_date)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_trigger_dedup_success
+  ON event_trigger_logs(event_id, trigger_date) WHERE status = 'success';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS calendar_feed_tokens JSONB DEFAULT '[]';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS external_calendar_sync_strategy TEXT DEFAULT 'add_only';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS api_scopes TEXT DEFAULT 'read,write';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS lunar_reminders_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS caldav_url TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS caldav_username TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS caldav_password_encrypted TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS outbound_webhook_url TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS resend_webhook_secret TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS markdown_email_template TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS notification_preset TEXT;`,
+    },
+    {
+      version: 25,
+      name: 'features_v25',
+      sql: `CREATE TABLE IF NOT EXISTS contact_groups (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS contact_group_members (
+  id SERIAL PRIMARY KEY,
+  group_id INTEGER NOT NULL REFERENCES contact_groups(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  name TEXT,
+  UNIQUE(group_id, email)
+);
+CREATE TABLE IF NOT EXISTS conditional_reminder_rules (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  days_before INTEGER NOT NULL,
+  channels JSONB NOT NULL DEFAULT '[]',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id TEXT,
+  details JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created ON audit_logs(user_id, created_at DESC);`,
+    },
   ];
 
   for (const migration of migrations) {

@@ -53,6 +53,21 @@ export async function processNotificationRetries(): Promise<{ processed: number;
     const retryCount = (row.retry_count as number) ?? 0;
     const channel = row.channel as string;
     const userId = row.user_id as number;
+    const accountId = row.account_id as number | undefined;
+
+    if (accountId) {
+      const acct = await query(
+        `SELECT connection_status FROM notification_accounts WHERE id = $1`,
+        [accountId],
+      );
+      if (acct.rows[0]?.connection_status === 'unhealthy') {
+        await query(
+          `UPDATE notification_queue SET status = 'dead', error_message = 'channel unhealthy', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [queueId],
+        );
+        continue;
+      }
+    }
 
     try {
       const results = await sendNotifications(row, userId, [channel], { skipQuietHours: true });

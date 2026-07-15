@@ -32,11 +32,20 @@ export default function DeployWizard() {
   const [cronBase, setCronBase] = useState('');
   const [loading, setLoading] = useState(true);
 
+  const [lastCron, setLastCron] = useState<{ job?: string; status?: string; at?: string }>({});
+
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch('/api/health');
         const data = await res.json();
+        if (data.checks?.lastCronAt) {
+          setLastCron({
+            job: data.checks.lastCronJob,
+            status: data.checks.lastCronStatus,
+            at: data.checks.lastCronAt,
+          });
+        }
 
         try {
           const deploy = await api.get<DeployInfo>('/security/deploy-info');
@@ -154,6 +163,11 @@ export default function DeployWizard() {
             {channelNote && (
               <p className="text-xs text-slate-500 border-t border-slate-200 dark:border-slate-700 pt-3">
                 {channelNote}
+              </p>
+            )}
+            {lastCron.at && (
+              <p className="text-xs text-slate-500 border-t border-slate-200 dark:border-slate-700 pt-3">
+                最近 Cron：{lastCron.job} · {lastCron.status} · {new Date(lastCron.at).toLocaleString('zh-CN')}
               </p>
             )}
           </CardContent>

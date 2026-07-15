@@ -6,12 +6,15 @@ import { rateLimit } from '../middleware/rate-limit.js';
 
 const webhookInbound = new Hono();
 const inboundLimit = rateLimit(30, 60 * 1000);
+const MAX_PAYLOAD_BYTES = 64 * 1024;
 
 webhookInbound.post('/receive/:token', inboundLimit, async (c) => {
   const token = c.req.param('token');
   if (!token || token.length < 16) {
     return c.json({ success: false, error: 'Invalid token' }, 400);
   }
+
+  const idempotencyKey = c.req.header('x-idempotency-key');
 
   const userRow = await query(
     'SELECT user_id, webhook_inbound_secret FROM user_configs WHERE webhook_inbound_token = $1',
@@ -23,8 +26,26 @@ webhookInbound.post('/receive/:token', inboundLimit, async (c) => {
 
   const userId = userRow.rows[0].user_id as number;
   const secret = userRow.rows[0].webhook_inbound_secret as string | null;
+
+  if (idempotencyKey) {
+    const cached = await query(
+      'SELECT response_body FROM webhook_idempotency_keys WHERE idempotency_key = $1 AND user_id = $2',
+      [idempotencyKey, userId],
+    );
+    if (cached.rows[0]?.response_body) {
+      return c.body(cached.rows[0].response_body as string, 200, { 'Content-Type': 'application/json' });
+    }
+  }
+
   const rawBody = await c.req.text();
+  if (Buffer.byteLength(rawBody, 'utf8') > MAX_PAYLOAD_BYTES) {
+    return c.json({ success: false, error: 'Payload too large (max 64KB)' }, 413);
+  }
   const signature = c.req.header('x-timemark-signature') || c.req.header('x-hub-signature-256');
+
+  if (secret && !signature) {
+    return c.json({ success: false, error: '缺少签名头 X-Timemark-Signature' }, 401);
+  }
 
   if (secret && signature) {
     const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
@@ -72,7 +93,16 @@ webhookInbound.post('/receive/:token', inboundLimit, async (c) => {
     },
   });
 
-  return c.json({ success: true, data: { eventId: event.id, name: event.name, date: event.date } });
+  const responseBody = JSON.stringify({ success: true, data: { eventId: event.id, name: event.name, date: event.date } });
+  if (idempotencyKey) {
+    await query(
+      `INSERT INTO webhook_idempotency_keys (idempotency_key, user_id, response_body)
+       VALUES ($1, $2, $3) ON CONFLICT (idempotency_key) DO NOTHING`,
+      [idempotencyKey, userId, responseBody],
+    ).catch(() => {});
+  }
+
+  return c.body(responseBody, 200, { 'Content-Type': 'application/json' });
 });
 
 export default webhookInbound;

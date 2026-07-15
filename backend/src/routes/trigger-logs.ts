@@ -14,21 +14,40 @@ triggerLogs.get('/', async (c) => {
   const userId = Number(user.id);
   const limit = Math.min(parseInt(c.req.query('limit') || '50'), 200);
   const offset = parseInt(c.req.query('offset') || '0');
+  const status = c.req.query('status');
+  const channel = c.req.query('channel');
+  const eventId = c.req.query('eventId');
+
+  const conditions = ['tl.user_id = $1'];
+  const params: unknown[] = [userId];
+  if (status) {
+    params.push(status);
+    conditions.push(`tl.status = $${params.length}`);
+  }
+  if (channel) {
+    params.push(`%${channel}%`);
+    conditions.push(`tl.channel_type ILIKE $${params.length}`);
+  }
+  if (eventId) {
+    params.push(parseInt(eventId, 10));
+    conditions.push(`tl.event_id = $${params.length}`);
+  }
+  const where = conditions.join(' AND ');
 
   try {
     const result = await query(
       `SELECT tl.*, e.name as event_name, e.type as event_type
        FROM event_trigger_logs tl
        LEFT JOIN events e ON tl.event_id = e.id
-       WHERE tl.user_id = $1
+       WHERE ${where}
        ORDER BY tl.created_at DESC
-       LIMIT $2 OFFSET $3`,
-      [userId, limit, offset]
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset],
     );
 
     const countResult = await query(
-      'SELECT COUNT(*) as total FROM event_trigger_logs WHERE user_id = $1',
-      [userId]
+      `SELECT COUNT(*) as total FROM event_trigger_logs tl WHERE ${where}`,
+      params,
     );
 
     return c.json({
@@ -44,6 +63,29 @@ triggerLogs.get('/', async (c) => {
     console.error('[TriggerLogs] Failed to fetch:', error);
     return c.json({ success: false, error: error.message || 'Failed to fetch logs' }, 500);
   }
+});
+
+// B18: CSV 导出
+triggerLogs.get('/export.csv', async (c) => {
+  const user = c.get('user');
+  const userId = Number(user.id);
+  const result = await query(
+    `SELECT tl.id, tl.event_id, e.name AS event_name, tl.trigger_type, tl.trigger_date,
+            tl.status, tl.channel_type, tl.error_message, tl.created_at
+     FROM event_trigger_logs tl
+     LEFT JOIN events e ON tl.event_id = e.id
+     WHERE tl.user_id = $1 ORDER BY tl.created_at DESC LIMIT 5000`,
+    [userId],
+  );
+  const header = 'id,event_id,event_name,trigger_type,trigger_date,status,channel,error,created_at';
+  const rows = result.rows.map((r: Record<string, unknown>) =>
+    [r.id, r.event_id, r.event_name, r.trigger_type, r.trigger_date, r.status, r.channel_type, r.error_message, r.created_at]
+      .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','),
+  );
+  const csv = [header, ...rows].join('\n');
+  c.header('Content-Type', 'text/csv; charset=utf-8');
+  c.header('Content-Disposition', 'attachment; filename="trigger-logs.csv"');
+  return c.body(csv);
 });
 
 // 重试失败的通知

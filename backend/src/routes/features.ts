@@ -3,8 +3,8 @@ import { randomBytes } from 'crypto';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
 import { getBlessing } from '@timemark/shared';
-import { getRecommendedDaysBefore } from '../services/recommendations.js';
-import { SERVERLESS_NOTES } from '../services/notifications/supported-channels.js';
+import { getRecommendedDaysBefore, getRecommendedDaysFromHistory } from '../services/recommendations.js';
+import { getServerlessFeatureReport } from '../utils/serverless-suitability.js';
 import type { User } from '@timemark/shared';
 
 const features = new Hono<{ Variables: { user: User } }>();
@@ -28,7 +28,7 @@ features.get('/annual-report', async (c) => {
   const userId = Number(c.get('user').id);
   const year = parseInt(c.req.query('year') || String(new Date().getFullYear()), 10);
 
-  const [events, triggers, channels, monthly] = await Promise.all([
+  const [events, triggers, channels, monthly, channelStats] = await Promise.all([
     query('SELECT COUNT(*)::int AS total FROM events WHERE user_id = $1', [userId]),
     query(
       `SELECT COUNT(*)::int AS total,
@@ -42,6 +42,15 @@ features.get('/annual-report', async (c) => {
       `SELECT EXTRACT(MONTH FROM date)::int AS month, COUNT(*)::int AS count
        FROM events WHERE user_id = $1 AND EXTRACT(YEAR FROM date) = $2
        GROUP BY 1 ORDER BY 1`,
+      [userId, year],
+    ),
+    query(
+      `SELECT channel_type AS channel,
+              COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE status = 'success')::int AS success
+       FROM event_trigger_logs
+       WHERE user_id = $1 AND EXTRACT(YEAR FROM trigger_date) = $2 AND channel_type IS NOT NULL
+       GROUP BY channel_type`,
       [userId, year],
     ),
   ]);
@@ -68,6 +77,12 @@ features.get('/annual-report', async (c) => {
       activeChannels: channels.rows[0]?.total ?? 0,
       eventsByType: byType.rows,
       monthlyHeatmap: heatmap,
+      channelSuccessRates: channelStats.rows.map((r: { channel: string; total: number; success: number }) => ({
+        channel: r.channel,
+        total: r.total,
+        success: r.success,
+        rate: r.total > 0 ? Math.round((r.success / r.total) * 100) : 0,
+      })),
     },
   });
 });
@@ -84,9 +99,11 @@ features.get('/conflicts', async (c) => {
   return c.json({ success: true, data: result.rows });
 });
 
-features.get('/smart-days/:type', (c) => {
+features.get('/smart-days/:type', async (c) => {
   const type = c.req.param('type');
-  return c.json({ success: true, data: { daysBefore: getRecommendedDaysBefore(type) } });
+  const userId = Number(c.get('user').id);
+  const fromHistory = await getRecommendedDaysFromHistory(userId, type);
+  return c.json({ success: true, data: { daysBefore: fromHistory.length ? fromHistory : getRecommendedDaysBefore(type), source: fromHistory.length ? 'history' : 'preset' } });
 });
 
 features.get('/blessing', (c) => {
@@ -98,7 +115,11 @@ features.get('/blessing', (c) => {
 });
 
 features.get('/serverless-suitability', (c) => {
-  return c.json({ success: true, data: { notes: SERVERLESS_NOTES } });
+  return c.json({ success: true, data: { features: getServerlessFeatureReport() } });
+});
+
+features.get('/serverless-check', (c) => {
+  return c.json({ success: true, data: { features: getServerlessFeatureReport() } });
 });
 
 features.post('/events/:id/share', async (c) => {
