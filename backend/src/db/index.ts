@@ -73,10 +73,14 @@ export async function query(text: string, params: any[] = []): Promise<QueryResu
   // Ensure pool is ready
   const client = await waitForDb();
 
-  // Auto-append RETURNING id for INSERT queries without explicit RETURNING clause
+  // Auto-append RETURNING id for simple INSERTs (skip UPSERT / tables without id PK)
   let sql = text;
   let addedReturning = false;
-  if (/^\s*INSERT\b/i.test(sql) && !/\bRETURNING\b/i.test(sql)) {
+  if (
+    /^\s*INSERT\b/i.test(sql) &&
+    !/\bRETURNING\b/i.test(sql) &&
+    !/\bON CONFLICT\b/i.test(sql)
+  ) {
     sql = sql.trimEnd().replace(/;?\s*$/, '') + ' RETURNING id';
     addedReturning = true;
   }
