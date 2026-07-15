@@ -1,8 +1,5 @@
-import { startRegistration, startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
-import type {
-  PublicKeyCredentialCreationOptionsJSON,
-  PublicKeyCredentialRequestOptionsJSON,
-} from '@simplewebauthn/browser';
+import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
+import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser';
 import { api } from './api';
 
 export function isPasskeySupported(): boolean {
@@ -19,15 +16,6 @@ export async function registerPasskey(deviceName?: string) {
     response: attestation,
     deviceName,
   });
-}
-
-export async function loginWithPasskeyRequest(username: string) {
-  const options = await api.post<PublicKeyCredentialRequestOptionsJSON>(
-    '/auth/webauthn/login/options',
-    { username },
-  );
-  const assertion = await startAuthentication({ optionsJSON: options });
-  return assertion;
 }
 
 export interface PasskeyCredential {

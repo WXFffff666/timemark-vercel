@@ -83,11 +83,13 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
     let message = `HTTP ${response.status}: ${response.statusText}`;
     let locked = false;
     let remainingSeconds = 0;
+    let requiresTotp = false;
     try {
       const errData = await response.json() as ApiResponse<unknown> & {
         remainingSeconds?: number;
         locked?: boolean;
         lockMinutes?: number;
+        requiresTotp?: boolean;
       };
       if (errData.error) {
         message = errData.error;
@@ -96,12 +98,18 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
       if (typeof errData.remainingSeconds === 'number' && errData.remainingSeconds > 0) {
         remainingSeconds = errData.remainingSeconds;
       }
+      if (errData.requiresTotp) requiresTotp = true;
     } catch {
       // ignore non-JSON error bodies
     }
-    const err = new Error(message) as Error & { locked?: boolean; remainingSeconds?: number };
+    const err = new Error(message) as Error & {
+      locked?: boolean;
+      remainingSeconds?: number;
+      requiresTotp?: boolean;
+    };
     err.locked = locked;
     err.remainingSeconds = remainingSeconds;
+    if (requiresTotp) err.requiresTotp = true;
     throw err;
   }
 

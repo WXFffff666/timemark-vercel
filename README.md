@@ -10,7 +10,7 @@
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-2.10.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
+[![Version](https://img.shields.io/badge/Version-2.11.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
 [![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-vercel?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-vercel/stargazers)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat&logo=vercel)](https://vercel.com/new)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
@@ -111,7 +111,21 @@ vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-部署完成！访问 `https://your-project.vercel.app`
+部署完成！生产环境请绑定自定义域名（例如 `https://timemark.example.com`）。
+
+### 生产域名与预览保护
+
+对外仅暴露你的**正式自定义域名**。`*.vercel.app` 预览地址可保留给本人调试，但应开启 Vercel **Standard Protection**（部署保护）：
+
+```powershell
+# 开启后：正式域名公开；vercel.app 需 Vercel 账号登录
+.\scripts\enable-vercel-protection.ps1
+
+# 每次部署后清理多余 vercel.app 别名
+.\scripts\prune-vercel-aliases.ps1
+```
+
+环境变量建议：`CORS_ORIGIN=https://你的正式域名`，`WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` 与正式域名一致。
 
 | 项目 | 值 |
 |:----:|:--:|

@@ -1,11 +1,26 @@
 # TimeMark 优化计划与实施记录
 
+## 已完成（v2.11.0）
+
+### 域名与访问控制
+- **对外唯一公开入口**：`https://timemark.the37777777.top`
+- 移除 `middleware.ts` 强制跳转（避免妨碍本人通过 Vercel 预览域名调试）
+- **Vercel Standard Protection**：`scripts/enable-vercel-protection.ps1` 开启后，`*.vercel.app` 需 Vercel 账号登录，仅本人/团队可访问
+- 部署后清理别名：`scripts/prune-vercel-aliases.ps1`
+- CORS 默认仅正式域名；预览需 `ALLOW_VERCEL_PREVIEW=true`
+
+### 登录安全
+- **默认仅用户名 + 密码**登录，不强制二步验证
+- TOTP 为可选：仅在安全中心主动启用后才要求验证码
+- Passkey 仅用于安全中心注册/管理，**不参与登录**
+
+---
+
 ## 已完成（v2.10.0）
 
 ### Passkeys / WebAuthn
 - 注册：`安全中心 → Passkey` 绑定设备（指纹/面容/安全密钥）
-- 登录：登录页「使用 Passkey 登录」（需先输入用户名）
-- API：`/api/auth/webauthn/*`（基于 `@simplewebauthn`）
+- API：`/api/auth/webauthn/register/*`、`/credentials`（管理端点）
 - 迁移 **v19**：`webauthn_challenges` 表 + credentials 扩展字段
 - 可选环境变量：`WEBAUTHN_RP_ID`、`WEBAUTHN_RP_NAME`、`WEBAUTHN_ORIGIN`
 
@@ -17,9 +32,8 @@
 - **设置页卡死**：部署向导图标误用 `<Settings />` 组件自身，导致无限递归渲染
 - **页面切换慢**：移除 `AnimatePresence mode="wait"`；路由 chunk 预加载；vendor 分包
 
-### 域名
-- 仅允许 `https://timemark.the37777777.top`（`CORS_ORIGIN` 不再包含 vercel.app）
-- `middleware.ts`：访问 `*.vercel.app` 自动 308 跳转到正式域名
+### 域名（已由 v2.11 调整）
+- `CORS_ORIGIN` 默认仅正式域名
 
 ---
 

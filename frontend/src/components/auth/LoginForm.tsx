@@ -8,7 +8,6 @@ import { useNavigate } from 'react-router-dom';
 import { Lock, User } from 'lucide-react';
 import { LockIcon } from '@/components/icons';
 import { api } from '@/lib/api';
-import { isPasskeySupported } from '@/lib/webauthn';
 
 declare global {
   interface Window {
@@ -44,9 +43,7 @@ export function LoginForm() {
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const login = useAuthStore((state) => state.login);
-  const loginWithPasskey = useAuthStore((state) => state.loginWithPasskey);
   const navigate = useNavigate();
-  const passkeySupported = isPasskeySupported();
 
   const isLocked = lockoutSeconds > 0;
 
@@ -115,7 +112,11 @@ export function LoginForm() {
         navigate('/settings?changePassword=1', { replace: true });
       }
     } catch (err: unknown) {
-      const e = err as Error & { locked?: boolean; remainingSeconds?: number };
+      const e = err as Error & {
+        locked?: boolean;
+        remainingSeconds?: number;
+        requiresTotp?: boolean;
+      };
       const message = e.message || '登录失败';
 
       if (e.locked || message.includes('锁定') || message.includes('频繁')) {
@@ -125,7 +126,7 @@ export function LoginForm() {
         if (sec > 0) startLockoutCountdown(sec);
         setError(message.replace(/^HTTP \d+:\s*/, ''));
       } else if (message.includes('401') || message.includes('Invalid') || message.includes('密码错误')) {
-        if (message.includes('双因素') || (e as { requiresTotp?: boolean }).requiresTotp) {
+        if (message.includes('双因素') || e.requiresTotp) {
           setShowTotp(true);
           setError('请输入双因素验证码');
         } else {
@@ -134,30 +135,6 @@ export function LoginForm() {
       } else {
         setError(message);
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePasskeyLogin = async () => {
-    if (isLocked) return;
-    const trimmedUsername = username.trim();
-    if (trimmedUsername.length < 3) {
-      setError('请先输入用户名再使用 Passkey 登录');
-      return;
-    }
-    setError('');
-    setLoading(true);
-    try {
-      const { mustChangePassword } = await loginWithPasskey(trimmedUsername, rememberMe, {
-        turnstileToken: turnstileToken || undefined,
-      });
-      if (mustChangePassword) {
-        navigate('/settings?changePassword=1', { replace: true });
-      }
-    } catch (err: unknown) {
-      const e = err as Error;
-      setError(e.message?.replace(/^HTTP \d+:\s*/, '') || 'Passkey 登录失败');
     } finally {
       setLoading(false);
     }
@@ -230,22 +207,10 @@ export function LoginForm() {
               {error}
             </motion.div>
           )}
-          <motion.div variants={itemVariants} className="pt-4 space-y-3">
+          <motion.div variants={itemVariants} className="pt-4">
             <Button type="submit" variant="vision" size="lg" className="w-full text-base font-semibold shadow-lg shadow-primary-500/20" disabled={loading || isLocked}>
               {loading ? '登录中...' : isLocked ? `锁定中 (${formatLockTime(lockoutSeconds)})` : '登 录'}
             </Button>
-            {passkeySupported && (
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                className="w-full text-base font-semibold"
-                disabled={loading || isLocked}
-                onClick={handlePasskeyLogin}
-              >
-                使用 Passkey 登录
-              </Button>
-            )}
           </motion.div>
         </motion.form>
       </CardContent>

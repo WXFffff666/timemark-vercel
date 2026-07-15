@@ -124,7 +124,7 @@ export default function Security() {
   };
 
   const handleRemovePasskey = async (id: string) => {
-    if (!confirm('确定删除此 Passkey？删除后将无法用它登录。')) return;
+    if (!confirm('确定删除此 Passkey？')) return;
     try {
       await removePasskey(id);
       load();
@@ -187,7 +187,7 @@ export default function Security() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Fingerprint className="w-4 h-4" />Passkey（无密码登录）</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Fingerprint className="w-4 h-4" />Passkey（设备绑定）</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-slate-600 dark:text-slate-300">
               状态: {passkeys.length > 0 ? `已注册 ${passkeys.length} 个` : '未注册'}
@@ -226,7 +226,7 @@ export default function Security() {
               </div>
             )}
             <p className="text-xs text-slate-500">
-              注册后可在登录页使用「Passkey 登录」。需 HTTPS 环境（生产域名已支持）。
+              可在安全中心注册 Passkey 备用，当前登录默认仅需用户名和密码。若在安全中心启用了 TOTP，登录时需额外输入验证码。需 HTTPS（生产域名已支持）。
             </p>
           </CardContent>
         </Card>
