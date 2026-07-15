@@ -129,7 +129,7 @@ export default function Channels() {
     try {
       const result = await api.post<{ success: boolean; message: string }>(
         '/channels/test',
-        { accountId: Number(account.id) },
+        { accountId: Number(account.id), type: account.type },
       );
       const status: ConnectionTestResult = {
         status: 'connected',

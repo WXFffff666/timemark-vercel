@@ -47,14 +47,18 @@ export const saveUserConfigSchema = z.object({
 }).passthrough();
 
 export const testConnectionSchema = z.object({
-  type: z.string().min(1),
+  accountId: z.coerce.number().int().positive().optional(),
+  type: z.string().min(1).optional(),
   configMethod: z.enum(['webhook', 'token', 'plugin']).optional().default('webhook'),
   webhook: z.string().optional().nullable(),
   token: z.string().optional().nullable(),
   chatId: z.string().optional().nullable(),
   secret: z.string().optional().nullable(),
   sessionData: z.any().optional().nullable(),
-});
+}).refine(
+  (data) => data.accountId != null || Boolean(data.type?.trim()),
+  { message: '请提供 accountId 或渠道类型 type', path: ['accountId'] },
+);
 
 export const createRelationshipMappingSchema = z.object({
   event_id: z.number().int().positive('event_id is required'),

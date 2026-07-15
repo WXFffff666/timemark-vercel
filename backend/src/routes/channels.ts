@@ -9,6 +9,7 @@ import {
 import { isSupportedChannel } from '../services/notifications/supported-channels.js';
 import { testConnectionSchema } from '@timemark/shared';
 import type { User } from '@timemark/shared';
+import type { ZodError } from 'zod';
 import { query } from '../db/index.js';
 import { testConnection } from '../services/notifications/test-connection.js';
 import { checkAllChannels, checkChannel } from '../services/notifications/network-check.js';
@@ -17,6 +18,16 @@ import { getNotificationAccounts } from '../services/config.service.js';
 const channels = new Hono<{ Variables: { user: User } }>();
 
 channels.use('*', authMiddleware);
+
+function formatValidationError(error: ZodError): string {
+  const flat = error.flatten();
+  const parts: string[] = [];
+  for (const [field, messages] of Object.entries(flat.fieldErrors)) {
+    if (messages?.length) parts.push(`${field}: ${messages.join(', ')}`);
+  }
+  if (flat.formErrors.length) parts.push(...flat.formErrors);
+  return parts.join('；') || '请求参数无效';
+}
 
 channels.get('/templates', async (c) => {
   return c.json({ success: true, data: getSupportedChannelTemplates() });
@@ -60,16 +71,20 @@ channels.post('/test', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = testConnectionSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+    return c.json({
+      success: false,
+      error: formatValidationError(parsed.error),
+      details: parsed.error.flatten(),
+    }, 400);
   }
-  if (!isSupportedChannel(parsed.data.type)) {
+  if (parsed.data.type && !isSupportedChannel(parsed.data.type)) {
     return c.json({ success: false, error: '该通知渠道在云端部署中不可用' }, 400);
   }
 
-  const accountId = typeof body.accountId === 'number' ? body.accountId : null;
+  const accountId = parsed.data.accountId ?? null;
   const userId = Number(user.id);
 
-  let testType = parsed.data.type;
+  let testType = parsed.data.type || '';
   let testConfigMethod = parsed.data.configMethod || 'webhook';
   let testToken = parsed.data.token || undefined;
   let testChatId = parsed.data.chatId || undefined;
@@ -88,6 +103,14 @@ channels.post('/test', async (c) => {
     testChatId = testChatId || account.chat_id || undefined;
     testWebhook = testWebhook || account.webhook || undefined;
     testSecret = testSecret || account.secret || undefined;
+  }
+
+  if (!testType) {
+    return c.json({ success: false, error: '请指定 accountId 或渠道类型' }, 400);
+  }
+
+  if (!isSupportedChannel(testType)) {
+    return c.json({ success: false, error: '该通知渠道在云端部署中不可用' }, 400);
   }
 
   if ((testType === 'email' || testType === 'resend') && !testChatId) {
