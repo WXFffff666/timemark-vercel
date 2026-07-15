@@ -10,6 +10,7 @@ build
 *.js
 *.js.map
 !api/index.js
+!frontend/public/sw.js
 !*.config.js
 !scripts/build-vercel-api.mjs
 api/handler.cjs

@@ -138,7 +138,7 @@ export default function Contacts() {
   const membersFor = (groupId: number) => members.filter((m) => m.group_id === groupId);
 
   return (
-    <div className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24">
+    <div id="main-content" className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24" tabIndex={-1}>
       <div className="flex items-center gap-3 mb-4">
         <Button variant="ghost" size="icon" onClick={() => navigate('/settings')} aria-label="返回" className="min-h-11 min-w-11">
           <ArrowLeft className="w-5 h-5" />

@@ -4,6 +4,7 @@ import { processNotificationRetries, purgeOldQueueEntries } from '../services/no
 import { purgeOldEmailLogs } from '../services/email-log.service.js';
 import { syncAllExternalCalendars } from '../services/calendar-sync.service.js';
 import { syncAllCalDavSubscriptions } from '../services/caldav-sync.service.js';
+import { syncAllGoogleCalendars } from '../services/google-calendar-sync.service.js';
 import { sendLunarPhaseReminders } from '../services/lunar-reminders.service.js';
 import { aggregateDailyStats } from '../services/stats-daily.service.js';
 import { purgeExpiredEventCache } from '../services/event-cache.service.js';
@@ -116,8 +117,9 @@ cronRoutes.get('/calendar-sync', async (c) => {
   const startedAt = Date.now();
   try {
     await syncAllExternalCalendars();
-    await logCronRun('calendar-sync', 'success', startedAt, 'External calendars synced');
-    return c.json({ success: true, job: 'calendar-sync' });
+    const googleStats = await syncAllGoogleCalendars();
+    await logCronRun('calendar-sync', 'success', startedAt, `External + Google synced (${googleStats.synced} imported)`);
+    return c.json({ success: true, job: 'calendar-sync', googleImported: googleStats.synced });
   } catch (error: any) {
     await logCronRun('calendar-sync', 'failed', startedAt, undefined, error.message);
     return c.json({ success: false, error: error.message || 'Job failed' }, 500);

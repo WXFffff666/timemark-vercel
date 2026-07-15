@@ -447,6 +447,14 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created ON audit_logs(user_id, cr
 );
 CREATE INDEX IF NOT EXISTS idx_reminder_claims_claimed ON reminder_send_claims(claimed_at);`,
     },
+    {
+      version: 27,
+      name: 'google_oauth_calendar_v27',
+      sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS google_oauth_refresh_token_encrypted TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS google_oauth_email TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS google_calendar_id TEXT DEFAULT 'primary';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS google_oauth_connected_at TIMESTAMP;`,
+    },
   ];
 
   for (const migration of migrations) {

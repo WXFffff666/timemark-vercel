@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#6366f1" />
+  <title>TimeMark — 离线</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      color: #e2e8f0;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .card {
+      max-width: 24rem;
+      padding: 2rem;
+      border-radius: 1.5rem;
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 0.75rem; }
+    p { font-size: 0.95rem; color: #94a3b8; line-height: 1.6; margin-bottom: 1.5rem; }
+    button {
+      background: #6366f1;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.75rem;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:hover { background: #4f46e5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>当前处于离线状态</h1>
+    <p>TimeMark 需要网络连接才能同步事件与发送提醒。已缓存的界面仍可浏览，恢复网络后请刷新页面。</p>
+    <button type="button" onclick="location.reload()">重新连接</button>
+  </div>
+</body>
+</html>

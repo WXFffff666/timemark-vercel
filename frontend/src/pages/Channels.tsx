@@ -519,11 +519,11 @@ export default function Channels() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
-      <header className="sticky top-6 z-40 px-4 max-w-[90rem] mx-auto">
+      <header className="sticky top-6 z-40 px-4 max-w-[90rem] mx-auto" role="banner">
         <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={() => navigate(-1)} aria-label="返回">
-              <ArrowLeft size={20} />
+            <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={() => navigate(-1)} aria-label="返回上一页">
+              <ArrowLeft size={20} aria-hidden />
             </Button>
             <div>
               <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">通知渠道</h1>
@@ -531,6 +531,9 @@ export default function Channels() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="rounded-full min-h-11 hidden sm:flex" onClick={() => navigate('/integrations-docs')} aria-label="查看 ntfy 与集成文档">
+              ntfy 教程
+            </Button>
             {accounts.length > 0 && (
               <Button
                 variant="secondary"
@@ -553,7 +556,7 @@ export default function Channels() {
         </div>
       </header>
 
-      <main className="max-w-[90rem] mx-auto px-6 py-10 mt-2">
+      <main id="main-content" className="max-w-[90rem] mx-auto px-6 py-10 mt-2" tabIndex={-1}>
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-primary-500" />

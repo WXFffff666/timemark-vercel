@@ -157,66 +157,66 @@ export function Dashboard() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
-      <header className="sticky top-4 z-50 px-4 max-w-7xl mx-auto">
+      <header className="sticky top-4 z-50 px-4 max-w-7xl mx-auto" role="banner" aria-label="页面顶部导航">
         <div className="glass-panel rounded-full px-6 py-3 flex justify-between items-center ring-1 ring-white/20 dark:ring-white/10">
-          <div className="flex items-center gap-4 alive-interactive" onClick={() => navigate('/dashboard')}>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary-500 to-purple-500 flex items-center justify-center shadow-lg">
+          <div className="flex items-center gap-4 alive-interactive" onClick={() => navigate('/dashboard')} role="button" tabIndex={0} aria-label="返回首页" onKeyDown={(e) => e.key === 'Enter' && navigate('/dashboard')}>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary-500 to-purple-500 flex items-center justify-center shadow-lg" aria-hidden>
               <span className="text-white font-bold text-xl">T</span>
             </div>
             <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 hidden md:block tracking-tight">TimeMark</h1>
           </div>
           <div className="flex items-center gap-2 md:gap-4">
-            <div className="hidden md:flex items-center gap-3 bg-white/30 dark:bg-black/30 backdrop-blur-md rounded-full px-4 py-1.5 shadow-inner">
+            <div className="hidden md:flex items-center gap-3 bg-white/30 dark:bg-black/30 backdrop-blur-md rounded-full px-4 py-1.5 shadow-inner" aria-label="时钟与时区">
               <RealtimeClock />
-              <div className="w-px h-4 bg-slate-300 dark:bg-slate-600"></div>
+              <div className="w-px h-4 bg-slate-300 dark:bg-slate-600" aria-hidden></div>
               <TimezoneSelector />
             </div>
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="rounded-full relative" onClick={() => navigate('/inbox')} title="收件箱">
-                <Inbox size={20} className="text-slate-600 dark:text-slate-300" />
+            <div className="flex items-center gap-1" role="toolbar" aria-label="快捷操作">
+              <Button variant="ghost" size="icon" className="rounded-full relative" onClick={() => navigate('/inbox')} aria-label={`收件箱${inboxUnread > 0 ? `，${inboxUnread} 条未读` : ''}`}>
+                <Inbox size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
                 {inboxUnread > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
                     {inboxUnread > 99 ? '99+' : inboxUnread}
                   </span>
                 )}
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/trigger-logs')} title="触发日志">
-                <ListChecks size={20} className="text-slate-600 dark:text-slate-300" />
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/trigger-logs')} aria-label="触发日志">
+                <ListChecks size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/analytics')} title="数据看板">
-                <BarChart2 size={20} className="text-slate-600 dark:text-slate-300" />
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/analytics')} aria-label="数据看板">
+                <BarChart2 size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/annual-report')} title="年度报告">
-                <Calendar size={20} className="text-slate-600 dark:text-slate-300" />
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/annual-report')} aria-label="年度报告">
+                <Calendar size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/channels')} title="通知渠道">
-                <Bell size={20} className="text-slate-600 dark:text-slate-300" />
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/channels')} aria-label="通知渠道">
+                <Bell size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/security')} title="安全中心">
-                <Shield size={20} className="text-slate-600 dark:text-slate-300" />
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/security')} aria-label="安全中心">
+                <Shield size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full" title="导出 ICS" onClick={() => handleExportCalendar('ics')}>
-                <Download size={20} className="text-slate-600 dark:text-slate-300" />
+              <Button variant="ghost" size="icon" className="rounded-full" aria-label="导出 ICS 日历" onClick={() => handleExportCalendar('ics')}>
+                <Download size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </Button>
-              <label className="cursor-pointer inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800" title="导入 ICS">
-                <input type="file" accept=".ics,text/calendar" className="hidden" onChange={(e) => e.target.files?.[0] && handleImportIcs(e.target.files[0])} />
-                <Upload size={20} className="text-slate-600 dark:text-slate-300" />
+              <label className="cursor-pointer inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="导入 ICS 日历">
+                <input type="file" accept=".ics,text/calendar" className="hidden" aria-label="选择 ICS 文件" onChange={(e) => e.target.files?.[0] && handleImportIcs(e.target.files[0])} />
+                <Upload size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </label>
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/settings')}>
-                <Settings size={20} className="text-slate-600 dark:text-slate-300" />
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/settings')} aria-label="系统设置">
+                <Settings size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </Button>
               <ThemeToggle />
             </div>
             <div className="h-8 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block"></div>
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300 hidden sm:block">{user?.username}</span>
-              <Button variant="outline" size="sm" className="rounded-full border-slate-300/50 dark:border-slate-600/50" onClick={logout}>退出</Button>
+              <Button variant="outline" size="sm" className="rounded-full border-slate-300/50 dark:border-slate-600/50" onClick={logout} aria-label="退出登录">退出</Button>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 mt-4">
+      <main id="main-content" className="max-w-7xl mx-auto px-6 py-8 mt-4" tabIndex={-1}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">今日事件</p><p className="text-2xl font-bold">{todayCount}</p></div>
           <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">本周待办</p><p className="text-2xl font-bold">{upcomingWeek}</p></div>

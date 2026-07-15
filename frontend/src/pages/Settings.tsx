@@ -108,6 +108,13 @@ export default function Settings() {
   const [apiScopes, setApiScopes] = useState('read,write');
   const [advancedSaving, setAdvancedSaving] = useState(false);
   const [uiLang, setUiLang] = useState<'zh' | 'en'>(getLang());
+  const [googleOAuth, setGoogleOAuth] = useState<{
+    configured: boolean;
+    connected: boolean;
+    email: string | null;
+    calendarId: string;
+  }>({ configured: false, connected: false, email: null, calendarId: 'primary' });
+  const [googleSyncLoading, setGoogleSyncLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,8 +133,9 @@ export default function Settings() {
         externalCalendarSyncStrategy?: string;
       }>('/calendar/integrations').catch(() => null),
       api.get<{ markdown_email_template?: string | null; api_scopes?: string }>('/config/notification-advanced').catch(() => null),
+      api.get<{ configured?: boolean; connected?: boolean; email?: string | null; calendarId?: string }>('/calendar/google-oauth/status').catch(() => null),
     ])
-      .then(([config, accounts, logs, integrations, advanced]) => {
+      .then(([config, accounts, logs, integrations, advanced, googleStatus]) => {
         if (cancelled) return;
         if (config?.timezone) setTimezone(config.timezone);
         if (config?.quiet_hours_start) setQuietHoursStart(config.quiet_hours_start);
@@ -151,6 +159,14 @@ export default function Settings() {
         }
         if (advanced?.markdown_email_template) setMarkdownTemplate(advanced.markdown_email_template);
         if (advanced?.api_scopes) setApiScopes(advanced.api_scopes);
+        if (googleStatus) {
+          setGoogleOAuth({
+            configured: !!googleStatus.configured,
+            connected: !!googleStatus.connected,
+            email: googleStatus.email ?? null,
+            calendarId: googleStatus.calendarId || 'primary',
+          });
+        }
       })
       .catch((e) => {
         if (!cancelled) setPageError(e instanceof Error ? e.message : '加载设置失败');
@@ -159,6 +175,29 @@ export default function Settings() {
         if (!cancelled) setPageLoading(false);
       });
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const google = params.get('google');
+    if (google === 'connected') {
+      alert('Google 日历已成功连接');
+      params.delete('google');
+      window.history.replaceState({}, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}`);
+      api.get<{ configured?: boolean; connected?: boolean; email?: string | null; calendarId?: string }>('/calendar/google-oauth/status')
+        .then((s) => setGoogleOAuth({
+          configured: !!s?.configured,
+          connected: !!s?.connected,
+          email: s?.email ?? null,
+          calendarId: s?.calendarId || 'primary',
+        }))
+        .catch(() => {});
+    } else if (google === 'error') {
+      alert(`Google 日历连接失败：${params.get('reason') || '未知错误'}`);
+      params.delete('google');
+      params.delete('reason');
+      window.history.replaceState({}, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}`);
+    }
   }, []);
 
   const saveNotificationDefaults = async () => {
@@ -290,6 +329,41 @@ export default function Settings() {
       setSyncResult(e instanceof Error ? e.message : '同步失败');
     } finally {
       setSyncLoading(false);
+    }
+  };
+
+  const connectGoogleCalendar = async () => {
+    try {
+      const result = await api.get<{ authUrl: string }>('/calendar/google-oauth/start');
+      if (result.authUrl) window.location.href = result.authUrl;
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '无法启动 Google 授权');
+    }
+  };
+
+  const disconnectGoogleCalendar = async () => {
+    if (!confirm('确定断开 Google 日历连接？')) return;
+    try {
+      await api.delete('/calendar/google-oauth');
+      setGoogleOAuth((prev) => ({ ...prev, connected: false, email: null }));
+      alert('已断开 Google 日历');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '断开失败');
+    }
+  };
+
+  const syncGoogleCalendar = async () => {
+    setGoogleSyncLoading(true);
+    setSyncResult(null);
+    try {
+      const result = await api.post<{ imported: number; deleted?: number; errors: string[] }>('/calendar/google-oauth/sync');
+      const parts = [`Google 导入 ${result.imported} 条`];
+      if (result.deleted) parts.push(`删除 ${result.deleted} 条`);
+      setSyncResult(result.errors?.length ? `${parts.join('，')}；${result.errors.join('; ')}` : parts.join('，'));
+    } catch (e) {
+      setSyncResult(e instanceof Error ? e.message : 'Google 同步失败');
+    } finally {
+      setGoogleSyncLoading(false);
     }
   };
 
@@ -505,15 +579,15 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-6 z-40 px-4 max-w-3xl mx-auto">
+      <header className="sticky top-6 z-40 px-4 max-w-3xl mx-auto" role="banner">
         <div className="glass-panel rounded-full px-6 py-3.5 flex items-center gap-4 ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
-          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)} aria-label="返回上一页"><ArrowLeft size={20} aria-hidden /></Button>
           <div>
             <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">系统设置</h1>
           </div>
         </div>
       </header>
-      <main className="max-w-3xl mx-auto px-6 py-10 mt-2">
+      <main id="main-content" className="max-w-3xl mx-auto px-6 py-10 mt-2" tabIndex={-1}>
         {pageError && (
           <div className="mb-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
             部分配置加载失败：{pageError}
@@ -705,6 +779,30 @@ export default function Settings() {
               </div>
 
               <div>
+                <label className="text-xs font-semibold text-slate-500 mb-2 block">Google 日历 OAuth 同步（只读）</label>
+                {!googleOAuth.configured ? (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">管理员需配置 GOOGLE_OAUTH_CLIENT_ID 与 GOOGLE_OAUTH_CLIENT_SECRET 环境变量</p>
+                ) : googleOAuth.connected ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-emerald-600 dark:text-emerald-400">已连接：{googleOAuth.email || 'Google 账户'} · 日历 {googleOAuth.calendarId}</p>
+                    <p className="text-xs text-slate-400">Cron `/api/cron/calendar-sync` 会按上方「外部 ICS 同步策略」自动同步 primary 日历</p>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button size="sm" variant="secondary" className="min-h-11" onClick={syncGoogleCalendar} disabled={googleSyncLoading}>
+                        <RefreshCw size={14} className={`mr-1 ${googleSyncLoading ? 'animate-spin' : ''}`} aria-hidden />
+                        {googleSyncLoading ? '同步中...' : '立即同步 Google'}
+                      </Button>
+                      <Button size="sm" variant="outline" className="min-h-11" onClick={disconnectGoogleCalendar}>断开连接</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs text-slate-400 mb-2">OAuth 授权后可自动从 Google 主日历导入事件（只读，需 refresh token）</p>
+                    <Button size="sm" className="min-h-11" onClick={connectGoogleCalendar}>连接 Google 日历</Button>
+                  </div>
+                )}
+              </div>
+
+              <div>
                 <label className="text-xs font-semibold text-slate-500 mb-2 block">CalDAV 只读订阅</label>
                 <Input placeholder="CalDAV / ICS URL" value={caldavUrl} onChange={(e) => setCaldavUrl(e.target.value)} className="mb-2" />
                 <div className="flex gap-2 mb-2">
@@ -720,6 +818,7 @@ export default function Settings() {
                   value={syncStrategy}
                   onChange={(e) => setSyncStrategy(e.target.value as 'add_only' | 'replace')}
                   className="h-11 px-3 rounded-xl border text-sm w-full max-w-xs mb-3"
+                  aria-label="外部日历同步策略"
                 >
                   <option value="add_only">只增不删</option>
                   <option value="replace">替换同步</option>
@@ -766,8 +865,13 @@ export default function Settings() {
                   </Button>
                 </div>
                 {syncResult && (
-                  <p className="text-xs text-slate-500 mt-2">{syncResult}</p>
+                  <p className="text-xs text-slate-500 mt-2" role="status">{syncResult}</p>
                 )}
+              </div>
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button variant="outline" size="sm" className="min-h-11" onClick={() => navigate('/integrations-docs')}>
+                  查看 iOS 快捷指令 / ntfy / 自动化文档
+                </Button>
               </div>
             </div>
           </section>

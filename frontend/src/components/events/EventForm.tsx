@@ -719,6 +719,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="h-12"
+              aria-label="事件名称"
             />
           </motion.div>
 
@@ -766,6 +767,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
               required
               type="date"
               value={formData.date}
+              aria-label="事件日期"
               onChange={(e) => {
                 const newDate = e.target.value;
                 setFormData({ ...formData, date: newDate });

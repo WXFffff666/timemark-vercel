@@ -237,10 +237,10 @@ export function LoginForm() {
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 font-medium">掌控您的每一个倒数时刻</p>
       </CardHeader>
       <CardContent className="px-10 pb-12">
-        <motion.form onSubmit={handleSubmit} className="space-y-6" variants={containerVariants} initial="hidden" animate="visible">
+        <motion.form onSubmit={handleSubmit} className="space-y-6" variants={containerVariants} initial="hidden" animate="visible" aria-label="登录表单">
           <motion.div variants={itemVariants}>
             <div className="relative group">
-              <User className="absolute left-4 top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors z-10" />
+              <User className="absolute left-4 top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors z-10" aria-hidden />
               <Input
                 type="text"
                 placeholder="用户名"
@@ -249,12 +249,14 @@ export function LoginForm() {
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLocked || loading}
                 required
+                aria-label="用户名"
+                autoComplete="username"
               />
             </div>
           </motion.div>
           <motion.div variants={itemVariants}>
             <div className="relative group">
-              <Lock className="absolute left-4 top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors z-10" />
+              <Lock className="absolute left-4 top-3.5 h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors z-10" aria-hidden />
               <Input
                 type="password"
                 placeholder="密码"
@@ -263,17 +265,19 @@ export function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLocked || loading}
                 required
+                aria-label="密码"
+                autoComplete="current-password"
               />
             </div>
           </motion.div>
           {showTotp && (
             <motion.div variants={itemVariants}>
-              <Input placeholder="双因素验证码 (6位)" value={totpCode} onChange={(e) => setTotpCode(e.target.value)} disabled={isLocked || loading} />
+              <Input placeholder="双因素验证码 (6位)" value={totpCode} onChange={(e) => setTotpCode(e.target.value)} disabled={isLocked || loading} aria-label="双因素验证码" inputMode="numeric" autoComplete="one-time-code" />
             </motion.div>
           )}
           {turnstileSiteKey && <div ref={turnstileRef} className="flex justify-center" />}
           <motion.div variants={itemVariants} className="flex items-center gap-3 pt-1 alive-interactive w-max" onClick={() => !isLocked && setRememberMe(!rememberMe)}>
-             <input type="checkbox" checked={rememberMe} readOnly disabled={isLocked} className="peer w-5 h-5 rounded-md border-slate-300 dark:border-slate-600 text-primary-500 focus:ring-primary-500/30 bg-white dark:bg-black/50 transition-all disabled:opacity-50" />
+             <input type="checkbox" checked={rememberMe} readOnly disabled={isLocked} aria-label="保持登录 30 天" className="peer w-5 h-5 rounded-md border-slate-300 dark:border-slate-600 text-primary-500 focus:ring-primary-500/30 bg-white dark:bg-black/50 transition-all disabled:opacity-50" />
              <label className="text-sm font-medium text-slate-700 dark:text-slate-300 select-none cursor-pointer">保持登录（30天）</label>
           </motion.div>
           {isLocked && (
@@ -291,7 +295,7 @@ export function LoginForm() {
               {loading ? '登录中...' : isLocked ? `锁定中 (${formatLockTime(lockoutSeconds)})` : '登 录'}
             </Button>
             {passkeySupported && (
-              <Button type="button" variant="outline" size="lg" className="w-full min-h-11" onClick={handlePasskeyLogin} disabled={loading || isLocked}>
+              <Button type="button" variant="outline" size="lg" className="w-full min-h-11" onClick={handlePasskeyLogin} disabled={loading || isLocked} aria-label="使用 Passkey 登录">
                 <Fingerprint className="w-4 h-4 mr-2" /> 使用 Passkey 登录
               </Button>
             )}

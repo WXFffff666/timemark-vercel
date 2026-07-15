@@ -4,6 +4,7 @@ import { useAuthStore } from './stores/auth.store';
 import { LoginPage } from './pages/Login';
 import ShareEvent from './pages/ShareEvent';
 import { TimezoneProvider } from './components/RealtimeClock';
+import { SkipLink } from './components/SkipLink';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -128,16 +129,18 @@ function App() {
       }
     };
     mq.addEventListener('change', onChange);
+
+    if ('serviceWorker' in navigator && import.meta.env.PROD) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
     return () => mq.removeEventListener('change', onChange);
   }, []);
-
-  if ('serviceWorker' in navigator && import.meta.env.PROD) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  }
 
   return (
     <BrowserRouter>
       <TimezoneProvider>
+        <SkipLink />
         <MeshBackground />
         <div className="relative z-10 min-h-screen text-slate-900 dark:text-slate-100">
           <AnimatedRoutes />
