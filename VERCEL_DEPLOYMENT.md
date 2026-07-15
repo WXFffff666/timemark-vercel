@@ -238,25 +238,51 @@ Each cron handler validates an `Authorization: Bearer <CRON_SECRET>` header. If 
 
 ---
 
-## 7. Incompatible Channels
+## 7. Notification Channels (Vercel Cloud)
 
-The following notification channels require WebSocket connections, local filesystem access, or native binaries. They are **automatically skipped** when `process.env.VERCEL` is set and will never be triggered in the serverless environment:
+Vercel serverless **only supports HTTP-based channels** (Webhook URL or Bot Token). Plugin channels that require QR login, local processes, or persistent WebSocket connections are **removed from the API and UI**, not merely skipped at send time.
 
-| Channel ID | Channel Name | Reason |
-|-----------|-------------|--------|
-| `qq_bot` | QQ Bot | Requires native OICQ bindings |
-| `signal` | Signal | Requires local Signal CLI |
-| `wechat_personal` | WeChat Personal (Wechaty) | Requires Puppet service |
-| `whatsapp` | WhatsApp | Requires WebSocket (Baileys) |
-| `clawbot` | WeChat ClawBot | Requires ilink API over persistent connection |
+### Supported channels
 
-When the notification dispatcher detects `VERCEL` in the environment, it filters these channels out of the send list and logs a message like:
+All channels returned by `GET /api/channels/templates` are cloud-ready. Examples:
 
+- **Webhook**: Feishu, DingTalk, WeCom, Discord, Slack, Google Chat, IRC, Synology Chat, Twitch, generic webhook
+- **Token**: Telegram, Resend/SMTP email, WxPusher, Qmsg, Bark, Gotify, ServerChan, PushPlus, Matrix, LINE, Teams, ntfy, Pushover, Apprise, and more
+
+Source of truth: `backend/src/services/notifications/supported-channels.ts` and `channels.config.ts` → `getSupportedChannelTemplates()`.
+
+### Removed on cloud (not available)
+
+| Channel ID | Name | Reason |
+|-----------|------|--------|
+| `wechat_personal` | WeChat Personal (Wechaty) | QR login + Puppet, no serverless session |
+| `whatsapp` | WhatsApp (Baileys) | Persistent WebSocket |
+| `qq_bot` | QQ Bot (OICQ) | Native bindings + QR login |
+| `signal` | Signal | Local Signal CLI |
+| `imessage` | iMessage (BlueBubbles) | Plugin / local relay |
+| `zalo` | Zalo | Plugin session |
+| `clawbot` | WeChat ClawBot | Persistent ilink connection |
+| `nostr` | Nostr | Long-lived relay connections |
+
+**Also unavailable on Vercel**: Browser **Web Push** (requires VAPID + service worker push infrastructure; removed from Settings UI).
+
+### Server-side enforcement
+
+- `POST /api/config/accounts` rejects unsupported `type` values
+- `POST /api/channels/test` rejects unsupported channels
+- Notification dispatcher uses `filterSupportedChannels()` before send
+- Vercel API bundle stubs removed IM service imports via `scripts/build-vercel-api.mjs`
+
+### Login lockout (429)
+
+After repeated failed logins, the account is temporarily locked (security feature, not disabled). To clear lockout for admin:
+
+```bash
+vercel env pull .env
+npx tsx scripts/clear-login-lock.ts admin
 ```
-[Notifications] Skipping incompatible channels in Vercel: qq_bot, signal, wechat_personal, whatsapp, clawbot
-```
 
-All other channels (Resend email, Telegram, Discord, Slack, Feishu, DingTalk, WeCom, etc.) work normally in Vercel.
+The UI shows remaining lock time when login returns HTTP 429.
 
 ---
 

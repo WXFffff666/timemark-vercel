@@ -60,7 +60,9 @@ npx tsx scripts/migrate-db.ts
 
 ### 6. 配置通知渠道
 
-登录 → **通知渠道** → 添加飞书/钉钉/Telegram/Bark/邮件等 Webhook → 测试发送
+登录 → **通知渠道** → 添加飞书/钉钉/Telegram/Bark/邮件等 **Webhook 或 Token 渠道** → 测试发送
+
+**云端不支持**：微信个人号、WhatsApp、QQ Bot、Signal、iMessage、Zalo、Clawbot、Nostr、浏览器 Web Push。界面中不会显示这些选项。
 
 ### 7. 创建事件并验证
 
@@ -107,6 +109,8 @@ npx tsx scripts/migrate-db.ts
 | 问题 | 解决 |
 |------|------|
 | 登录 403 | 检查 `CORS_ORIGIN` 是否包含你的域名 |
+| 登录 429 | 登录失败次数过多被锁定；等待或运行 `npx tsx scripts/clear-login-lock.ts admin` |
+| 无微信/WhatsApp 渠道 | 云端版已移除插件类渠道，请使用飞书/钉钉/Server酱/Bark 等 HTTP 渠道 |
 | 无通知 | 确认 cron-job.org 已启用且 Header 正确 |
 | API 502 | 检查 `DATABASE_URL` 和 `NODEJS_HELPERS=0` |
 | 深链 404 | 已配置 SPA rewrite，重新部署 |

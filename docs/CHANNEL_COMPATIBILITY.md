@@ -1,5 +1,29 @@
 # Channel Compatibility Matrix
 
+> Audit of notification channel services across **Docker** (full) and **Vercel** (HTTP-only) deployments.
+
+## Vercel Cloud Deploy (HTTP channels only)
+
+On Vercel serverless, only **Webhook / Token** channels are available. The following are **removed from API and UI** (see `backend/src/services/notifications/supported-channels.ts`):
+
+| Channel ID | Docker | Vercel | Reason |
+|------------|:------:|:------:|--------|
+| `wechat_personal` | ✅ | ❌ | Wechaty QR + Puppet |
+| `whatsapp` | ✅ | ❌ | Baileys WebSocket |
+| `qq_bot` | ✅ | ❌ | OICQ + QR login |
+| `signal` | ✅ | ❌ | Signal CLI |
+| `imessage` | ✅ | ❌ | BlueBubbles plugin |
+| `zalo` | ✅ | ❌ | Plugin session |
+| `clawbot` | ✅ | ❌ | Persistent ilink API |
+| `nostr` | ✅ | ❌ | Relay long connection |
+| Web Push (browser) | partial | ❌ | Not in Vercel Settings UI |
+
+**~30 channels** remain available on cloud (Feishu, DingTalk, Telegram, email, Bark, ServerChan, etc.).
+
+---
+
+## Docker Full Deploy
+
 > Auto-generated audit of all 39 notification channel services.
 > Base image: `node:20.18-alpine`
 > System packages installed: `dumb-init`, `ca-certificates`, `icu-data-full`

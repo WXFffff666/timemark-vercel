@@ -15,7 +15,7 @@
 - 移除 `Reminders` / `LoginHistory` 的 mock 假数据
 
 ### 补全缺失功能
-- **Web Push**：`sw.js` + `lib/push.ts`，Settings 页完整订阅/取消
+- **Web Push**：Vercel 云端版已移除浏览器推送设置（`sw.js` 仍保留于代码库，Docker 版可用）
 - **数据备份**：Settings 导出/导入 `/api/data/*`
 - **图形化看板**：新增 `/analytics`（Recharts 柱状图/饼图）
 - **年度报告**：增加成功率与饼图可视化

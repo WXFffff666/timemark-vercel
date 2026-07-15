@@ -6,7 +6,9 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/xfffff666/timemark?style=flat&color=0ea5e9)](https://hub.docker.com/r/xfffff666/timemark)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
 
-**智能事件提醒系统** · **38+ 通知渠道** · **农历转换** · **关系映射** · **通知模板** · **重复事件**
+**智能事件提醒系统** · **Vercel 云端 30+ 通知渠道** · **农历转换** · **关系映射** · **通知模板** · **重复事件**
+
+> **Vercel 版说明**：本文档部分章节描述 Docker 全功能版架构。云端部署仅支持 Webhook/Token HTTP 渠道，插件类渠道已移除，详见 [VERCEL_DEPLOYMENT.md](../VERCEL_DEPLOYMENT.md) 第 7 节。
 
 ---
 
@@ -290,16 +292,14 @@ TimeMark 使用 SQLite 数据库，包含以下核心表：
 
 | 方法 | 路径 | 说明 | 认证 |
 |:----:|------|------|:----:|
-| GET | `/api/channels/templates` | 获取所有渠道模板 | 是 |
-| GET | `/api/channels/templates/:id` | 获取单个渠道模板 | 是 |
-| GET | `/api/channels/accounts` | 获取用户通知账户列表 | 是 |
-| POST | `/api/channels/accounts` | 创建通知账户 | 是 |
-| PUT | `/api/channels/accounts/:id` | 更新通知账户 | 是 |
-| DELETE | `/api/channels/accounts/:id` | 删除通知账户 | 是 |
+| GET | `/api/channels/templates` | 获取可用渠道模板（Vercel：仅 webhook/token） | 是 |
+| GET | `/api/channels/templates/:method` | 按配置方式获取模板（`webhook` / `token`） | 是 |
+| GET | `/api/channels/template/:id` | 获取单个渠道模板 | 是 |
+| GET | `/api/channels/available` | 获取已配置且可用的通知账户 | 是 |
 | POST | `/api/channels/test` | 测试通知连接 | 是 |
-| POST | `/api/channels/plugin/:type/start` | 启动插件授权 | 是 |
-| GET | `/api/channels/plugin/:type/status` | 查询插件授权状态 | 是 |
-| POST | `/api/channels/plugin/:type/logout` | 登出插件 | 是 |
+| POST | `/api/channels/network-check` | 批量网络连通性检查 | 是 |
+
+> **Vercel 版已移除**：`POST /api/channels/plugin/:type/*` 插件扫码授权相关路由。
 
 ### 触发日志接口 (`/api/trigger-logs`)
 
@@ -327,13 +327,13 @@ TimeMark 使用 SQLite 数据库，包含以下核心表：
 
 ### 渠道分类
 
-TimeMark 将 38+ 通知渠道分为三种配置方式：
+TimeMark 将通知渠道分为三种配置方式。**Vercel 云端版仅启用前两种**：
 
-| 配置方式 | 说明 | 渠道数量 |
-|:--------:|------|:--------:|
-| **webhook** | 只需填写 Webhook URL | 大部分渠道 |
-| **token** | 需要 Bot Token + 其他参数 | 部分渠道 |
-| **plugin** | 需要扫码授权（如微信个人号） | 6 个 |
+| 配置方式 | 说明 | Docker | Vercel |
+|:--------:|------|:------:|:------:|
+| **webhook** | 只需填写 Webhook URL | ✅ | ✅ |
+| **token** | 需要 Bot Token + 其他参数 | ✅ | ✅ |
+| **plugin** | 需要扫码授权（如微信个人号） | ✅ | ❌ 已移除 |
 
 ### 渠道实现列表
 

@@ -4,13 +4,13 @@
 
 <h1>🎂 TimeMark</h1>
 
-<h3>智能事件提醒系统 | 43+ 通知渠道 | 农历转换 | 关系映射</h3>
+<h3>智能事件提醒系统 | 30+ 通知渠道 | 农历转换 | 关系映射</h3>
 
 <p>一个为生日、纪念日等重要日期打造的全功能提醒系统。<br/>Vercel Serverless 部署，PostgreSQL 数据库，零服务器运维。</p>
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-2.6.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
+[![Version](https://img.shields.io/badge/Version-2.7.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
 [![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-vercel?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-vercel/stargazers)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat&logo=vercel)](https://vercel.com/new)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
@@ -39,7 +39,7 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 | 密钥管理 | data/.env 文件 | **Vercel Environment Variables** |
 | 静态资源 | Docker 镜像内 | **Vercel Edge Network (CDN)** |
 | 免费额度 | 需自备服务器 | **Vercel Hobby 免费套餐可用** |
-| 通知渠道 | 43+ 渠道 | **38+ 渠道（5 个不兼容渠道自动跳过）** |
+| 通知渠道 | 43+ 渠道 | **30+ HTTP 渠道（Webhook/Token，云端可用）** |
 
 ### 架构优势
 
@@ -56,7 +56,7 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 
 | 🗓️ 精准农历 | 📢 多渠道通知 | 👨‍👩‍👧‍👦 智能关系映射 | 🔒 安全防护 | 🌍 全球时区 |
 |:----------:|:----------:|:---------------:|:----------:|:--------:|
-| 闰月自动转换 | 43+ 通知渠道 | 40+ 称呼映射 | 登录锁定 + 告警 | NTP 自动同步 |
+| 闰月自动转换 | 30+ 通知渠道 | 40+ 称呼映射 | 登录锁定 + 告警 | NTP 自动同步 |
 | 公历/农历双历 | 同渠道多账户 | 家庭关系映射 | AES-256 凭证加密 | 自定义时区 |
 
 | 📝 通知模板 | 🔄 重复事件 | 📧 多邮箱支持 | 📅 日历导出 | 🎯 11 种事件类型 |
@@ -204,7 +204,7 @@ npx tsx scripts/migrate-db.ts
 |--------|--------|
 | 提醒时间 | 06:00 - 22:00 + 自定义任意时间 (可多选) |
 | 提前天数 | 1天 / 3天 / 7天 / 14天 / 30天 (可多选) |
-| 通知渠道 | 43+ 渠道任意组合 (可多选) |
+| 通知渠道 | 30+ HTTP 渠道任意组合 (可多选) |
 | 重复事件 | 每天 / 每周 / 每月 / 每年 |
 | 通知模板 | 6 种预设模板 + 自定义模板 |
 | 收件人邮箱 | 支持多个收件人邮箱 |
@@ -236,15 +236,18 @@ npx tsx scripts/migrate-db.ts
 
 ---
 
-## 📢 通知渠道 (43+)
+## 📢 通知渠道（云端可用 30+）
 
-TimeMark 支持 43+ 通知渠道，覆盖国内外主流通讯平台。所有渠道（含邮箱）统一通过「通知账户」管理，支持同渠道多账户配置，创建事件时可选择发送给哪些账户。
+TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插件、无长连接 IM）。所有渠道通过「通知账户」统一管理，支持同渠道多账户，创建事件时可选择发送目标。
 
-### 💬 即时通讯 (11 个)
+> **云端不可用（已从前端与 API 移除）**：微信个人号、WhatsApp、QQ Bot、Signal、iMessage、Zalo、Clawbot、Nostr、浏览器 Web Push。  
+> 完整兼容性说明见 [docs/CHANNEL_COMPATIBILITY.md](docs/CHANNEL_COMPATIBILITY.md)。
+
+### 💬 即时通讯
 
 | 渠道 | 说明 |
 |------|------|
-| 📧 邮件 (Resend) | 正式邮件通知，支持多账号选择 |
+| 📧 邮件 (Resend / SMTP) | 正式邮件通知，支持多账号 |
 | 🔵 飞书 | 飞书群聊机器人 |
 | 🟢 企业微信 | 企业微信群聊机器人 |
 | 🔷 钉钉 | 钉钉群聊机器人 |
@@ -253,10 +256,9 @@ TimeMark 支持 43+ 通知渠道，覆盖国内外主流通讯平台。所有渠
 | 🟣 Discord | Discord Webhook |
 | 📱 WxPusher | 微信公众号推送 |
 | 💬 Qmsg | QQ 消息推送 |
-| 🦞 微信龙虾 (ClawBot) | 直接推送到个人微信（ilink API） |
 | 📡 Server酱 | 微信推送服务（Turbo/V3） |
 
-### 🔗 Webhook 集成 (10 个)
+### 🔗 Webhook 集成
 
 | 渠道 | 说明 |
 |------|------|
@@ -269,8 +271,9 @@ TimeMark 支持 43+ 通知渠道，覆盖国内外主流通讯平台。所有渠
 | 通用 Webhook | 自定义 HTTP 回调 |
 | PushPlus | 多渠道推送服务 |
 | PushMe | 多平台统一推送 |
+| Apprise | 统一通知网关 |
 
-### 📱 移动推送 (4 个)
+### 📱 移动推送
 
 | 渠道 | 说明 |
 |------|------|
@@ -278,27 +281,16 @@ TimeMark 支持 43+ 通知渠道，覆盖国内外主流通讯平台。所有渠
 | Gotify | 自托管推送服务 |
 | 喵推送 (Meow) | 鸿蒙系统推送 |
 | 企业微信应用 | 企微应用消息推送 |
+| ntfy | 自托管/公共 ntfy 推送 |
+| Pushover | Pushover 移动推送 |
 
-### 🌐 协议集成 (5 个)
+### 🌐 协议集成
 
 | 渠道 | 说明 |
 |------|------|
 | Matrix | 去中心化通讯协议 |
 | LINE | LINE 消息推送 |
 | Microsoft Teams | Teams 频道通知 |
-| Nostr | 去中心化社交协议 |
-| WhatsApp | WhatsApp 消息 |
-
-### 🔌 插件渠道 (5 个)
-
-| 渠道 | 说明 |
-|------|------|
-| 微信个人号 (OpenClaw) | 微信个人消息 |
-| 微信个人号 (Wechaty) | 微信个人消息 (Wechaty 方案) |
-| QQ Bot | QQ 机器人 |
-| Signal | Signal 加密消息 |
-| iMessage (BlueBubbles) | Apple iMessage |
-| Zalo | 越南 Zalo 消息 |
 
 ---
 
@@ -460,7 +452,8 @@ docker compose restart
 
 | 版本 | 日期 | 内容 |
 |:----:|:----:|------|
-| **v2.4.2** | 2026-05 | 通知预览按事件类型分组显示模板；Resend 发件人邮箱字段改为可选；调度器优化（每分钟检查）；事件创建/更新后立即触发提醒 |
+| **v2.7.0** | 2026-07 | 云端版移除不可用通知渠道（插件/扫码/长连接 IM）；仅保留 Webhook/Token HTTP 渠道；服务端校验 + 登录锁定提示优化 |
+| **v2.6.0** | 2026-05 | Vercel Serverless 部署；Neon PostgreSQL；安全加固与渠道兼容性审计 |
 | **v2.4.1** | 2026-05 | 修复 Resend 发件人邮箱强制必填；修复 Zod 验证规则；调度器时间匹配优化；事件创建后立即触发提醒 |
 | **v2.4.0** | 2026-05 | 通知模板预览（6 种预设模板）；自定义事件模板；浏览器推送 UI；日历导出按钮；重复事件选项；更多事件类型（会议/截止日期/旅行/毕业/婚礼/医疗）；CSRF 保护；API 分页；单元测试 |
 | **v2.3.0** | 2026-05 | 自动生成密钥；更多示例事件；渠道测试按钮修复；事件测试发送修复；Resend 发件人修复；时区偏移修复 |

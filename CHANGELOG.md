@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.7.0 (2026-07-15)
+
+### 云端通知渠道精简
+
+- **移除不可用渠道**：微信个人号、WhatsApp、QQ Bot、Signal、iMessage、Zalo、Clawbot、Nostr 从前端 UI、API 路由和发送逻辑中完全移除
+- **仅保留 HTTP 渠道**：Webhook / Token 类（飞书、钉钉、Telegram、邮件、Bark 等 30+ 渠道）
+- **服务端校验**：创建/测试通知账户时拒绝不支持的渠道类型（`supported-channels.ts`）
+- **前端清理**：移除「插件」Tab、扫码授权弹窗、浏览器 Web Push 设置项
+- **Vercel 构建**：恢复真实 HTTP 通知发送，仅 stub 已移除的 IM 服务模块
+
+### 安全
+
+- 登录失败锁定与限流机制保持不变
+- 登录 429 响应显示剩余锁定时间
+- 新增 `scripts/clear-login-lock.ts` 用于运维解锁
+
+### 文档
+
+- 更新 README、VERCEL_DEPLOYMENT、CHANNEL_COMPATIBILITY 等文档以反映云端可用渠道列表
+
 ## v2.6.0 (2026-05-31)
 
 ### 安全加固
