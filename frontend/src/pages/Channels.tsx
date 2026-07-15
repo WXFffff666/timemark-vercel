@@ -527,7 +527,7 @@ export default function Channels() {
             </Button>
             <div>
               <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">通知渠道</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">配置您的提醒接收方式</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">按需添加并绑定，不配置不影响核心提醒</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -557,6 +557,14 @@ export default function Channels() {
       </header>
 
       <main id="main-content" className="max-w-[90rem] mx-auto px-6 py-10 mt-2" tabIndex={-1}>
+        <p className="text-sm text-hint mb-8 max-w-3xl">
+          通知渠道均为可选：愿意用哪种就添加并绑定哪种，不添加也能正常创建事件。需要时点击「添加渠道」；配置说明见
+          {' '}
+          <button type="button" className="text-primary-600 dark:text-primary-400 underline" onClick={() => navigate('/integrations-docs')}>
+            集成文档
+          </button>
+          。
+        </p>
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
@@ -594,8 +602,8 @@ export default function Channels() {
                 <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">
                   还没有配置通知渠道
                 </h3>
-                <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-md mx-auto">
-                  添加通知渠道后，您可以在事件提醒时通过多种方式接收通知
+                <p className="text-hint mb-6 max-w-md mx-auto">
+                  添加通知渠道后，可在事件提醒时通过邮件、IM、Webhook 等方式接收通知；也可以稍后再配。
                 </p>
                 <Button 
                   variant="vision" 
@@ -629,7 +637,7 @@ export default function Channels() {
               </DialogTitle>
             </DialogHeader>
             <p className="text-slate-500 dark:text-slate-400 mt-2">
-              选择一个渠道类型进行配置，不同类型的渠道需要不同的认证方式
+              选择一个渠道类型进行配置；所有渠道均为可选，按需绑定即可
             </p>
           </div>
           

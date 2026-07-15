@@ -635,7 +635,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">深色模式</h3>
-                    <p className="text-xs text-slate-500">手动切换系统主题</p>
+                    <p className="text-xs text-hint">点击切换；新主题从触点圆形扩散</p>
                   </div>
                 </div>
                 <ThemeToggle />

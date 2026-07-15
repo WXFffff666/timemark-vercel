@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.14.2 (2026-07-15)
+
+### 体验与文档
+- **深浅色切换**：View Transitions API 圆形扩散动画（从点击位置向外过渡；尊重 `prefers-reduced-motion`）
+- **深色模式对比度**：调高 muted 文字、边框与玻璃面板可读性
+- 新增 [docs/OPTIONAL_FEATURES.md](docs/OPTIONAL_FEATURES.md)：平台 env、通知渠道、集成、Cron 均可选说明
+- 通知渠道页与文档强调「按需绑定，不配置不影响核心功能」
+
 ## v2.14.1 (2026-07-15)
 
 ### 文档与可选集成

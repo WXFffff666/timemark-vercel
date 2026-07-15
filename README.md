@@ -21,6 +21,7 @@
 [📖 Vercel 完整文档](VERCEL_DEPLOYMENT.md) · 
 [📧 通知系统指南](docs/NOTIFICATIONS.md) · 
 [🔗 集成功能](docs/INTEGRATIONS.md) · 
+[📋 可选功能说明](docs/OPTIONAL_FEATURES.md) · 
 [🐛 问题反馈](https://github.com/WXFffff666/timemark-vercel/issues) · 
 [⭐ Star 支持](https://github.com/WXFffff666/timemark-vercel/stargazers)
 

@@ -59,13 +59,13 @@
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted-foreground: 215 20% 72%;
     --accent: 217 33% 17%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 31%;
+    --destructive: 0 63% 40%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
+    --border: 217 22% 24%;
+    --input: 217 22% 20%;
     --ring: 221 83% 60%;
 
     /* 深色模式网格：极其幽暗的光晕，极大程度降低不透明度和增加模糊，解决噪点问题 */
@@ -94,7 +94,36 @@
 
 /* 主面板毛玻璃：浅色下是带有实体白色的透贴，自带明显的立体投影；深色下是深灰半透加顶部高光白线 */
 .glass-panel {
-  @apply bg-white/80 dark:bg-[#18181b]/70 backdrop-blur-3xl border border-white dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_16px_40px_rgb(0,0,0,0.5)];
+  @apply bg-white/80 dark:bg-[#18181b]/75 backdrop-blur-3xl border border-white dark:border-white/15 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_16px_40px_rgb(0,0,0,0.5)];
+}
+
+/* 辅助说明文字：深浅色均保证可读对比度 */
+.text-hint {
+  @apply text-slate-600 dark:text-slate-400;
+}
+
+/* 深浅色切换：圆形扩散过渡（View Transitions API） */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-image-pair(root) {
+  isolation: auto;
+}
+
+html[data-theme-transition='to-dark']::view-transition-new(root),
+html[data-theme-transition='to-light']::view-transition-new(root) {
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
+  }
 }
 
 /* 小米 HyperOS 动态弹簧反馈 */

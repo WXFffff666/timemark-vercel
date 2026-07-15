@@ -2,6 +2,8 @@
 
 本文说明 TimeMark Vercel 版从「配置渠道」到「定时提醒」的完整流程，以及常见问题排查。
 
+> **所有通知渠道均为可选**：不添加任何渠道也可创建与管理事件；仅在需要外发提醒时绑定渠道。参见 [OPTIONAL_FEATURES.md](./OPTIONAL_FEATURES.md)。
+
 ---
 
 ## 1. 端到端流程
@@ -49,7 +51,7 @@
 | 类型 | 配置位置 | 示例 |
 |------|----------|------|
 | **平台环境变量** | Vercel Dashboard | `DATABASE_URL`、`JWT_SECRET`、`MASTER_KEY`、`CRON_SECRET`、`SecretKey`/`SiteKey`（Turnstile） |
-| **通知渠道凭证** | 应用内「通知渠道」 | Resend API Key、Telegram Bot Token、飞书 Webhook |
+| **通知渠道凭证** | 应用内「通知渠道」**（按需添加，可不配）** | Resend API Key、Telegram Bot Token、飞书 Webhook |
 | **默认收件人** | 应用内「设置」 | 通知默认邮箱 |
 
 **部署向导（设置 → 部署向导）** 仅检查平台环境变量与数据库结构版本，**不**检查 Resend 等渠道 API Key。
