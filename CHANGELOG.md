@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.14.1 (2026-07-15)
+
+### 文档与可选集成
+- 新增 [docs/GOOGLE_CALENDAR_OAUTH.md](docs/GOOGLE_CALENDAR_OAUTH.md)：Google OAuth 可选配置、Vercel 环境变量、Google Cloud 重定向 URI、schema v27
+- 更新 VERCEL_DEPLOYMENT、FREE_TIER_DEPLOY、INTEGRATIONS、README：schema 期望版本 v27；Google OAuth 标明为可选
+- 设置页：未配置 OAuth 时显示中性提示（不影响其他功能），链至集成文档
+- 部署自检 `EXPECTED_SCHEMA_VERSION` 更新为 27
+
 ## v2.14.0 (2026-07-15)
 
 ### Phase 0 — 收件箱

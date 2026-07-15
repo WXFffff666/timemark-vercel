@@ -42,13 +42,14 @@ vercel --prod
 | `CORS_ORIGIN` | 建议 | `https://你的正式域名` |
 | `SecretKey` / `SiteKey` | 可选 | Cloudflare Turnstile（也支持 `TURNSTILE_SECRET_KEY` / `TURNSTILE_SITE_KEY`） |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` | 建议 | 与正式域名一致（Passkey） |
+| `GOOGLE_OAUTH_CLIENT_ID` / `SECRET` | 可选 | Google 日历 OAuth 只读同步；不配不影响其他功能 → [docs/GOOGLE_CALENDAR_OAUTH.md](docs/GOOGLE_CALENDAR_OAUTH.md) |
 | `TZ` | 可选 | `Asia/Shanghai` |
 
 > **Resend API Key 不在此列表** — 在应用内「通知渠道」按账户配置。详见 [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md)。
 
 ### 4. 数据库迁移
 
-**自动**：首次访问 API 时执行 v1–v22 增量迁移。  
+**自动**：首次访问 API 时执行 v1–v27 增量迁移。  
 **手动**（可选）：
 
 ```bash
@@ -56,7 +57,7 @@ vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-登录后打开 **设置 → 部署向导**，确认「数据库结构版本」为 **v22**。
+登录后打开 **设置 → 部署向导**，确认「数据库结构版本」为 **v27**。
 
 默认账号：`admin` / `TimeMark@2026`（首次登录会提示改密码）
 
@@ -72,7 +73,7 @@ Authorization: Bearer 你的CRON_SECRET
 |------|----------|------|
 | `/api/cron/reminder-check` | `* * * * *` | **必须** — 每分钟检查提醒 |
 | `/api/cron/retry-notifications` | `*/10 * * * *` | 建议 — 重试失败通知 |
-| `/api/cron/calendar-sync` | `*/15 * * * *` | 可选 — 外部 ICS 同步 |
+| `/api/cron/calendar-sync` | `*/15 * * * *` | 可选 — 外部 ICS + Google OAuth（已连接时）同步 |
 | `/api/cron/warmup` | `* * * * *` | 可选 — 减少冷启动延迟 |
 
 完整 URL 示例：`https://你的域名/api/cron/reminder-check`

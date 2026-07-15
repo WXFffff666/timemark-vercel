@@ -151,6 +151,22 @@ export default function IntegrationsDocs() {
         {ntfyResult && <p className="text-sm text-slate-600 dark:text-slate-400" role="status">{ntfyResult}</p>}
       </section>
 
+      <section id="google-oauth" className="mb-8 glass-panel p-6 rounded-2xl" aria-labelledby="google-oauth-heading">
+        <h2 id="google-oauth-heading" className="text-lg font-semibold mb-2">Google 日历 OAuth（可选）</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+          默认不启用。不配环境变量时不影响 Webhook、ICS 订阅等。仅需从 Google 主日历自动导入时，由管理员配置 OAuth 后 redeploy。
+        </p>
+        <ol className="text-sm text-slate-600 dark:text-slate-400 list-decimal list-inside space-y-2 mb-3">
+          <li>Google Cloud：启用 Calendar API，创建 Web OAuth 客户端，重定向 URI 为 <code className="text-xs">{SITE}/api/calendar/google-oauth/callback</code></li>
+          <li>Vercel 环境变量：<code className="text-xs">GOOGLE_OAUTH_CLIENT_ID</code>、<code className="text-xs">GOOGLE_OAUTH_CLIENT_SECRET</code>（可选 <code className="text-xs">GOOGLE_OAUTH_REDIRECT_URI</code>）</li>
+          <li>Redeploy 后，在「设置 → 集成」点击「连接 Google 日历」</li>
+          <li>确认部署向导中数据库结构为 v27+</li>
+        </ol>
+        <p className="text-xs text-slate-500">
+          不想配 OAuth？在 Google 日历复制 ICS 秘密地址，粘贴到「外部 ICS 订阅 URL」即可。完整说明见仓库 <code className="text-xs">docs/GOOGLE_CALENDAR_OAUTH.md</code>。
+        </p>
+      </section>
+
       <section className="mb-8 glass-panel p-6 rounded-2xl" aria-labelledby="zapier-heading">
         <h2 id="zapier-heading" className="text-lg font-semibold mb-2">Zapier / Make 模板</h2>
         <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">使用入站 Webhook 创建事件：</p>

@@ -65,6 +65,9 @@ Set these variables in the Vercel Dashboard under **Settings > Environment Varia
 | `TURNSTILE_SITE_KEY` / `SiteKey` | No | Cloudflare Turnstile site key (login CAPTCHA) |
 | `TURNSTILE_SECRET_KEY` / `SecretKey` | No | Cloudflare Turnstile secret key |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` | No | Passkey relying party (use production domain) |
+| `GOOGLE_OAUTH_CLIENT_ID` | No | **可选** — Google 日历 OAuth 只读同步；不配不影响其他功能。见 [docs/GOOGLE_CALENDAR_OAUTH.md](./docs/GOOGLE_CALENDAR_OAUTH.md) |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | No | 与上配套 |
+| `GOOGLE_OAUTH_REDIRECT_URI` | No | 可选；默认 `{站点}/api/calendar/google-oauth/callback` |
 | `NODEJS_HELPERS` | Yes (Hobby) | Set to `0` on Vercel Hobby |
 | `TZ` | No | Server timezone (default: `Asia/Shanghai`) |
 | `LOG_QUERIES` | No | Enable SQL query logging (default: `false`) |
@@ -75,7 +78,7 @@ Set these variables in the Vercel Dashboard under **Settings > Environment Varia
 - **Default recipient email** → Settings → Default notification email
 - **Webhook inbound / calendar feed tokens** → Auto-generated on migration v22
 
-See [docs/NOTIFICATIONS.md](./docs/NOTIFICATIONS.md) and [docs/INTEGRATIONS.md](./docs/INTEGRATIONS.md).
+See [docs/NOTIFICATIONS.md](./docs/NOTIFICATIONS.md) and [docs/INTEGRATIONS.md](./docs/INTEGRATIONS.md). Optional Google Calendar OAuth: [docs/GOOGLE_CALENDAR_OAUTH.md](./docs/GOOGLE_CALENDAR_OAUTH.md).
 
 See `.env.example` for a template with descriptions and generation commands.
 
@@ -128,7 +131,7 @@ Vercel will:
 Once deployed, check:
 
 - `https://<your-project>.vercel.app/api/health` returns `{ "status": "ok", "checks": { "database": true } }`
-- Log in → **Settings → Deploy Wizard** → system self-check shows schema v22
+- Log in → **Settings → Deploy Wizard** → system self-check shows schema **v27**
 - Frontend loads without JavaScript errors
 - Configure external cron jobs (see Section 6)
 
@@ -263,14 +266,14 @@ Each cron handler validates an `Authorization: Bearer <CRON_SECRET>` header. If 
 
 ### Database migrations
 
-Incremental migrations (currently **v22**) run automatically on serverless cold start via `runMigrations()` in `backend/src/db/migrate.ts`. Manual run:
+Incremental migrations (currently **v27**) run automatically on serverless cold start via `runMigrations()` in `backend/src/db/migrate.ts`. Manual run:
 
 ```bash
 vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-Verify in **Settings → Deploy Wizard** that schema version is **v22**.
+Verify in **Settings → Deploy Wizard** that schema version is **v27**.
 
 ---
 

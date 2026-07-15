@@ -1,7 +1,7 @@
 import { query } from '../db/index.js';
 import { createEvent } from './event.service.js';
 import { createLogger } from '../utils/logger.js';
-import { decryptRefreshToken, refreshGoogleAccessToken } from './google-oauth.service.js';
+import { decryptRefreshToken, isGoogleOAuthConfigured, refreshGoogleAccessToken } from './google-oauth.service.js';
 
 const log = createLogger('google-calendar-sync');
 
@@ -111,6 +111,9 @@ export async function syncGoogleCalendarForUser(
 }
 
 export async function syncAllGoogleCalendars(): Promise<{ synced: number }> {
+  if (!isGoogleOAuthConfigured()) {
+    return { synced: 0 };
+  }
   const users = await query(
     `SELECT user_id FROM user_configs
      WHERE google_oauth_refresh_token_encrypted IS NOT NULL

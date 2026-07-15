@@ -779,9 +779,14 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-2 block">Google 日历 OAuth 同步（只读）</label>
+                <label className="text-xs font-semibold text-slate-500 mb-2 block">Google 日历 OAuth 同步（可选 · 只读）</label>
                 {!googleOAuth.configured ? (
-                  <p className="text-xs text-amber-600 dark:text-amber-400">管理员需配置 GOOGLE_OAUTH_CLIENT_ID 与 GOOGLE_OAUTH_CLIENT_SECRET 环境变量</p>
+                  <p className="text-xs text-slate-400">
+                    未启用。不配置不影响提醒、ICS 订阅等现有功能；仅需从 Google 主日历自动导入时，由管理员在 Vercel 配置 OAuth 环境变量后 redeploy。
+                    <Button variant="link" size="sm" className="h-auto p-0 ml-1 text-xs" onClick={() => navigate('/integrations-docs#google-oauth')}>
+                      查看配置说明
+                    </Button>
+                  </p>
                 ) : googleOAuth.connected ? (
                   <div className="space-y-2">
                     <p className="text-sm text-emerald-600 dark:text-emerald-400">已连接：{googleOAuth.email || 'Google 账户'} · 日历 {googleOAuth.calendarId}</p>
