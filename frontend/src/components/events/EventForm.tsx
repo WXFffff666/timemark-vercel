@@ -129,11 +129,8 @@ const notificationChannels = [
   { value: 'mattermost', label: 'Mattermost', icon: '🧱' },
   { value: 'msteams', label: 'MS Teams', icon: '📊' },
   { value: 'nextcloud_talk', label: 'Nextcloud Talk', icon: '☁️' },
-  { value: 'nostr', label: 'Nostr', icon: '🕸️' },
   { value: 'wxpusher', label: 'WxPusher', icon: '💚' },
   { value: 'qmsg', label: 'Qmsg', icon: '🐧' },
-  // New token-based channels (batch 2)
-  { value: 'clawbot', label: '微信龙虾', icon: '🦞' },
   { value: 'serverchan', label: 'Server酱', icon: '📡' },
   { value: 'pushplus', label: 'PushPlus', icon: '➕' },
   { value: 'bark', label: 'Bark', icon: '🐕' },
@@ -141,14 +138,9 @@ const notificationChannels = [
   { value: 'meow', label: '喵推送', icon: '🐱' },
   { value: 'pushme', label: 'PushMe', icon: '📲' },
   { value: 'wecomapp', label: '企微应用', icon: '🏢' },
-  // Plugin-based channels
-  { value: 'wechat_official', label: '微信公众号', icon: '📣' },
-  { value: 'wechat_personal', label: '微信个人号', icon: '💬' },
-  { value: 'whatsapp', label: 'WhatsApp', icon: '📲' },
-  { value: 'qqbot', label: 'QQ Bot', icon: '🐧' },
-  { value: 'signal', label: 'Signal', icon: '🔒' },
-  { value: 'zalo', label: 'Zalo', icon: '💌' },
-  { value: 'imessage', label: 'iMessage', icon: '🍎' },
+  { value: 'ntfy', label: 'ntfy', icon: '📢' },
+  { value: 'pushover', label: 'Pushover', icon: '🔔' },
+  { value: 'apprise', label: 'Apprise', icon: '🔗' },
 ];
 
 const defaultReminderConfig: ReminderConfig = {
@@ -450,16 +442,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     mattermost: 'mattermost',
     msteams: 'msteams',
     nextcloud_talk: 'nextcloudtalk',
-    nostr: 'nostr',
-    whatsapp: 'whatsapp',
-    signal: 'signal',
-    zalo: 'zalo',
-    wechat_official: 'wxpusher',
-    wechat_personal: 'wechat_personal',
-    qqbot: 'qqbot',
     qmsg: 'qmsg',
     wxpusher: 'wxpusher',
-    clawbot: 'clawbot',
     serverchan: 'serverchan',
     pushplus: 'pushplus',
     bark: 'bark',
@@ -467,6 +451,9 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     meow: 'meow',
     pushme: 'pushme',
     wecomapp: 'wecomapp',
+    ntfy: 'ntfy',
+    pushover: 'pushover',
+    apprise: 'apprise',
   };
 
   const openAccountPicker = async (channel: string, currentAccountIds: string[]) => {
