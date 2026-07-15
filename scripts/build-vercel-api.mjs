@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
 const schedulerStub = join(root, 'backend/src/queue/scheduler.vercel-stub.ts')
 
-const outfile = 'api/index.js'
+const outfile = 'api/handler.cjs'
 
 mkdirSync(dirname(outfile), { recursive: true })
 

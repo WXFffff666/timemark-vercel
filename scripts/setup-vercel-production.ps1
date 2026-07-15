@@ -23,6 +23,8 @@ $vars = @{
   CRON_SECRET = (New-HexSecret 24)
   NODEJS_HELPERS = "0"
   TZ = "Asia/Shanghai"
+  DEFAULT_ADMIN_USERNAME = "admin"
+  DEFAULT_ADMIN_PASSWORD = "TimeMark@2026"
 }
 
 foreach ($key in $vars.Keys) {
@@ -46,11 +48,13 @@ if ($existing -notmatch "MASTER_KEY") {
   $mk | npx vercel env add MASTER_KEY production
 }
 
-Write-Host "==> 构建并部署"
+Write-Host "==> 本地构建验证"
 npx pnpm install --config.blockExoticSubdeps=false
 npx pnpm build
-npx vercel deploy --prod --yes
 
-Write-Host "==> 完成。请在 Neon SQL 控制台确认数据库可连，或运行:"
+Write-Host "==> 推送 Git 后 Vercel 会自动部署（无需 vercel deploy）"
+Write-Host "    git add -A && git commit -m '...' && git push origin master"
+
+Write-Host "==> 部署完成后初始化数据库:"
 Write-Host "  vercel env pull .env.production"
 Write-Host "  npx tsx scripts/migrate-db.ts"

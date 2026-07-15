@@ -9,8 +9,10 @@ build
 .docker-cache
 *.js
 *.js.map
+!api/index.js
 !*.config.js
 !scripts/build-vercel-api.mjs
+api/handler.cjs
 
 # Data directories (contains SQLite DB)
 data/
