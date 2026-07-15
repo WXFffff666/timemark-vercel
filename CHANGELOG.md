@@ -1,5 +1,35 @@
 # Changelog
 
+## v2.13.0 (2026-07-15)
+
+### 通知系统修复与完善
+
+- **收件人解析**：统一 `resolveRecipientEmails()`，优先级为事件 → 渠道 `chat_id` → 默认测试邮箱 → `reminder_emails`
+- **Resend 渠道**：恢复「收件人邮箱」字段；编辑表单通用回填；测试失败返回 HTTP 400 与明确错误信息
+- **设置页**：「通知默认邮箱」可保存与清空；近 30 天「邮件记录」
+- **测试发送**：`test-send` 写入 `event_trigger_logs`；渠道测试传递 `accountId` 并持久化 `last_test_result`
+- **失败重试**：`notification_queue` 指数退避（5m→30m→2h→6h）；Cron `/api/cron/retry-notifications`
+
+### 集成功能（Migration v22）
+
+- **入站 Webhook**：`POST /api/webhook/receive/:token` 创建事件，可选 HMAC 签名
+- **日历 ICS Feed**：`GET /api/calendar/feed/:token.ics` 供 Google/Outlook 订阅
+- **外部 ICS 同步**：设置页配置 URL + Cron `/api/cron/calendar-sync`
+- **冲突提示**：通知正文追加同日其他日程提示
+- **事件缓存**：`event_reminder_cache` 表（PostgreSQL，非 Redis）
+- **年度报告**：月度热力图与 `year` 查询参数
+
+### 部署与自检
+
+- **部署向导**：中文系统自检、数据库结构版本（v22）、区分平台 env 与渠道 API Key
+- **Turnstile**：兼容 Vercel 中 `SecretKey` / `SiteKey` 命名
+- **登录限流**：仅 `POST /login` 限流，避免全 `/api/auth/*` 误触 429
+
+### 文档
+
+- 新增 [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md)、[docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)
+- 更新 README、VERCEL_DEPLOYMENT、FREE_TIER_DEPLOY 中的 Cron 与 Resend 说明
+
 ## v2.7.0 (2026-07-15)
 
 ### 云端通知渠道精简

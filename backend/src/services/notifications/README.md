@@ -11,9 +11,28 @@ This directory contains notification channel implementations and configuration.
 | `wechat_personal`, `whatsapp`, `qq_bot`, `signal`, `imessage`, `zalo`, `clawbot` | QR login, local process, or persistent connection |
 | `nostr` | Long-lived relay connections |
 
+## Email / Resend recipient resolution
+
+When sending email (`email` or `resend` channel), recipients are resolved in order:
+
+1. Event `reminder_config.emailRecipients`
+2. Channel account `chat_id` (must be a valid email)
+3. User `default_test_email` (Settings page)
+4. User `reminder_emails` list
+
+Channel test and event test-send use the same logic. Failures return explicit errors (no silent success).
+
+**Resend API Key** is stored per notification account (encrypted with `MASTER_KEY`), not as a global `RESEND_API_KEY` env var.
+
+User-facing guide: [docs/NOTIFICATIONS.md](../../../docs/NOTIFICATIONS.md)
+
+## Retry queue
+
+Failed sends enqueue `notification_queue` with backoff: 5m → 30m → 2h → 6h. Processed by `/api/cron/retry-notifications`.
+
 ## File Structure
 
-- `index.ts` — Main notification dispatcher
+- `index.ts` — Main notification dispatcher (`resolveRecipientEmails`, conflict hints)
 - `channels.config.ts` — Channel definitions; `getSupportedChannelTemplates()` filters cloud-safe channels
 - `supported-channels.ts` — Blocklist for Vercel / serverless
 - `test-connection.ts` — Connection testing utilities

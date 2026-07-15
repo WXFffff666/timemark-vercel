@@ -4,8 +4,8 @@
 
 ## 为什么需要外部 Cron？
 
-Vercel **Hobby（免费）** 内置 Cron **每天最多 1 次**，无法每分钟检查提醒。  
-TimeMark 需要 **每分钟** 扫描到期事件，因此用 [cron-job.org](https://cron-job.org)（免费）代替。
+Vercel **Hobby（免费）** 内置 Cron **每天最多 1 次**（`vercel.json` 仅配置 `daily-maintenance`）。  
+TimeMark 需要 **每分钟** 扫描到期事件，因此用 [cron-job.org](https://cron-job.org)（免费）调用 `/api/cron/reminder-check` 等端点。
 
 > **装包提示**：本地 `pnpm install` / `pnpm add` 请加 `--config.blockExoticSubdeps=false`，或运行 `pnpm run install:deps`（原因见 README「本地开发与装包」）。
 
@@ -37,49 +37,85 @@ vercel --prod
 | `DATABASE_URL` | ✅ | Neon PostgreSQL 连接串 |
 | `JWT_SECRET` | ✅ | `openssl rand -hex 64` |
 | `MASTER_KEY` | ✅ | `openssl rand -hex 64` |
-| `CRON_SECRET` | ✅ | 任意随机字符串 |
+| `CRON_SECRET` | ✅ | 任意随机字符串（外部 Cron 认证用） |
 | `NODEJS_HELPERS` | ✅ | 设为 `0` |
-| `CORS_ORIGIN` | 建议 | `https://你的项目.vercel.app` |
+| `CORS_ORIGIN` | 建议 | `https://你的正式域名` |
+| `SecretKey` / `SiteKey` | 可选 | Cloudflare Turnstile（也支持 `TURNSTILE_SECRET_KEY` / `TURNSTILE_SITE_KEY`） |
+| `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` | 建议 | 与正式域名一致（Passkey） |
 | `TZ` | 可选 | `Asia/Shanghai` |
 
-### 4. 初始化数据库
+> **Resend API Key 不在此列表** — 在应用内「通知渠道」按账户配置。详见 [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md)。
+
+### 4. 数据库迁移
+
+**自动**：首次访问 API 时执行 v1–v22 增量迁移。  
+**手动**（可选）：
 
 ```bash
 vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
+登录后打开 **设置 → 部署向导**，确认「数据库结构版本」为 **v22**。
+
 默认账号：`admin` / `TimeMark@2026`（首次登录会提示改密码）
 
 ### 5. 配置外部 Cron（关键！）
 
-1. 注册 [cron-job.org](https://console.cron-job.org)
-2. 创建 Cron Job：
-   - **URL**: `https://你的项目.vercel.app/api/cron/reminder-check`
-   - **Schedule**: `* * * * *`（每分钟）
-   - **Request method**: GET
-   - **Headers**: `Authorization: Bearer 你的CRON_SECRET`
-3. 保存并启用
+在 [cron-job.org](https://console.cron-job.org) 为以下端点创建任务，Header 均为：
 
-### 6. 配置通知渠道
+```
+Authorization: Bearer 你的CRON_SECRET
+```
 
-登录 → **通知渠道** → 添加飞书/钉钉/Telegram/Bark/邮件等 **Webhook 或 Token 渠道** → 测试发送
+| 端点 | Schedule | 说明 |
+|------|----------|------|
+| `/api/cron/reminder-check` | `* * * * *` | **必须** — 每分钟检查提醒 |
+| `/api/cron/retry-notifications` | `*/10 * * * *` | 建议 — 重试失败通知 |
+| `/api/cron/calendar-sync` | `*/15 * * * *` | 可选 — 外部 ICS 同步 |
+| `/api/cron/warmup` | `* * * * *` | 可选 — 减少冷启动延迟 |
 
-**云端不支持**：微信个人号、WhatsApp、QQ Bot、Signal、iMessage、Zalo、Clawbot、Nostr、浏览器 Web Push。界面中不会显示这些选项。
+完整 URL 示例：`https://你的域名/api/cron/reminder-check`
+
+应用内 **设置 → 部署向导** 可复制各端点 URL 与 curl 示例。
+
+### 6. 配置通知（Resend 邮件示例）
+
+1. **设置 → 通知默认邮箱** — 填写你的收件邮箱  
+2. **通知渠道 → 添加 Resend**：
+   - Resend API Key（`re_...`）
+   - 发件人（可选；留空用测试地址 `onboarding@resend.dev`）
+   - 收件人（可选；留空用默认邮箱）
+3. 点击 **测试** — 应显示成功或具体错误（不会假成功）
 
 ### 7. 创建事件并验证
 
-创建一条「今天、当前时间 ±2 分钟内」的测试事件，等待 1–2 分钟，检查 **触发日志** 页面。
+1. 创建事件，选择 Resend 渠道与提前天数  
+2. 仪表盘 **测试发送**  
+3. 查看 **提醒日志**、**设置 → 邮件记录**  
+4. 等待 1–2 分钟验证定时 Cron（事件时间设在当前 ±2 分钟内）
+
+---
+
+## 系统自检
+
+**设置 → 部署向导 → 系统自检** 检查：
+
+- 数据库连接、结构版本（v22）
+- `JWT_SECRET`、`MASTER_KEY`、`CRON_SECRET`
+- Turnstile（可选）
+
+红色项为平台环境变量问题；**Resend 不在自检范围内**。
 
 ---
 
 ## 健康检查
 
-- `GET https://你的项目.vercel.app/api/health` → `{ "status": "ok" }`
+- `GET https://你的域名/api/health` → `{ "status": "ok", "checks": { "database": true, ... } }`
 - 手动测试 Cron：
   ```bash
   curl -H "Authorization: Bearer 你的CRON_SECRET" \
-    https://你的项目.vercel.app/api/cron/reminder-check
+    https://你的域名/api/cron/reminder-check
   ```
 
 ---
@@ -87,6 +123,12 @@ npx tsx scripts/migrate-db.ts
 ## 祝福语说明（无需 AI API Key）
 
 TimeMark 使用 **本地预设祝福语库**（`shared/src/blessings.ts`），根据事件类型和关系智能匹配，**不需要** OpenAI 或其他在线 API，也不会上传你的密钥。
+
+---
+
+## 集成功能
+
+Webhook 入站、ICS 订阅、外部日历同步见 [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)。
 
 ---
 
@@ -112,10 +154,12 @@ npx tsx scripts/migrate-db.ts
 | 问题 | 解决 |
 |------|------|
 | 登录 403 | 检查 `CORS_ORIGIN` 是否包含你的域名 |
-| 登录 429 | 登录失败次数过多被锁定；**无运维解锁**，仅等待锁定期结束或使用正确密码登录 |
-| 无微信/WhatsApp 渠道 | 云端版已移除插件类渠道，请使用飞书/钉钉/Server酱/Bark 等 HTTP 渠道 |
-| 无通知 | 确认 cron-job.org 已启用且 Header 正确 |
+| 登录 429 | 登录失败次数过多被锁定；等待锁定期结束或使用正确密码 |
+| Resend 测试失败 | 填写 API Key + 收件人（或设置默认邮箱）；见 [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) |
+| 自检缺 API | 多为 Turnstile/Cron，非 Resend；Resend 在通知渠道页配置 |
+| 无通知 | 确认 cron-job.org 已启用 `reminder-check` 且 Header 正确 |
+| 数据库版本低 | 重新部署或访问站点触发冷启动迁移 |
 | API 502 | 检查 `DATABASE_URL` 和 `NODEJS_HELPERS=0` |
 | 深链 404 | 已配置 SPA rewrite，重新部署 |
 
-完整文档见 [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md)。
+完整文档见 [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)。

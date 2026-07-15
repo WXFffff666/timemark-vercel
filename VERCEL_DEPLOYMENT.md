@@ -15,7 +15,7 @@ TimeMark runs on Vercel using a serverless architecture:
 | **Frontend** | Static files via Vercel | Vite build, output to `frontend/dist` |
 | **Backend** | Hono serverless Functions | Served at `/api/*`, single Hono app exported as default in `backend/src/index.ts` |
 | **Database** | Vercel Postgres (Neon) | Serverless Postgres, connection via `DATABASE_URL` |
-| **Scheduler** | Vercel Cron Jobs | 5 cron tasks defined in `vercel.json`, replaces Docker's internal Croner scheduler |
+| **Scheduler** | Vercel Cron + external cron | `vercel.json` has `daily-maintenance` only; minute-level jobs via cron-job.org |
 | **Monorepo** | pnpm workspaces | 3 packages: `shared`, `frontend`, `backend` |
 
 Key architectural differences from the Docker deployment:
@@ -51,19 +51,31 @@ vercel --prod
 
 ## 3. Environment Variables
 
-Set these 9 variables in the Vercel Dashboard under **Settings > Environment Variables**, or use `vercel env add` via the CLI. All values are required in Vercel (unlike Docker where they are optional):
+Set these variables in the Vercel Dashboard under **Settings > Environment Variables**, or use `vercel env add` via the CLI.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `JWT_SECRET` | Yes | JWT signing secret (64 hex chars) |
 | `MASTER_KEY` | Yes | AES-256 encryption key for notification credentials (64 hex chars) |
-| `CRON_SECRET` | Yes | Shared secret for cron job authentication |
+| `CRON_SECRET` | Yes | Shared secret for external cron job authentication |
 | `CORS_ORIGIN` | No | Comma-separated allowed origins (defaults to localhost) |
 | `DEFAULT_ADMIN_USERNAME` | No | Initial admin username (default: `admin`) |
 | `DEFAULT_ADMIN_PASSWORD` | No | Initial admin password (default: `TimeMark@2026`) |
+| `TURNSTILE_SITE_KEY` / `SiteKey` | No | Cloudflare Turnstile site key (login CAPTCHA) |
+| `TURNSTILE_SECRET_KEY` / `SecretKey` | No | Cloudflare Turnstile secret key |
+| `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` | No | Passkey relying party (use production domain) |
+| `NODEJS_HELPERS` | Yes (Hobby) | Set to `0` on Vercel Hobby |
 | `TZ` | No | Server timezone (default: `Asia/Shanghai`) |
 | `LOG_QUERIES` | No | Enable SQL query logging (default: `false`) |
+
+**Not environment variables** (configured in-app):
+
+- **Resend / SMTP / Telegram API keys** → Notification Channels page per account
+- **Default recipient email** → Settings → Default notification email
+- **Webhook inbound / calendar feed tokens** → Auto-generated on migration v22
+
+See [docs/NOTIFICATIONS.md](./docs/NOTIFICATIONS.md) and [docs/INTEGRATIONS.md](./docs/INTEGRATIONS.md).
 
 See `.env.example` for a template with descriptions and generation commands.
 
@@ -109,15 +121,16 @@ Vercel will:
 2. Build shared, frontend, and backend with `pnpm build`
 3. Deploy frontend static files from `frontend/dist`
 4. Deploy the Hono app as serverless Functions at `/api/*`
-5. Register the 5 cron jobs defined in `vercel.json`
+5. Register the built-in cron job in `vercel.json` (`daily-maintenance` only on Hobby)
 
 ### 4.4. Verify Deployment
 
 Once deployed, check:
 
-- `https://<your-project>.vercel.app/health` returns `{ "status": "ok" }`
+- `https://<your-project>.vercel.app/api/health` returns `{ "status": "ok", "checks": { "database": true } }`
+- Log in → **Settings → Deploy Wizard** → system self-check shows schema v22
 - Frontend loads without JavaScript errors
-- Cron job invocations appear in Vercel Dashboard > Cron Jobs
+- Configure external cron jobs (see Section 6)
 
 ### 4.5. Manual UI End-to-End Test (Cloud Platform)
 
@@ -220,21 +233,44 @@ To automate schema creation during first boot, you can add a one-time Vercel Fun
 
 ## 6. Cron Jobs
 
-TimeMark uses 5 cron jobs defined in `vercel.json`. Each job calls a Hono route via an HTTP request authenticated with the `CRON_SECRET` header.
+### Built-in (Vercel `vercel.json`)
 
 | Job | Cron Expression | Route | Description |
 |-----|----------------|-------|-------------|
-| **Reminder Check** | `* * * * *` | `/api/cron/reminder-check` | Every minute: check for due reminders and send notifications |
-| **Daily Email Backup** | `0 18 * * *` | `/api/cron/daily-email-backup` | Daily at 18:00: backup email notification credentials |
-| **Daily Login Backup** | `0 19 * * *` | `/api/cron/daily-login-backup` | Daily at 19:00: backup login logs |
-| **Hourly Cleanup** | `0 * * * *` | `/api/cron/hourly-cleanup` | Every hour: clean expired sessions and temporary data |
-| **Plugin Session Cleanup** | `30 * * * *` | `/api/cron/plugin-session-cleanup` | Every hour at :30: clean plugin sessions |
+| **Daily Maintenance** | `0 2 * * *` | `/api/cron/daily-maintenance` | Purge sessions, expired cache, old logs and notification queue |
 
-All cron functions have a maximum duration of 30 seconds (`maxDuration: 30` in `vercel.json`).
+Hobby plan allows **one cron per day** — this is the only job in `vercel.json`.
+
+### External (cron-job.org — required for reminders)
+
+Configure these with `Authorization: Bearer <CRON_SECRET>`:
+
+| Job | Suggested schedule | Route | Description |
+|-----|-------------------|-------|-------------|
+| **Warmup** | Every minute (optional) | `/api/cron/warmup` | Reduce cold-start DB latency |
+| **Reminder Check** | **Every minute (required)** | `/api/cron/reminder-check` | Check due reminders and send notifications |
+| **Retry Notifications** | Every 5–15 min | `/api/cron/retry-notifications` | Retry failed `notification_queue` entries |
+| **Calendar Sync** | Every 15 min | `/api/cron/calendar-sync` | Pull external ICS calendar URLs |
+| **Channel Health** | Daily (optional) | `/api/cron/channel-health` | Re-test active notification accounts |
+
+Copy exact URLs from **Settings → Deploy Wizard** in the app.
+
+Legacy routes (`daily-email-backup`, `hourly-cleanup`, `plugin-session-cleanup`, etc.) are **not used** on the Vercel edition.
 
 ### Cron Authentication
 
 Each cron handler validates an `Authorization: Bearer <CRON_SECRET>` header. If `CRON_SECRET` is not set or the header does not match, the request is rejected with a 403 response.
+
+### Database migrations
+
+Incremental migrations (currently **v22**) run automatically on serverless cold start via `runMigrations()` in `backend/src/db/migrate.ts`. Manual run:
+
+```bash
+vercel env pull .env
+npx tsx scripts/migrate-db.ts
+```
+
+Verify in **Settings → Deploy Wizard** that schema version is **v22**.
 
 ---
 
@@ -248,6 +284,14 @@ All channels returned by `GET /api/channels/templates` are cloud-ready. Examples
 
 - **Webhook**: Feishu, DingTalk, WeCom, Discord, Slack, Google Chat, IRC, Synology Chat, Twitch, generic webhook
 - **Token**: Telegram, Resend/SMTP email, WxPusher, Qmsg, Bark, Gotify, ServerChan, PushPlus, Matrix, LINE, Teams, ntfy, Pushover, Apprise, and more
+
+**Resend email setup** (in-app, not env vars):
+
+1. Settings → Default notification email (fallback recipient)
+2. Notification Channels → Resend → API Key + optional sender + optional recipient
+3. Test channel → create event → test send → check Trigger Logs / Email logs
+
+See [docs/NOTIFICATIONS.md](./docs/NOTIFICATIONS.md).
 
 Source of truth: `backend/src/services/notifications/supported-channels.ts` and `channels.config.ts` → `getSupportedChannelTemplates()`.
 
