@@ -33,6 +33,7 @@ import calendarImportRoutes from './routes/calendar-import.js';
 import contactsRoutes from './routes/contacts.js';
 import broadcastRoutes from './routes/broadcast.js';
 import webauthnRoutes from './routes/webauthn.js';
+import emailLogsRoutes from './routes/email-logs.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -91,6 +92,7 @@ app.route('/api/security', securityRoutes);
 app.route('/api/calendar', calendarImportRoutes);
 app.route('/api/contacts', contactsRoutes);
 app.route('/api/broadcast', broadcastRoutes);
+app.route('/api/email-logs', emailLogsRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {

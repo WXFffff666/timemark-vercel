@@ -180,6 +180,7 @@ export async function getUserConfig(userId: number): Promise<any> {
     timezone: r.timezone || 'Asia/Shanghai',
     quiet_hours_start: r.quiet_hours_start || null,
     quiet_hours_end: r.quiet_hours_end || null,
+    default_test_email: r.default_test_email || null,
   };
 
   // Persist re-encrypted values if any fields were migrated
@@ -261,6 +262,24 @@ function mapNotificationAccountRow(row: any, pendingUpdates?: Record<string, str
       }
     })(),
   };
+}
+
+export async function saveNotificationDefaults(
+  userId: number,
+  data: { default_test_email?: string | null; reminder_emails?: string[] },
+): Promise<void> {
+  await query(
+    `INSERT INTO user_configs (user_id, default_test_email, reminder_emails)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (user_id) DO UPDATE SET
+       default_test_email = COALESCE($2, user_configs.default_test_email),
+       reminder_emails = COALESCE($3, user_configs.reminder_emails)`,
+    [
+      userId,
+      data.default_test_email ?? null,
+      data.reminder_emails ? JSON.stringify(data.reminder_emails) : null,
+    ],
+  );
 }
 
 export async function getNotificationAccounts(userId: number): Promise<NotificationAccount[]> {

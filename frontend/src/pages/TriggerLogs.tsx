@@ -123,6 +123,21 @@ export default function TriggerLogs() {
     }
   };
 
+  const [retryingId, setRetryingId] = useState<number | null>(null);
+
+  const retryLog = async (logId: number) => {
+    setRetryingId(logId);
+    try {
+      await api.post(`/trigger-logs/${logId}/retry`, {});
+      await fetchLogs();
+      alert('已重新发送，请查看更新后的状态');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '重试失败');
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
   const parseChannelResults = (resultsStr?: string): Record<string, ChannelResult> => {
     if (!resultsStr) return {};
     try {
@@ -234,8 +249,21 @@ export default function TriggerLogs() {
                             )}
                           </div>
                         </div>
+                        <div className="flex flex-col items-end gap-2">
                         <div className="text-sm font-bold text-slate-400 whitespace-nowrap bg-slate-100/50 dark:bg-slate-800/50 px-3 py-1 rounded-lg">
                           {formatTime(log.created_at)}
+                        </div>
+                        {!isSuccess && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full text-xs"
+                            disabled={retryingId === log.id}
+                            onClick={() => retryLog(log.id)}
+                          >
+                            {retryingId === log.id ? '重试中...' : '手动重试'}
+                          </Button>
+                        )}
                         </div>
                       </div>
                     </div>

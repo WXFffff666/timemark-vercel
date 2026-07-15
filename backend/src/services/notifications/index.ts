@@ -50,6 +50,38 @@ import { applyRelationshipMapping } from '@timemark/shared/relationship';
 import { getBlessing } from '../../../../shared/src/blessings.js';
 import { generateNotificationContent } from '../../../../shared/src/templates.js';
 import { query } from '../../db/index.js';
+import { logEmail } from '../email-log.service.js';
+import { enqueueNotificationRetry } from '../notification-retry.service.js';
+
+function resolveRecipientEmails(event: Record<string, unknown>, chConfig: { emails?: string[] }, userConfig: Record<string, unknown> | null): string[] {
+  if (event.reminder_recipient_email) {
+    return [String(event.reminder_recipient_email)];
+  }
+
+  let parsedReminderConfig: { emailRecipients?: string[] } = {};
+  try {
+    const raw = event.reminder_config || event.reminderConfig;
+    if (raw) {
+      parsedReminderConfig = typeof raw === 'string' ? JSON.parse(raw) : (raw as { emailRecipients?: string[] });
+    }
+  } catch {
+    // ignore
+  }
+
+  if (parsedReminderConfig.emailRecipients?.length) {
+    return parsedReminderConfig.emailRecipients;
+  }
+  if (chConfig.emails?.length) {
+    return chConfig.emails.filter(Boolean);
+  }
+  if (Array.isArray(userConfig?.reminder_emails) && userConfig.reminder_emails.length) {
+    return userConfig.reminder_emails as string[];
+  }
+  if (userConfig?.default_test_email) {
+    return [String(userConfig.default_test_email)];
+  }
+  return [];
+}
 
 /**
  * Check if current time is within quiet hours for the user's timezone.
@@ -555,62 +587,50 @@ export async function sendNotifications(
         else if (ch === 'qq' && chConfig.token)
           await retryWithBackoff(() => sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if ((ch === 'email' || ch === 'resend') && chConfig.apiKey) {
-          // 为每个收件人单独发送邮件，应用不同的关系映射（per-recipient）
           const fromEmail = chConfig.fromEmail || 'TimeMark <noreply@timemark.app>';
-          
-          // 解析 reminderConfig（可能是 JSON 字符串）
-          let parsedReminderConfig: any = {};
-          try {
-            const rawConfig = event.reminder_config || event.reminderConfig;
-            if (rawConfig) {
-              parsedReminderConfig = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
-            }
-          } catch (e) {
-            console.error('[sendNotifications] Failed to parse reminder_config:', e);
-          }
-          
-          // 获取收件人邮箱：只使用事件级别的配置
-          let recipientEmails: string[] = [];
-          
-          // 1. 优先使用事件的 reminderRecipientEmail
-          if (event.reminder_recipient_email) {
-            recipientEmails = [event.reminder_recipient_email];
-          }
-          // 2. 其次使用 reminderConfig.emailRecipients
-          else if (parsedReminderConfig.emailRecipients?.length > 0) {
-            recipientEmails = parsedReminderConfig.emailRecipients;
-          }
-          
-          // 如果没有配置收件人邮箱，跳过此渠道
+          const recipientEmails = resolveRecipientEmails(event, chConfig, config);
+
           if (recipientEmails.length === 0) {
-            console.warn(`[sendNotifications] No recipient emails configured for event ${event.id}, skipping email channel`);
-            return;
+            throw new Error('未配置收件邮箱：请在事件、通知渠道或设置中填写默认邮箱');
           }
-          
-          console.log(`[sendNotifications] Sending email from ${fromEmail} to ${recipientEmails.length} recipients...`);
+
           const results = await Promise.allSettled(recipientEmails.map(async (email: string) => {
             const emailMappedEvent = {
               ...event,
-              name: applyRelationshipMapping(event.name, mappings, email)
+              name: applyRelationshipMapping(event.name, mappings, email),
             };
-            console.log(`[sendNotifications] Sending to ${email}...`);
             try {
               await retryWithBackoff(() => sendEmailNotification(
                 emailMappedEvent,
                 chConfig.apiKey,
                 fromEmail,
-                email
+                email,
               ));
-              console.log(`[sendNotifications] ✅ Email sent to ${email}`);
+              await logEmail({
+                userId,
+                eventId: event.id ? Number(event.id) : null,
+                recipient: email,
+                status: 'sent',
+                subject: `TimeMark: ${emailMappedEvent.name}`,
+                channelType: ch,
+              });
             } catch (error) {
-              console.error(`[sendNotifications] ❌ Failed to send email to ${email}:`, error);
+              const errMsg = error instanceof Error ? error.message : String(error);
+              await logEmail({
+                userId,
+                eventId: event.id ? Number(event.id) : null,
+                recipient: email,
+                status: 'failed',
+                subject: `TimeMark: ${emailMappedEvent.name}`,
+                errorMessage: errMsg,
+                channelType: ch,
+              });
               throw error;
             }
           }));
-          // Log any failures
-          const failures = results.filter(r => r.status === 'rejected');
+          const failures = results.filter((r) => r.status === 'rejected');
           if (failures.length > 0) {
-            console.error(`[sendNotifications] ${failures.length} email(s) failed to send`);
+            throw new Error(`${failures.length} 封邮件发送失败`);
           }
         }
         else if (ch === 'smtp' && chConfig.webhook && chConfig.token && chConfig.chat_id) {
@@ -618,17 +638,10 @@ export async function sendNotifications(
           const smtpPort = parseInt(chConfig.secret || '587', 10);
           const password = chConfig.token;
           const fromEmail = chConfig.chat_id;
-          
-          // 获取收件人邮箱：优先使用事件级别的配置
-          let smtpRecipients: string[] = [];
-          if (event.reminder_recipient_email) {
-            smtpRecipients = [event.reminder_recipient_email];
-          } else if (event.reminderConfig?.emailRecipients?.length > 0) {
-            smtpRecipients = event.reminderConfig.emailRecipients;
-          } else {
-            smtpRecipients = [fromEmail]; // 回退到发件人邮箱
+          const smtpRecipients = resolveRecipientEmails(event, { emails: [fromEmail] }, config);
+          if (smtpRecipients.length === 0) {
+            throw new Error('未配置 SMTP 收件邮箱');
           }
-          
           for (const recipient of smtpRecipients) {
             await retryWithBackoff(() => sendSmtpNotification(mappedEvent, smtpHost, smtpPort, password, fromEmail, recipient));
           }
@@ -695,9 +708,17 @@ export async function sendNotifications(
     } else {
       const errMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
       channelResults[ch] = { success: false, error: errMsg, accountId: task.accountId };
-      // Track consecutive failures and auto-disable after 3
       if (task.accountId) {
         await trackConsecutiveFailure(task.accountId, ch, errMsg);
+      }
+      if (event.id) {
+        enqueueNotificationRetry({
+          eventId: Number(event.id),
+          userId,
+          channel: ch,
+          accountId: task.accountId,
+          errorMessage: errMsg,
+        }).catch(() => {});
       }
     }
   }

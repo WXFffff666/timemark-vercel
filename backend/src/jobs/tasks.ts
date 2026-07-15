@@ -2,6 +2,7 @@ import { query } from '../db/index.js';
 import { Lunar, Solar } from 'lunar-javascript';
 import { sendNotifications } from '../services/notifications/index.js';
 import { createLogger } from '../utils/logger.js';
+import { recordEventTrigger } from '../services/trigger-log.service.js';
 
 const log = createLogger('tasks');
 // Batch query replaces per-user getReminderSettings/getUserConfig calls
@@ -271,35 +272,6 @@ export async function sendReminders() {
         await recordEventTrigger(event.id, event.user_id, 'scheduled', today, 'failed', String(error));
       }
     }
-  }
-}
-
-// 记录事件触发日志
-async function recordEventTrigger(
-  eventId: number, 
-  userId: number, 
-  triggerType: string, 
-  triggerDate: string,
-  status: string = 'success',
-  errorMessage?: string,
-  channelResults?: string,
-  errorDetails?: { channel_type?: string; account_id?: number; details?: any }
-) {
-  try {
-    await query(
-      `INSERT INTO event_trigger_logs 
-       (event_id, user_id, trigger_type, trigger_date, status, error_message, channel_results, error_details, channel_type, account_id) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        eventId, userId, triggerType, triggerDate, 
-        status, errorMessage || null, channelResults || null,
-        errorDetails?.details ? JSON.stringify(errorDetails.details) : null,
-        errorDetails?.channel_type || null,
-        errorDetails?.account_id || null
-      ]
-    );
-  } catch (error) {
-    log.error({ err: error }, 'Failed to record event trigger log');
   }
 }
 

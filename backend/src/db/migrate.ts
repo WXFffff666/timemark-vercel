@@ -281,6 +281,18 @@ ALTER TABLE webauthn_credentials ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP
         }
       },
     },
+    {
+      version: 21,
+      name: 'notification_defaults_email_logs_v21',
+      sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS default_test_email TEXT;
+ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS error_message TEXT;
+ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS channel_type TEXT DEFAULT 'email';
+CREATE INDEX IF NOT EXISTS idx_email_logs_user_sent ON email_logs(user_id, sent_at);
+ALTER TABLE notification_queue ADD COLUMN IF NOT EXISTS account_id INTEGER;
+CREATE INDEX IF NOT EXISTS idx_notification_queue_retry ON notification_queue(status, next_retry_at);`,
+    },
   ];
 
   for (const migration of migrations) {

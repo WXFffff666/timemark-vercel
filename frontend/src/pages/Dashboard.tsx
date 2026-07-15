@@ -77,7 +77,20 @@ export function Dashboard() {
 
   const handleEdit = (event: Event) => { setEditingEvent(event); setShowForm(true); };
   const handleDelete = async (id: string) => { if (confirm('确定删除此事件？')) { await deleteEvent(id); setShowForm(false); setEditingEvent(undefined); } };
-  const handleTestSend = async (id: string) => { try { await testSendEvent(id); alert('测试通知已发送！'); } catch (error) { alert('发送失败，请检查通知渠道配置'); } };
+  const handleTestSend = async (id: string) => {
+    try {
+      const result = await testSendEvent(id);
+      const results = result?.channelResults || {};
+      const failed = Object.entries(results).filter(([, r]) => !r.success);
+      if (failed.length > 0) {
+        alert(`部分渠道失败：\n${failed.map(([ch, r]) => `${ch}: ${r.error || '未知错误'}`).join('\n')}`);
+      } else {
+        alert('测试通知已发送！可在「提醒日志」查看记录。');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '发送失败，请检查通知渠道与设置中的默认邮箱');
+    }
+  };
   const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return;
     try {

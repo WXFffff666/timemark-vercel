@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions } from '../jobs/tasks.js';
+import { processNotificationRetries, purgeOldQueueEntries } from '../services/notification-retry.service.js';
+import { purgeOldEmailLogs } from '../services/email-log.service.js';
 import { query } from '../db/index.js';
 import { pingHeartbeat } from '../utils/heartbeat.js';
 import { testConnection } from '../services/notifications/test-connection.js';
@@ -73,6 +75,19 @@ cronRoutes.get('/reminder-check', async (c) => {
   }
 });
 
+// Process notification retries — call every 5–15 min via external cron on Vercel Hobby
+cronRoutes.get('/retry-notifications', async (c) => {
+  const startedAt = Date.now();
+  try {
+    const stats = await processNotificationRetries();
+    await logCronRun('retry-notifications', 'success', startedAt, `processed ${stats.processed}, ok ${stats.succeeded}`);
+    return c.json({ success: true, job: 'retry-notifications', ...stats });
+  } catch (error: any) {
+    await logCronRun('retry-notifications', 'failed', startedAt, undefined, error.message);
+    return c.json({ success: false, error: error.message || 'Job failed' }, 500);
+  }
+});
+
 // 2. Daily maintenance — Vercel Hobby built-in cron (once per day)
 cronRoutes.get('/daily-maintenance', async (c) => {
   const startedAt = Date.now();
@@ -80,12 +95,15 @@ cronRoutes.get('/daily-maintenance', async (c) => {
     await cleanupSessions();
     await githubBackup();
     await archiveLoginHistory();
+    const retryStats = await processNotificationRetries();
+    const purgedEmails = await purgeOldEmailLogs();
+    const purgedQueue = await purgeOldQueueEntries();
     const pluginResult = await query('DELETE FROM plugin_sessions WHERE expires_at < NOW()');
     await logCronRun(
       'daily-maintenance',
       'success',
       startedAt,
-      `sessions cleaned; plugin_sessions deleted: ${pluginResult.rowCount ?? 0}`,
+      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged emails: ${purgedEmails}; purged queue: ${purgedQueue}`,
     );
     await pingHeartbeat('daily-maintenance');
     return c.json({

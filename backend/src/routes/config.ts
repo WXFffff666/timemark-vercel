@@ -13,6 +13,7 @@ import {
   deleteRelationshipMapping,
   getReminderSettings,
   saveReminderSettings,
+  saveNotificationDefaults,
   getEventTemplates,
   getEventTemplate,
   saveEventTemplate,
@@ -251,6 +252,25 @@ config.post('/reminders', async (c) => {
     emailAddresses: parsed.data.emailAddresses,
   });
   
+  return c.json({ success: true });
+});
+
+config.post('/notification-defaults', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  const defaultTestEmail = typeof body.default_test_email === 'string' ? body.default_test_email.trim() : undefined;
+  const reminderEmails = Array.isArray(body.reminder_emails)
+    ? body.reminder_emails.filter((e: unknown) => typeof e === 'string')
+    : undefined;
+
+  if (defaultTestEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(defaultTestEmail)) {
+    return c.json({ success: false, error: '默认邮箱格式无效' }, 400);
+  }
+
+  await saveNotificationDefaults(Number(user.id), {
+    default_test_email: defaultTestEmail ?? null,
+    reminder_emails: reminderEmails,
+  });
   return c.json({ success: true });
 });
 

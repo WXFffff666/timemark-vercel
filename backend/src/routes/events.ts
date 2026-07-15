@@ -103,6 +103,7 @@ events.post('/:id/test-send', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
   const { sendNotifications } = await import('../services/notifications/index.js');
+  const { recordEventTrigger } = await import('../services/trigger-log.service.js');
   const { query } = await import('../db/index.js');
   
   const result = await query('SELECT * FROM events WHERE id = $1 AND user_id = $2', [id, user.id]);
@@ -115,15 +116,51 @@ events.post('/:id/test-send', async (c) => {
   const channels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
 
   if (channels.length === 0) {
-    return c.json({ success: false, error: 'No notification channels configured' }, 400);
+    return c.json({ success: false, error: '请先为事件配置通知渠道' }, 400);
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+
   try {
-    await sendNotifications(event, Number(user.id), channels);
-    return c.json({ success: true, message: 'Test notification sent' });
+    const channelResults = await sendNotifications(event, Number(user.id), channels, { skipQuietHours: true });
+    const values = Object.values(channelResults);
+    const hasFailure = values.some((r) => !r.success);
+    const allFailed = values.length > 0 && values.every((r) => !r.success);
+    const status = allFailed ? 'failed' : hasFailure ? 'partial' : 'success';
+    const errorMessage = hasFailure
+      ? Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => `${ch}: ${r.error}`).join('; ')
+      : undefined;
+
+    await recordEventTrigger(
+      Number(event.id),
+      Number(user.id),
+      'manual_test',
+      today,
+      status === 'partial' ? 'failed' : status,
+      errorMessage,
+      JSON.stringify(channelResults),
+      hasFailure
+        ? {
+            channel_type: Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch]) => ch).join(','),
+            details: Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => ({ channel: ch, error: r.error })),
+          }
+        : undefined,
+    );
+
+    if (allFailed) {
+      return c.json({ success: false, error: errorMessage || '所有渠道发送失败', data: { channelResults } }, 400);
+    }
+
+    return c.json({
+      success: true,
+      message: hasFailure ? '部分渠道发送成功' : '测试通知已发送',
+      data: { channelResults, status },
+    });
   } catch (error) {
     console.error('[test-send] Error:', error);
-    return c.json({ success: false, error: 'Failed to send notification' }, 500);
+    const errMsg = error instanceof Error ? error.message : 'Failed to send notification';
+    await recordEventTrigger(Number(event.id), Number(user.id), 'manual_test', today, 'failed', errMsg);
+    return c.json({ success: false, error: errMsg }, 500);
   }
 });
 

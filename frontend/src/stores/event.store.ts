@@ -10,7 +10,7 @@ interface EventState {
   updateEvent: (id: string, data: Partial<CreateEventRequest>) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
   deleteEventsBatch: (ids: string[]) => Promise<number>;
-  testSendEvent: (id: string) => Promise<void>;
+  testSendEvent: (id: string) => Promise<{ channelResults?: Record<string, { success: boolean; error?: string }>; status?: string }>;
 }
 
 export const useEventStore = create<EventState>((set, get) => ({
@@ -49,6 +49,6 @@ export const useEventStore = create<EventState>((set, get) => ({
   },
 
   testSendEvent: async (id) => {
-    await api.post(`/events/${id}/test-send`, {});
+    return api.post(`/events/${id}/test-send`, {});
   },
 }));

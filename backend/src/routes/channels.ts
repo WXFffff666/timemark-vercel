@@ -55,6 +55,7 @@ channels.get('/available', async (c) => {
 });
 
 channels.post('/test', async (c) => {
+  const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
   const parsed = testConnectionSchema.safeParse(body);
   if (!parsed.success) {
@@ -66,13 +67,20 @@ channels.post('/test', async (c) => {
 
   const accountId = typeof body.accountId === 'number' ? body.accountId : null;
 
+  let testChatId = parsed.data.chatId || undefined;
+  let testWebhook = parsed.data.webhook || undefined;
+  if ((parsed.data.type === 'email' || parsed.data.type === 'resend') && !testChatId) {
+    const cfg = await query('SELECT default_test_email FROM user_configs WHERE user_id = $1', [Number(user.id)]);
+    testChatId = cfg.rows[0]?.default_test_email || testChatId;
+  }
+
   try {
     const result = await testConnection({
       type: parsed.data.type,
       configMethod: parsed.data.configMethod || 'webhook',
-      webhook: parsed.data.webhook || undefined,
+      webhook: testWebhook,
       token: parsed.data.token || undefined,
-      chatId: parsed.data.chatId || undefined,
+      chatId: testChatId,
       secret: parsed.data.secret || undefined,
     });
 

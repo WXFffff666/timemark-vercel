@@ -415,7 +415,7 @@ export async function updateEvent(id: string, userId: string, data: UpdateEventD
     // This allows the scheduler to re-trigger with the new configuration
     try {
       await query(
-        `DELETE FROM event_trigger_logs WHERE event_id = $1 AND trigger_date = date('now')`,
+        `DELETE FROM event_trigger_logs WHERE event_id = $1 AND trigger_date::date = CURRENT_DATE`,
         [id]
       );
       console.log(`[updateEvent] Cleared trigger logs for event ${id} due to config change`);

@@ -43,6 +43,7 @@ export const saveUserConfigSchema = z.object({
   reminder_emails: z.array(z.string().email()).optional(),
   alert_channels: z.array(z.string()).optional(),
   timezone: z.string().max(50).optional().nullable(),
+  default_test_email: z.string().email().optional().nullable(),
 }).passthrough();
 
 export const testConnectionSchema = z.object({

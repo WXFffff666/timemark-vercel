@@ -130,6 +130,7 @@ export default function Channels() {
       const result = await api.post<{ success: boolean; message: string }>(
         '/channels/test',
         {
+          accountId: Number(account.id),
           type: account.type,
           configMethod: (account as any).configMethod || (account as any).config_method || 'webhook',
           webhook: account.webhook,

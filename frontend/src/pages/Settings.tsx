@@ -78,6 +78,10 @@ export default function Settings() {
 
   // Timezone setting
   const [timezone, setTimezone] = useState('Asia/Shanghai');
+  const [defaultTestEmail, setDefaultTestEmail] = useState('');
+  const [defaultReminderEmails, setDefaultReminderEmails] = useState('');
+  const [notificationDefaultsSaving, setNotificationDefaultsSaving] = useState(false);
+  const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [backupLoading, setBackupLoading] = useState(false);
 
   const [pageLoading, setPageLoading] = useState(true);
@@ -88,16 +92,22 @@ export default function Settings() {
     setPageLoading(true);
     setPageError('');
     Promise.all([
-      api.get<{ timezone?: string; alert_channels?: unknown }>('/config').catch(() => null),
+      api.get<{ timezone?: string; alert_channels?: unknown; default_test_email?: string; reminder_emails?: string[] }>('/config').catch(() => null),
       api.get('/config/accounts').catch(() => []),
+      api.get<any[]>('/email-logs?limit=50').catch(() => []),
     ])
-      .then(([config, accounts]) => {
+      .then(([config, accounts, logs]) => {
         if (cancelled) return;
         if (config?.timezone) setTimezone(config.timezone);
+        if (config?.default_test_email) setDefaultTestEmail(config.default_test_email);
+        if (Array.isArray(config?.reminder_emails)) {
+          setDefaultReminderEmails(config.reminder_emails.join(', '));
+        }
         if (config?.alert_channels != null) {
           setSelectedAlertChannels(parseAlertChannels(config.alert_channels));
         }
         setAlertAccounts(ensureArray(accounts));
+        setEmailLogs(ensureArray(logs));
       })
       .catch((e) => {
         if (!cancelled) setPageError(e instanceof Error ? e.message : '加载设置失败');
@@ -107,6 +117,35 @@ export default function Settings() {
       });
     return () => { cancelled = true; };
   }, []);
+
+  const saveNotificationDefaults = async () => {
+    setNotificationDefaultsSaving(true);
+    try {
+      const reminderList = defaultReminderEmails
+        .split(/[,，\s]+/)
+        .map((e) => e.trim())
+        .filter(Boolean);
+      await api.post('/config/notification-defaults', {
+        default_test_email: defaultTestEmail.trim() || null,
+        reminder_emails: reminderList.length ? reminderList : [],
+      });
+      alert('通知默认设置已保存');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setNotificationDefaultsSaving(false);
+    }
+  };
+
+  const clearEmailLogs = async () => {
+    if (!confirm('确定清空近30天内的邮件发送记录？')) return;
+    try {
+      await api.delete('/email-logs');
+      setEmailLogs([]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '清空失败');
+    }
+  };
 
   const handleTimezoneChange = async (value: string) => {
     setTimezone(value);
@@ -359,6 +398,63 @@ export default function Settings() {
                 </div>
                 <Switch checked={soundEnabled} onCheckedChange={handleSoundToggle} />
               </div>
+            </div>
+          </section>
+
+          {/* 通知默认邮箱 */}
+          <section>
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">通知默认邮箱</h2>
+            <div className="glass-panel rounded-[2.5rem] p-6 space-y-4 ring-1 ring-black/5 dark:ring-white/10">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                渠道测试、事件未单独配置收件人时，将使用以下邮箱。建议填写你常用的收件地址。
+              </p>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 mb-1 block">默认测试/收件邮箱</label>
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={defaultTestEmail}
+                  onChange={(e) => setDefaultTestEmail(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 mb-1 block">默认提醒收件人（多个用逗号分隔）</label>
+                <Input
+                  placeholder="a@example.com, b@example.com"
+                  value={defaultReminderEmails}
+                  onChange={(e) => setDefaultReminderEmails(e.target.value)}
+                />
+              </div>
+              <Button onClick={saveNotificationDefaults} disabled={notificationDefaultsSaving} className="w-full">
+                {notificationDefaultsSaving ? '保存中...' : '保存通知邮箱设置'}
+              </Button>
+            </div>
+          </section>
+
+          {/* 邮件记录（近30天） */}
+          <section>
+            <div className="flex items-center justify-between mb-3 px-4">
+              <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">邮件记录（近30天）</h2>
+              {emailLogs.length > 0 && (
+                <button type="button" onClick={clearEmailLogs} className="text-xs text-red-500">清空</button>
+              )}
+            </div>
+            <div className="glass-panel rounded-[2.5rem] p-4 ring-1 ring-black/5 dark:ring-white/10 max-h-64 overflow-y-auto">
+              {emailLogs.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-6">暂无邮件记录</p>
+              ) : (
+                <ul className="space-y-2">
+                  {emailLogs.map((log: any) => (
+                    <li key={log.id} className="text-sm border-b border-slate-100 dark:border-slate-800 pb-2 last:border-0">
+                      <div className="flex justify-between gap-2">
+                        <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{log.recipient}</span>
+                        <span className={log.status === 'sent' ? 'text-emerald-600' : 'text-red-500'}>{log.status === 'sent' ? '已发送' : '失败'}</span>
+                      </div>
+                      <p className="text-xs text-slate-400 truncate">{log.subject || log.channel_type} · {log.sent_at ? new Date(log.sent_at).toLocaleString('zh-CN') : ''}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </section>
 
