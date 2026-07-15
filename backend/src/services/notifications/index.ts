@@ -53,6 +53,7 @@ import { query } from '../../db/index.js';
 import { logEmail } from '../email-log.service.js';
 import { enqueueNotificationRetry } from '../notification-retry.service.js';
 import { getConflictHint } from '../conflict-hint.service.js';
+import { createInboxMessage } from '../inbox.service.js';
 
 function resolveRecipientEmails(event: Record<string, unknown>, chConfig: { emails?: string[] }, userConfig: Record<string, unknown> | null): string[] {
   if (event.reminder_recipient_email) {
@@ -613,12 +614,15 @@ export async function sendNotifications(
               ...event,
               name: applyRelationshipMapping(event.name, mappings, email),
             };
+            const todayKey = new Date().toISOString().slice(0, 10);
+            const idempotencyKey = `reminder-${event.id}-${todayKey}-${email}`;
             try {
               await retryWithBackoff(() => sendEmailNotification(
                 emailMappedEvent,
                 chConfig.apiKey,
                 fromEmail,
                 email,
+                idempotencyKey,
               ));
               await logEmail({
                 userId,
@@ -790,7 +794,23 @@ export async function sendNotifications(
       }
     }
   }
-  
+
+  const successfulChannels = Object.entries(channelResults)
+    .filter(([key, r]) => r.success && !key.startsWith('_'))
+    .map(([ch]) => ch);
+  if (successfulChannels.length > 0) {
+    const bodyText = mappedEvent.customMessage
+      || `已通过 ${successfulChannels.join(', ')} 发送提醒`;
+    createInboxMessage({
+      userId,
+      title: `提醒已发送：${event.name}`,
+      body: bodyText,
+      source: 'notification',
+      channel: successfulChannels.join(','),
+      eventId: event.id ? Number(event.id) : null,
+    }).catch(() => {});
+  }
+
   return channelResults;
 }
 

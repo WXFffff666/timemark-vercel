@@ -36,6 +36,8 @@ import webauthnRoutes from './routes/webauthn.js';
 import emailLogsRoutes from './routes/email-logs.js';
 import webhookInboundRoutes from './routes/webhook-inbound.js';
 import calendarPublicRoutes from './routes/calendar-public.js';
+import inboxRoutes from './routes/inbox.js';
+import inboxPublicRoutes from './routes/inbox-public.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -97,6 +99,8 @@ app.route('/api/broadcast', broadcastRoutes);
 app.route('/api/email-logs', emailLogsRoutes);
 app.route('/api/webhook', webhookInboundRoutes);
 app.route('/api/calendar', calendarPublicRoutes);
+app.route('/api/inbox', inboxRoutes);
+app.route('/api/inbox', inboxPublicRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {

@@ -70,7 +70,7 @@ calendarImport.get('/webcal-url', async (c) => {
 calendarImport.get('/integrations', async (c) => {
   const user = c.get('user');
   const row = await query(
-    `SELECT webhook_inbound_token, calendar_feed_token, external_calendar_urls
+    `SELECT webhook_inbound_token, calendar_feed_token, external_calendar_urls, inbox_receive_token
      FROM user_configs WHERE user_id = $1`,
     [Number(user.id)],
   );
@@ -79,10 +79,12 @@ calendarImport.get('/integrations', async (c) => {
   const protocol = c.req.header('X-Forwarded-Proto') || 'https';
   const webhookToken = r.webhook_inbound_token as string | undefined;
   const feedToken = r.calendar_feed_token as string | undefined;
+  const inboxToken = r.inbox_receive_token as string | undefined;
   return c.json({
     success: true,
     data: {
       webhookUrl: webhookToken ? `${protocol}://${host}/api/webhook/receive/${webhookToken}` : null,
+      inboxReceiveUrl: inboxToken ? `${protocol}://${host}/api/inbox/receive/${inboxToken}` : null,
       calendarFeedUrl: feedToken ? `${protocol}://${host}/api/calendar/feed/${feedToken}.ics` : null,
       externalCalendarUrls: Array.isArray(r.external_calendar_urls) ? r.external_calendar_urls : [],
     },

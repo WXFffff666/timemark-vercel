@@ -4,6 +4,7 @@ import { processNotificationRetries, purgeOldQueueEntries } from '../services/no
 import { purgeOldEmailLogs } from '../services/email-log.service.js';
 import { syncAllExternalCalendars } from '../services/calendar-sync.service.js';
 import { purgeExpiredEventCache } from '../services/event-cache.service.js';
+import { purgeOldInboxMessages } from '../services/inbox.service.js';
 import { query } from '../db/index.js';
 import { pingHeartbeat } from '../utils/heartbeat.js';
 import { testConnection } from '../services/notifications/test-connection.js';
@@ -115,12 +116,13 @@ cronRoutes.get('/daily-maintenance', async (c) => {
     const purgedEmails = await purgeOldEmailLogs();
     const purgedQueue = await purgeOldQueueEntries();
     const purgedCache = await purgeExpiredEventCache();
+    const purgedInbox = await purgeOldInboxMessages();
     const pluginResult = await query('DELETE FROM plugin_sessions WHERE expires_at < NOW()');
     await logCronRun(
       'daily-maintenance',
       'success',
       startedAt,
-      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged emails: ${purgedEmails}; purged queue: ${purgedQueue}`,
+      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged emails: ${purgedEmails}; purged queue: ${purgedQueue}; purged inbox: ${purgedInbox}`,
     );
     await pingHeartbeat('daily-maintenance');
     return c.json({

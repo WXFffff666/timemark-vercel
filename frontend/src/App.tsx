@@ -12,6 +12,7 @@ const LoginHistory = lazy(() => import('./pages/LoginHistory'));
 const Channels = lazy(() => import('./pages/Channels'));
 const Templates = lazy(() => import('./pages/Templates'));
 const TriggerLogs = lazy(() => import('./pages/TriggerLogs'));
+const Inbox = lazy(() => import('./pages/Inbox'));
 const AnnualReport = lazy(() => import('./pages/AnnualReport'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const Security = lazy(() => import('./pages/Security'));
@@ -88,6 +89,7 @@ function AnimatedRoutes() {
           <Route path="/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
           <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
           <Route path="/trigger-logs" element={<ProtectedRoute><TriggerLogs /></ProtectedRoute>} />
+          <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
           <Route path="/annual-report" element={<ProtectedRoute><AnnualReport /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />

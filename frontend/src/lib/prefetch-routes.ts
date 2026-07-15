@@ -10,6 +10,7 @@ const loaders: Record<string, () => Promise<unknown>> = {
   '/contacts': () => import('../pages/Contacts'),
   '/broadcast': () => import('../pages/Broadcast'),
   '/calendar': () => import('../pages/Calendar'),
+  '/inbox': () => import('../pages/Inbox'),
 };
 
 const prefetched = new Set<string>();

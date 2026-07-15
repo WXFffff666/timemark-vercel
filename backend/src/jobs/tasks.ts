@@ -279,8 +279,8 @@ export async function sendReminders() {
   }
   
   log.info({ count: eventsToRemind.length }, 'Events to remind');
-  
-  for (const event of eventsToRemind) {
+
+  for (const event of eventsToRemind.slice(0, 50)) {
     const rawChannels = event.notification_channels;
     const channels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
     if (channels.length > 0) {

@@ -3,6 +3,10 @@
  * Plugin channels (WeChat/WhatsApp/QQ QR login, Signal CLI, etc.) are excluded.
  */
 
+import { checkChannelSuitability } from '../../utils/serverless-suitability.js';
+
+export { SERVERLESS_NOTES, checkChannelSuitability } from '../../utils/serverless-suitability.js';
+
 export const UNSUPPORTED_CHANNEL_IDS = new Set([
   // Plugin / QR / local process — not available on serverless
   'wechat_personal',
@@ -17,7 +21,7 @@ export const UNSUPPORTED_CHANNEL_IDS = new Set([
 ]);
 
 export function isSupportedChannel(channelId: string): boolean {
-  return !UNSUPPORTED_CHANNEL_IDS.has(channelId);
+  return checkChannelSuitability(channelId).suitable;
 }
 
 export function filterSupportedChannels(channelIds: string[]): string[] {

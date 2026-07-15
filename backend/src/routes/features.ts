@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
 import { getBlessing } from '@timemark/shared';
 import { getRecommendedDaysBefore } from '../services/recommendations.js';
+import { SERVERLESS_NOTES } from '../services/notifications/supported-channels.js';
 import type { User } from '@timemark/shared';
 
 const features = new Hono<{ Variables: { user: User } }>();
@@ -94,6 +95,10 @@ features.get('/blessing', (c) => {
   const recipientName = c.req.query('recipientName') || undefined;
   const blessing = getBlessing(type, undefined, personName, recipientName);
   return c.json({ success: true, data: { blessing, source: 'preset' } });
+});
+
+features.get('/serverless-suitability', (c) => {
+  return c.json({ success: true, data: { notes: SERVERLESS_NOTES } });
 });
 
 features.post('/events/:id/share', async (c) => {

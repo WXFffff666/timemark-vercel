@@ -32,6 +32,15 @@ async function initPool(): Promise<Pool> {
     console.error('[DB] Unexpected pool error:', err);
   });
 
+  if (process.env.VERCEL) {
+    try {
+      const { attachDatabasePool } = await import('@vercel/functions');
+      attachDatabasePool(pool);
+    } catch (err) {
+      console.warn('[DB] attachDatabasePool failed:', err);
+    }
+  }
+
   poolReady = true;
   return pool;
 }

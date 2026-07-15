@@ -10,7 +10,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { RealtimeClock } from '@/components/RealtimeClock';
 import { TimezoneSelector } from '@/components/TimezoneSelector';
 import type { Event, CreateEventRequest } from '@timemark/shared';
-import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail } from 'lucide-react';
+import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail, Inbox } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { api } from '@/lib/api';
 import { prefetchRoute } from '@/lib/prefetch-routes';
@@ -27,11 +27,19 @@ export function Dashboard() {
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [conflicts, setConflicts] = useState<{ date: string; count: number; names: string[] }[]>([]);
+  const [inboxUnread, setInboxUnread] = useState(0);
 
   useEffect(() => {
     prefetchRoute('/settings');
     prefetchRoute('/security');
     prefetchRoute('/analytics');
+    prefetchRoute('/inbox');
+  }, []);
+
+  useEffect(() => {
+    api.getRaw<unknown[]>('/inbox?limit=1')
+      .then((res) => setInboxUnread((res.pagination?.unreadCount as number) || 0))
+      .catch(() => setInboxUnread(0));
   }, []);
 
   useEffect(() => {
@@ -164,6 +172,14 @@ export function Dashboard() {
               <TimezoneSelector />
             </div>
             <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="rounded-full relative" onClick={() => navigate('/inbox')} title="收件箱">
+                <Inbox size={20} className="text-slate-600 dark:text-slate-300" />
+                {inboxUnread > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {inboxUnread > 99 ? '99+' : inboxUnread}
+                  </span>
+                )}
+              </Button>
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/trigger-logs')} title="触发日志">
                 <ListChecks size={20} className="text-slate-600 dark:text-slate-300" />
               </Button>

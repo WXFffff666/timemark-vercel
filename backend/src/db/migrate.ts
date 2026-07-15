@@ -329,6 +329,43 @@ CREATE INDEX IF NOT EXISTS idx_event_reminder_cache_expires ON event_reminder_ca
         }
       },
     },
+    {
+      version: 23,
+      name: 'inbox_messages_v23',
+      sql: `CREATE TABLE IF NOT EXISTS inbox_messages (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  source TEXT NOT NULL,
+  channel TEXT,
+  event_id INTEGER,
+  sender_label TEXT,
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_inbox_messages_user_created ON inbox_messages(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inbox_messages_user_unread ON inbox_messages(user_id, is_read);
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS inbox_receive_token TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS inbox_receive_secret TEXT;`,
+      postMigrate: async () => {
+        const { randomBytes } = await import('crypto');
+        const users = await query(
+          `SELECT user_id FROM user_configs WHERE inbox_receive_token IS NULL`,
+        );
+        for (const row of users.rows as Array<{ user_id: number }>) {
+          const token = randomBytes(24).toString('hex');
+          const secret = randomBytes(32).toString('hex');
+          await query(
+            `UPDATE user_configs SET
+               inbox_receive_token = COALESCE(inbox_receive_token, $1),
+               inbox_receive_secret = COALESCE(inbox_receive_secret, $2)
+             WHERE user_id = $3`,
+            [token, secret, row.user_id],
+          );
+        }
+      },
+    },
   ];
 
   for (const migration of migrations) {

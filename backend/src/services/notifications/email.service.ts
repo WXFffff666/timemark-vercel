@@ -6,7 +6,8 @@ export async function sendEmailNotification(
   event: any,
   apiKey: string,
   fromEmail: string,
-  toEmail: string
+  toEmail: string,
+  idempotencyKey?: string,
 ): Promise<void> {
   const resend = new Resend(apiKey);
   
@@ -146,6 +147,7 @@ export async function sendEmailNotification(
     to: toEmail,
     subject: `📅 TimeMark 提醒: ${event.name}`,
     html,
+    ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
   });
 
   if (error) {

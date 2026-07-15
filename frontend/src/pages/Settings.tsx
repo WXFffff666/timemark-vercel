@@ -78,6 +78,9 @@ export default function Settings() {
 
   // Timezone setting
   const [timezone, setTimezone] = useState('Asia/Shanghai');
+  const [quietHoursStart, setQuietHoursStart] = useState('');
+  const [quietHoursEnd, setQuietHoursEnd] = useState('');
+  const [quietHoursSaving, setQuietHoursSaving] = useState(false);
   const [defaultTestEmail, setDefaultTestEmail] = useState('');
   const [defaultReminderEmails, setDefaultReminderEmails] = useState('');
   const [notificationDefaultsSaving, setNotificationDefaultsSaving] = useState(false);
@@ -88,6 +91,7 @@ export default function Settings() {
   const [pageError, setPageError] = useState('');
 
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
+  const [inboxReceiveUrl, setInboxReceiveUrl] = useState<string | null>(null);
   const [calendarFeedUrl, setCalendarFeedUrl] = useState<string | null>(null);
   const [externalCalendarUrls, setExternalCalendarUrls] = useState<string[]>([]);
   const [integrationsSaving, setIntegrationsSaving] = useState(false);
@@ -99,14 +103,16 @@ export default function Settings() {
     setPageLoading(true);
     setPageError('');
     Promise.all([
-      api.get<{ timezone?: string; alert_channels?: unknown; default_test_email?: string; reminder_emails?: string[] }>('/config').catch(() => null),
+      api.get<{ timezone?: string; alert_channels?: unknown; default_test_email?: string; reminder_emails?: string[]; quiet_hours_start?: string | null; quiet_hours_end?: string | null }>('/config').catch(() => null),
       api.get('/config/accounts').catch(() => []),
       api.get<any[]>('/email-logs?limit=50').catch(() => []),
-      api.get<{ webhookUrl?: string | null; calendarFeedUrl?: string | null; externalCalendarUrls?: string[] }>('/calendar/integrations').catch(() => null),
+      api.get<{ webhookUrl?: string | null; inboxReceiveUrl?: string | null; calendarFeedUrl?: string | null; externalCalendarUrls?: string[] }>('/calendar/integrations').catch(() => null),
     ])
       .then(([config, accounts, logs, integrations]) => {
         if (cancelled) return;
         if (config?.timezone) setTimezone(config.timezone);
+        if (config?.quiet_hours_start) setQuietHoursStart(config.quiet_hours_start);
+        if (config?.quiet_hours_end) setQuietHoursEnd(config.quiet_hours_end);
         if (config?.default_test_email) setDefaultTestEmail(config.default_test_email);
         if (Array.isArray(config?.reminder_emails)) {
           setDefaultReminderEmails(config.reminder_emails.join(', '));
@@ -118,6 +124,7 @@ export default function Settings() {
         setEmailLogs(ensureArray(logs));
         if (integrations) {
           setWebhookUrl(integrations.webhookUrl ?? null);
+          setInboxReceiveUrl(integrations.inboxReceiveUrl ?? null);
           setCalendarFeedUrl(integrations.calendarFeedUrl ?? null);
           setExternalCalendarUrls(Array.isArray(integrations.externalCalendarUrls) ? integrations.externalCalendarUrls : []);
         }
@@ -205,6 +212,21 @@ export default function Settings() {
       await api.post('/config', { timezone: value });
     } catch (error) {
       console.error('Failed to save timezone:', error);
+    }
+  };
+
+  const saveQuietHours = async () => {
+    setQuietHoursSaving(true);
+    try {
+      await api.post('/config', {
+        quiet_hours_start: quietHoursStart.trim() || null,
+        quiet_hours_end: quietHoursEnd.trim() || null,
+      });
+      alert('免打扰时段已保存');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setQuietHoursSaving(false);
     }
   };
 
@@ -519,8 +541,21 @@ export default function Settings() {
             </h2>
             <div className="glass-panel rounded-[2.5rem] p-6 space-y-4 ring-1 ring-black/5 dark:ring-white/10">
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Webhook 入站创建事件；日历 Feed 供 Google/Outlook 订阅；外部 ICS URL 定期同步导入。
+                Webhook 入站创建事件；收件箱接收外部消息；日历 Feed 供 Google/Outlook 订阅；外部 ICS URL 定期同步导入。
               </p>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 mb-1 block">收件箱接收 URL</label>
+                <div className="flex gap-2">
+                  <Input readOnly value={inboxReceiveUrl || '加载中...'} className="font-mono text-xs" />
+                  {inboxReceiveUrl && (
+                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(inboxReceiveUrl, '收件箱接收 URL')}>
+                      <Copy size={16} />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-1">POST JSON: {"{ title, body, sender? }"}；可配置 X-Timemark-Signature 签名</p>
+              </div>
 
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">Webhook 入站 URL</label>
@@ -599,8 +634,8 @@ export default function Settings() {
 
           {/* 时区设置 */}
           <section>
-            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">时区设置</h2>
-            <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10">
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">时区与免打扰</h2>
+            <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10 space-y-1">
               <div className="flex items-center justify-between p-4 rounded-[2rem]">
                 <div className="flex items-center gap-4">
                   <div className="w-11 h-11 rounded-2xl bg-teal-50 dark:bg-teal-900/30 text-teal-600 flex items-center justify-center shadow-inner border border-teal-100 dark:border-teal-800/50">
@@ -620,6 +655,40 @@ export default function Settings() {
                     <option key={tz.value} value={tz.value}>{tz.label}</option>
                   ))}
                 </select>
+              </div>
+              <div className="p-4 rounded-[2rem] border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center shadow-inner border border-indigo-100 dark:border-indigo-800/50">
+                    <Bell size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">免打扰时段</h3>
+                    <p className="text-xs text-slate-500">该时段内不发送提醒通知（基于上方时区）</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 mb-1 block">开始</label>
+                    <Input
+                      type="time"
+                      value={quietHoursStart}
+                      onChange={(e) => setQuietHoursStart(e.target.value)}
+                      className="w-36"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 mb-1 block">结束</label>
+                    <Input
+                      type="time"
+                      value={quietHoursEnd}
+                      onChange={(e) => setQuietHoursEnd(e.target.value)}
+                      className="w-36"
+                    />
+                  </div>
+                  <Button onClick={saveQuietHours} disabled={quietHoursSaving} size="sm">
+                    {quietHoursSaving ? '保存中...' : '保存免打扰'}
+                  </Button>
+                </div>
               </div>
             </div>
           </section>
