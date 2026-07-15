@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Shield, Bell, Settings, BarChart2 } from 'lucide-react';
+import { prefetchRoute } from '@/lib/prefetch-routes';
 
 const items = [
   { path: '/dashboard', icon: Home, label: '首页' },
@@ -21,6 +22,9 @@ export function MobileBottomNav() {
           <button
             key={path}
             type="button"
+            onMouseEnter={() => prefetchRoute(path)}
+            onFocus={() => prefetchRoute(path)}
+            onTouchStart={() => prefetchRoute(path)}
             onClick={() => navigate(path)}
             className={`flex flex-col items-center gap-0.5 text-xs px-2 ${active ? 'text-blue-600' : 'text-slate-500'}`}
           >

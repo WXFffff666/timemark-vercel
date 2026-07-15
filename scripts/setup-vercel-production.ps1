@@ -19,7 +19,7 @@ Write-Host "==> 配置 Vercel 环境变量 (Production)"
 
 $vars = @{
   DATABASE_URL = $DatabaseUrl
-  CORS_ORIGIN = "https://timemark.the37777777.top,https://timemark-vercel.vercel.app"
+  CORS_ORIGIN = "https://timemark.the37777777.top"
   CRON_SECRET = (New-HexSecret 24)
   NODEJS_HELPERS = "0"
   TZ = "Asia/Shanghai"

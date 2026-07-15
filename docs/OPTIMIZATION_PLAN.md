@@ -1,5 +1,17 @@
 # TimeMark 优化计划与实施记录
 
+## 已完成（v2.9.1）
+
+### 关键 Bug
+- **设置页卡死**：部署向导图标误用 `<Settings />` 组件自身，导致无限递归渲染
+- **页面切换慢**：移除 `AnimatePresence mode="wait"`；路由 chunk 预加载；vendor 分包
+
+### 域名
+- 仅允许 `https://timemark.the37777777.top`（`CORS_ORIGIN` 不再包含 vercel.app）
+- `middleware.ts`：访问 `*.vercel.app` 自动 308 跳转到正式域名
+
+---
+
 ## 已完成（v2.9.0）
 
 ### Bug 修复

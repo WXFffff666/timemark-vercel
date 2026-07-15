@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
 import { useAuthStore } from './stores/auth.store';
 import { LoginPage } from './pages/Login';
 import ShareEvent from './pages/ShareEvent';
@@ -78,8 +77,7 @@ function AnimatedRoutes() {
 
   return (
     <Suspense fallback={<PageLoader />}>
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
+      <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
@@ -97,8 +95,7 @@ function AnimatedRoutes() {
           <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
           <Route path="/share/:token" element={<ShareEvent />} />
           <Route path="/" element={<Navigate to="/dashboard" />} />
-        </Routes>
-      </AnimatePresence>
+      </Routes>
     </Suspense>
   );
 }

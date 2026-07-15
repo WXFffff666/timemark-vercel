@@ -13,6 +13,7 @@ import type { Event, CreateEventRequest } from '@timemark/shared';
 import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { api } from '@/lib/api';
+import { prefetchRoute } from '@/lib/prefetch-routes';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -26,6 +27,12 @@ export function Dashboard() {
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [conflicts, setConflicts] = useState<{ date: string; count: number; names: string[] }[]>([]);
+
+  useEffect(() => {
+    prefetchRoute('/settings');
+    prefetchRoute('/security');
+    prefetchRoute('/analytics');
+  }, []);
 
   useEffect(() => {
     api.get<{ date: string; count: number; names: string[] }[]>('/features/conflicts')

@@ -47,7 +47,7 @@ app.use('*', cors({
   origin: (origin) => {
     if (!origin) return configuredOrigins[0] ?? 'http://localhost:5173';
     if (isAllowedOrigin(origin, undefined, configuredOrigins)) return origin;
-    return configuredOrigins[0] ?? 'http://localhost:5173';
+    return null;
   },
   credentials: true,
 }));

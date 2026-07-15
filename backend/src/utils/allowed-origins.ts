@@ -1,4 +1,6 @@
-/** Shared CORS / CSRF origin rules for SPA + custom domains on Vercel */
+/** Shared CORS / CSRF origin rules — production uses canonical domain only */
+
+export const CANONICAL_ORIGIN = 'https://timemark.the37777777.top';
 
 export function getConfiguredOrigins(): string[] {
   const origins = [
@@ -12,16 +14,20 @@ export function getConfiguredOrigins(): string[] {
   if (corsOrigin) {
     if (corsOrigin === '*') return ['*'];
     origins.push(...corsOrigin.split(',').map((o) => o.trim()).filter(Boolean));
+  } else if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    origins.push(CANONICAL_ORIGIN);
   }
 
-  if (process.env.VERCEL_URL) {
+  // Vercel preview URLs only when explicitly enabled (default: off)
+  if (process.env.ALLOW_VERCEL_PREVIEW === 'true' && process.env.VERCEL_URL) {
     origins.push(`https://${process.env.VERCEL_URL}`);
   }
 
-  // Common custom domain for this deployment
-  origins.push('https://timemark.the37777777.top');
+  if (!corsOrigin && !origins.includes(CANONICAL_ORIGIN)) {
+    origins.push(CANONICAL_ORIGIN);
+  }
 
-  return origins;
+  return [...new Set(origins)];
 }
 
 export function isVercelAppOrigin(origin: string): boolean {

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail } from 'lucide-react';
+import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail, Settings as SettingsIcon } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -25,9 +24,6 @@ const TIMEZONES = [
   { value: 'Australia/Sydney', label: '澳大利亚东部时间 (UTC+10)' },
   { value: 'Pacific/Auckland', label: '新西兰时间 (UTC+12)' },
 ];
-
-const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
-const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
 
 function parseAlertChannels(raw: unknown): string[] {
   if (!raw) return [];
@@ -84,21 +80,32 @@ export default function Settings() {
   const [timezone, setTimezone] = useState('Asia/Shanghai');
   const [backupLoading, setBackupLoading] = useState(false);
 
-  useEffect(() => {
-    api.get<{ timezone?: string }>('/config').then((config) => {
-      if (config?.timezone) setTimezone(config.timezone);
-    }).catch(() => {});
-  }, []);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [pageError, setPageError] = useState('');
 
   useEffect(() => {
-    api.get('/config/accounts').then((accounts: unknown) => {
-      setAlertAccounts(ensureArray(accounts));
-    }).catch(() => setAlertAccounts([]));
-    api.get('/config').then((config: any) => {
-      if (config?.alert_channels != null) {
-        setSelectedAlertChannels(parseAlertChannels(config.alert_channels));
-      }
-    }).catch(() => setSelectedAlertChannels([]));
+    let cancelled = false;
+    setPageLoading(true);
+    setPageError('');
+    Promise.all([
+      api.get<{ timezone?: string; alert_channels?: unknown }>('/config').catch(() => null),
+      api.get('/config/accounts').catch(() => []),
+    ])
+      .then(([config, accounts]) => {
+        if (cancelled) return;
+        if (config?.timezone) setTimezone(config.timezone);
+        if (config?.alert_channels != null) {
+          setSelectedAlertChannels(parseAlertChannels(config.alert_channels));
+        }
+        setAlertAccounts(ensureArray(accounts));
+      })
+      .catch((e) => {
+        if (!cancelled) setPageError(e instanceof Error ? e.message : '加载设置失败');
+      })
+      .finally(() => {
+        if (!cancelled) setPageLoading(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
   const handleTimezoneChange = async (value: string) => {
@@ -135,7 +142,8 @@ export default function Settings() {
     try {
       const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
       const response = await fetch('/api/data/export', {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error('导出失败');
       const blob = await response.blob();
@@ -267,8 +275,16 @@ export default function Settings() {
     }
   };
 
+  if (pageLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center pb-24">
+        <div className="animate-spin h-8 w-8 border-b-2 border-primary-500 rounded-full" />
+      </div>
+    );
+  }
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
+    <div className="min-h-screen pb-24">
       <header className="sticky top-6 z-40 px-4 max-w-3xl mx-auto">
         <div className="glass-panel rounded-full px-6 py-3.5 flex items-center gap-4 ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
           <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
@@ -278,9 +294,14 @@ export default function Settings() {
         </div>
       </header>
       <main className="max-w-3xl mx-auto px-6 py-10 mt-2">
-        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-8">
+        {pageError && (
+          <div className="mb-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+            部分配置加载失败：{pageError}
+          </div>
+        )}
+        <div className="space-y-8">
           {/* 个人信息 */}
-          <motion.section variants={itemVariants}>
+          <section>
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">个人信息</h2>
             <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10">
               <div 
@@ -307,10 +328,10 @@ export default function Settings() {
                 <ChevronRight className="text-slate-400" />
               </div>
             </div>
-          </motion.section>
+          </section>
 
           {/* 外观与通知 */}
-          <motion.section variants={itemVariants}>
+          <section>
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">外观与通知</h2>
             <div className="glass-panel rounded-[2.5rem] p-2 space-y-1 ring-1 ring-black/5 dark:ring-white/10">
               <div className="flex items-center justify-between p-4 rounded-[2rem]">
@@ -339,10 +360,10 @@ export default function Settings() {
                 <Switch checked={soundEnabled} onCheckedChange={handleSoundToggle} />
               </div>
             </div>
-          </motion.section>
+          </section>
 
           {/* 时区设置 */}
-          <motion.section variants={itemVariants}>
+          <section>
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">时区设置</h2>
             <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10">
               <div className="flex items-center justify-between p-4 rounded-[2rem]">
@@ -366,10 +387,10 @@ export default function Settings() {
                 </select>
               </div>
             </div>
-          </motion.section>
+          </section>
 
           {/* 安全与数据 */}
-          <motion.section variants={itemVariants}>
+          <section>
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">安全与数据</h2>
             <div className="glass-panel rounded-[2.5rem] p-2 space-y-1 ring-1 ring-black/5 dark:ring-white/10">
               <div 
@@ -410,7 +431,7 @@ export default function Settings() {
               >
                 <div className="flex items-center gap-4">
                   <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center shadow-inner border border-amber-100 dark:border-amber-800/50">
-                    <Settings size={22} />
+                    <SettingsIcon size={22} />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">部署向导</h3>
@@ -472,10 +493,10 @@ export default function Settings() {
                 </div>
               </div>
             </div>
-          </motion.section>
+          </section>
 
           {/* 安全告警渠道 */}
-          <motion.section variants={itemVariants}>
+          <section>
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider flex items-center gap-2">
               <Shield className="w-4 h-4" /> 安全告警渠道
             </h2>
@@ -498,10 +519,10 @@ export default function Settings() {
                 </div>
               )}
             </div>
-          </motion.section>
+          </section>
 
           {/* 联系人与批量邮件 */}
-          <motion.section variants={itemVariants}>
+          <section>
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">联系人与群发</h2>
             <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10 space-y-1">
               <div className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer" onClick={() => navigate('/contacts')}>
@@ -525,10 +546,10 @@ export default function Settings() {
                 <ChevronRight className="text-slate-400" />
               </div>
             </div>
-          </motion.section>
+          </section>
 
           {/* 事件模板 */}
-          <motion.section variants={itemVariants}>
+          <section>
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">事件模板</h2>
             <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10">
               <div 
@@ -547,10 +568,10 @@ export default function Settings() {
                 <ChevronRight className="text-slate-400" />
               </div>
             </div>
-          </motion.section>
+          </section>
 
           {/* 退出登录 */}
-          <motion.div variants={itemVariants} className="pt-4">
+          <div className="pt-4">
             <Button 
               variant="destructive" 
               className="w-full h-14 rounded-2xl text-base font-bold shadow-lg shadow-red-500/20"
@@ -559,8 +580,8 @@ export default function Settings() {
               <LogOut size={20} className="mr-2" />
               退出登录
             </Button>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </main>
 
       {/* 编辑资料弹窗 */}
@@ -675,6 +696,6 @@ export default function Settings() {
         </DialogContent>
       </Dialog>
       <MobileBottomNav />
-    </motion.div>
+    </div>
   );
 }
