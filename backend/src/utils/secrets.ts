@@ -73,7 +73,7 @@ function writeEnvFile(config: Record<string, string>): void {
  */
 export function initSecretKeys(): KeyConfig {
   // Vercel 环境：所有密钥来自环境变量，不访问文件系统
-  if (process.env.VERCEL === '1') {
+  if (process.env.VERCEL) {
     const jwtSecret = process.env.JWT_SECRET;
     const masterKey = process.env.MASTER_KEY;
 
