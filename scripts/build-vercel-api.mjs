@@ -1,4 +1,4 @@
-﻿import * as esbuild from 'esbuild'
+import * as esbuild from 'esbuild'
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'

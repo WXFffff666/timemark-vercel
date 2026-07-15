@@ -10,7 +10,7 @@ const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, trans
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
 
 interface LoginLog {
-  id: number;
+  id: string;
   ip_address: string;
   username?: string;
   user_agent: string;
@@ -85,10 +85,10 @@ export default function LoginHistory() {
     try {
       await api.delete('/auth/login-history');
       setLogs([]);
+      alert('登录历史已清空');
     } catch (error) {
       console.error('Failed to clear logs:', error);
-      setLogs([]);
-      alert('日志已清空');
+      alert('清空失败，请稍后重试');
     } finally {
       setClearing(false);
     }
@@ -120,11 +120,12 @@ export default function LoginHistory() {
   };
 
   const getLocation = (ip: string) => {
+    if (!ip) return '未知';
     if (ip.startsWith('192.168') || ip.startsWith('10.') || ip.startsWith('172.')) {
-      return '内网访问';
+      return '内网';
     }
-    if (ip === '127.0.0.1') return '本地';
-    return '广东深圳';
+    if (ip === '127.0.0.1' || ip === '::1') return '本地';
+    return '公网';
   };
 
   return (

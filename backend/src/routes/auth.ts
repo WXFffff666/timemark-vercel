@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock } from '../services/auth.service.js';
+import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock, getIpBlockStatus, evaluateIpBlock } from '../services/auth.service.js';
+import { getClientIp } from '../utils/client-ip.js';
 import { createSession, deleteSession, deleteSessionById, deleteAllUserSessions } from '../services/session.service.js';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
 import { loginSchema, changePasswordSchema } from '@timemark/shared';
@@ -13,148 +14,27 @@ const auth = new Hono();
 
 auth.post('/login', async (c) => {
   try {
-    // 获取真实IP - 优先从代理头获取，其次从连接获取
-    // 检查所有可能的代理头
-    const forwardedFor = c.req.header('x-forwarded-for');
-    const cfIP = c.req.header('cf-connecting-ip');
-    const realIP = c.req.header('X-Real-IP');
-    const clientIP = c.req.header('Client-IP');
-    const forwarded = c.req.header('forwarded');
-    
-    let ip = '';
-    
-    // 1. 首先尝试从代理头解析
-    if (forwardedFor) {
-      // x-forwarded-for 可能包含多个IP，取第一个（最原始的客户端IP）
-      ip = forwardedFor.split(',')[0].trim();
-    } else if (cfIP) {
-      ip = cfIP.trim();
-    } else if (realIP) {
-      ip = realIP.trim();
-    } else if (clientIP) {
-      ip = clientIP.trim();
-    } else if (forwarded) {
-      // forwarded 头格式: for=1.2.3.4, for=5.6.7.8
-      const forMatch = forwarded.match(/for=([^,]+)/i);
-      ip = forMatch ? forMatch[1].trim() : '';
-    }
-    
-    // 2. 如果没有代理头，尝试从Hono 4.x获取request IP
-    if (!ip) {
-      try {
-        // Hono 4.x 使用 getRequestIP - 但需要传入 options
-        // @ts-ignore - hono 4.x 新 API
-        if (typeof (c as any).getRequestIP === 'function') {
-          // @ts-ignore
-          ip = (c as any).getRequestIP({ proxyProof: false }) || '';
-        }
-      } catch (e) {
-        // 忽略错误
-      }
-    }
-    
-    // 3. 最后fallback: 从底层socket获取
-    if (!ip) {
-      try {
-        // Node.js request 对象
-        const raw = (c.req as any).raw;
-        if (raw?.socket?.remoteAddress) {
-          ip = raw.socket.remoteAddress.replace(/^::ffff:/, '');
-        } else if (raw?.connection?.remoteAddress) {
-          ip = raw.connection.remoteAddress.replace(/^::ffff:/, '');
-        }
-      } catch (e) {
-        // 忽略错误
-      }
-    }
-    
-    // 4. 最后的fallback - 尝试从req.info获取（hono内部）
-    if (!ip) {
-      try {
-        // @ts-ignore - hono internal
-        const req = c.req as any;
-        if (req?.raw?.socket?.remoteAddress) {
-          ip = req.raw.socket.remoteAddress.replace(/^::ffff:/, '');
-        }
-      } catch (e) {
-        // 忽略
-      }
-    }
-    
-    // 5. 如果仍然没有IP，尝试从 event.fetchAPI 获取（Server-Sent Events）
-    if (!ip) {
-      try {
-        // @ts-ignore - hono request event
-        const event = (c as any).executionCtx ?? (c as any).req?.raw;
-        if (event?.request?.headers) {
-          // 检查event.request.headers中的remote地址
-        }
-      } catch (e) {
-        // 忽略
-      }
-    }
-    
-    // 6. 对于本地开发环境，使用Docker网络网关IP或localhost
-    // Docker容器默认网关通常是172.17.0.1或192.168.65.1
-    if (!ip || ip.includes('::') || ip.length > 45) {
-      // 尝试获取实际的远端地址
-      try {
-        // @ts-ignore
-        const socket = (c as any).req?.raw?.socket;
-        if (socket?.remoteAddress) {
-          ip = socket.remoteAddress;
-          // 处理IPv6格式
-          if (ip.startsWith('::ffff:')) {
-            ip = ip.replace('::ffff:', '');
-          }
-          // 如果是IPv6本地地址，转换为IPv4本地地址
-          if (ip === '::1' || ip.startsWith('fe80') || ip.startsWith('::')) {
-            ip = '127.0.0.1';
-          }
-        }
-      } catch (e) {
-        ip = '127.0.0.1';
-      }
-    }
-    
-    // 7. 最终清理：确保返回有效的IPv4地址
-    // 清理IPv6前缀和其他无效值
-    if (ip) {
-      // 移除IPv6映射的IPv4前缀 ::ffff:
-      if (ip.startsWith('::ffff:')) {
-        ip = ip.replace('::ffff:', '');
-      }
-      // 如果仍然包含冒号（IPv6），说明是纯IPv6地址
-      if (ip.includes(':') && !ip.includes('.')) {
-        ip = '';
-      }
-    }
-    
-    // 验证并最终设置
-    const validIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
-    if (!ip || !validIPv4.test(ip) || ip === '0.0.0.0' || ip.startsWith('127.') || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
-      // 对于本地/内网访问，都使用有意义的外网IP
-      // 在Docker容器中访问，使用172.17.0.1作为默认网关IP
-      ip = ip && validIPv4.test(ip) && !ip.startsWith('127.') ? ip : '127.0.0.1';
-    }
-    
-    console.log('[Auth] Client IP detected:', ip, 'headers:', {
-      'x-forwarded-for': forwardedFor,
-      'cf-connecting-ip': cfIP,
-      'X-Real-IP': realIP,
-      'forwarded': forwarded
-    });
-    
+    const ip = getClientIp(c);
     const userAgent = c.req.header('user-agent') || 'unknown';
-    
+
     const body = await c.req.json();
     const parsed = loginSchema.safeParse(body);
-    
+
     if (!parsed.success) {
       return c.json({ success: false, error: 'Invalid input' }, 400);
     }
 
     const { username, password, deviceFingerprint, rememberMe = false } = parsed.data;
+
+    const ipBlock = await getIpBlockStatus(ip);
+    if (ipBlock.isBlocked) {
+      return c.json({
+        success: false,
+        error: `该 IP 已被临时封禁，剩余 ${ipBlock.remainingSeconds} 秒`,
+        locked: true,
+        remainingSeconds: ipBlock.remainingSeconds,
+      }, 429);
+    }
 
     const lockStatus = await getAccountLockStatus({ username, ip });
     if (lockStatus.isLocked) {
@@ -171,6 +51,7 @@ auth.post('/login', async (c) => {
 
     if (!user) {
       await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'Invalid credentials');
+      await evaluateIpBlock(ip);
 
       const tracking = await trackLoginFailure({ username, ip });
 
@@ -302,6 +183,17 @@ auth.post('/change-password', authMiddleware, async (c) => {
     const currentPayload = bearer ? await verifyToken(bearer) : null;
     await deleteAllUserSessions(user.id, currentPayload?.sessionToken);
 
+    await sendSecurityAlert({
+      userId: Number(user.id),
+      adminEmails: [],
+      username: user.username,
+      ip: getClientIp(c),
+      userAgent: c.req.header('user-agent') || 'unknown',
+      failureCount: 0,
+      locked: false,
+      alertType: 'password_change',
+    });
+
     return c.json({ success: true, message: 'Password changed successfully' });
   } catch (error: any) {
     console.error('[Change Password Error]', error);
@@ -353,38 +245,48 @@ auth.get('/session', authMiddleware, async (c) => {
 
 // ============ Login history endpoints ============
 
+function toIsoLoginTime(value: unknown): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const s = String(value);
+  if (s.includes('T') || s.endsWith('Z')) return new Date(s).toISOString();
+  return new Date(`${s}Z`).toISOString();
+}
+
 auth.get('/login-history', authMiddleware, async (c) => {
   const user = c.get('user');
   try {
-    // 将 user.id 转换为整数，因为数据库中 user_id 是 integer 类型
     const numericUserId = parseInt(user.id, 10);
-    
+
     const result = await query(
       `SELECT id, ip_address, username, user_agent, device_fingerprint, success, failure_reason, login_time
-       FROM login_logs 
+       FROM login_logs
        WHERE user_id = $1 OR (user_id IS NULL AND username = $2)
-       ORDER BY login_time DESC LIMIT 50`,
-      [numericUserId, user.username]
+       ORDER BY login_time DESC LIMIT 100`,
+      [numericUserId, user.username],
     );
-    
-    // SQLite datetime('now') stores UTC time. Convert to proper ISO 8601 so frontend
-    // can correctly interpret the timezone and display local time.
-    const rows = result.rows.map((row: any) => ({
+
+    const rows = result.rows.map((row: Record<string, unknown>) => ({
       ...row,
-      login_time: row.login_time ? new Date(row.login_time + 'Z').toISOString() : row.login_time
+      success: row.success === true || row.success === 't',
+      login_time: toIsoLoginTime(row.login_time),
     }));
-    
+
     return c.json({ success: true, data: rows });
   } catch (error) {
     console.error('Failed to fetch login history:', error);
-    return c.json({ success: true, data: [] });
+    return c.json({ success: false, error: 'Failed to fetch login history' }, 500);
   }
 });
 
 auth.delete('/login-history', authMiddleware, async (c) => {
   const user = c.get('user');
   try {
-    await query('DELETE FROM login_logs WHERE user_id = $1', [parseInt(user.id, 10)]);
+    const numericUserId = parseInt(user.id, 10);
+    await query(
+      'DELETE FROM login_logs WHERE user_id = $1 OR (user_id IS NULL AND username = $2)',
+      [numericUserId, user.username],
+    );
     return c.json({ success: true });
   } catch (error) {
     console.error('Failed to clear login history:', error);

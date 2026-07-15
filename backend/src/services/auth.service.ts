@@ -58,9 +58,10 @@ export async function createLoginLog(
     if (success) {
       const numericId = parseInt(userIdOrUsername, 10);
       if (!isNaN(numericId)) {
-        const userResult = await query('SELECT id FROM users WHERE id = $1', [numericId]);
+        const userResult = await query('SELECT id, username FROM users WHERE id = $1', [numericId]);
         if (userResult.rows.length > 0) {
           userId = userResult.rows[0].id;
+          username = userResult.rows[0].username;
         }
       }
     } else {
@@ -190,4 +191,58 @@ export async function trackLoginFailure(params: { username: string; ip: string }
 
 export async function clearAccountLock(username: string): Promise<void> {
   await query(`DELETE FROM login_attempts WHERE identifier = $1 AND type = 'username'`, [username]);
+}
+
+// ============ IP 封禁（公网暴力破解防护，基于 PostgreSQL） ============
+
+const IP_BAN_THRESHOLD = 25;
+const IP_BAN_MINUTES = 60;
+
+function parseLockedUntilMs(lockedUntil: string | Date | null): number | null {
+  if (!lockedUntil) return null;
+  const raw = typeof lockedUntil === 'string' ? lockedUntil : lockedUntil.toISOString();
+  const ms = raw.includes('T') || raw.endsWith('Z')
+    ? new Date(raw).getTime()
+    : new Date(`${raw}Z`).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+export async function getIpBlockStatus(ip: string): Promise<{ isBlocked: boolean; remainingSeconds: number }> {
+  const result = await query(
+    `SELECT locked_until FROM login_attempts WHERE identifier = $1 AND type = 'ip'`,
+    [ip],
+  );
+  const untilMs = parseLockedUntilMs(result.rows[0]?.locked_until ?? null);
+  if (!untilMs || untilMs <= Date.now()) {
+    return { isBlocked: false, remainingSeconds: 0 };
+  }
+  return {
+    isBlocked: true,
+    remainingSeconds: Math.max(0, Math.floor((untilMs - Date.now()) / 1000)),
+  };
+}
+
+/** 统计该 IP 近 1 小时失败次数，超阈值则封禁 */
+export async function evaluateIpBlock(ip: string): Promise<void> {
+  if (!ip || ip === '127.0.0.1') return;
+
+  const countResult = await query(
+    `SELECT COUNT(*)::int AS count FROM login_logs
+     WHERE ip_address = $1 AND success = FALSE
+       AND login_time > NOW() - INTERVAL '1 hour'`,
+    [ip],
+  );
+  const count = countResult.rows[0]?.count ?? 0;
+  if (count < IP_BAN_THRESHOLD) return;
+
+  const lockedUntil = new Date(Date.now() + IP_BAN_MINUTES * 60 * 1000).toISOString();
+  await query(
+    `INSERT INTO login_attempts (identifier, type, failed_count, locked_until, last_attempt)
+     VALUES ($1, 'ip', $2, $3, CURRENT_TIMESTAMP)
+     ON CONFLICT (identifier, type) DO UPDATE SET
+       failed_count = $2,
+       locked_until = $3,
+       last_attempt = CURRENT_TIMESTAMP`,
+    [ip, count, lockedUntil],
+  );
 }

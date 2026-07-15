@@ -45,7 +45,7 @@ export function isAllowedOrigin(
 ): boolean {
   if (!origin) return false;
   if (allowedOrigins.includes('*')) return true;
-  if (isVercelAppOrigin(origin)) return true;
+  if (process.env.ALLOW_VERCEL_PREVIEW === 'true' && isVercelAppOrigin(origin)) return true;
   if (originMatchesHost(origin, host)) return true;
 
   return allowedOrigins.some((allowed) => {
