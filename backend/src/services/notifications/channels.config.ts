@@ -773,6 +773,47 @@ const tokenChannels: ChannelTemplate[] = [
     docsUrl: 'https://www.pushdeer.com/'
   },
   {
+    id: 'twilio',
+    name: 'Twilio SMS',
+    description: '通过 Twilio 发送短信提醒',
+    icon: 'Phone',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Account SID',
+        type: 'password',
+        required: true,
+        description: 'Twilio 控制台 Account SID',
+      },
+      {
+        name: 'secret',
+        label: 'Auth Token',
+        type: 'password',
+        required: true,
+        description: 'Twilio Auth Token',
+      },
+      {
+        name: 'webhook',
+        label: '发信号码 (From)',
+        type: 'text',
+        required: true,
+        placeholder: '+1234567890',
+        description: '已验证的 Twilio 发信号码',
+      },
+      {
+        name: 'chat_id',
+        label: '收件号码 (To)',
+        type: 'text',
+        required: true,
+        placeholder: '+8613800138000',
+        description: '接收短信的手机号',
+      },
+    ],
+    docsUrl: 'https://www.twilio.com/docs/sms',
+  },
+  {
     id: 'wecomapp',
     name: '企微应用 (WeComApp)',
     description: '企业微信应用消息推送',

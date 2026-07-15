@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Trash2, UserPlus, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
 
 interface FixedContact {
@@ -19,6 +20,16 @@ interface FixedContact {
   validation_status?: string;
 }
 
+interface ContactGroup {
+  id: number;
+  name: string;
+}
+
+interface GroupMember {
+  group_id: number;
+  email: string;
+}
+
 const emptyForm = {
   name: '',
   nickname: '',
@@ -31,16 +42,33 @@ const emptyForm = {
 
 export default function Contacts() {
   const navigate = useNavigate();
+  const [tab, setTab] = useState<'contacts' | 'groups'>('contacts');
   const [contacts, setContacts] = useState<FixedContact[]>([]);
+  const [groups, setGroups] = useState<ContactGroup[]>([]);
+  const [members, setMembers] = useState<GroupMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [groupName, setGroupName] = useState('');
+  const [groupEmails, setGroupEmails] = useState('');
   const [error, setError] = useState('');
 
+  const loadContacts = async () => {
+    const data = await api.get<FixedContact[]>('/contacts');
+    setContacts(data || []);
+  };
+
+  const loadGroups = async () => {
+    const data = await api.get<{ groups: ContactGroup[]; members: GroupMember[] }>('/contacts/groups');
+    setGroups(data?.groups || []);
+    setMembers(data?.members || []);
+  };
+
   const load = async () => {
+    setLoading(true);
     try {
-      const data = await api.get<FixedContact[]>('/contacts');
-      setContacts(data || []);
+      await Promise.all([loadContacts(), loadGroups()]);
     } finally {
       setLoading(false);
     }
@@ -54,7 +82,21 @@ export default function Contacts() {
       await api.post('/contacts', form);
       setOpen(false);
       setForm(emptyForm);
-      await load();
+      await loadContacts();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存失败');
+    }
+  };
+
+  const saveGroup = async () => {
+    setError('');
+    try {
+      const emails = groupEmails.split(/[,;\s]+/).map((e) => e.trim()).filter(Boolean);
+      await api.post('/contacts/groups', { name: groupName.trim(), emails });
+      setGroupOpen(false);
+      setGroupName('');
+      setGroupEmails('');
+      await loadGroups();
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存失败');
     }
@@ -63,56 +105,91 @@ export default function Contacts() {
   const remove = async (id: number) => {
     if (!confirm('确定删除该联系人？')) return;
     await api.delete(`/contacts/${id}`);
-    await load();
+    await loadContacts();
   };
+
+  const membersFor = (groupId: number) => members.filter((m) => m.group_id === groupId);
 
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24">
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
+      <div className="flex items-center gap-3 mb-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/settings')} aria-label="返回" className="min-h-11 min-w-11">
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold">固定联系人</h1>
           <p className="text-sm text-slate-500">快捷用于提醒与批量邮件</p>
         </div>
-        <Button onClick={() => setOpen(true)}>
+        <Button
+          onClick={() => (tab === 'contacts' ? setOpen(true) : setGroupOpen(true))}
+          className="min-h-11"
+        >
           <Plus className="w-4 h-4 mr-1" /> 添加
         </Button>
       </div>
 
+      <Tabs value={tab} onValueChange={(v) => setTab(v as 'contacts' | 'groups')} className="mb-6">
+        <TabsList>
+          <TabsTrigger value="contacts">联系人</TabsTrigger>
+          <TabsTrigger value="groups">分组</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {loading ? (
         <p className="text-slate-500">加载中…</p>
-      ) : contacts.length === 0 ? (
+      ) : tab === 'contacts' ? (
+        contacts.length === 0 ? (
+          <div className="text-center py-16 text-slate-500">
+            <UserPlus className="w-12 h-12 mx-auto mb-3 opacity-40" />
+            <p>暂无联系人，点击右上角添加</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {contacts.map((c) => (
+              <div key={c.id} className="rounded-xl border bg-white/70 dark:bg-slate-900/70 p-4 flex gap-3 items-start">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold">{c.name}</span>
+                    {c.nickname && <span className="text-sm text-slate-500">({c.nickname})</span>}
+                    {c.validation_status === 'valid' ? (
+                      <Badge className="bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3 mr-1" />已验证</Badge>
+                    ) : (
+                      <Badge variant="outline"><AlertCircle className="w-3 h-3 mr-1" />待验证</Badge>
+                    )}
+                  </div>
+                  <div className="text-sm text-slate-600 dark:text-slate-400 mt-1 space-y-0.5">
+                    {c.email && <div>📧 {c.email}</div>}
+                    {c.phone && <div>📱 {c.phone}</div>}
+                    {c.telegram_chat_id && <div>✈️ Telegram {c.telegram_chat_id}</div>}
+                    {c.qq && <div>🐧 QQ {c.qq}</div>}
+                    {c.wxpusher_uid && <div>💬 WxPusher {c.wxpusher_uid}</div>}
+                  </div>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => remove(c.id)} aria-label="删除联系人" className="min-h-11 min-w-11">
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )
+      ) : groups.length === 0 ? (
         <div className="text-center py-16 text-slate-500">
-          <UserPlus className="w-12 h-12 mx-auto mb-3 opacity-40" />
-          <p>暂无联系人，点击右上角添加</p>
+          <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
+          <p>暂无分组，用于批量邮件收件人</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {contacts.map((c) => (
-            <div key={c.id} className="rounded-xl border bg-white/70 dark:bg-slate-900/70 p-4 flex gap-3 items-start">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold">{c.name}</span>
-                  {c.nickname && <span className="text-sm text-slate-500">({c.nickname})</span>}
-                  {c.validation_status === 'valid' ? (
-                    <Badge className="bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3 mr-1" />已验证</Badge>
-                  ) : (
-                    <Badge variant="outline"><AlertCircle className="w-3 h-3 mr-1" />待验证</Badge>
-                  )}
-                </div>
-                <div className="text-sm text-slate-600 dark:text-slate-400 mt-1 space-y-0.5">
-                  {c.email && <div>📧 {c.email}</div>}
-                  {c.phone && <div>📱 {c.phone}</div>}
-                  {c.telegram_chat_id && <div>✈️ Telegram {c.telegram_chat_id}</div>}
-                  {c.qq && <div>🐧 QQ {c.qq}</div>}
-                  {c.wxpusher_uid && <div>💬 WxPusher {c.wxpusher_uid}</div>}
-                </div>
+          {groups.map((g) => (
+            <div key={g.id} className="rounded-xl border bg-white/70 dark:bg-slate-900/70 p-4">
+              <h3 className="font-semibold mb-2">{g.name}</h3>
+              <div className="flex flex-wrap gap-1">
+                {membersFor(g.id).map((m) => (
+                  <Badge key={m.email} variant="secondary">{m.email}</Badge>
+                ))}
+                {membersFor(g.id).length === 0 && (
+                  <span className="text-xs text-slate-400">暂无成员邮箱</span>
+                )}
               </div>
-              <Button variant="ghost" size="icon" onClick={() => remove(c.id)}>
-                <Trash2 className="w-4 h-4 text-red-500" />
-              </Button>
             </div>
           ))}
         </div>
@@ -124,7 +201,7 @@ export default function Contacts() {
             <DialogTitle>添加固定联系人</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <Input placeholder="姓名 *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Input placeholder="姓名 *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label="姓名" />
             <Input placeholder="昵称" value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} />
             <Input placeholder="邮箱" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <Input placeholder="手机" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
@@ -132,7 +209,27 @@ export default function Contacts() {
             <Input placeholder="QQ 号" value={form.qq} onChange={(e) => setForm({ ...form, qq: e.target.value })} />
             <Input placeholder="WxPusher UID" value={form.wxpusherUid} onChange={(e) => setForm({ ...form, wxpusherUid: e.target.value })} />
             {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button className="w-full" onClick={save}>保存并验证</Button>
+            <Button className="w-full min-h-11" onClick={save}>保存并验证</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={groupOpen} onOpenChange={setGroupOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新建联系人分组</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="分组名称 *" value={groupName} onChange={(e) => setGroupName(e.target.value)} aria-label="分组名称" />
+            <textarea
+              placeholder="成员邮箱，逗号或换行分隔"
+              value={groupEmails}
+              onChange={(e) => setGroupEmails(e.target.value)}
+              className="w-full min-h-[80px] rounded-xl border p-3 text-sm"
+              aria-label="成员邮箱"
+            />
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            <Button className="w-full min-h-11" onClick={saveGroup}>创建分组</Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -19,9 +19,12 @@ declare global {
           callback: (token: string) => void;
           'expired-callback'?: () => void;
           'error-callback'?: () => void;
+          'timeout-callback'?: () => void;
+          execution?: 'render' | 'execute';
         },
       ) => string;
       reset: (id: string) => void;
+      execute: (id: string) => void;
     };
   }
 }
@@ -50,6 +53,7 @@ export function LoginForm() {
   const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const pendingSubmitRef = useRef(false);
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
 
@@ -99,7 +103,14 @@ export function LoginForm() {
       if (window.turnstile && turnstileRef.current && !widgetIdRef.current) {
         widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
           sitekey: turnstileSiteKey,
-          callback: (token: string) => setTurnstileToken(token),
+          execution: 'execute',
+          callback: (token: string) => {
+            setTurnstileToken(token);
+            if (pendingSubmitRef.current) {
+              pendingSubmitRef.current = false;
+              void submitLogin(token);
+            }
+          },
           'expired-callback': () => setTurnstileToken(''),
           'error-callback': () => setTurnstileToken(''),
           'timeout-callback': () => setTurnstileToken(''),
@@ -110,21 +121,13 @@ export function LoginForm() {
     return () => { script.remove(); };
   }, [turnstileSiteKey]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isLocked) return;
-
-    setError('');
+  const submitLogin = async (turnstileOverride?: string) => {
     const trimmedUsername = username.trim();
     const trimmedPassword = password.trim();
-    if (trimmedUsername.length < 3) return setError('用户名至少3个字符');
-    if (trimmedPassword.length < 8) return setError('密码至少8个字符');
-    if (turnstileSiteKey && !turnstileToken) return setError('请先完成人机验证');
-
     setLoading(true);
     try {
       const { mustChangePassword } = await login(trimmedUsername, trimmedPassword, rememberMe, {
-        turnstileToken: turnstileToken || undefined,
+        turnstileToken: turnstileOverride || turnstileToken || undefined,
         totpCode: totpCode || undefined,
       });
       if (mustChangePassword) {
@@ -157,16 +160,36 @@ export function LoginForm() {
         setError(message);
       }
 
-      // Turnstile token is single-use once sent to server — refresh widget after consumed attempts
-      const turnstileConsumed = ![
-        'turnstile_required',
-      ].includes(code);
-      if (turnstileSiteKey && turnstileConsumed && turnstileToken) {
+      const turnstileConsumed = !['turnstile_required'].includes(code);
+      if (turnstileSiteKey && turnstileConsumed && (turnstileOverride || turnstileToken)) {
         resetTurnstile();
       }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isLocked) return;
+
+    setError('');
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
+    if (trimmedUsername.length < 3) return setError('用户名至少3个字符');
+    if (trimmedPassword.length < 8) return setError('密码至少8个字符');
+
+    if (turnstileSiteKey && !turnstileToken) {
+      pendingSubmitRef.current = true;
+      if (widgetIdRef.current && window.turnstile) {
+        window.turnstile.execute(widgetIdRef.current);
+      } else {
+        setError('人机验证加载中，请稍候再试');
+      }
+      return;
+    }
+
+    await submitLogin();
   };
 
   return (

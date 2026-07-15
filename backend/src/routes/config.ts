@@ -263,6 +263,66 @@ config.post('/reminders', async (c) => {
   return c.json({ success: true });
 });
 
+config.get('/notification-advanced', async (c) => {
+  const user = c.get('user');
+  const row = await query(
+    `SELECT markdown_email_template, notification_preset, api_scopes
+     FROM user_configs WHERE user_id = $1`,
+    [Number(user.id)],
+  );
+  const r = row.rows[0] || {};
+  return c.json({
+    success: true,
+    data: {
+      markdown_email_template: r.markdown_email_template ?? null,
+      notification_preset: r.notification_preset ?? null,
+      api_scopes: r.api_scopes ?? 'read,write',
+    },
+  });
+});
+
+config.post('/notification-advanced', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  const userId = Number(user.id);
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  let idx = 1;
+
+  if (typeof body.markdown_email_template === 'string') {
+    sets.push(`markdown_email_template = $${idx++}`);
+    params.push(body.markdown_email_template.slice(0, 8000));
+  } else if (body.markdown_email_template === null) {
+    sets.push(`markdown_email_template = NULL`);
+  }
+
+  if (typeof body.notification_preset === 'string') {
+    sets.push(`notification_preset = $${idx++}`);
+    params.push(body.notification_preset.slice(0, 50));
+  } else if (body.notification_preset === null) {
+    sets.push(`notification_preset = NULL`);
+  }
+
+  if (typeof body.api_scopes === 'string') {
+    const allowed = ['read', 'write'];
+    const scopes = body.api_scopes.split(',').map((s: string) => s.trim()).filter((s: string) => allowed.includes(s));
+    sets.push(`api_scopes = $${idx++}`);
+    params.push(scopes.length ? scopes.join(',') : 'read');
+  }
+
+  if (sets.length === 0) {
+    return c.json({ success: false, error: '无有效字段' }, 400);
+  }
+
+  params.push(userId);
+  await query(
+    `INSERT INTO user_configs (user_id) VALUES ($${idx})
+     ON CONFLICT (user_id) DO UPDATE SET ${sets.join(', ')}`,
+    params,
+  );
+  return c.json({ success: true });
+});
+
 config.post('/notification-defaults', async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));

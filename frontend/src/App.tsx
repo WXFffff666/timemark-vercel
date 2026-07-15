@@ -25,6 +25,7 @@ const CountdownWidget = lazy(() => import('./pages/CountdownWidget'));
 const DockerMigration = lazy(() => import('./pages/DockerMigration'));
 const LunarHolidays = lazy(() => import('./pages/LunarHolidays'));
 const CalendarPage = lazy(() => import('./pages/Calendar'));
+const NotificationRules = lazy(() => import('./pages/NotificationRules'));
 
 function PageLoader() {
   return (
@@ -95,6 +96,7 @@ function AnimatedRoutes() {
           <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
           <Route path="/trigger-logs" element={<ProtectedRoute><TriggerLogs /></ProtectedRoute>} />
           <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
+          <Route path="/notification-rules" element={<ProtectedRoute><NotificationRules /></ProtectedRoute>} />
           <Route path="/annual-report" element={<ProtectedRoute><AnnualReport /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />

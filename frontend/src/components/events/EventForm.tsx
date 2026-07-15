@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -163,6 +163,31 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     lunarDate: undefined,
     reminderConfig: defaultReminderConfig,
   });
+
+  const reminderTimeline = useMemo(() => {
+    if (!formData.date) return [];
+    const days = formData.reminderConfig?.daysBeforeList?.length
+      ? formData.reminderConfig.daysBeforeList
+      : [1, 3];
+    const allDays = days.includes(0) ? days : [0, ...days];
+    const times = formData.reminderConfig?.reminderTimes?.length
+      ? formData.reminderConfig.reminderTimes
+      : ['09:00'];
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const entries: { date: string; daysBefore: number; time: string }[] = [];
+
+    for (const d of [...new Set(allDays)].sort((a, b) => b - a)) {
+      const remind = new Date(formData.date + 'T00:00:00');
+      remind.setDate(remind.getDate() - d);
+      const dateStr = `${remind.getFullYear()}-${String(remind.getMonth() + 1).padStart(2, '0')}-${String(remind.getDate()).padStart(2, '0')}`;
+      if (dateStr >= todayStr) {
+        for (const time of times) {
+          entries.push({ date: dateStr, daysBefore: d, time });
+        }
+      }
+    }
+    return entries.slice(0, 16);
+  }, [formData.date, formData.reminderConfig]);
 
   const [lunarInputValue, setLunarInputValue] = useState('');
 
@@ -1037,6 +1062,24 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                       ))}
                     </div>
                   </div>
+
+                  {reminderTimeline.length > 0 && (
+                    <div className="space-y-2" aria-label="下次提醒时间线">
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                        <CalendarClock size={14} /> 提醒时间线预览
+                      </label>
+                      <ul className="text-xs space-y-1 max-h-32 overflow-y-auto rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+                        {reminderTimeline.map((item, i) => (
+                          <li key={`${item.date}-${item.time}-${i}`} className="flex justify-between gap-2 text-slate-600 dark:text-slate-300">
+                            <span>{item.date} {item.time}</span>
+                            <span className="text-slate-400 shrink-0">
+                              {item.daysBefore === 0 ? '当天' : `提前 ${item.daysBefore} 天`}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   {/* 通知渠道选择 */}
                   <div className="space-y-2">

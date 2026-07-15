@@ -30,6 +30,7 @@ import { sendGotifyNotification } from './gotify.service.js';
 import { sendMeowNotification } from './meow.service.js';
 import { sendPushMeNotification } from './pushme.service.js';
 import { sendPushDeerNotification } from './pushdeer.service.js';
+import { sendTwilioSmsNotification } from './twilio.service.js';
 import { sendWeComAppNotification } from './wecomapp.service.js';
 import { filterSupportedChannels } from './supported-channels.js';
 
@@ -196,6 +197,7 @@ const channelToAccountType: Record<string, string> = {
   'meow': 'meow',
   'pushme': 'pushme',
   'pushdeer': 'pushdeer',
+  'twilio': 'twilio',
   'wecomapp': 'wecomapp',
   // Plugin channels
   'wechat_personal': 'wechat_personal',
@@ -308,6 +310,11 @@ function getChannelConfigFromAccount(
     case 'pushdeer':
       return account.token
         ? { token: account.token, webhook: account.webhook }
+        : null;
+
+    case 'twilio':
+      return (account.token && account.secret && account.webhook && account.chat_id)
+        ? { token: account.token, secret: account.secret, webhook: account.webhook, chat_id: account.chat_id }
         : null;
     
     case 'wecomapp':
@@ -640,7 +647,10 @@ export async function sendNotifications(
               fromEmail,
               primaryEmail,
               idempotencyKey,
-              recipientEmails.length > 1 ? { bcc: recipientEmails.slice(1) } : undefined,
+              {
+                bcc: recipientEmails.length > 1 ? recipientEmails.slice(1) : undefined,
+                markdownTemplate: config?.markdown_email_template,
+              },
             ));
             for (const email of recipientEmails) {
               await logEmail({
@@ -706,6 +716,10 @@ export async function sendNotifications(
           await retryWithBackoff(() => sendPushMeNotification(mappedEvent, chConfig.token));
         else if (ch === 'pushdeer' && chConfig.token)
           await retryWithBackoff(() => sendPushDeerNotification(mappedEvent, chConfig.token, chConfig.webhook));
+        else if (ch === 'twilio' && chConfig.token && chConfig.secret && chConfig.webhook && chConfig.chat_id)
+          await retryWithBackoff(() => sendTwilioSmsNotification(
+            mappedEvent, chConfig.token, chConfig.secret, chConfig.webhook, chConfig.chat_id,
+          ));
         else if (ch === 'wecomapp' && chConfig.token && chConfig.secret && chConfig.chat_id && chConfig.webhook)
           await retryWithBackoff(() => sendWeComAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id, chConfig.webhook));
         // Ntfy, Pushover, Apprise
@@ -878,6 +892,8 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any): P
   else if (ch === 'meow' && chConfig.token) await sendMeowNotification(mappedEvent, chConfig.token);
   else if (ch === 'pushme' && chConfig.token) await sendPushMeNotification(mappedEvent, chConfig.token);
   else if (ch === 'pushdeer' && chConfig.token) await sendPushDeerNotification(mappedEvent, chConfig.token, chConfig.webhook);
+  else if (ch === 'twilio' && chConfig.token && chConfig.secret && chConfig.webhook && chConfig.chat_id)
+    await sendTwilioSmsNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.webhook, chConfig.chat_id);
   else if (ch === 'wecomapp' && chConfig.token && chConfig.secret && chConfig.chat_id && chConfig.webhook)
     await sendWeComAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id, chConfig.webhook);
   else if (ch === 'ntfy' && chConfig.webhook && chConfig.token)

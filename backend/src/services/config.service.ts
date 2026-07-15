@@ -181,6 +181,9 @@ export async function getUserConfig(userId: number): Promise<any> {
     quiet_hours_start: r.quiet_hours_start || null,
     quiet_hours_end: r.quiet_hours_end || null,
     default_test_email: r.default_test_email || null,
+    markdown_email_template: r.markdown_email_template || null,
+    notification_preset: r.notification_preset || null,
+    api_scopes: r.api_scopes || 'read,write',
   };
 
   // Persist re-encrypted values if any fields were migrated

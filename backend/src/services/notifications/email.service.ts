@@ -2,25 +2,43 @@ import { Resend } from 'resend';
 import { getBlessing } from '@timemark/shared/blessings';
 import { escapeHtml } from '../../utils/html.js';
 
+function renderMarkdownEmailTemplate(template: string, vars: Record<string, string>): string {
+  let text = template;
+  for (const [key, value] of Object.entries(vars)) {
+    text = text.split(`{{${key}}}`).join(escapeHtml(value));
+  }
+  const body = text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+  return `<!DOCTYPE html><html><body style="font-family:sans-serif;line-height:1.6;padding:20px">${body}</body></html>`;
+}
+
 export async function sendEmailNotification(
   event: any,
   apiKey: string,
   fromEmail: string,
   toEmail: string,
   idempotencyKey?: string,
-  options?: { bcc?: string[] },
+  options?: { bcc?: string[]; markdownTemplate?: string | null },
 ): Promise<void> {
   const resend = new Resend(apiKey);
   
-  // 智能匹配祝福语：根据被提醒人(personName)和提醒人(reminderRecipientName)自动适配
   const blessing = getBlessing(
     event.type, 
     event.reminderConfig?.customMessage,
-    event.personName,           // 被提醒人/事件所有者（妈妈）
-    event.reminderRecipientName // 提醒人/接收通知的人（我）
+    event.personName,
+    event.reminderRecipientName
   );
 
-  const html = `
+  const html = options?.markdownTemplate?.trim()
+    ? renderMarkdownEmailTemplate(options.markdownTemplate, {
+        name: String(event.name || ''),
+        date: String(event.date || ''),
+        type: String(event.type || ''),
+        blessing,
+        message: String(event.customMessage || blessing),
+      })
+    : `
 <!DOCTYPE html>
 <html>
 <head>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail, Settings as SettingsIcon, Link2, Copy, RefreshCw, Plus, Trash2 } from 'lucide-react';
+import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail, Settings as SettingsIcon, Link2, Copy, RefreshCw, Plus, Trash2, GitBranch, Languages } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/lib/api';
+import { getLang, setLang } from '@/i18n';
 
 const TIMEZONES = [
   { value: 'Asia/Shanghai', label: '中国标准时间 (UTC+8)' },
@@ -97,6 +98,10 @@ export default function Settings() {
   const [integrationsSaving, setIntegrationsSaving] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [markdownTemplate, setMarkdownTemplate] = useState('');
+  const [apiScopes, setApiScopes] = useState('read,write');
+  const [advancedSaving, setAdvancedSaving] = useState(false);
+  const [uiLang, setUiLang] = useState<'zh' | 'en'>(getLang());
 
   useEffect(() => {
     let cancelled = false;
@@ -107,8 +112,9 @@ export default function Settings() {
       api.get('/config/accounts').catch(() => []),
       api.get<any[]>('/email-logs?limit=50').catch(() => []),
       api.get<{ webhookUrl?: string | null; inboxReceiveUrl?: string | null; calendarFeedUrl?: string | null; externalCalendarUrls?: string[] }>('/calendar/integrations').catch(() => null),
+      api.get<{ markdown_email_template?: string | null; api_scopes?: string }>('/config/notification-advanced').catch(() => null),
     ])
-      .then(([config, accounts, logs, integrations]) => {
+      .then(([config, accounts, logs, integrations, advanced]) => {
         if (cancelled) return;
         if (config?.timezone) setTimezone(config.timezone);
         if (config?.quiet_hours_start) setQuietHoursStart(config.quiet_hours_start);
@@ -128,6 +134,8 @@ export default function Settings() {
           setCalendarFeedUrl(integrations.calendarFeedUrl ?? null);
           setExternalCalendarUrls(Array.isArray(integrations.externalCalendarUrls) ? integrations.externalCalendarUrls : []);
         }
+        if (advanced?.markdown_email_template) setMarkdownTemplate(advanced.markdown_email_template);
+        if (advanced?.api_scopes) setApiScopes(advanced.api_scopes);
       })
       .catch((e) => {
         if (!cancelled) setPageError(e instanceof Error ? e.message : '加载设置失败');
@@ -228,6 +236,26 @@ export default function Settings() {
     } finally {
       setQuietHoursSaving(false);
     }
+  };
+
+  const saveAdvancedNotification = async () => {
+    setAdvancedSaving(true);
+    try {
+      await api.post('/config/notification-advanced', {
+        markdown_email_template: markdownTemplate.trim() || null,
+        api_scopes: apiScopes,
+      });
+      alert('高级通知设置已保存');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setAdvancedSaving(false);
+    }
+  };
+
+  const handleLangChange = (lang: 'zh' | 'en') => {
+    setUiLang(lang);
+    setLang(lang);
   };
 
   // Sound setting with localStorage persistence
@@ -685,10 +713,56 @@ export default function Settings() {
                       className="w-36"
                     />
                   </div>
-                  <Button onClick={saveQuietHours} disabled={quietHoursSaving} size="sm">
+                  <Button onClick={saveQuietHours} disabled={quietHoursSaving} size="sm" className="min-h-11">
                     {quietHoursSaving ? '保存中...' : '保存免打扰'}
                   </Button>
                 </div>
+              </div>
+              <div className="p-4 rounded-[2rem] border-t border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-violet-50 dark:bg-violet-900/30 text-violet-600 flex items-center justify-center">
+                    <GitBranch size={22} />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold">提醒规则与套餐</h3>
+                    <p className="text-xs text-slate-500">按提前天数分级渠道、条件规则</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="min-h-11" onClick={() => navigate('/notification-rules')}>
+                    管理
+                  </Button>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1 block">Markdown 邮件模板</label>
+                  <textarea
+                    value={markdownTemplate}
+                    onChange={(e) => setMarkdownTemplate(e.target.value)}
+                    placeholder={'**{{name}}** 提醒\n日期：{{date}}\n\n{{blessing}}'}
+                    className="w-full min-h-[100px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-sm font-mono"
+                    aria-label="Markdown 邮件模板"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">变量：name, date, type, blessing, message</p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1 block">API Key 权限范围</label>
+                  <select
+                    value={apiScopes}
+                    onChange={(e) => setApiScopes(e.target.value)}
+                    className="h-11 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm w-full max-w-xs"
+                    aria-label="API Key 权限"
+                  >
+                    <option value="read,write">读写 (read,write)</option>
+                    <option value="read">只读 (read)</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Languages size={18} className="text-slate-500" />
+                  <span className="text-sm">界面语言</span>
+                  <Button variant={uiLang === 'zh' ? 'default' : 'outline'} size="sm" className="min-h-11" onClick={() => handleLangChange('zh')}>中文</Button>
+                  <Button variant={uiLang === 'en' ? 'default' : 'outline'} size="sm" className="min-h-11" onClick={() => handleLangChange('en')}>English</Button>
+                </div>
+                <Button onClick={saveAdvancedNotification} disabled={advancedSaving} className="min-h-11">
+                  {advancedSaving ? '保存中...' : '保存高级通知设置'}
+                </Button>
               </div>
             </div>
           </section>

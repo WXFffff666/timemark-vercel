@@ -4,37 +4,45 @@ import { query } from '../db/index.js';
 import { getUserById } from '../services/auth.service.js';
 import type { User } from '@timemark/shared';
 
-export async function apiKeyMiddleware(c: Context<{ Variables: { user: User } }>, next: Next) {
+function parseScopes(raw: string | null | undefined): string[] {
+  if (!raw) return ['read', 'write'];
+  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+export async function apiKeyMiddleware(c: Context<{ Variables: { user: User; apiScopes?: string[] } }>, next: Next) {
   const apiKey = c.req.header('X-API-Key');
 
   if (!apiKey) {
     return c.json({ success: false, error: 'API key required' }, 401);
   }
 
-  // Validate API key format
   if (apiKey.length < 32) {
     return c.json({ success: false, error: 'Invalid API key format' }, 401);
   }
 
-  // Hash the incoming API key with SHA-256 before DB lookup
   const hashedKey = createHash('sha256').update(apiKey).digest('hex');
 
-  // Look up user by hashed API key (stored in user_configs)
   let result = await query(
-    'SELECT user_id FROM user_configs WHERE api_key_hash = $1',
-    [hashedKey]
+    'SELECT user_id, api_scopes FROM user_configs WHERE api_key_hash = $1',
+    [hashedKey],
   );
 
-  // Backward compatibility: check legacy plaintext column
   if (result.rows.length === 0) {
     result = await query(
-      'SELECT user_id FROM user_configs WHERE api_key = $1',
-      [apiKey]
+      'SELECT user_id, api_scopes FROM user_configs WHERE api_key = $1',
+      [apiKey],
     );
   }
 
   if (result.rows.length === 0) {
     return c.json({ success: false, error: 'Invalid API key' }, 401);
+  }
+
+  const scopes = parseScopes(result.rows[0].api_scopes);
+  const method = c.req.method.toUpperCase();
+  const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+  if (isWrite && !scopes.includes('write')) {
+    return c.json({ success: false, error: 'API Key 无 write 权限' }, 403);
   }
 
   const userId = result.rows[0].user_id;
@@ -45,5 +53,6 @@ export async function apiKeyMiddleware(c: Context<{ Variables: { user: User } }>
   }
 
   c.set('user', user);
+  c.set('apiScopes', scopes);
   await next();
 }

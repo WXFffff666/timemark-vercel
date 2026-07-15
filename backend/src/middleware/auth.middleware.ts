@@ -3,6 +3,7 @@ import { verifyToken } from '../utils/jwt.js';
 import { getUserById } from '../services/auth.service.js';
 import { getSessionByToken } from '../services/session.service.js';
 import { getAccessTokenFromCookie } from '../utils/auth-cookies.js';
+import { apiKeyMiddleware } from './api-key.js';
 import type { User } from '@timemark/shared';
 
 export async function authMiddleware(c: Context<{ Variables: { user: User } }>, next: Next) {
@@ -16,6 +17,10 @@ export async function authMiddleware(c: Context<{ Variables: { user: User } }>, 
   const token = authHeader?.replace('Bearer ', '') || getAccessTokenFromCookie(c);
 
   if (!token) {
+    const apiKey = c.req.header('X-API-Key');
+    if (apiKey) {
+      return apiKeyMiddleware(c, next);
+    }
     return c.json({ success: false, error: 'Unauthorized' }, 401);
   }
 

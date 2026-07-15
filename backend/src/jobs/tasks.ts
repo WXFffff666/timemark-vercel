@@ -173,7 +173,7 @@ export async function sendReminders() {
   }
   
   // 筛选需要提醒的事件
-  const eventsToRemind: Array<{ id: number; user_id: number; name: string; date: string; lunar_date: any; calendar_type: string; notification_channels: string[]; notification_account_ids: any; targetDate?: Date }> = [];
+  const eventsToRemind: Array<{ id: number; user_id: number; name: string; date: string; lunar_date: any; calendar_type: string; notification_channels: string[]; notification_account_ids: any; targetDate?: Date; daysUntil: number }> = [];
   
   for (const event of allEventRows) {
     // Check if user has reminders enabled (batch-loaded, default to true)
@@ -188,6 +188,7 @@ export async function sendReminders() {
 
     const calendarType = event.calendar_type;
     let eventTargetDate: Date | null = null;
+    let matchedDaysUntil: number | null = null;
     
     // 获取此事件的提前提醒天数列表
     // 优先从 reminder_config.daysBeforeList 读取，回退到 reminder_days_before
@@ -214,12 +215,34 @@ export async function sendReminders() {
     
     try {
       if (calendarType === 'gregorian' || calendarType === 'both') {
+        const diff = diffDays(today, event.date);
         const gTarget = resolveGregorianTarget(today, event.date, allDays, now);
-        if (gTarget) eventTargetDate = gTarget;
+        if (gTarget) {
+          eventTargetDate = gTarget;
+          matchedDaysUntil = diff;
+        }
       }
       if ((calendarType === 'lunar' || calendarType === 'both') && event.lunar_date) {
         const lTarget = resolveLunarTarget(today, event.lunar_date, allDays, now);
-        if (lTarget) eventTargetDate = lTarget;
+        if (lTarget) {
+          eventTargetDate = lTarget;
+          if (matchedDaysUntil === null) {
+            try {
+              const lunarData = typeof event.lunar_date === 'string' ? JSON.parse(event.lunar_date) : event.lunar_date;
+              const month = lunarData.isLeap ? -lunarData.month : lunarData.month;
+              for (const year of [now.getFullYear(), now.getFullYear() + 1]) {
+                const tryLunarDate = Lunar.fromYmd(year, month, lunarData.day);
+                const trySolar = tryLunarDate.getSolar();
+                const tryDateStr = `${trySolar.getYear()}-${String(trySolar.getMonth()).padStart(2, '0')}-${String(trySolar.getDay()).padStart(2, '0')}`;
+                const diff = diffDays(today, tryDateStr);
+                if (diff >= 0 && allDays.includes(diff)) {
+                  matchedDaysUntil = diff;
+                  break;
+                }
+              }
+            } catch { /* ignore */ }
+          }
+        }
       }
     } catch (error) {
       log.error({ eventId: event.id, err: error }, 'Failed to parse lunar date');
@@ -274,7 +297,7 @@ export async function sendReminders() {
       if (!shouldRemind) {
         continue; // Skip - not the right time for this event
       }
-      eventsToRemind.push({ ...event, targetDate: eventTargetDate });
+      eventsToRemind.push({ ...event, targetDate: eventTargetDate, daysUntil: matchedDaysUntil ?? 0 });
     }
   }
   
@@ -282,7 +305,9 @@ export async function sendReminders() {
 
   for (const event of eventsToRemind.slice(0, 50)) {
     const rawChannels = event.notification_channels;
-    const channels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
+    const baseChannels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
+    const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
+    const channels = await resolveReminderChannels(event.user_id, baseChannels, event.daysUntil ?? 0);
     if (channels.length > 0) {
       // Check if already sent today
       const timeZone = getUserTimezone(event.user_id);
