@@ -4,16 +4,16 @@
 $ErrorActionPreference = "Continue"
 $canonical = "timemark.the37777777.top"
 
-function Invoke-Npx {
+function Invoke-Vercel {
   param([string[]]$Args)
-  $output = & npx @Args 2>&1
+  $output = & npx --yes vercel @Args --non-interactive 2>&1
   $code = $LASTEXITCODE
   if ($output) { $output | ForEach-Object { Write-Host $_ } }
   return @{ Output = ($output | Out-String); Code = $code }
 }
 
 Write-Host "==> Current aliases"
-$list = Invoke-Npx @("vercel", "alias", "ls")
+$list = Invoke-Vercel @("alias", "ls")
 if ($list.Code -ne 0) {
   Write-Host "Failed to list aliases (exit $($list.Code))"
   exit $list.Code
@@ -30,9 +30,9 @@ foreach ($line in $lines) {
   }
   if ($url -match "vercel\.app") {
     Write-Host "  remove: $url"
-    Invoke-Npx @("vercel", "alias", "rm", $url, "--yes") | Out-Null
+    Invoke-Vercel @("alias", "rm", $url, "--yes") | Out-Null
   }
 }
 
 Write-Host "==> After prune"
-Invoke-Npx @("vercel", "alias", "ls") | Out-Null
+Invoke-Vercel @("alias", "ls") | Out-Null

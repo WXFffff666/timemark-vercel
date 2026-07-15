@@ -5,8 +5,9 @@
 ### 域名与访问控制
 - **对外唯一公开入口**：`https://timemark.the37777777.top`
 - 移除 `middleware.ts` 强制跳转（避免妨碍本人通过 Vercel 预览域名调试）
-- **Vercel Standard Protection**：`scripts/enable-vercel-protection.ps1` 开启后，`*.vercel.app` 需 Vercel 账号登录，仅本人/团队可访问
-- 部署后清理别名：`scripts/prune-vercel-aliases.ps1`
+- **Vercel Standard Protection**（已启用）：`ssoProtection.deploymentType = prod_deployment_urls_and_all_previews`，`*.vercel.app` 需 Vercel 账号登录
+- 脚本：`scripts/enable-vercel-protection.ps1`、`scripts/prune-vercel-aliases.ps1`（使用 `npx --yes vercel --non-interactive` 避免卡住）
+- 部署后若 Vercel 自动重建 vercel.app 别名，再运行 prune 脚本
 - CORS 默认仅正式域名；预览需 `ALLOW_VERCEL_PREVIEW=true`
 
 ### 登录安全

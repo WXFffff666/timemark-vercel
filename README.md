@@ -125,9 +125,11 @@ npx tsx scripts/migrate-db.ts
 # 开启后：正式域名公开；vercel.app 需 Vercel 账号登录
 .\scripts\enable-vercel-protection.ps1
 
-# 每次部署后清理多余 vercel.app 别名
+# 每次部署后清理多余 vercel.app 别名（Vercel 可能自动重建友好别名）
 .\scripts\prune-vercel-aliases.ps1
 ```
+
+当前生产别名应仅保留正式域名（如 `timemark.the37777777.top`）。部署保护已开启时，即使知道 `*.vercel.app` 地址也需 Vercel 账号才能访问。
 
 环境变量建议：`CORS_ORIGIN=https://你的正式域名`，`WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` 与正式域名一致。
 

@@ -4,9 +4,9 @@
 $ErrorActionPreference = "Continue"
 Set-Location (Join-Path $PSScriptRoot "..")
 
-function Invoke-Npx {
+function Invoke-Vercel {
   param([string[]]$Args)
-  $output = & npx @Args 2>&1
+  $output = & npx --yes vercel @Args --non-interactive 2>&1
   $code = $LASTEXITCODE
   if ($output) { $output | ForEach-Object { Write-Host $_ } }
   return $code
@@ -16,7 +16,7 @@ Write-Host "==> Enable Vercel Authentication (Standard Protection)"
 Write-Host "    Public: timemark.the37777777.top | Protected: *.vercel.app (team login required)"
 Write-Host ""
 
-$enableCode = Invoke-Npx @("vercel", "project", "protection", "enable", "timemark-vercel", "--sso", "--format", "json")
+$enableCode = Invoke-Vercel @("project", "protection", "enable", "timemark-vercel", "--sso", "--format", "json")
 
 if ($enableCode -ne 0) {
   Write-Host ""
@@ -28,7 +28,7 @@ if ($enableCode -ne 0) {
 
 Write-Host ""
 Write-Host "==> Current protection settings"
-Invoke-Npx @("vercel", "project", "protection", "timemark-vercel", "--format", "json") | Out-Null
+Invoke-Vercel @("project", "protection", "timemark-vercel", "--format", "json") | Out-Null
 
 Write-Host ""
 Write-Host "==> Prune extra vercel.app aliases"
