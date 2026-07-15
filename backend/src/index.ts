@@ -98,7 +98,7 @@ app.get('/api/health', async (c) => {
   const detailed = c.req.query('detailed') === '1' && c.req.header('x-health-token') === process.env.HEALTH_DETAIL_TOKEN;
   const checks: Record<string, boolean | string> = {
     platform: process.env.VERCEL ? 'vercel' : 'local',
-    version: '2.11.0',
+    version: '2.12.0',
     database: false,
     turnstile: isTurnstileEnabled(),
   };
