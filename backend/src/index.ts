@@ -31,6 +31,7 @@ import securityRoutes from './routes/security.js';
 import calendarImportRoutes from './routes/calendar-import.js';
 import contactsRoutes from './routes/contacts.js';
 import broadcastRoutes from './routes/broadcast.js';
+import webauthnRoutes from './routes/webauthn.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -73,6 +74,7 @@ app.use('/api/channels/test', notifyRateLimit);
 app.use('/api/*', apiRateLimit);
 
 app.route('/api/auth', authRoutes);
+app.route('/api/auth/webauthn', webauthnRoutes);
 app.route('/api/events', eventRoutes);
 app.route('/api/config', configRoutes);
 app.route('/api/channels', channelsRoutes);

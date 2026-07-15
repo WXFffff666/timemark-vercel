@@ -6,7 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
-import { Shield, Monitor, Globe, Ban, Key, Clock, Trash2, ArrowLeft } from 'lucide-react';
+import { Shield, Monitor, Globe, Ban, Key, Clock, Trash2, ArrowLeft, Fingerprint, Plus } from 'lucide-react';
+import {
+  isPasskeySupported,
+  listPasskeys,
+  registerPasskey,
+  removePasskey,
+  type PasskeyCredential,
+} from '@/lib/webauthn';
 
 interface SessionRow {
   id: number;
@@ -29,6 +36,10 @@ export default function Security() {
   const [totpCode, setTotpCode] = useState('');
   const [deployInfo, setDeployInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [passkeys, setPasskeys] = useState<PasskeyCredential[]>([]);
+  const [passkeyName, setPasskeyName] = useState('');
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const passkeySupported = isPasskeySupported();
 
   const [loadError, setLoadError] = useState('');
 
@@ -36,13 +47,14 @@ export default function Security() {
     setLoading(true);
     setLoadError('');
     try {
-      const [sess, ev, bans, wl, totp, deploy] = await Promise.all([
+      const [sess, ev, bans, wl, totp, deploy, keys] = await Promise.all([
         api.get<SessionRow[]>('/security/sessions'),
         api.get<any[]>('/security/events'),
         api.get<any[]>('/security/ip-bans'),
         api.get<{ enabled: boolean; ips: string[] }>('/security/ip-whitelist'),
         api.get<{ enabled: boolean }>('/security/totp/status'),
         api.get<any>('/security/deploy-info'),
+        listPasskeys().catch(() => []),
       ]);
       setSessions(Array.isArray(sess) ? sess : []);
       setEvents(Array.isArray(ev) ? ev : []);
@@ -51,6 +63,7 @@ export default function Security() {
       setWhitelistIps((wl?.ips || []).join('\n'));
       setTotpEnabled(!!totp?.enabled);
       setDeployInfo(deploy ?? null);
+      setPasskeys(Array.isArray(keys) ? keys : []);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : '加载失败');
       setSessions([]);
@@ -90,6 +103,34 @@ export default function Security() {
   const unbanIp = async (ip: string) => {
     await api.delete(`/security/ip-bans/${encodeURIComponent(ip)}`);
     load();
+  };
+
+  const handleRegisterPasskey = async () => {
+    if (!passkeySupported) {
+      alert('当前浏览器不支持 Passkey');
+      return;
+    }
+    setPasskeyBusy(true);
+    try {
+      await registerPasskey(passkeyName.trim() || '我的设备');
+      setPasskeyName('');
+      alert('Passkey 注册成功');
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Passkey 注册失败');
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
+
+  const handleRemovePasskey = async (id: string) => {
+    if (!confirm('确定删除此 Passkey？删除后将无法用它登录。')) return;
+    try {
+      await removePasskey(id);
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '删除失败');
+    }
   };
 
   if (loading) {
@@ -142,6 +183,51 @@ export default function Security() {
                 {!s.isCurrent && <Button size="sm" variant="ghost" onClick={() => revokeSession(s.id)}><Trash2 className="w-4 h-4" /></Button>}
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Fingerprint className="w-4 h-4" />Passkey（无密码登录）</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              状态: {passkeys.length > 0 ? `已注册 ${passkeys.length} 个` : '未注册'}
+              {!passkeySupported && ' · 当前浏览器不支持'}
+            </p>
+            {passkeySupported && (
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  placeholder="设备名称（如：iPhone / MacBook）"
+                  value={passkeyName}
+                  onChange={(e) => setPasskeyName(e.target.value)}
+                  disabled={passkeyBusy}
+                />
+                <Button size="sm" onClick={handleRegisterPasskey} disabled={passkeyBusy}>
+                  <Plus className="w-4 h-4 mr-1" />
+                  {passkeyBusy ? '注册中...' : '注册 Passkey'}
+                </Button>
+              </div>
+            )}
+            {passkeys.length > 0 && (
+              <div className="space-y-2">
+                {passkeys.map((pk) => (
+                  <div key={pk.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-sm">
+                    <div>
+                      <p className="font-medium">{pk.deviceName || 'Passkey'}</p>
+                      <p className="text-xs text-slate-500">
+                        注册于 {new Date(pk.createdAt).toLocaleString()}
+                        {pk.lastUsedAt ? ` · 最近使用 ${new Date(pk.lastUsedAt).toLocaleString()}` : ''}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => handleRemovePasskey(pk.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-slate-500">
+              注册后可在登录页使用「Passkey 登录」。需 HTTPS 环境（生产域名已支持）。
+            </p>
           </CardContent>
         </Card>
 

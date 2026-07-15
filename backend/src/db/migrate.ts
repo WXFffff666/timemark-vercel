@@ -240,6 +240,20 @@ ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS broadcast_id INTEGER REFERENCES 
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS email_opt_out BOOLEAN DEFAULT FALSE;
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;`
     },
+    {
+      version: 19,
+      name: 'webauthn_challenges_v19',
+      sql: `CREATE TABLE IF NOT EXISTS webauthn_challenges (
+  challenge TEXT PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expires ON webauthn_challenges(expires_at);
+ALTER TABLE webauthn_credentials ADD COLUMN IF NOT EXISTS transports TEXT;
+ALTER TABLE webauthn_credentials ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP;`
+    },
   ];
 
   for (const migration of migrations) {

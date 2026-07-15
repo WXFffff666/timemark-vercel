@@ -83,6 +83,7 @@ interface AuthState {
   mustChangePassword: boolean;
   setUser: (user: User | null) => void;
   login: (username: string, password: string, rememberMe?: boolean, extras?: { turnstileToken?: string; totpCode?: string }) => Promise<{ mustChangePassword: boolean }>;
+  loginWithPasskey: (username: string, rememberMe?: boolean, extras?: { turnstileToken?: string }) => Promise<{ mustChangePassword: boolean }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   clearMustChangePassword: () => void;
@@ -148,6 +149,41 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     set({ user: response.user, isAuthenticated: true, isLoading: false, mustChangePassword });
     console.log('[AuthStore] Login complete, isAuthenticated should be true now');
+    return { mustChangePassword };
+  },
+
+  loginWithPasskey: async (username, rememberMe = false, extras = {}) => {
+    const { loginWithPasskeyRequest } = await import('@/lib/webauthn');
+    const fingerprint = await getEnhancedFingerprint();
+    const assertion = await loginWithPasskeyRequest(username.trim());
+    const response = await api.post<any>('/auth/webauthn/login/verify', {
+      username: username.trim(),
+      response: assertion,
+      deviceFingerprint: fingerprint,
+      rememberMe,
+      turnstileToken: extras.turnstileToken,
+    });
+
+    if (response.authMode === 'cookie') {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('refreshToken');
+      if (response.sessionId) {
+        localStorage.setItem(SESSION_ID_KEY, response.sessionId);
+      }
+      if (rememberMe) {
+        localStorage.setItem('timemark_persistent_login', 'true');
+      } else {
+        localStorage.removeItem('timemark_persistent_login');
+      }
+    }
+
+    const mustChangePassword = !!response.mustChangePassword;
+    if (mustChangePassword) {
+      sessionStorage.setItem('mustChangePassword', 'true');
+    }
+    set({ user: response.user, isAuthenticated: true, isLoading: false, mustChangePassword });
     return { mustChangePassword };
   },
 

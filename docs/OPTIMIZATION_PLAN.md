@@ -1,5 +1,16 @@
 # TimeMark 优化计划与实施记录
 
+## 已完成（v2.10.0）
+
+### Passkeys / WebAuthn
+- 注册：`安全中心 → Passkey` 绑定设备（指纹/面容/安全密钥）
+- 登录：登录页「使用 Passkey 登录」（需先输入用户名）
+- API：`/api/auth/webauthn/*`（基于 `@simplewebauthn`）
+- 迁移 **v19**：`webauthn_challenges` 表 + credentials 扩展字段
+- 可选环境变量：`WEBAUTHN_RP_ID`、`WEBAUTHN_RP_NAME`、`WEBAUTHN_ORIGIN`
+
+---
+
 ## 已完成（v2.9.1）
 
 ### 关键 Bug
@@ -90,7 +101,7 @@
 | P2 | E2E 测试 | Playwright 覆盖登录、事件 CRUD、提醒触发 |
 | P2 | 日历视图 | 月历热力图展示即将到来的事件 |
 | P2 | 冲突检测 UI | 接入已有 `/api/features/conflicts` |
-| P3 | Passkeys | Better Auth 或 WebAuthn 无密码登录 |
+| P3 | Passkeys | ~~Better Auth 或 WebAuthn 无密码登录~~ **v2.10 已实现** |
 
 ---
 

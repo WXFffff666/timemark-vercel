@@ -10,7 +10,11 @@ export type SecurityEventType =
   | 'new_device'
   | 'session_revoked'
   | 'totp_enabled'
-  | 'totp_disabled';
+  | 'totp_disabled'
+  | 'passkey_registered'
+  | 'passkey_removed'
+  | 'passkey_login_success'
+  | 'passkey_login_failure';
 
 export async function logSecurityEvent(params: {
   userId?: number | null;
