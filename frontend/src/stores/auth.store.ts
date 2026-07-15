@@ -158,8 +158,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       password,
       deviceFingerprint: fingerprint,
       rememberMe,
-      turnstileToken: extras.turnstileToken,
-      totpCode: extras.totpCode,
+      turnstileToken: extras.turnstileToken?.trim() || undefined,
+      totpCode: extras.totpCode?.trim() || undefined,
     });
     return applyLoginResponse(response, rememberMe);
   },

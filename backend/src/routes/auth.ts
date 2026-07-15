@@ -27,7 +27,12 @@ auth.post('/login', loginRateLimit, async (c) => {
     const parsed = loginSchema.safeParse(body);
 
     if (!parsed.success) {
-      return c.json({ success: false, error: 'Invalid input' }, 400);
+      return c.json({
+        success: false,
+        error: '请求参数无效',
+        code: 'validation_failed',
+        details: parsed.error.flatten(),
+      }, 400);
     }
 
     const { username, password, deviceFingerprint, rememberMe = false, turnstileToken, totpCode } = parsed.data;

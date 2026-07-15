@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/auth.store';
 import { Button } from '@/components/ui/button';
@@ -21,14 +21,17 @@ declare global {
           'expired-callback'?: () => void;
           'error-callback'?: () => void;
           'timeout-callback'?: () => void;
-          execution?: 'render' | 'execute';
+          theme?: 'light' | 'dark' | 'auto';
+          size?: 'normal' | 'compact';
         },
       ) => string;
       reset: (id: string) => void;
-      execute: (id: string) => void;
+      remove: (id: string) => void;
     };
   }
 }
+
+const TURNSTILE_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
@@ -52,15 +55,21 @@ export function LoginForm() {
   const [showTotp, setShowTotp] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
+  const [turnstileReady, setTurnstileReady] = useState(false);
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const pendingSubmitRef = useRef(false);
+  const credentialsRef = useRef({ username: '', password: '', rememberMe: false, totpCode: '' });
   const login = useAuthStore((state) => state.login);
   const loginPasskey = useAuthStore((state) => state.loginPasskey);
   const navigate = useNavigate();
   const passkeySupported = isPasskeySupported();
 
   const isLocked = lockoutSeconds > 0;
+
+  useEffect(() => {
+    credentialsRef.current = { username, password, rememberMe, totpCode };
+  }, [username, password, rememberMe, totpCode]);
 
   const startLockoutCountdown = (seconds: number) => {
     if (seconds <= 0) return;
@@ -78,60 +87,33 @@ export function LoginForm() {
     }, 1000);
   };
 
-  const resetTurnstile = () => {
+  const resetTurnstile = useCallback(() => {
     setTurnstileToken('');
     if (widgetIdRef.current && window.turnstile) {
       window.turnstile.reset(widgetIdRef.current);
     }
-  };
-
-  useEffect(() => () => {
-    if (timerRef.current) clearInterval(timerRef.current);
   }, []);
 
-  useEffect(() => {
-    api.get<{ siteKey: string | null; enabled: boolean }>('/auth/turnstile-config')
-      .then((cfg) => {
-        if (cfg.enabled && cfg.siteKey) setTurnstileSiteKey(cfg.siteKey);
-      })
-      .catch(() => {});
-  }, []);
+  const submitLogin = useCallback(async (turnstileOverride?: string) => {
+    const { username: u, password: p, rememberMe: rm, totpCode: totp } = credentialsRef.current;
+    const trimmedUsername = u.trim();
+    const trimmedPassword = p.trim();
+    const token = turnstileOverride || turnstileToken || undefined;
 
-  useEffect(() => {
-    if (!turnstileSiteKey || !turnstileRef.current) return;
-    const script = document.createElement('script');
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-    script.async = true;
-    script.onload = () => {
-      if (window.turnstile && turnstileRef.current && !widgetIdRef.current) {
-        widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
-          sitekey: turnstileSiteKey,
-          execution: 'execute',
-          callback: (token: string) => {
-            setTurnstileToken(token);
-            if (pendingSubmitRef.current) {
-              pendingSubmitRef.current = false;
-              void submitLogin(token);
-            }
-          },
-          'expired-callback': () => setTurnstileToken(''),
-          'error-callback': () => setTurnstileToken(''),
-          'timeout-callback': () => setTurnstileToken(''),
-        });
-      }
-    };
-    document.body.appendChild(script);
-    return () => { script.remove(); };
-  }, [turnstileSiteKey]);
+    if (trimmedUsername.length < 3) {
+      setError('用户名至少3个字符');
+      return;
+    }
+    if (trimmedPassword.length < 8) {
+      setError('密码至少8个字符');
+      return;
+    }
 
-  const submitLogin = async (turnstileOverride?: string) => {
-    const trimmedUsername = username.trim();
-    const trimmedPassword = password.trim();
     setLoading(true);
     try {
-      const { mustChangePassword } = await login(trimmedUsername, trimmedPassword, rememberMe, {
-        turnstileToken: turnstileOverride || turnstileToken || undefined,
-        totpCode: totpCode || undefined,
+      const { mustChangePassword } = await login(trimmedUsername, trimmedPassword, rm, {
+        turnstileToken: token,
+        totpCode: totp.trim() || undefined,
       });
       if (mustChangePassword) {
         navigate('/settings?changePassword=1', { replace: true });
@@ -157,20 +139,91 @@ export function LoginForm() {
         setError('请输入双因素验证码');
       } else if (code === 'invalid_credentials' || message.includes('密码错误') || message.includes('还剩')) {
         setError('用户名或密码错误');
+        if (turnstileSiteKey) resetTurnstile();
       } else if (code.startsWith('turnstile_') || message.includes('人机验证')) {
+        setError(message);
+        resetTurnstile();
+      } else if (code === 'validation_failed' || message.includes('参数无效')) {
         setError(message);
       } else {
         setError(message);
       }
-
-      const turnstileConsumed = !['turnstile_required'].includes(code);
-      if (turnstileSiteKey && turnstileConsumed && (turnstileOverride || turnstileToken)) {
-        resetTurnstile();
-      }
     } finally {
       setLoading(false);
+      pendingSubmitRef.current = false;
     }
-  };
+  }, [login, navigate, resetTurnstile, turnstileSiteKey, turnstileToken]);
+
+  const submitLoginRef = useRef(submitLogin);
+  submitLoginRef.current = submitLogin;
+
+  useEffect(() => () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (widgetIdRef.current && window.turnstile) {
+      try {
+        window.turnstile.remove(widgetIdRef.current);
+      } catch {
+        // ignore
+      }
+      widgetIdRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    api.get<{ siteKey: string | null; enabled: boolean }>('/auth/turnstile-config')
+      .then((cfg) => {
+        if (cfg.enabled && cfg.siteKey) setTurnstileSiteKey(cfg.siteKey);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!turnstileSiteKey || !turnstileRef.current) return;
+
+    const mountWidget = () => {
+      if (!window.turnstile || !turnstileRef.current || widgetIdRef.current) return;
+      widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: turnstileSiteKey,
+        theme: 'auto',
+        size: 'normal',
+        callback: (token: string) => {
+          setTurnstileToken(token);
+          setError('');
+          if (pendingSubmitRef.current) {
+            void submitLoginRef.current(token);
+          }
+        },
+        'expired-callback': () => setTurnstileToken(''),
+        'error-callback': () => {
+          setTurnstileToken('');
+          setError('人机验证加载失败，请刷新页面重试');
+        },
+        'timeout-callback': () => setTurnstileToken(''),
+      });
+      setTurnstileReady(true);
+    };
+
+    if (window.turnstile) {
+      mountWidget();
+      return;
+    }
+
+    let script = document.querySelector<HTMLScriptElement>(`script[src^="${TURNSTILE_SCRIPT.split('?')[0]}"]`);
+    if (!script) {
+      script = document.createElement('script');
+      script.src = TURNSTILE_SCRIPT;
+      script.async = true;
+      document.body.appendChild(script);
+    }
+
+    const onLoad = () => mountWidget();
+    script.addEventListener('load', onLoad);
+    if (window.turnstile) mountWidget();
+
+    return () => {
+      script?.removeEventListener('load', onLoad);
+    };
+  }, [turnstileSiteKey]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,14 +235,16 @@ export function LoginForm() {
     if (trimmedUsername.length < 3) return setError('用户名至少3个字符');
     if (trimmedPassword.length < 8) return setError('密码至少8个字符');
 
-    if (turnstileSiteKey && !turnstileToken) {
-      pendingSubmitRef.current = true;
-      if (widgetIdRef.current && window.turnstile) {
-        window.turnstile.execute(widgetIdRef.current);
-      } else {
+    if (turnstileSiteKey) {
+      if (!turnstileReady) {
         setError('人机验证加载中，请稍候再试');
+        return;
       }
-      return;
+      if (!turnstileToken) {
+        pendingSubmitRef.current = true;
+        setError('请先完成下方人机验证');
+        return;
+      }
     }
 
     await submitLogin();
@@ -275,7 +330,14 @@ export function LoginForm() {
               <Input placeholder="双因素验证码 (6位)" value={totpCode} onChange={(e) => setTotpCode(e.target.value)} disabled={isLocked || loading} aria-label="双因素验证码" inputMode="numeric" autoComplete="one-time-code" />
             </motion.div>
           )}
-          {turnstileSiteKey && <div ref={turnstileRef} className="flex justify-center" />}
+          {turnstileSiteKey && (
+            <motion.div variants={itemVariants} className="flex flex-col items-center gap-2">
+              <div ref={turnstileRef} className="min-h-[65px] flex items-center justify-center" aria-label="Cloudflare 人机验证" />
+              {!turnstileReady && (
+                <p className="text-xs text-hint">人机验证加载中…</p>
+              )}
+            </motion.div>
+          )}
           <motion.div variants={itemVariants} className="flex items-center gap-3 pt-1 alive-interactive w-max" onClick={() => !isLocked && setRememberMe(!rememberMe)}>
              <input type="checkbox" checked={rememberMe} readOnly disabled={isLocked} aria-label="保持登录 30 天" className="peer w-5 h-5 rounded-md border-slate-300 dark:border-slate-600 text-primary-500 focus:ring-primary-500/30 bg-white dark:bg-black/50 transition-all disabled:opacity-50" />
              <label className="text-sm font-medium text-slate-700 dark:text-slate-300 select-none cursor-pointer">保持登录（30天）</label>

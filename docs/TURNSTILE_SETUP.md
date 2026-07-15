@@ -41,8 +41,16 @@ cd D:\Works_Cursor\timemark-vercel
 ## 三、验证是否生效
 
 1. 打开 `https://timemark.the37777777.top/api/health`，`checks.turnstile` 应为 `true`。
-2. 打开登录页，密码框下方应出现 Turnstile 验证组件。
-3. 未完成验证时登录应提示「请完成人机验证」。
+2. 打开登录页，密码框下方应出现 **可见的** Turnstile 验证框（Managed 模式下多数为勾选即过）。
+3. 须先完成人机验证，再点击「登录」；验证通过后会自动尝试登录（若您已先点过登录）。
+
+## 登录流程说明
+
+1. 输入用户名、密码
+2. 在下方 Turnstile 组件完成验证（出现绿色勾）
+3. 点击「登录」
+
+若提示「请先完成下方人机验证」，说明尚未勾选 Turnstile；完成后再点登录即可。
 
 ## 本地开发（可选）
 
@@ -60,5 +68,6 @@ TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 | 现象 | 处理 |
 |------|------|
 | 登录页无 Turnstile 组件 | 检查 `TURNSTILE_SITE_KEY` 是否已设且已 Redeploy |
-| 提示人机验证失败 | Hostname 是否与 Widget 中域名一致 |
+| 提示「请求参数无效」 | 多为旧版前端缓存；强制刷新（Ctrl+F5）或清除站点缓存后重试 |
+| 验证成功仍无法登录 | 确认用户名密码正确；Turnstile token 一次性，失败后需重新勾选 |
 | health 里 turnstile 仍为 false | 仅设置了 Site Key 未设 Secret Key；Secret 决定 `enabled` |
