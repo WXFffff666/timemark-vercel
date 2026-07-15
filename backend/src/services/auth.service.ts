@@ -1,8 +1,7 @@
 import { query } from '../db/index.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
-import { generateAccessToken, generateRefreshToken } from '../utils/jwt.js';
 import { randomUUID } from 'crypto';
-import type { User, Session } from '@timemark/shared';
+import type { User } from '@timemark/shared';
 
 export async function createUser(username: string, password: string): Promise<User> {
   const existing = await query('SELECT id FROM users WHERE username = $1', [username]);
@@ -43,7 +42,14 @@ export async function verifyUserPassword(username: string, password: string): Pr
 
 // ============ 登录日志 ============
 
-export async function createLoginLog(userIdOrUsername: string, ip: string, userAgent: string, fingerprint: string, success: boolean, reason?: string): Promise<void> {
+export async function createLoginLog(
+  userIdOrUsername: string,
+  ip: string,
+  userAgent: string,
+  fingerprint: string,
+  success: boolean,
+  reason?: string,
+): Promise<void> {
   try {
     const id = randomUUID();
     let userId: number | null = null;
@@ -64,7 +70,7 @@ export async function createLoginLog(userIdOrUsername: string, ip: string, userA
     await query(
       `INSERT INTO login_logs (id, user_id, username, ip_address, user_agent, device_fingerprint, success, failure_reason, login_time) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
-      [id, userId, username, ip, userAgent, fingerprint, success ? true : false, reason || null]
+      [id, userId, username, ip, userAgent, fingerprint, success ? true : false, reason || null],
     );
   } catch (error) {
     console.error('[createLoginLog] Failed:', error);
@@ -72,21 +78,22 @@ export async function createLoginLog(userIdOrUsername: string, ip: string, userA
 }
 
 // ============ 锁定机制 ============
-// 公网部署：无运维解锁后门，仅能通过等待锁定期结束或正确密码登录解除
-// 规则：以用户名为准统计连续失败（跨 IP 生效），5 次失败触发锁定，时间线性叠加
-// 第 1 次锁定 5 分钟，第 2 次 10 分钟，第 3 次 15 分钟……
+// 公网部署：无运维解锁后门
+// 5 次密码错误触发锁定，时间线性叠加：5 / 10 / 15 … 分钟
+// 锁定期间拒绝一切登录尝试，不验证密码、不累计失败次数
 
 const LOCK_THRESHOLD = 5;
 const LOCK_BASE_MINUTES = 5;
 
-export async function getAccountLockStatus(params: { username: string; ip: string }): Promise<{
+export type AccountLockStatus = {
   isLocked: boolean;
   failureCount: number;
   lockTriggerCount: number;
   remainingSeconds: number;
   lockMinutes: number;
-}> {
-  // 以该用户最后一次成功登录为起点（任意 IP），防止换 IP 绕过计数
+};
+
+async function countPasswordFailuresSinceLastSuccess(username: string): Promise<number> {
   const lastSuccessResult = await query(
     `SELECT MAX(login_time) AS last_success FROM login_logs
      WHERE success = TRUE
@@ -94,7 +101,7 @@ export async function getAccountLockStatus(params: { username: string; ip: strin
          user_id = (SELECT id FROM users WHERE username = $1 LIMIT 1)
          OR username = $1
        )`,
-    [params.username],
+    [username],
   );
   const lastSuccess = lastSuccessResult.rows[0]?.last_success || '1970-01-01';
 
@@ -102,63 +109,68 @@ export async function getAccountLockStatus(params: { username: string; ip: strin
     `SELECT COUNT(*) AS count FROM login_logs
      WHERE username = $1
        AND success = FALSE
+       AND COALESCE(failure_reason, '') NOT IN ('locked_attempt', 'rate_limited')
        AND login_time > $2`,
-    [params.username, lastSuccess],
+    [username, lastSuccess],
   );
-  let failureCount = failResult.rows.length > 0 ? parseInt(failResult.rows[0].count, 10) : 0;
+  return failResult.rows.length > 0 ? parseInt(failResult.rows[0].count, 10) : 0;
+}
 
-  // 未知用户名：同时按 IP 累计失败（防枚举）
-  if (failureCount === 0) {
-    const ipFailResult = await query(
-      `SELECT COUNT(*) AS count FROM login_logs
-       WHERE ip_address = $1 AND success = FALSE AND login_time > NOW() - INTERVAL '1 hour'`,
-      [params.ip],
-    );
-    failureCount = ipFailResult.rows.length > 0 ? parseInt(ipFailResult.rows[0].count, 10) : 0;
-  }
+function parseLockedUntil(lockedUntil: string | Date | null): number | null {
+  if (!lockedUntil) return null;
+  const raw = typeof lockedUntil === 'string' ? lockedUntil : lockedUntil.toISOString();
+  const ms = raw.includes('T') || raw.endsWith('Z')
+    ? new Date(raw).getTime()
+    : new Date(raw + 'Z').getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
 
-  const lockTriggerCount = Math.floor(failureCount / LOCK_THRESHOLD);
-
-  if (lockTriggerCount === 0) {
-    return { isLocked: false, failureCount, lockTriggerCount: 0, remainingSeconds: 0, lockMinutes: 0 };
-  }
-
-  const lockMinutes = lockTriggerCount * LOCK_BASE_MINUTES;
-
-  const lastFailResult = await query(
-    `SELECT MAX(login_time) AS last_failure FROM login_logs
-     WHERE username = $1 AND success = FALSE AND login_time > $2`,
-    [params.username, lastSuccess],
+export async function getAccountLockStatus(params: { username: string; ip: string }): Promise<AccountLockStatus> {
+  const attemptResult = await query(
+    `SELECT failed_count, locked_until FROM login_attempts
+     WHERE identifier = $1 AND type = 'username'`,
+    [params.username],
   );
-  let lastFailure = lastFailResult.rows[0]?.last_failure;
 
-  if (!lastFailure && failureCount > 0) {
-    const ipLastFail = await query(
-      `SELECT MAX(login_time) AS last_failure FROM login_logs
-       WHERE ip_address = $1 AND success = FALSE`,
-      [params.ip],
-    );
-    lastFailure = ipLastFail.rows[0]?.last_failure;
-  }
-
-  if (lastFailure) {
-    const lastFailureTime = new Date(lastFailure + 'Z').getTime();
-    const lockUntilTime = lastFailureTime + lockMinutes * 60 * 1000;
-    const remainingSeconds = Math.max(0, Math.floor((lockUntilTime - Date.now()) / 1000));
-
-    if (remainingSeconds > 0) {
-      return { isLocked: true, failureCount, lockTriggerCount, remainingSeconds, lockMinutes };
+  if (attemptResult.rows.length > 0) {
+    const row = attemptResult.rows[0];
+    const untilMs = parseLockedUntil(row.locked_until);
+    if (untilMs && untilMs > Date.now()) {
+      const remainingSeconds = Math.max(0, Math.floor((untilMs - Date.now()) / 1000));
+      const failureCount = row.failed_count ?? 0;
+      const lockTriggerCount = Math.max(1, Math.floor(failureCount / LOCK_THRESHOLD));
+      return {
+        isLocked: true,
+        failureCount,
+        lockTriggerCount,
+        remainingSeconds,
+        lockMinutes: Math.max(1, Math.ceil(remainingSeconds / 60)),
+      };
     }
   }
 
-  return { isLocked: false, failureCount, lockTriggerCount, remainingSeconds: 0, lockMinutes: 0 };
+  const failureCount = await countPasswordFailuresSinceLastSuccess(params.username);
+  const lockTriggerCount = Math.floor(failureCount / LOCK_THRESHOLD);
+
+  return {
+    isLocked: false,
+    failureCount,
+    lockTriggerCount,
+    remainingSeconds: 0,
+    lockMinutes: 0,
+  };
 }
 
-export async function trackLoginFailure(params: { username: string; ip: string }): Promise<{ shouldLock: boolean; failureCount: number; lockTriggerCount: number }> {
-  const status = await getAccountLockStatus(params);
-
-  const shouldLock = status.failureCount >= LOCK_THRESHOLD && (status.failureCount % LOCK_THRESHOLD === 0);
-  const lockMinutes = Math.max(status.lockTriggerCount, 1) * LOCK_BASE_MINUTES;
+export async function trackLoginFailure(params: { username: string; ip: string }): Promise<{
+  shouldLock: boolean;
+  failureCount: number;
+  lockTriggerCount: number;
+  lockMinutes: number;
+}> {
+  const failureCount = await countPasswordFailuresSinceLastSuccess(params.username);
+  const lockTriggerCount = Math.floor(failureCount / LOCK_THRESHOLD);
+  const shouldLock = failureCount > 0 && failureCount % LOCK_THRESHOLD === 0;
+  const lockMinutes = shouldLock ? lockTriggerCount * LOCK_BASE_MINUTES : 0;
   const lockedUntil = shouldLock
     ? new Date(Date.now() + lockMinutes * 60 * 1000).toISOString()
     : null;
@@ -168,14 +180,14 @@ export async function trackLoginFailure(params: { username: string; ip: string }
      VALUES ($1, 'username', $2, $3, CURRENT_TIMESTAMP)
      ON CONFLICT (identifier, type) DO UPDATE SET
        failed_count = $2,
-       locked_until = COALESCE($3, login_attempts.locked_until),
+       locked_until = $3,
        last_attempt = CURRENT_TIMESTAMP`,
-    [params.username, status.failureCount, lockedUntil],
+    [params.username, failureCount, lockedUntil],
   );
 
-  return {
-    shouldLock,
-    failureCount: status.failureCount,
-    lockTriggerCount: status.lockTriggerCount,
-  };
+  return { shouldLock, failureCount, lockTriggerCount, lockMinutes };
+}
+
+export async function clearAccountLock(username: string): Promise<void> {
+  await query(`DELETE FROM login_attempts WHERE identifier = $1 AND type = 'username'`, [username]);
 }

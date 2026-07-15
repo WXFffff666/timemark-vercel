@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus } from '../services/auth.service.js';
+import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock } from '../services/auth.service.js';
 import { createSession, deleteSession, deleteSessionById, deleteAllUserSessions } from '../services/session.service.js';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
 import { loginSchema, changePasswordSchema } from '@timemark/shared';
@@ -156,49 +156,25 @@ auth.post('/login', async (c) => {
 
     const { username, password, deviceFingerprint, rememberMe = false } = parsed.data;
 
-    // 1. 先检查是否被锁定（锁定期间不验证密码）
     const lockStatus = await getAccountLockStatus({ username, ip });
     if (lockStatus.isLocked) {
-      await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, `Locked (${lockStatus.lockMinutes}min)`);
       return c.json({
         success: false,
-        error: `账户已锁定，请${lockStatus.lockMinutes}分钟后重试`,
+        error: `账户已锁定，剩余 ${lockStatus.remainingSeconds} 秒后可重试`,
         locked: true,
-        remainingSeconds: lockStatus.remainingSeconds
+        remainingSeconds: lockStatus.remainingSeconds,
+        lockMinutes: lockStatus.lockMinutes,
       }, 429);
     }
 
-    // 1b. Also check username-based lock (prevents attacks from different IPs)
-    const usernameLockResult = await query(
-      `SELECT failed_count, locked_until FROM login_attempts 
-       WHERE identifier = $1 AND type = 'username'`,
-      [username]
-    );
-    if (usernameLockResult.rows.length > 0) {
-      const row = usernameLockResult.rows[0];
-      if (row.locked_until && new Date(row.locked_until + 'Z').getTime() > Date.now()) {
-        const remaining = Math.ceil((new Date(row.locked_until + 'Z').getTime() - Date.now()) / 1000);
-        return c.json({
-          success: false,
-          error: `账户已锁定，请${Math.ceil(remaining / 60)}分钟后重试`,
-          locked: true,
-          remainingSeconds: remaining
-        }, 429);
-      }
-    }
-
-    // 2. 验证密码
     const user = await verifyUserPassword(username, password);
 
     if (!user) {
-      // 记录失败日志
       await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'Invalid credentials');
 
-      // 检查是否刚好触发锁定（每5次触发一次）
       const tracking = await trackLoginFailure({ username, ip });
 
       if (tracking.shouldLock) {
-        // 获取用户ID用于发送告警到已配置的渠道
         const targetUser = await getUserByUsername(username);
         const userId = targetUser ? parseInt(targetUser.id, 10) : undefined;
 
@@ -210,26 +186,26 @@ auth.post('/login', async (c) => {
           userAgent,
           failureCount: tracking.failureCount,
           locked: true,
-          alertType: 'login_failure'
+          lockMinutes: tracking.lockMinutes,
+          alertType: 'login_failure',
         });
 
         const newLockStatus = await getAccountLockStatus({ username, ip });
         return c.json({
           success: false,
-          error: `登录失败次数过多，账户已锁定${newLockStatus.lockMinutes}分钟`,
+          error: `登录失败次数过多，账户已锁定 ${tracking.lockMinutes} 分钟（剩余 ${newLockStatus.remainingSeconds} 秒）`,
           locked: true,
-          remainingSeconds: newLockStatus.remainingSeconds
+          remainingSeconds: newLockStatus.remainingSeconds,
+          lockMinutes: tracking.lockMinutes,
         }, 429);
       }
 
-      // 返回剩余尝试次数提示
       const remaining = 5 - (tracking.failureCount % 5);
-      return c.json({ success: false, error: `密码错误，还剩${remaining}次尝试机会` }, 401);
+      return c.json({ success: false, error: `密码错误，还剩 ${remaining} 次尝试机会` }, 401);
     }
 
-    // 3. 登录成功
     await createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', true);
-    await query(`DELETE FROM login_attempts WHERE identifier = $1 AND type = 'username'`, [username]);
+    await clearAccountLock(username);
     const { session, accessToken, refreshToken } = await createSession(user.id, deviceFingerprint || '', false, rememberMe);
 
     const pwdCheck = await query(

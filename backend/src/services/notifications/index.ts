@@ -321,12 +321,16 @@ function getChannelConfigFromAccount(
  * @param userId - The user's ID
  * @param channels - Array of channel IDs to send through (e.g., ['resend', 'telegram'])
  */
-export async function sendNotifications(event: any, userId: number, channels: string[]): Promise<Record<string, { success: boolean; error?: string; accountId?: number }>> {
+export async function sendNotifications(
+  event: any,
+  userId: number,
+  channels: string[],
+  options?: { skipQuietHours?: boolean },
+): Promise<Record<string, { success: boolean; error?: string; accountId?: number }>> {
   const config = await getUserConfig(userId);
 
-  // Quiet hours check: skip sending, scheduler will retry next minute
   const userTimezone = config?.timezone || 'Asia/Shanghai';
-  if (isInQuietHours(config?.quiet_hours_start, config?.quiet_hours_end, userTimezone)) {
+  if (!options?.skipQuietHours && isInQuietHours(config?.quiet_hours_start, config?.quiet_hours_end, userTimezone)) {
     console.log(`[Notifications] Skipping send during quiet hours for user ${userId}`);
     return { _quiet_hours: { success: false, error: 'quiet_hours' } };
   }

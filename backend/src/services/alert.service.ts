@@ -1,4 +1,3 @@
-import { sendSecurityAlertEmail } from './notifications/email.service.js';
 import { getUserConfig, getNotificationAccounts } from './config.service.js';
 import { sendNotifications } from './notifications/index.js';
 
@@ -12,6 +11,7 @@ export async function sendSecurityAlert(params: {
   userAgent: string;
   failureCount: number;
   locked: boolean;
+  lockMinutes?: number;
   alertType?: AlertType;
 }): Promise<void> {
   try {
@@ -19,168 +19,55 @@ export async function sendSecurityAlert(params: {
       username: params.username,
       ip: params.ip,
       failureCount: params.failureCount,
-      locked: params.locked
+      locked: params.locked,
+      lockMinutes: params.lockMinutes,
     });
 
-    let userId = params.userId;
-    const alertContent = buildAlertContent(params);
-
-    // 通过用户已配置的所有通知渠道发送告警
-    if (userId) {
-      const config = await getUserConfig(userId);
-      const channels = config?.alert_channels && config.alert_channels.length > 0
-        ? config.alert_channels
-        : [];
-
-      // 邮件渠道
-      if (channels.includes('email') && process.env.RESEND_API_KEY && params.adminEmails.length > 0) {
-        await sendSecurityAlertEmail(
-          {
-            adminEmails: params.adminEmails,
-            username: params.username,
-            ip: params.ip,
-            userAgent: params.userAgent,
-            failureCount: params.failureCount,
-            locked: params.locked,
-            alertType: params.alertType
-          },
-          process.env.RESEND_API_KEY,
-          'TimeMark Security <security@timemark.app>'
-        );
-        console.log('[Security Alert] Email sent');
-      }
-
-      // 其他渠道（飞书/企微/钉钉/Telegram等）
-      const nonEmailChannels = channels.filter((ch: string) => ch !== 'email');
-      if (nonEmailChannels.length > 0) {
-        await sendAlertToChannels(userId, nonEmailChannels, alertContent, params);
-      }
-
-      // 没有配置渠道时跳过
+    if (!params.userId) {
+      console.log('[Security Alert] No userId — skip channel dispatch');
+      return;
     }
 
-    console.log(`[Security Alert] ${params.alertType || 'login_failure'}: ${params.username} from ${params.ip}, failures: ${params.failureCount}, locked: ${params.locked}`);
+    const config = await getUserConfig(params.userId);
+    const channels: string[] = config?.alert_channels?.length ? config.alert_channels : [];
+    if (channels.length === 0) {
+      console.log('[Security Alert] No alert_channels configured — skip');
+      return;
+    }
+
+    const accounts = await getNotificationAccounts(params.userId);
+    const matchingAccounts = accounts.filter((a) => a.is_active && channels.includes(a.type));
+    if (matchingAccounts.length === 0) {
+      console.log('[Security Alert] No active accounts match alert_channels');
+      return;
+    }
+
+    const lockInfo = params.locked
+      ? `已锁定 ${params.lockMinutes ?? Math.floor(params.failureCount / 5) * 5} 分钟`
+      : '未锁定';
+
+    const alertEvent = {
+      id: 0,
+      name: params.locked ? '🔒 账户锁定告警' : '⚠️ 登录失败告警',
+      event_date: new Date().toISOString().split('T')[0],
+      event_type: 'other',
+      calendar_type: 'gregorian',
+      reminder_times: [],
+      notification_account_ids: matchingAccounts.map((a) => a.id),
+      personName: params.username,
+      customMessage: [
+        `用户名: ${params.username}`,
+        `IP: ${params.ip}`,
+        `失败次数: ${params.failureCount}`,
+        `状态: ${lockInfo}`,
+        `时间: ${new Date().toLocaleString('zh-CN', { timeZone: config?.timezone || 'Asia/Shanghai' })}`,
+        `设备: ${params.userAgent}`,
+      ].join('\n'),
+    };
+
+    await sendNotifications(alertEvent, params.userId, channels, { skipQuietHours: true });
+    console.log(`[Security Alert] Dispatched to ${matchingAccounts.length} account(s) via [${channels.join(', ')}]`);
   } catch (error) {
     console.error('[sendSecurityAlert] Failed to send alert:', error);
   }
-}
-
-function buildAlertContent(params: {
-  username: string;
-  ip: string;
-  userAgent: string;
-  failureCount: number;
-  locked: boolean;
-  alertType?: AlertType;
-}): any {
-  const typeLabels: Record<string, string> = {
-    login_failure: '登录失败告警',
-    new_device: '新设备登录告警',
-    password_change: '密码修改告警'
-  };
-
-  const title = typeLabels[params.alertType || 'login_failure'];
-  const alertEvent = {
-    id: 0,
-    name: `🔔 ${title}`,
-    event_date: new Date().toISOString().split('T')[0],
-    event_type: 'other',
-    calendar_type: 'gregorian',
-    reminder_times: [],
-    notification_account_ids: [],
-    personName: params.username,
-    customMessage: `用户名: ${params.username}\nIP: ${params.ip}\nUser-Agent: ${params.userAgent}\n失败次数: ${params.failureCount}\n账户锁定: ${params.locked ? '是' : '否'}`
-  };
-
-  return alertEvent;
-}
-
-async function sendAlertToChannels(userId: number, channels: string[], alertContent: any, alertParams: any): Promise<void> {
-  const accounts = await getNotificationAccounts(userId);
-  if (!accounts || accounts.length === 0) return;
-
-  // Filter accounts by type matching the channels parameter, only active ones
-  const matchingAccounts = accounts.filter(a => a.is_active && channels.includes(a.type));
-  if (matchingAccounts.length === 0) return;
-
-  await Promise.allSettled(matchingAccounts.map(async (account) => {
-    try {
-      switch (account.type) {
-        case 'feishu': {
-          const { sendFeishuNotification } = await import('./notifications/feishu.service.js');
-          if (account.webhook) await sendFeishuNotification(alertContent, account.webhook);
-          break;
-        }
-        case 'wecom': {
-          const { sendWeComNotification } = await import('./notifications/wecom.service.js');
-          if (account.webhook) await sendWeComNotification(alertContent, account.webhook);
-          break;
-        }
-        case 'dingtalk': {
-          const { sendDingTalkNotification } = await import('./notifications/dingtalk.service.js');
-          if (account.webhook && account.secret) await sendDingTalkNotification(alertContent, account.webhook, account.secret);
-          break;
-        }
-        case 'telegram': {
-          const { sendTelegramNotification } = await import('./notifications/telegram.service.js');
-          if (account.token && account.chat_id) await sendTelegramNotification(alertContent, account.token, account.chat_id);
-          break;
-        }
-        case 'discord': {
-          const { sendDiscordNotification } = await import('./notifications/discord.service.js');
-          if (account.webhook) await sendDiscordNotification(alertContent, account.webhook);
-          break;
-        }
-        case 'slack': {
-          const { sendSlackNotification } = await import('./notifications/slack.service.js');
-          if (account.webhook) await sendSlackNotification(alertContent, account.webhook);
-          break;
-        }
-        case 'wechat': {
-          const { sendWxPusherNotification } = await import('./notifications/wxpusher.service.js');
-          if (account.token && account.chat_id) await sendWxPusherNotification(alertContent, account.token, account.chat_id);
-          break;
-        }
-        case 'qq': {
-          const { sendQmsgNotification } = await import('./notifications/qmsg.service.js');
-          if (account.token) await sendQmsgNotification(alertContent, account.token, account.chat_id || undefined);
-          break;
-        }
-        case 'resend': {
-          const { sendSecurityAlertEmail } = await import('./notifications/email.service.js');
-          if (account.token && account.chat_id) {
-            await sendSecurityAlertEmail(
-              {
-                adminEmails: [account.chat_id],
-                username: alertParams.username,
-                ip: alertParams.ip,
-                userAgent: alertParams.userAgent,
-                failureCount: alertParams.failureCount,
-                locked: alertParams.locked,
-                alertType: alertParams.alertType
-              },
-              account.token,
-              account.webhook || 'onboarding@resend.dev'
-            );
-          }
-          break;
-        }
-        case 'smtp': {
-          const { sendSmtpNotification } = await import('./notifications/smtp.service.js');
-          if (account.webhook && account.token && account.chat_id) {
-            const smtpHost = account.webhook;
-            const smtpPort = parseInt(account.secret || '587', 10);
-            const password = account.token;
-            const fromEmail = account.chat_id;
-            await sendSmtpNotification(alertContent, smtpHost, smtpPort, password, fromEmail, fromEmail);
-          }
-          break;
-        }
-      }
-
-      console.log(`[Security Alert] ${account.type} notification sent via account "${account.name}"`);
-    } catch (e) {
-      console.error(`[Security Alert] Failed to send to ${account.type} (${account.name}):`, e);
-    }
-  }));
 }
