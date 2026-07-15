@@ -1,10 +1,9 @@
 /**
  * 通知渠道定义和配置
- * 按照 OpenClaw 的方式组织渠道，分为三类：
- * - webhook: 只需要 Webhook URL
- * - token: 需要 Bot Token 和可选的其他参数
- * - plugin: 需要安装 npm 包并扫码授权
+ * 云端部署仅支持 webhook / token 类 HTTP 渠道
  */
+
+import { isSupportedChannel } from './supported-channels.js';
 
 export type ChannelConfigMethod = 'webhook' | 'token' | 'plugin';
 
@@ -860,200 +859,29 @@ const tokenChannels: ChannelTemplate[] = [
   }
 ];
 
-// ============ Plugin-based Channels ============
-
-const pluginChannels: ChannelTemplate[] = [
-  {
-    id: 'wechat_personal',
-    name: '微信个人号',
-    description: '微信个人号消息推送（扫码登录）',
-    icon: 'Smartphone',
-    configMethod: 'plugin',
-    isBuiltIn: true,
-    pluginPackage: 'wechaty',
-    fields: [
-      {
-        name: 'session_data',
-        label: '认证会话',
-        type: 'textarea',
-        required: false,
-        description: '扫码登录后自动填充的会话数据'
-      }
-    ],
-    docsUrl: 'https://wechaty.js.org/'
-  },
-  {
-    id: 'whatsapp',
-    name: 'WhatsApp',
-    description: 'WhatsApp 消息推送（扫码配对）',
-    icon: 'Phone',
-    configMethod: 'plugin',
-    isBuiltIn: true,
-    pluginPackage: '@whiskeysockets/baileys',
-    fields: [
-      {
-        name: 'session_data',
-        label: '认证会话',
-        type: 'textarea',
-        required: false,
-        description: '扫码配对后自动填充的会话数据'
-      }
-    ],
-    docsUrl: 'https://github.com/WhiskeySockets/Baileys'
-  },
-  {
-    id: 'qq_bot',
-    name: 'QQ Bot',
-    description: 'QQ 机器人消息推送（扫码登录）',
-    icon: 'MessageCircle',
-    configMethod: 'plugin',
-    isBuiltIn: true,
-    pluginPackage: 'oicq',
-    fields: [
-      {
-        name: 'token',
-        label: 'QQ 号码',
-        type: 'text',
-        required: true,
-        placeholder: '123456789',
-        description: '机器人的 QQ 号码'
-      },
-      {
-        name: 'session_data',
-        label: '认证会话',
-        type: 'textarea',
-        required: false,
-        description: '扫码登录后自动填充的会话数据'
-      }
-    ],
-    docsUrl: 'https://oicqjs.github.io/oicq/'
-  },
-  {
-    id: 'signal',
-    name: 'Signal',
-    description: 'Signal 消息推送（需安装 signal-cli）',
-    icon: 'Shield',
-    configMethod: 'plugin',
-    isBuiltIn: true,
-    pluginPackage: 'signal-cli',
-    pluginInstallCommand: '# 需安装 signal-cli 命令行工具',
-    fields: [
-      {
-        name: 'token',
-        label: '电话号码',
-        type: 'text',
-        required: true,
-        placeholder: '+86138xxxxxxxx',
-        description: 'Signal 注册的手机号码'
-      },
-      {
-        name: 'session_data',
-        label: '认证会话',
-        type: 'textarea',
-        required: false,
-        description: '验证后自动填充的会话数据'
-      }
-    ],
-    docsUrl: 'https://github.com/AsamK/signal-cli'
-  },
-  {
-    id: 'imessage',
-    name: 'iMessage',
-    description: 'iMessage 消息推送（需 BlueBubbles 服务器）',
-    icon: 'MessageSquare',
-    configMethod: 'token',
-    isBuiltIn: true,
-    fields: [
-      {
-        name: 'webhook',
-        label: 'BlueBubbles 服务器 URL',
-        type: 'text',
-        required: true,
-        placeholder: 'https://your-bluebubbles-server.com',
-        description: 'BlueBubbles 服务器地址'
-      },
-      {
-        name: 'token',
-        label: 'API 密钥',
-        type: 'password',
-        required: true,
-        description: 'BlueBubbles 服务器的 API 密钥'
-      },
-      {
-        name: 'chat_id',
-        label: '接收人 ID',
-        type: 'text',
-        required: true,
-        placeholder: 'iMessage 地址或电话号码',
-        description: 'iMessage 接收人地址（邮箱或电话号码）'
-      }
-    ],
-    docsUrl: 'https://bluebubbles.app/'
-  },
-  {
-    id: 'zalo',
-    name: 'Zalo',
-    description: 'Zalo 消息推送（越南版微信）',
-    icon: 'MessageCircle',
-    configMethod: 'plugin',
-    isBuiltIn: true,
-    pluginPackage: 'zalo-messenger',
-    pluginInstallCommand: 'npm install axios',
-    fields: [
-      {
-        name: 'token',
-        label: 'Access Token',
-        type: 'password',
-        required: true,
-        description: 'Zalo OA 后台获取的 Access Token'
-      },
-      {
-        name: 'session_data',
-        label: '认证会话',
-        type: 'textarea',
-        required: false,
-        description: '扫码登录后自动填充的会话数据'
-      }
-    ],
-    docsUrl: 'https://developers.zalo.com/'
-  },
-  {
-    id: 'clawbot',
-    name: '微信龙虾 (ClawBot)',
-    description: '微信龙虾机器人消息推送（扫码登录）',
-    icon: 'Bot',
-    configMethod: 'plugin',
-    isBuiltIn: true,
-    pluginPackage: 'ilink-clawbot-api',
-    fields: [
-      {
-        name: 'session_data',
-        label: '认证会话',
-        type: 'textarea',
-        required: false,
-        description: '扫码登录后自动填充的会话数据'
-      }
-    ],
-    docsUrl: 'https://github.com/nicepkg/wechat-clawbot'
-  }
-];
-
 // ============ All Channel Templates ============
 
 export const allChannelTemplates: ChannelTemplate[] = [
   ...webhookChannels,
-  ...tokenChannels,
-  ...pluginChannels
+  ...tokenChannels.filter((c) => c.id !== 'nostr'),
 ];
+
+export function getSupportedChannelTemplates(): ChannelTemplate[] {
+  return allChannelTemplates.filter((c) => c.configMethod !== 'plugin' && isSupportedChannel(c.id));
+}
+
+export function getSupportedChannelsByMethod(method: ChannelConfigMethod): ChannelTemplate[] {
+  return getSupportedChannelTemplates().filter((c) => c.configMethod === method);
+}
 
 // ============ Channel Helpers ============
 
 export function getChannelTemplate(channelId: string): ChannelTemplate | undefined {
-  return allChannelTemplates.find(c => c.id === channelId);
+  return getSupportedChannelTemplates().find((c) => c.id === channelId);
 }
 
 export function getChannelsByMethod(method: ChannelConfigMethod): ChannelTemplate[] {
-  return allChannelTemplates.filter(c => c.configMethod === method);
+  return getSupportedChannelsByMethod(method);
 }
 
 export function isBuiltInChannel(channelId: string): boolean {
@@ -1077,9 +905,7 @@ export const legacyChannelToAccountType: Record<string, string> = {
   'slack': 'slack',
   'wechat': 'wxpusher',
   'wechat_official': 'wxpusher',
-  'wechat_personal': 'wechat_personal',
   'qq': 'qmsg',
-  'qq_bot': 'qmsg',
   'email': 'email',
   'resend': 'resend',
 };

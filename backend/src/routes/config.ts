@@ -28,6 +28,7 @@ import {
   saveEventTemplateSchema,
 } from '@timemark/shared';
 import type { User } from '@timemark/shared';
+import { isSupportedChannel } from '../services/notifications/supported-channels.js';
 
 const config = new Hono<{ Variables: { user: User } }>();
 
@@ -67,6 +68,12 @@ config.post('/accounts', async (c) => {
   if (!parsed.success) {
     return c.json({ success: false, error: 'Invalid input', details: parsed.error.flatten() }, 400);
   }
+  if (!isSupportedChannel(parsed.data.type)) {
+    return c.json({ success: false, error: '该通知渠道在云端部署中不可用' }, 400);
+  }
+  if (parsed.data.configMethod === 'plugin') {
+    return c.json({ success: false, error: '插件类通知渠道在云端部署中不可用' }, 400);
+  }
   
   const account = await createNotificationAccount(Number(user.id), {
     type: parsed.data.type,
@@ -91,6 +98,9 @@ config.put('/accounts/:id', async (c) => {
   const parsed = updateNotificationAccountSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: 'Invalid input', details: parsed.error.flatten() }, 400);
+  }
+  if (parsed.data.configMethod === 'plugin') {
+    return c.json({ success: false, error: '插件类通知渠道在云端部署中不可用' }, 400);
   }
   
   const account = await updateNotificationAccount(id, Number(user.id), {

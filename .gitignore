@@ -31,3 +31,4 @@ test-api*.ps1
 
 # Vercel
 .vercel
+.env*

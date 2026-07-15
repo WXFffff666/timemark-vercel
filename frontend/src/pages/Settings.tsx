@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe } from 'lucide-react';
+import { User, Shield, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/lib/api';
-import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed } from '@/lib/push';
 
 const TIMEZONES = [
   { value: 'Asia/Shanghai', label: '中国标准时间 (UTC+8)' },
@@ -64,13 +63,7 @@ export default function Settings() {
 
   // Timezone setting
   const [timezone, setTimezone] = useState('Asia/Shanghai');
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushLoading, setPushLoading] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
-
-  useEffect(() => {
-    isWebPushSubscribed().then(setPushEnabled).catch(() => {});
-  }, []);
 
   useEffect(() => {
     api.get<{ timezone?: string }>('/config').then((config) => {
@@ -117,31 +110,6 @@ export default function Settings() {
     setAlertSaving(true);
     try { await api.post('/config', { alert_channels: selectedAlertChannels }); } catch (e) { console.error(e); }
     setAlertSaving(false);
-  };
-
-  const handlePushToggle = async () => {
-    setPushLoading(true);
-    try {
-      if (pushEnabled) {
-        await unsubscribeWebPush();
-        setPushEnabled(false);
-        alert('已关闭浏览器推送');
-      } else {
-        const result = await subscribeWebPush();
-        if (result === 'unsupported') {
-          alert('您的浏览器不支持 Web Push');
-        } else if (result === 'denied') {
-          alert('请在浏览器设置中允许通知权限');
-        } else {
-          setPushEnabled(true);
-          alert('浏览器推送已开启');
-        }
-      }
-    } catch (error) {
-      alert('推送设置失败: ' + (error instanceof Error ? error.message : '未知错误'));
-    } finally {
-      setPushLoading(false);
-    }
   };
 
   const handleExportData = async () => {
@@ -378,32 +346,6 @@ export default function Settings() {
                     <option key={tz.value} value={tz.value}>{tz.label}</option>
                   ))}
                 </select>
-              </div>
-            </div>
-          </motion.section>
-
-          {/* 浏览器推送 */}
-          <motion.section variants={itemVariants}>
-            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">浏览器推送</h2>
-            <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10">
-              <div className="flex items-center justify-between p-4 rounded-[2rem]">
-                <div className="flex items-center gap-4">
-                  <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center shadow-inner border border-blue-100 dark:border-blue-800/50">
-                    <Bell size={22} />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">浏览器推送通知</h3>
-                    <p className="text-xs text-slate-500">即使关闭页面也能收到提醒</p>
-                  </div>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={pushLoading}
-                  onClick={handlePushToggle}
-                >
-                  {pushLoading ? '处理中...' : pushEnabled ? '关闭推送' : '开启推送'}
-                </Button>
               </div>
             </div>
           </motion.section>

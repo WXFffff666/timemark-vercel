@@ -37,15 +37,15 @@ export function LoginForm() {
       }
     } catch (err: any) {
       const message = err.message || '登录失败';
-      if (message.includes('429') || message.includes('锁定')) {
-        const match = message.match(/(\d+)\s*秒/);
-        if (match) {
-          setLockoutSeconds(parseInt(match[1]));
+      if (message.includes('429') || message.includes('锁定') || message.includes('频繁')) {
+        const secMatch = message.match(/剩余\s*(\d+)\s*秒/) || message.match(/(\d+)\s*秒/);
+        if (secMatch) {
+          setLockoutSeconds(parseInt(secMatch[1], 10));
           const timer = setInterval(() => {
             setLockoutSeconds(prev => { if (prev <= 1) { clearInterval(timer); return 0; } return prev - 1; });
           }, 1000);
         }
-        setError(message);
+        setError(message.replace(/^HTTP \d+:\s*/, ''));
       } else if (message.includes('401') || message.includes('Invalid')) {
         setError('用户名或密码错误');
       } else {

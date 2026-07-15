@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   MessageCircle, Mail, Webhook, MessageSquare, AlertCircle, CheckCircle2, 
-  Link2Off, ArrowLeft, Plus, ExternalLink, QrCode, Puzzle, Settings,
+  Link2Off, ArrowLeft, Plus, ExternalLink, Settings,
   Gamepad2, Hash, Building2, Terminal, Server, Video, Smartphone,
   Send, Grid3X3, Cloud, Zap, Phone, Shield, BookOpen, ChevronRight,
   Loader2
@@ -17,8 +17,8 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import type { NotificationAccount } from '@timemark/shared';
 
-// Channel configuration method types
-type ConfigMethod = 'webhook' | 'token' | 'plugin';
+// Channel configuration method types (cloud deploy: webhook + token only)
+type ConfigMethod = 'webhook' | 'token';
 
 interface ChannelField {
   name: string;
@@ -37,8 +37,6 @@ interface ChannelTemplate {
   configMethod: ConfigMethod;
   fields: ChannelField[];
   docsUrl?: string;
-  pluginPackage?: string;
-  pluginInstallCommand?: string;
   isBuiltIn: boolean;
 }
 
@@ -51,7 +49,7 @@ interface Account extends NotificationAccount {
 const iconMap: Record<string, React.ElementType> = {
   MessageCircle, MessageSquare, Mail, Webhook, Gamepad2, Hash, Building2,
   Terminal, Server, Video, Smartphone, Send, Grid3X3, Cloud, Zap, Phone,
-  Shield, BookOpen, Plus, Settings, Puzzle, QrCode, Loader2
+  Shield, BookOpen, Plus, Settings, Loader2
 };
 
 const containerVariants = { 
@@ -85,7 +83,6 @@ export default function Channels() {
   // Modals state
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [showQrModal, setShowQrModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<ChannelTemplate | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [configForm, setConfigForm] = useState<Record<string, string>>({});
@@ -101,11 +98,6 @@ export default function Channels() {
   const [connectionStatus, setConnectionStatus] = useState<Record<number, ConnectionTestResult>>({});
   const [testingAll, setTestingAll] = useState(false);
 
-  // QR code state for plugins
-  const [qrCodeData, setQrCodeData] = useState<string>('');
-  const [qrSessionId, setQrSessionId] = useState<string>('');
-  const [authStatus, setAuthStatus] = useState<string>('pending');
-
   useEffect(() => {
     fetchData();
   }, []);
@@ -116,7 +108,7 @@ export default function Channels() {
       // Fetch templates - api already returns data.data, so result is ChannelTemplate[]
       const templatesRes = await api.get<ChannelTemplate[]>('/channels/templates');
       if (templatesRes) {
-        setTemplates(templatesRes);
+        setTemplates(templatesRes.filter(t => t.configMethod === 'webhook' || t.configMethod === 'token'));
       }
 
       // Fetch accounts - api already returns data.data, so result is Account[]
@@ -159,12 +151,8 @@ export default function Channels() {
     }
   };
 
-  // Test all non-plugin accounts sequentially
   const testAllAccounts = async () => {
-    const testableAccounts = accounts.filter(a => {
-      const tpl = templates.find(t => t.id === a.type);
-      return tpl?.configMethod !== 'plugin' && a.is_active !== false;
-    });
+    const testableAccounts = accounts.filter(a => a.is_active !== false);
     setTestingAll(true);
     for (const account of testableAccounts) {
       await testAccountStatus(account);
@@ -188,7 +176,6 @@ export default function Channels() {
     switch (method) {
       case 'webhook': return Webhook;
       case 'token': return Settings;
-      case 'plugin': return Puzzle;
     }
   };
 
@@ -196,7 +183,6 @@ export default function Channels() {
     switch (method) {
       case 'webhook': return 'Webhook';
       case 'token': return 'Token';
-      case 'plugin': return '插件';
     }
   };
 
@@ -204,7 +190,6 @@ export default function Channels() {
     switch (method) {
       case 'webhook': return 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400';
       case 'token': return 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400';
-      case 'plugin': return 'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400';
     }
   };
 
@@ -214,7 +199,6 @@ export default function Channels() {
 
   const getAccountStatus = (account: Account) => {
     if (!account.is_active) return 'disabled';
-    if (account.configMethod === 'plugin' && !account.sessionData) return 'pending_auth';
     return 'connected';
   };
 
@@ -249,16 +233,11 @@ export default function Channels() {
     setModalBackStack(newStack);
     
     if (lastState === 'main' || lastState === undefined) {
-      // Go back to main list - close all modals
       setShowConfigModal(false);
       setShowTemplateModal(false);
-      setShowQrModal(false);
     } else if (lastState === 'template') {
       setShowConfigModal(false);
       setShowTemplateModal(true);
-    } else if (lastState === 'qr') {
-      setShowQrModal(false);
-      setShowConfigModal(true);
     }
   };
 
@@ -380,104 +359,9 @@ export default function Channels() {
     }
   };
 
-  const startPluginAuth = async (template: ChannelTemplate, account?: Account) => {
-    setSelectedTemplate(template);
-    setQrCodeData('');
-    setQrSessionId('');
-    setAuthStatus('pending');
-    setShowQrModal(true);
-    // 设置正确的返回栈，确保关闭弹窗时回到主页面
-    setModalBackStack(['main', 'qr']);
-
-    try {
-      // Call backend to start authentication
-      const body: any = {};
-      
-      // For QQ bot, we need the QQ number from config
-      if (template.id === 'qq_bot') {
-        // Try to get QQ number from configForm first (for new configs)
-        // or from account token (for existing accounts)
-        body.qqNumber = configForm.token || account?.token;
-      }
-
-      console.log('[Channels] Starting plugin auth for:', template.id, 'with body:', body);
-      
-      const result = await api.post<{ qrcode: string; sessionId: string }>(
-        `/channels/plugin/${template.id}/start-auth`,
-        body
-      );
-
-      console.log('[Channels] Auth result:', result);
-
-      if (result) {
-        setQrCodeData(result.qrcode);
-        setQrSessionId(result.sessionId);
-        setAuthStatus('authenticating');
-
-        // Start polling to check auth status
-        checkAuthStatus(template.id, result.sessionId);
-      }
-    } catch (error: any) {
-      console.error('[Channels] Failed to start auth:', error);
-      setAuthStatus('error');
-      setQrCodeData('');
-    }
-  };
-
-  // Poll for authentication status
-  const checkAuthStatus = async (type: string, sessionId: string) => {
-    const maxAttempts = 120; // 2 minutes
-    let attempts = 0;
-    let consecutiveErrors = 0;
-
-    const poll = async () => {
-      if (attempts >= maxAttempts) {
-        setAuthStatus('error');
-        return;
-      }
-      if (authStatus === 'authenticated') {
-        return;
-      }
-
-      try {
-        const pendingSessionData = JSON.stringify({ sessionId, authenticated: false });
-        const result = await api.post<{ authenticated: boolean; user?: string; sessionData?: string }>(
-          `/channels/plugin/${type}/check-auth`,
-          { sessionData: pendingSessionData }
-        );
-
-        consecutiveErrors = 0; // Reset on success
-
-        if (result?.authenticated) {
-          setAuthStatus('authenticated');
-          // Save session data to config form - use the full credentials returned by backend
-          const sessionDataToSave = result.sessionData || pendingSessionData;
-          setConfigForm(prev => ({ ...prev, sessionData: sessionDataToSave }));
-          console.log('[Channels] Authenticated! Session data saved.');
-        } else {
-          attempts++;
-          setTimeout(poll, 2000);
-        }
-      } catch (error) {
-        console.error('Error checking auth status:', error);
-        consecutiveErrors++;
-        attempts++;
-        if (consecutiveErrors >= 3) {
-          setAuthStatus('error');
-          return;
-        }
-        setTimeout(poll, 2000);
-      }
-    };
-
-    poll();
-  };
-
   const filteredTemplates = templates.filter(t => t.configMethod === activeTab);
 
-  // Group accounts by status
   const connectedAccounts = accounts.filter(a => getAccountStatus(a) === 'connected');
-  const pendingAccounts = accounts.filter(a => getAccountStatus(a) === 'pending_auth');
   const disabledAccounts = accounts.filter(a => getAccountStatus(a) === 'disabled');
 
   return (
@@ -621,77 +505,6 @@ export default function Channels() {
               </section>
             )}
 
-            {/* Pending Auth Accounts (Plugin channels) */}
-            {pendingAccounts.length > 0 && (
-              <section className="mb-10">
-                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
-                  <QrCode className="w-5 h-5 text-amber-500" />
-                  等待授权
-                </h2>
-                <motion.div 
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
-                  variants={containerVariants} 
-                  initial="hidden" 
-                  animate="visible"
-                >
-                  {pendingAccounts.map((account) => {
-                    const template = templates.find(t => t.id === account.type);
-                    const Icon = template ? getTemplateIcon(template.icon) : MessageSquare;
-                    
-                    return (
-                      <motion.div key={account.id} variants={itemVariants}>
-                        <div className="glass-panel rounded-3xl p-6 transition-all duration-300 ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/5">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
-                                <Icon size={24} />
-                              </div>
-                              <div>
-                                <h3 className="font-semibold text-slate-900 dark:text-white">{account.name}</h3>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Badge variant="warning" className="gap-1 text-xs">
-                                    <QrCode size={12} /> 待授权
-                                  </Badge>
-                                  <span className={`text-xs px-2 py-0.5 rounded-full ${getMethodColor('plugin')}`}>
-                                    插件
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 mb-4">
-                            <p className="text-sm text-amber-700 dark:text-amber-300">
-                              需要扫码授权以激活此渠道
-                            </p>
-                          </div>
-                          
-                          <div className="flex items-center justify-between">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="rounded-lg border-amber-200"
-                              onClick={() => template && startPluginAuth(template, account)}
-                            >
-                              <QrCode size={14} className="mr-1" /> 扫码授权
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="rounded-lg text-red-500"
-                              onClick={() => deleteAccount(account)}
-                            >
-                              删除
-                            </Button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </motion.div>
-              </section>
-            )}
-
             {/* Empty State */}
             {accounts.length === 0 && (
               <div className="text-center py-20">
@@ -742,7 +555,7 @@ export default function Channels() {
           
           <div className="p-6">
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ConfigMethod)} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-6">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="webhook" className="flex items-center gap-2">
                   <Webhook size={16} />
                   Webhook
@@ -755,13 +568,6 @@ export default function Channels() {
                   Token
                   <Badge variant="secondary" className="ml-1 text-xs">
                     {templates.filter(t => t.configMethod === 'token').length}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="plugin" className="flex items-center gap-2">
-                  <Puzzle size={16} />
-                  插件
-                  <Badge variant="secondary" className="ml-1 text-xs">
-                    {templates.filter(t => t.configMethod === 'plugin').length}
                   </Badge>
                 </TabsTrigger>
               </TabsList>
@@ -791,12 +597,6 @@ export default function Channels() {
                               <h3 className="font-semibold text-slate-900 dark:text-white">
                                 {template.name}
                               </h3>
-                              {template.configMethod === 'plugin' && !template.isBuiltIn && !template.pluginPackage?.startsWith('@') && (
-                                <Badge variant="outline" className="text-xs">
-                                  <Puzzle size={10} className="mr-1" />
-                                  需安装
-                                </Badge>
-                              )}
                             </div>
                             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
                               {template.description}
@@ -859,25 +659,6 @@ export default function Channels() {
             </div>
           </DialogHeader>
 
-          {selectedTemplate?.configMethod === 'plugin' && !selectedTemplate.isBuiltIn && (
-            <div className="mb-6 p-4 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
-              <div className="flex items-center gap-2 mb-2">
-                <Puzzle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                <span className="font-medium text-purple-900 dark:text-purple-200">
-                  需要安装插件
-                </span>
-              </div>
-              <p className="text-sm text-purple-700 dark:text-purple-300 mb-2">
-                此渠道需要安装额外的 npm 包才能使用
-              </p>
-              {selectedTemplate.pluginInstallCommand && (
-                <code className="block p-2 bg-slate-900 text-slate-100 rounded-lg text-sm font-mono">
-                  {selectedTemplate.pluginInstallCommand}
-                </code>
-              )}
-            </div>
-          )}
-
           <div className="space-y-4 mt-4">
             <div>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
@@ -933,21 +714,6 @@ export default function Channels() {
               </a>
             )}
 
-            {/* Plugin渠道显示扫码授权按钮 */}
-            {selectedTemplate?.configMethod === 'plugin' && (
-              <div className="pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-12 rounded-2xl font-bold border-amber-300 text-amber-600 hover:bg-amber-50"
-                  onClick={() => selectedTemplate && startPluginAuth(selectedTemplate, selectedAccount || undefined)}
-                >
-                  <QrCode size={18} className="mr-2" />
-                  {selectedAccount?.sessionData ? '重新扫码授权' : '扫码授权'}
-                </Button>
-              </div>
-            )}
-
             <div className="pt-4 flex gap-3">
               <Button
                 variant="secondary"
@@ -982,164 +748,6 @@ export default function Channels() {
                 )}
               </Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* QR Code Modal for Plugin Auth */}
-      <Dialog open={showQrModal} onOpenChange={(open) => {
-        // 点击遮罩层/旁边区域时返回上一级，而不是直接关闭
-        if (!open) {
-          // 只有当不是通过"稍后授权"或"我已扫码"按钮关闭时才打开配置弹窗
-          // 检查是否有 account (已有渠道) 或 modalBackStack 状态
-          if (!selectedAccount && modalBackStack[modalBackStack.length - 1] !== 'config') {
-            setShowConfigModal(true);
-          }
-          setShowQrModal(false);
-        }
-      }}>
-        <DialogContent className="glass-panel rounded-[2rem] max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              {canGoBack && (
-                <button 
-                  onClick={goBackInModal}
-                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                >
-                  <ArrowLeft size={24} className="text-slate-600 dark:text-slate-400" />
-                </button>
-              )}
-              <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-                <div className="p-2 bg-purple-50 dark:bg-purple-900/30 rounded-xl text-purple-600 dark:text-purple-400">
-                  <QrCode size={24} />
-                </div>
-                扫码授权
-              </DialogTitle>
-            </div>
-          </DialogHeader>
-          
-          <div className="text-center py-8">
-            <div className="w-48 h-48 mx-auto mb-6 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center overflow-hidden">
-              {authStatus === 'error' ? (
-                <div className="text-center p-4">
-                  <AlertCircle className="w-12 h-12 mx-auto mb-2 text-red-400" />
-                  <p className="text-sm text-red-500">加载失败</p>
-                  <button
-                    className="mt-2 text-xs text-primary-500 hover:text-primary-600 underline"
-                    onClick={() => selectedTemplate && startPluginAuth(selectedTemplate)}
-                  >
-                    重试
-                  </button>
-                </div>
-              ) : qrCodeData ? (
-                <img src={qrCodeData} alt="QR Code" className="w-full h-full object-contain" />
-              ) : (
-                <div className="text-center p-4">
-                  <Loader2 className="w-12 h-12 mx-auto mb-2 text-slate-400 animate-spin" />
-                  <p className="text-sm text-slate-500">加载中...</p>
-                </div>
-              )}
-            </div>
-            <p className="text-slate-600 dark:text-slate-300 mb-2">
-              {authStatus === 'error' ? '二维码加载失败' : `请使用 ${selectedTemplate?.name} 扫描二维码`}
-            </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {authStatus === 'authenticating' ? '等待扫码中...' : authStatus === 'authenticated' ? '授权成功！' : authStatus === 'error' ? '请检查后端服务状态后重试' : '扫码后将自动完成授权并启用此渠道'}
-            </p>
-          </div>
-
-          {authStatus === 'authenticating' && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 mb-4">
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-                <span className="text-sm text-blue-700 dark:text-blue-300">等待扫码验证...</span>
-              </div>
-            </div>
-          )}
-
-          {authStatus === 'authenticated' && (
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 mb-4">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-500" />
-                <span className="text-sm text-green-700 dark:text-green-300">授权成功！请保存配置。</span>
-              </div>
-            </div>
-          )}
-
-          {authStatus === 'error' && (
-            <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 mb-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-red-500" />
-                  <span className="text-sm text-red-700 dark:text-red-300">认证失败，请检查后端服务或网络连接</span>
-                </div>
-                <button
-                  className="text-xs text-red-600 dark:text-red-400 hover:underline font-medium"
-                  onClick={() => selectedTemplate && startPluginAuth(selectedTemplate)}
-                >
-                  重试
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 mb-4">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-500 mt-0.5" />
-              <div className="text-sm text-amber-700 dark:text-amber-300">
-                <p className="font-medium mb-1">注意</p>
-                <p>插件渠道需要安装对应的 npm 包才能正常使用扫码功能。请确保已安装所需依赖。</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            <Button
-              variant="secondary"
-              className="flex-1 h-12 rounded-2xl font-bold"
-              onClick={() => {
-                // 点击稍后授权返回上一级，而不是直接关闭
-                // 如果是已有账户（待授权列表点击），直接关闭即可
-                if (selectedAccount) {
-                  setShowQrModal(false);
-                  setModalBackStack(['main']);
-                } else if (modalBackStack.length > 1) {
-                  goBackInModal();
-                } else {
-                  setShowQrModal(false);
-                  setShowConfigModal(true);
-                  setModalBackStack(['main', 'template', 'config']);
-                }
-              }}
-            >
-              稍后授权
-            </Button>
-            <Button
-              variant="vision"
-              className="flex-1 h-12 rounded-2xl font-bold shadow-lg shadow-primary-500/30"
-              onClick={() => {
-                // 扫码完成后，验证认证状态
-                if (authStatus === 'authenticated') {
-                  // 认证成功，保存并关闭
-                  if (selectedAccount) {
-                    setShowQrModal(false);
-                    setModalBackStack(['main']);
-                  } else {
-                    setShowQrModal(false);
-                    setShowConfigModal(true);
-                    setModalBackStack(['main', 'template', 'config']);
-                  }
-                } else if (authStatus === 'authenticating') {
-                  // 还在认证中，提示用户等待
-                  alert('正在等待扫码确认，请稍候...');
-                } else {
-                  // 认证失败或未开始，提示用户
-                  alert('尚未完成扫码授权，请先扫码或选择"稍后授权"');
-                }
-              }}
-            >
-              我已扫码
-            </Button>
           </div>
         </DialogContent>
       </Dialog>

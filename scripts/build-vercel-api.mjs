@@ -6,14 +6,9 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
 const schedulerStub = join(root, 'backend/src/queue/scheduler.vercel-stub.ts')
-const notificationsStub = join(root, 'backend/src/services/notifications.vercel-stub.ts')
-const emailStub = join(root, 'backend/src/services/notifications/email.vercel-stub.ts')
-const imAuthStub = join(root, 'backend/src/services/notifications/im-auth.vercel-stub.ts')
-const pushStub = join(root, 'backend/src/routes/push.vercel-stub.ts')
-const testConnectionStub = join(root, 'backend/src/services/notifications/test-connection.vercel-stub.ts')
-const networkCheckStub = join(root, 'backend/src/services/notifications/network-check.vercel-stub.ts')
 const imServicePattern =
-  /[/\\]notifications[/\\](wechaty|whatsapp|qqbot|signal|zalo|bluebubbles|clawbot|wechat-openclaw)\.service\.js$/
+  /[/\\]notifications[/\\](wechaty|whatsapp|qqbot|signal|zalo|bluebubbles|clawbot|wechat-openclaw|nostr)\.service\.js$/
+const imAuthStub = join(root, 'backend/src/services/notifications/im-auth.vercel-stub.ts')
 
 const outfile = 'api/handler.cjs'
 
@@ -44,25 +39,10 @@ await esbuild.build({
       },
     },
     {
-      name: 'notifications-vercel-stub',
+      name: 'drop-removed-channel-services',
       setup(build) {
-        build.onResolve({ filter: /[/\\]notifications[/\\]index\.js$/ }, () => ({
-          path: notificationsStub,
-        }))
-        build.onResolve({ filter: /[/\\]notifications[/\\]email\.service\.js$/ }, () => ({
-          path: emailStub,
-        }))
         build.onResolve({ filter: imServicePattern }, () => ({
           path: imAuthStub,
-        }))
-        build.onResolve({ filter: /[/\\]routes[/\\]push\.js$/ }, () => ({
-          path: pushStub,
-        }))
-        build.onResolve({ filter: /[/\\]notifications[/\\]test-connection\.js$/ }, () => ({
-          path: testConnectionStub,
-        }))
-        build.onResolve({ filter: /[/\\]notifications[/\\]network-check\.js$/ }, () => ({
-          path: networkCheckStub,
         }))
       },
     },

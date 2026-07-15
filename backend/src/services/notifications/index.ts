@@ -20,12 +20,9 @@ import { sendMatrixNotification } from './matrix.service.js';
 import { sendMattermostNotification } from './mattermost.service.js';
 import { sendMicrosoftTeamsNotification } from './msteams.service.js';
 import { sendNextcloudTalkNotification } from './nextcloudtalk.service.js';
-import { sendNostrNotification } from './nostr.service.js';
 import { sendNtfyNotification } from './ntfy.service.js';
 import { sendPushoverNotification } from './pushover.service.js';
 import { sendAppriseNotification } from './apprise.service.js';
-// New token-based channels (batch 2)
-import { sendClawBotNotification } from './clawbot.service.js';
 import { sendServerChanNotification } from './serverchan.service.js';
 import { sendPushPlusNotification } from './pushplus.service.js';
 import { sendBarkNotification } from './bark.service.js';
@@ -33,14 +30,7 @@ import { sendGotifyNotification } from './gotify.service.js';
 import { sendMeowNotification } from './meow.service.js';
 import { sendPushMeNotification } from './pushme.service.js';
 import { sendWeComAppNotification } from './wecomapp.service.js';
-
-// Plugin channel services
-import { sendNotification as sendWechatNotification } from './wechaty.service.js';
-import { sendNotification as sendWhatsappNotification } from './whatsapp.service.js';
-import { sendNotification as sendQQNotification } from './qqbot.service.js';
-import { sendNotification as sendSignalNotification } from './signal.service.js';
-import { sendNotification as sendZaloNotification } from './zalo.service.js';
-import { sendNotification as sendBlueBubblesNotification } from './bluebubbles.service.js';
+import { filterSupportedChannels } from './supported-channels.js';
 
 import { getUserConfig, getRelationshipMappings, getNotificationAccounts, getEventTemplate } from '../config.service.js';
 import { applyRelationshipMapping } from '@timemark/shared/relationship';
@@ -341,15 +331,10 @@ export async function sendNotifications(event: any, userId: number, channels: st
     return { _quiet_hours: { success: false, error: 'quiet_hours' } };
   }
 
-  // Vercel environment: skip channels that require WebSocket, local filesystem, or native binaries
-  if (process.env.VERCEL) {
-    const INCOMPATIBLE_VERCEL_CHANNELS = ['qq_bot', 'signal', 'wechat_personal', 'whatsapp', 'clawbot'];
-    const filtered = channels.filter(ch => !INCOMPATIBLE_VERCEL_CHANNELS.includes(ch));
-    if (filtered.length !== channels.length) {
-      const skipped = channels.filter(ch => INCOMPATIBLE_VERCEL_CHANNELS.includes(ch));
-      console.log(`[Notifications] Skipping incompatible channels in Vercel: ${skipped.join(', ')}`);
-    }
-    channels = filtered;
+  // Vercel / cloud: only HTTP-based channels
+  channels = filterSupportedChannels(channels);
+  if (channels.length === 0) {
+    return { _skipped: { success: false, error: 'no_supported_channels' } };
   }
 
   const channelWebhooks = config?.channel_webhooks || {};
@@ -644,47 +629,6 @@ export async function sendNotifications(event: any, userId: number, channels: st
           await retryWithBackoff(() => sendPushoverNotification(mappedEvent, chConfig.token, chConfig.secret));
         else if (ch === 'apprise' && chConfig.webhook)
           await retryWithBackoff(() => sendAppriseNotification(mappedEvent, chConfig.webhook, chConfig.token));
-        // Plugin-based channels
-        else if (ch === 'wechat_personal' && chConfig.sessionData) {
-          const toUser = chConfig.toUser || mappedEvent.personName || 'me';
-          await retryWithBackoff(() => sendWechatNotification(mappedEvent, chConfig.sessionData, toUser));
-        }
-        else if (ch === 'whatsapp' && chConfig.sessionData) {
-          const toUser = chConfig.toUser || mappedEvent.personName || '';
-          await retryWithBackoff(() => sendWhatsappNotification(mappedEvent, chConfig.sessionData, toUser));
-        }
-        else if (ch === 'qq_bot' && chConfig.sessionData) {
-          const toUser = chConfig.toUser || mappedEvent.personName || '';
-          await retryWithBackoff(() => sendQQNotification(mappedEvent, chConfig.sessionData, toUser));
-        }
-        else if (ch === 'signal' && chConfig.sessionData) {
-          const toUser = chConfig.toUser || mappedEvent.personName || '';
-          await retryWithBackoff(() => sendSignalNotification(mappedEvent, chConfig.sessionData, toUser));
-        }
-        else if (ch === 'zalo' && chConfig.sessionData) {
-          const toUser = chConfig.toUser || mappedEvent.personName || '';
-          await retryWithBackoff(() => sendZaloNotification(mappedEvent, chConfig.sessionData, toUser));
-        }
-        else if (ch === 'imessage' && chConfig.webhook && chConfig.token && chConfig.chat_id) {
-          // iMessage via BlueBubbles
-          const sessionData = {
-            serverUrl: chConfig.webhook,
-            password: chConfig.token,
-            sessionId: 'direct'
-          };
-          await retryWithBackoff(() => sendBlueBubblesNotification(mappedEvent, sessionData, chConfig.chat_id));
-        }
-        else if (ch === 'clawbot' && chConfig.sessionData) {
-          const sessionObj = typeof chConfig.sessionData === 'string'
-            ? JSON.parse(chConfig.sessionData)
-            : chConfig.sessionData;
-          const botToken = sessionObj.bot_token;
-          const baseUrl = sessionObj.baseUrl || 'https://ilinkai.weixin.qq.com';
-          const toUser = chConfig.toUser || '';
-          if (botToken && toUser) {
-            await retryWithBackoff(() => sendClawBotNotification(mappedEvent, botToken, toUser, baseUrl));
-          }
-        }
       } catch (e) {
         console.error(`Failed ${ch}:`, e);
         throw e;

@@ -79,7 +79,22 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
   }
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    let message = `HTTP ${response.status}: ${response.statusText}`;
+    try {
+      const errData = await response.json() as ApiResponse<unknown> & {
+        remainingSeconds?: number;
+        locked?: boolean;
+      };
+      if (errData.error) {
+        message = errData.error;
+        if (errData.remainingSeconds && errData.remainingSeconds > 0) {
+          message += `（剩余 ${errData.remainingSeconds} 秒）`;
+        }
+      }
+    } catch {
+      // ignore non-JSON error bodies
+    }
+    throw new Error(message);
   }
 
   const data: ApiResponse<T> = await response.json();
