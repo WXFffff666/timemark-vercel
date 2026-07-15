@@ -100,7 +100,7 @@ export function LoginForm() {
     const trimmedUsername = username.trim();
     const trimmedPassword = password.trim();
     if (trimmedUsername.length < 3) return setError('用户名至少3个字符');
-    if (trimmedPassword.length < 6) return setError('密码至少6个字符');
+    if (trimmedPassword.length < 8) return setError('密码至少8个字符');
 
     setLoading(true);
     try {

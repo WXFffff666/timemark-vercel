@@ -95,16 +95,20 @@ app.route('/api/broadcast', broadcastRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {
+  const detailed = c.req.query('detailed') === '1' && c.req.header('x-health-token') === process.env.HEALTH_DETAIL_TOKEN;
   const checks: Record<string, boolean | string> = {
     platform: process.env.VERCEL ? 'vercel' : 'local',
-    version: '2.8.0',
-    commit: process.env.VERCEL_GIT_COMMIT_SHA || 'local',
-    databaseUrl: !!process.env.DATABASE_URL,
-    jwtSecret: !!process.env.JWT_SECRET,
-    masterKey: !!process.env.MASTER_KEY,
+    version: '2.11.0',
+    database: false,
     turnstile: isTurnstileEnabled(),
-    cronSecret: !!process.env.CRON_SECRET,
   };
+  if (detailed && process.env.HEALTH_DETAIL_TOKEN) {
+    checks.commit = process.env.VERCEL_GIT_COMMIT_SHA || 'local';
+    checks.databaseUrl = !!process.env.DATABASE_URL;
+    checks.jwtSecret = !!process.env.JWT_SECRET;
+    checks.masterKey = !!process.env.MASTER_KEY;
+    checks.cronSecret = !!process.env.CRON_SECRET;
+  }
   if (!process.env.DATABASE_URL) {
     checks.database = false;
     checks.error = 'DATABASE_URL not configured';

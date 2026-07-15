@@ -14,6 +14,8 @@
 - **默认仅用户名 + 密码**登录，不强制二步验证
 - TOTP 为可选：仅在安全中心主动启用后才要求验证码
 - Passkey 仅用于安全中心注册/管理，**不参与登录**
+- Turnstile 人机验证已支持（见 `docs/TURNSTILE_SETUP.md`）
+- 浏览器渗透评估见 `docs/SECURITY_AUDIT.md`
 
 ---
 

@@ -6,7 +6,7 @@ const REFRESH_COOKIE = 'timemark_refresh';
 
 const baseOpts = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: process.env.NODE_ENV === 'production' || !!process.env.VERCEL,
   sameSite: 'Lax' as const,
   path: '/',
 };

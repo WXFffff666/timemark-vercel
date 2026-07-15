@@ -511,7 +511,7 @@ docker compose restart
 
 🐛 问题反馈：[GitHub Issues](https://github.com/WXFffff666/timemark-docker/issues)
 
-📖 部署文档：[DEPLOYMENT.md](DEPLOYMENT.md)
+📖 部署与运维：见 [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)、[docs/OPTIMIZATION_PLAN.md](docs/OPTIMIZATION_PLAN.md)
 
 ---
 

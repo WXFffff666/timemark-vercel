@@ -19,12 +19,22 @@ export default function DeployWizard() {
       try {
         const res = await fetch('/api/health');
         const data = await res.json();
+        let secretChecks: Record<string, boolean> = {};
+        try {
+          const deploy = await api.get<{
+            turnstileConfigured?: boolean;
+            cronSecretConfigured?: boolean;
+          }>('/security/deploy-info');
+          secretChecks = {
+            cronSecret: !!deploy.cronSecretConfigured,
+            turnstile: !!deploy.turnstileConfigured,
+          };
+        } catch {
+          secretChecks = { turnstile: !!data.checks?.turnstile };
+        }
         setChecks({
           database: !!data.checks?.database,
-          jwtSecret: !!data.checks?.jwtSecret,
-          masterKey: !!data.checks?.masterKey,
-          cronSecret: !!data.checks?.cronSecret,
-          turnstile: !!data.checks?.turnstile,
+          ...secretChecks,
         });
         const host = window.location.host;
         const proto = window.location.protocol;
