@@ -37,24 +37,48 @@ export async function verifyTurnstileToken(
     return { ok: false, skipped: false, error: '请完成人机验证' };
   }
 
-  const body = new URLSearchParams({
-    secret,
-    response: token,
-  });
-  if (remoteIp) body.set('remoteip', remoteIp);
+  type SiteVerifyResponse = {
+    success?: boolean;
+    'error-codes'?: string[];
+  };
 
-  try {
+  const verify = async (includeRemoteIp: boolean): Promise<SiteVerifyResponse> => {
+    const body = new URLSearchParams({ secret, response: token });
+    if (includeRemoteIp && remoteIp) body.set('remoteip', remoteIp);
+
     const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
     });
-    const data = (await res.json()) as { success?: boolean };
+    return res.json() as Promise<SiteVerifyResponse>;
+  };
+
+  try {
+    // Prefer verification without remoteip: behind Vercel/Cloudflare proxies the
+    // server-resolved IP often differs from the IP Turnstile bound to the token.
+    let data = await verify(false);
+    if (!data.success && remoteIp) {
+      data = await verify(true);
+    }
+
     if (!data.success) {
+      const codes = data['error-codes'] ?? [];
+      if (codes.includes('invalid-input-secret')) {
+        console.error('[turnstile] invalid secret key — check TURNSTILE_SECRET_KEY / SecretKey');
+        return { ok: false, skipped: false, error: '人机验证配置错误，请联系管理员' };
+      }
+      if (codes.includes('timeout-or-duplicate')) {
+        return { ok: false, skipped: false, error: '人机验证已过期，请重新验证' };
+      }
+      if (codes.length) {
+        console.warn('[turnstile] siteverify failed:', codes.join(', '));
+      }
       return { ok: false, skipped: false, error: '人机验证失败，请重试' };
     }
     return { ok: true, skipped: false };
-  } catch {
+  } catch (err) {
+    console.error('[turnstile] siteverify error:', err);
     return { ok: false, skipped: false, error: '人机验证服务暂不可用' };
   }
 }

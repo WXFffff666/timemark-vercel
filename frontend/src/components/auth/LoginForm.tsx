@@ -12,7 +12,15 @@ import { api } from '@/lib/api';
 declare global {
   interface Window {
     turnstile?: {
-      render: (el: HTMLElement, opts: { sitekey: string; callback: (token: string) => void }) => string;
+      render: (
+        el: HTMLElement,
+        opts: {
+          sitekey: string;
+          callback: (token: string) => void;
+          'expired-callback'?: () => void;
+          'error-callback'?: () => void;
+        },
+      ) => string;
       reset: (id: string) => void;
     };
   }
@@ -63,6 +71,13 @@ export function LoginForm() {
     }, 1000);
   };
 
+  const resetTurnstile = () => {
+    setTurnstileToken('');
+    if (widgetIdRef.current && window.turnstile) {
+      window.turnstile.reset(widgetIdRef.current);
+    }
+  };
+
   useEffect(() => () => {
     if (timerRef.current) clearInterval(timerRef.current);
   }, []);
@@ -85,6 +100,8 @@ export function LoginForm() {
         widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
           sitekey: turnstileSiteKey,
           callback: (token: string) => setTurnstileToken(token),
+          'expired-callback': () => setTurnstileToken(''),
+          'error-callback': () => setTurnstileToken(''),
         });
       }
     };
@@ -101,6 +118,7 @@ export function LoginForm() {
     const trimmedPassword = password.trim();
     if (trimmedUsername.length < 3) return setError('用户名至少3个字符');
     if (trimmedPassword.length < 8) return setError('密码至少8个字符');
+    if (turnstileSiteKey && !turnstileToken) return setError('请先完成人机验证');
 
     setLoading(true);
     try {
@@ -135,6 +153,7 @@ export function LoginForm() {
       } else {
         setError(message);
       }
+      if (turnstileSiteKey) resetTurnstile();
     } finally {
       setLoading(false);
     }
