@@ -31,8 +31,8 @@ cd D:\Works_Cursor\timemark-vercel
 
 | 变量名 | 值 |
 |--------|-----|
-| `TURNSTILE_SITE_KEY` | Cloudflare 的 Site Key |
-| `TURNSTILE_SECRET_KEY` | Cloudflare 的 Secret Key |
+| `TURNSTILE_SITE_KEY` | Cloudflare 的 Site Key（勿写成 `SiteKey`） |
+| `TURNSTILE_SECRET_KEY` | Cloudflare 的 Secret Key（勿写成 `SecretKey`） |
 
 保存后 **Redeploy** 一次生产部署。
 

@@ -8,6 +8,7 @@ import { logSecurityEvent } from '../services/security-event.service.js';
 import { deleteSessionById, deleteAllUserSessions } from '../services/session.service.js';
 import { lookupGeoLabel } from '../utils/geoip.js';
 import type { User } from '@timemark/shared';
+import { isTurnstileEnabled } from '../utils/turnstile.js';
 
 const security = new Hono<{ Variables: { user: User } }>();
 security.use('*', authMiddleware);
@@ -221,7 +222,7 @@ security.get('/deploy-info', async (c) => {
       version: process.env.npm_package_version || '2.7.0',
       platform: process.env.VERCEL ? 'vercel' : 'local',
       vercelUrl: process.env.VERCEL_URL || null,
-      turnstileConfigured: !!process.env.TURNSTILE_SECRET_KEY,
+      turnstileConfigured: isTurnstileEnabled(),
       cronSecretConfigured: !!process.env.CRON_SECRET,
       jwtSecretRotatedAt: jwtAge,
       buildTime: process.env.VERCEL_GIT_COMMIT_SHA || null,

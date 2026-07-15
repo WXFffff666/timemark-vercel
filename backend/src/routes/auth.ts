@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock, getIpBlockStatus, evaluateIpBlock, checkIpWhitelist, verifyTotpCode } from '../services/auth.service.js';
 import { getClientIp } from '../utils/client-ip.js';
-import { verifyTurnstileToken } from '../utils/turnstile.js';
+import { getTurnstileSiteKey, isTurnstileEnabled, verifyTurnstileToken } from '../utils/turnstile.js';
 import { isSafePublicUrl } from '../utils/url-safety.js';
 import { lookupGeoLabel } from '../utils/geoip.js';
 import { logSecurityEvent } from '../services/security-event.service.js';
@@ -293,8 +293,8 @@ auth.get('/turnstile-config', async (c) => {
   return c.json({
     success: true,
     data: {
-      siteKey: process.env.TURNSTILE_SITE_KEY || process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || null,
-      enabled: !!process.env.TURNSTILE_SECRET_KEY,
+      siteKey: getTurnstileSiteKey() || null,
+      enabled: isTurnstileEnabled(),
     },
   });
 });

@@ -14,6 +14,7 @@ import { waitForDb, query } from './db/index.js';
 import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
 import { hashPassword } from './utils/password.js';
 import { initSecretKeys } from './utils/secrets.js';
+import { isTurnstileEnabled } from './utils/turnstile.js';
 import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
 import configRoutes from './routes/config.js';
@@ -101,7 +102,7 @@ app.get('/api/health', async (c) => {
     databaseUrl: !!process.env.DATABASE_URL,
     jwtSecret: !!process.env.JWT_SECRET,
     masterKey: !!process.env.MASTER_KEY,
-    turnstile: !!process.env.TURNSTILE_SECRET_KEY,
+    turnstile: isTurnstileEnabled(),
     cronSecret: !!process.env.CRON_SECRET,
   };
   if (!process.env.DATABASE_URL) {
