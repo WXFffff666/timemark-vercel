@@ -22,8 +22,7 @@
   ],
   "functions": {
     "api/index.js": {
-      "maxDuration": 60,
-      "includeFiles": "node_modules/pg/**"
+      "maxDuration": 60
     }
   }
 }

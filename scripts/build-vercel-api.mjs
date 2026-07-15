@@ -21,8 +21,6 @@ await esbuild.build({
   mainFields: ['module', 'main'],
   packages: 'bundle',
   external: [
-    'pg',
-    'pg-native',
     'baileys',
     'wechaty',
     'oicq',
