@@ -52,6 +52,7 @@ import { generateNotificationContent } from '../../../../shared/src/templates.js
 import { query } from '../../db/index.js';
 import { logEmail } from '../email-log.service.js';
 import { enqueueNotificationRetry } from '../notification-retry.service.js';
+import { getConflictHint } from '../conflict-hint.service.js';
 
 function resolveRecipientEmails(event: Record<string, unknown>, chConfig: { emails?: string[] }, userConfig: Record<string, unknown> | null): string[] {
   if (event.reminder_recipient_email) {
@@ -397,6 +398,11 @@ export async function sendNotifications(
   // Apply default relationship mapping for all channels
   const defaultMappedName = applyRelationshipMapping(event.name, mappings);
   const mappedEvent: any = { ...event, name: defaultMappedName };
+
+  const conflictHint = await getConflictHint(userId, String(event.date).slice(0, 10), Number(event.id) || undefined);
+  if (conflictHint) {
+    mappedEvent.conflictHint = conflictHint;
+  }
   
   // Try to get user-customized template for this event type
   const userTemplate = await getEventTemplate(userId, event.type);
@@ -420,6 +426,12 @@ export async function sendNotifications(
       event.reminder_time
     );
     mappedEvent.customMessage = renderedContent;
+  }
+
+  if (conflictHint) {
+    const base = mappedEvent.customMessage
+      || `**日期:** ${event.date}\n**类型:** ${event.type}`;
+    mappedEvent.customMessage = `${base}\n\n📅 ${conflictHint}`;
   }
   
   // 获取事件绑定的通知账户ID

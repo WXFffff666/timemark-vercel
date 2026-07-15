@@ -3,24 +3,10 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
 import { createEvent } from '../services/event.service.js';
 import type { User } from '@timemark/shared';
+import { parseIcsEvents } from '../utils/ics-parser.js';
 
 const calendarImport = new Hono<{ Variables: { user: User } }>();
 calendarImport.use('*', authMiddleware);
-
-/** Parse minimal ICS VEVENT blocks into events */
-function parseIcsEvents(icsText: string): Array<{ name: string; date: string; description?: string }> {
-  const events: Array<{ name: string; date: string; description?: string }> = [];
-  const blocks = icsText.split(/BEGIN:VEVENT/i);
-  for (const block of blocks.slice(1)) {
-    const summary = block.match(/SUMMARY[^:]*:(.+)/i)?.[1]?.trim();
-    const dtstart = block.match(/DTSTART[^:]*:(\d{8})/i)?.[1];
-    const desc = block.match(/DESCRIPTION[^:]*:(.+)/i)?.[1]?.trim();
-    if (!summary || !dtstart) continue;
-    const date = `${dtstart.slice(0, 4)}-${dtstart.slice(4, 6)}-${dtstart.slice(6, 8)}`;
-    events.push({ name: summary.replace(/\\n/g, ' '), date, description: desc });
-  }
-  return events;
-}
 
 calendarImport.post('/import-ics', async (c) => {
   const user = c.get('user');
@@ -62,15 +48,69 @@ calendarImport.post('/import-ics', async (c) => {
 
 /** Token-based WebCal subscribe URL helper */
 calendarImport.get('/webcal-url', async (c) => {
+  const user = c.get('user');
+  const row = await query(
+    'SELECT calendar_feed_token FROM user_configs WHERE user_id = $1',
+    [Number(user.id)],
+  );
+  const token = row.rows[0]?.calendar_feed_token as string | undefined;
   const host = c.req.header('Host') || 'localhost';
   const protocol = c.req.header('X-Forwarded-Proto') || 'https';
+  const feedPath = token ? `/api/calendar/feed/${token}.ics` : '/api/calendar/export.ics';
   return c.json({
     success: true,
     data: {
-      webcalUrl: `webcal://${host}/api/calendar/export.ics`,
-      httpsUrl: `${protocol}://${host}/api/calendar/export.ics`,
+      webcalUrl: `webcal://${host}${feedPath}`,
+      httpsUrl: `${protocol}://${host}${feedPath}`,
+      usesToken: !!token,
     },
   });
+});
+
+calendarImport.get('/integrations', async (c) => {
+  const user = c.get('user');
+  const row = await query(
+    `SELECT webhook_inbound_token, calendar_feed_token, external_calendar_urls
+     FROM user_configs WHERE user_id = $1`,
+    [Number(user.id)],
+  );
+  const r = row.rows[0] || {};
+  const host = c.req.header('Host') || 'localhost';
+  const protocol = c.req.header('X-Forwarded-Proto') || 'https';
+  const webhookToken = r.webhook_inbound_token as string | undefined;
+  const feedToken = r.calendar_feed_token as string | undefined;
+  return c.json({
+    success: true,
+    data: {
+      webhookUrl: webhookToken ? `${protocol}://${host}/api/webhook/receive/${webhookToken}` : null,
+      calendarFeedUrl: feedToken ? `${protocol}://${host}/api/calendar/feed/${feedToken}.ics` : null,
+      externalCalendarUrls: Array.isArray(r.external_calendar_urls) ? r.external_calendar_urls : [],
+    },
+  });
+});
+
+calendarImport.post('/integrations', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  const urls = Array.isArray(body.externalCalendarUrls)
+    ? body.externalCalendarUrls.map((u: unknown) => String(u).trim()).filter(Boolean).slice(0, 5)
+    : undefined;
+  if (urls) {
+    await query(
+      `INSERT INTO user_configs (user_id, external_calendar_urls)
+       VALUES ($1, $2::jsonb)
+       ON CONFLICT (user_id) DO UPDATE SET external_calendar_urls = $2::jsonb`,
+      [Number(user.id), JSON.stringify(urls)],
+    );
+  }
+  return c.json({ success: true });
+});
+
+calendarImport.post('/sync-external', async (c) => {
+  const user = c.get('user');
+  const { syncExternalCalendarsForUser } = await import('../services/calendar-sync.service.js');
+  const result = await syncExternalCalendarsForUser(Number(user.id));
+  return c.json({ success: true, data: result });
 });
 
 export default calendarImport;

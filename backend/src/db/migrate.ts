@@ -293,6 +293,42 @@ CREATE INDEX IF NOT EXISTS idx_email_logs_user_sent ON email_logs(user_id, sent_
 ALTER TABLE notification_queue ADD COLUMN IF NOT EXISTS account_id INTEGER;
 CREATE INDEX IF NOT EXISTS idx_notification_queue_retry ON notification_queue(status, next_retry_at);`,
     },
+    {
+      version: 22,
+      name: 'integrations_v22',
+      sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS webhook_inbound_token TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS webhook_inbound_secret TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS calendar_feed_token TEXT;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS external_calendar_urls JSONB DEFAULT '[]';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS timezone TEXT;
+CREATE TABLE IF NOT EXISTS event_reminder_cache (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  payload JSONB NOT NULL DEFAULT '[]',
+  expires_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_event_reminder_cache_expires ON event_reminder_cache(expires_at);`,
+      postMigrate: async () => {
+        const { randomBytes } = await import('crypto');
+        const users = await query(
+          `SELECT user_id FROM user_configs
+           WHERE webhook_inbound_token IS NULL OR calendar_feed_token IS NULL`,
+        );
+        for (const row of users.rows as Array<{ user_id: number }>) {
+          const webhookToken = randomBytes(24).toString('hex');
+          const feedToken = randomBytes(24).toString('hex');
+          const webhookSecret = randomBytes(32).toString('hex');
+          await query(
+            `UPDATE user_configs SET
+               webhook_inbound_token = COALESCE(webhook_inbound_token, $1),
+               calendar_feed_token = COALESCE(calendar_feed_token, $2),
+               webhook_inbound_secret = COALESCE(webhook_inbound_secret, $3)
+             WHERE user_id = $4`,
+            [webhookToken, feedToken, webhookSecret, row.user_id],
+          );
+        }
+      },
+    },
   ];
 
   for (const migration of migrations) {

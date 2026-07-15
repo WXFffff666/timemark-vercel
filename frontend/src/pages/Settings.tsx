@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail, Settings as SettingsIcon } from 'lucide-react';
+import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail, Settings as SettingsIcon, Link2, Copy, RefreshCw, Plus, Trash2 } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -87,6 +87,13 @@ export default function Settings() {
   const [pageLoading, setPageLoading] = useState(true);
   const [pageError, setPageError] = useState('');
 
+  const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
+  const [calendarFeedUrl, setCalendarFeedUrl] = useState<string | null>(null);
+  const [externalCalendarUrls, setExternalCalendarUrls] = useState<string[]>([]);
+  const [integrationsSaving, setIntegrationsSaving] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     setPageLoading(true);
@@ -95,8 +102,9 @@ export default function Settings() {
       api.get<{ timezone?: string; alert_channels?: unknown; default_test_email?: string; reminder_emails?: string[] }>('/config').catch(() => null),
       api.get('/config/accounts').catch(() => []),
       api.get<any[]>('/email-logs?limit=50').catch(() => []),
+      api.get<{ webhookUrl?: string | null; calendarFeedUrl?: string | null; externalCalendarUrls?: string[] }>('/calendar/integrations').catch(() => null),
     ])
-      .then(([config, accounts, logs]) => {
+      .then(([config, accounts, logs, integrations]) => {
         if (cancelled) return;
         if (config?.timezone) setTimezone(config.timezone);
         if (config?.default_test_email) setDefaultTestEmail(config.default_test_email);
@@ -108,6 +116,11 @@ export default function Settings() {
         }
         setAlertAccounts(ensureArray(accounts));
         setEmailLogs(ensureArray(logs));
+        if (integrations) {
+          setWebhookUrl(integrations.webhookUrl ?? null);
+          setCalendarFeedUrl(integrations.calendarFeedUrl ?? null);
+          setExternalCalendarUrls(Array.isArray(integrations.externalCalendarUrls) ? integrations.externalCalendarUrls : []);
+        }
       })
       .catch((e) => {
         if (!cancelled) setPageError(e instanceof Error ? e.message : '加载设置失败');
@@ -144,6 +157,45 @@ export default function Settings() {
       setEmailLogs([]);
     } catch (e) {
       alert(e instanceof Error ? e.message : '清空失败');
+    }
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(`${label}已复制`);
+    } catch {
+      alert('复制失败，请手动选择复制');
+    }
+  };
+
+  const saveIntegrations = async () => {
+    setIntegrationsSaving(true);
+    try {
+      await api.post('/calendar/integrations', {
+        externalCalendarUrls: externalCalendarUrls.filter((u) => u.trim()),
+      });
+      alert('外部日历 URL 已保存');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setIntegrationsSaving(false);
+    }
+  };
+
+  const syncExternalCalendars = async () => {
+    setSyncLoading(true);
+    setSyncResult(null);
+    try {
+      const result = await api.post<{ imported: number; errors: string[] }>('/calendar/sync-external');
+      const msg = result.errors?.length
+        ? `导入 ${result.imported} 条；${result.errors.length} 个错误`
+        : `成功导入 ${result.imported} 条事件`;
+      setSyncResult(msg);
+    } catch (e) {
+      setSyncResult(e instanceof Error ? e.message : '同步失败');
+    } finally {
+      setSyncLoading(false);
     }
   };
 
@@ -455,6 +507,91 @@ export default function Settings() {
                   ))}
                 </ul>
               )}
+            </div>
+          </section>
+
+          {/* 集成 */}
+          <section>
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider flex items-center gap-2">
+              <Link2 className="w-4 h-4" /> 集成
+            </h2>
+            <div className="glass-panel rounded-[2.5rem] p-6 space-y-4 ring-1 ring-black/5 dark:ring-white/10">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Webhook 入站创建事件；日历 Feed 供 Google/Outlook 订阅；外部 ICS URL 定期同步导入。
+              </p>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 mb-1 block">Webhook 入站 URL</label>
+                <div className="flex gap-2">
+                  <Input readOnly value={webhookUrl || '加载中...'} className="font-mono text-xs" />
+                  {webhookUrl && (
+                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(webhookUrl, 'Webhook URL')}>
+                      <Copy size={16} />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-1">POST JSON: {"{ name, date, type? }"}</p>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 mb-1 block">日历 Feed URL（ICS）</label>
+                <div className="flex gap-2">
+                  <Input readOnly value={calendarFeedUrl || '加载中...'} className="font-mono text-xs" />
+                  {calendarFeedUrl && (
+                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(calendarFeedUrl, '日历 Feed URL')}>
+                      <Copy size={16} />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-1">在 Google Calendar / Outlook 中添加「通过 URL 订阅」</p>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 mb-2 block">外部 ICS 订阅 URL（最多 5 个）</label>
+                <div className="space-y-2">
+                  {externalCalendarUrls.map((url, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <Input
+                        placeholder="https://calendar.google.com/calendar/ical/..."
+                        value={url}
+                        onChange={(e) => {
+                          const next = [...externalCalendarUrls];
+                          next[idx] = e.target.value;
+                          setExternalCalendarUrls(next);
+                        }}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setExternalCalendarUrls(externalCalendarUrls.filter((_, i) => i !== idx))}
+                      >
+                        <Trash2 size={16} className="text-red-500" />
+                      </Button>
+                    </div>
+                  ))}
+                  {externalCalendarUrls.length < 5 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setExternalCalendarUrls([...externalCalendarUrls, ''])}
+                    >
+                      <Plus size={14} className="mr-1" /> 添加 URL
+                    </Button>
+                  )}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <Button onClick={saveIntegrations} disabled={integrationsSaving} className="flex-1">
+                    {integrationsSaving ? '保存中...' : '保存外部日历'}
+                  </Button>
+                  <Button variant="secondary" onClick={syncExternalCalendars} disabled={syncLoading}>
+                    <RefreshCw size={14} className={`mr-1 ${syncLoading ? 'animate-spin' : ''}`} />
+                    {syncLoading ? '同步中...' : '立即同步'}
+                  </Button>
+                </div>
+                {syncResult && (
+                  <p className="text-xs text-slate-500 mt-2">{syncResult}</p>
+                )}
+              </div>
             </div>
           </section>
 

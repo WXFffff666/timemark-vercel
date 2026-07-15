@@ -10,6 +10,10 @@ export function csrfProtection() {
       return next();
     }
 
+    if (c.req.path.startsWith('/api/webhook/')) {
+      return next();
+    }
+
     const origin = c.req.header('Origin');
     const referer = c.req.header('Referer');
     const host = c.req.header('host') ?? c.req.header('x-forwarded-host');

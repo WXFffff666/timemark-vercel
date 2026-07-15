@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions } from '../jobs/tasks.js';
 import { processNotificationRetries, purgeOldQueueEntries } from '../services/notification-retry.service.js';
 import { purgeOldEmailLogs } from '../services/email-log.service.js';
+import { syncAllExternalCalendars } from '../services/calendar-sync.service.js';
+import { purgeExpiredEventCache } from '../services/event-cache.service.js';
 import { query } from '../db/index.js';
 import { pingHeartbeat } from '../utils/heartbeat.js';
 import { testConnection } from '../services/notifications/test-connection.js';
@@ -75,6 +77,19 @@ cronRoutes.get('/reminder-check', async (c) => {
   }
 });
 
+// Sync external ICS calendars — call every 15 min via external cron
+cronRoutes.get('/calendar-sync', async (c) => {
+  const startedAt = Date.now();
+  try {
+    await syncAllExternalCalendars();
+    await logCronRun('calendar-sync', 'success', startedAt, 'External calendars synced');
+    return c.json({ success: true, job: 'calendar-sync' });
+  } catch (error: any) {
+    await logCronRun('calendar-sync', 'failed', startedAt, undefined, error.message);
+    return c.json({ success: false, error: error.message || 'Job failed' }, 500);
+  }
+});
+
 // Process notification retries — call every 5–15 min via external cron on Vercel Hobby
 cronRoutes.get('/retry-notifications', async (c) => {
   const startedAt = Date.now();
@@ -98,6 +113,7 @@ cronRoutes.get('/daily-maintenance', async (c) => {
     const retryStats = await processNotificationRetries();
     const purgedEmails = await purgeOldEmailLogs();
     const purgedQueue = await purgeOldQueueEntries();
+    const purgedCache = await purgeExpiredEventCache();
     const pluginResult = await query('DELETE FROM plugin_sessions WHERE expires_at < NOW()');
     await logCronRun(
       'daily-maintenance',

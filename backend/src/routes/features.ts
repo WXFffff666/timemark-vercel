@@ -25,9 +25,9 @@ features.use('*', authMiddleware);
 
 features.get('/annual-report', async (c) => {
   const userId = Number(c.get('user').id);
-  const year = new Date().getFullYear();
+  const year = parseInt(c.req.query('year') || String(new Date().getFullYear()), 10);
 
-  const [events, triggers, channels] = await Promise.all([
+  const [events, triggers, channels, monthly] = await Promise.all([
     query('SELECT COUNT(*)::int AS total FROM events WHERE user_id = $1', [userId]),
     query(
       `SELECT COUNT(*)::int AS total,
@@ -37,12 +37,24 @@ features.get('/annual-report', async (c) => {
       [userId, year],
     ),
     query('SELECT COUNT(*)::int AS total FROM notification_accounts WHERE user_id = $1 AND is_active = TRUE', [userId]),
+    query(
+      `SELECT EXTRACT(MONTH FROM date)::int AS month, COUNT(*)::int AS count
+       FROM events WHERE user_id = $1 AND EXTRACT(YEAR FROM date) = $2
+       GROUP BY 1 ORDER BY 1`,
+      [userId, year],
+    ),
   ]);
 
   const byType = await query(
     `SELECT type, COUNT(*)::int AS count FROM events WHERE user_id = $1 GROUP BY type ORDER BY count DESC`,
     [userId],
   );
+
+  const heatmap = Array.from({ length: 12 }, (_, i) => {
+    const month = i + 1;
+    const found = monthly.rows.find((r: { month: number }) => Number(r.month) === month);
+    return { month, count: found?.count ?? 0 };
+  });
 
   return c.json({
     success: true,
@@ -54,6 +66,7 @@ features.get('/annual-report', async (c) => {
       notificationsFailed: triggers.rows[0]?.failed ?? 0,
       activeChannels: channels.rows[0]?.total ?? 0,
       eventsByType: byType.rows,
+      monthlyHeatmap: heatmap,
     },
   });
 });

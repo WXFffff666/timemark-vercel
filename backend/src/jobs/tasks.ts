@@ -1,6 +1,7 @@
 import { query } from '../db/index.js';
 import { Lunar, Solar } from 'lunar-javascript';
 import { sendNotifications } from '../services/notifications/index.js';
+import { refreshUserEventCache } from '../services/event-cache.service.js';
 import { createLogger } from '../utils/logger.js';
 import { recordEventTrigger } from '../services/trigger-log.service.js';
 
@@ -74,10 +75,7 @@ export async function sendReminders() {
   log.info('Checking reminders...');
   
   const now = new Date();
-  
-  // 查询所有事件
-  const allEvents = await query('SELECT * FROM events');
-  
+
   // Batch load ALL user configs upfront to avoid N+1 queries
   const allUserConfigs = await query(
     `SELECT user_id, timezone, reminders_enabled, daily_check_time, days_before_list, reminder_emails 
@@ -118,11 +116,66 @@ export async function sendReminders() {
     }
     return [1, 3, 7];
   }
+
+  const enabledUserIds = [...userConfigMap.entries()]
+    .filter(([, cfg]) => cfg.reminders_enabled !== false)
+    .map(([id]) => id);
+
+  const eventIdSet = new Set<number>();
+  const allEventRows: any[] = [];
+
+  if (enabledUserIds.length > 0) {
+    const cacheRows = await query(
+      `SELECT user_id, payload FROM event_reminder_cache
+       WHERE user_id = ANY($1::int[]) AND expires_at > NOW()`,
+      [enabledUserIds],
+    );
+    const cachedUserIds = new Set<number>();
+    for (const row of cacheRows.rows) {
+      cachedUserIds.add(row.user_id as number);
+      const payload = row.payload;
+      if (!Array.isArray(payload)) continue;
+      for (const ev of payload) {
+        const id = (ev as { id?: number }).id;
+        if (id && !eventIdSet.has(id)) {
+          eventIdSet.add(id);
+          allEventRows.push(ev);
+        }
+      }
+    }
+
+    const uncachedUserIds = enabledUserIds.filter((id) => !cachedUserIds.has(id));
+    if (uncachedUserIds.length > 0) {
+      const fallback = await query('SELECT * FROM events WHERE user_id = ANY($1::int[])', [uncachedUserIds]);
+      for (const ev of fallback.rows) {
+        if (!eventIdSet.has(ev.id)) {
+          eventIdSet.add(ev.id);
+          allEventRows.push(ev);
+        }
+      }
+      for (const userId of uncachedUserIds) {
+        refreshUserEventCache(userId).catch((e) => log.warn({ userId, err: e }, 'Cache refresh failed'));
+      }
+    }
+
+    const lunarRows = await query(
+      `SELECT * FROM events WHERE user_id = ANY($1::int[])
+       AND lunar_date IS NOT NULL
+       AND calendar_type IN ('lunar', 'both')`,
+      [enabledUserIds],
+    );
+    for (const ev of lunarRows.rows) {
+      if (!eventIdSet.has(ev.id)) {
+        eventIdSet.add(ev.id);
+        allEventRows.push(ev);
+      }
+    }
+  }
   
   // 筛选需要提醒的事件
-  const eventsToRemind: Array<{ id: number; user_id: number; name: string; date: string; lunar_date: any; calendar_type: string; notification_channels: string[]; notification_account_ids: any }> = [];
+  const eventsToRemind: Array<{ id: number; user_id: number; name: string; date: string; lunar_date: any; calendar_type: string; notification_channels: string[]; notification_account_ids: any; targetDate?: Date }> = [];
   
-  for (const event of allEvents.rows) {
+  for (const event of allEventRows) {
     // Check if user has reminders enabled (batch-loaded, default to true)
     if (!userEnabledCache.has(event.user_id)) {
       userEnabledCache.set(event.user_id, true); // Default: enabled
@@ -267,6 +320,9 @@ export async function sendReminders() {
         
         // 记录事件触发日志 - use timezone-aware today string for dedup consistency
         await recordEventTrigger(event.id, event.user_id, 'scheduled', today, status, errorMessage, JSON.stringify(channelResults), errorDetails);
+        if (status === 'success') {
+          refreshUserEventCache(event.user_id).catch((e) => log.warn({ userId: event.user_id, err: e }, 'Post-send cache refresh failed'));
+        }
       } catch (error) {
         log.error({ eventId: event.id, err: error }, 'Failed to send notifications');
         await recordEventTrigger(event.id, event.user_id, 'scheduled', today, 'failed', String(error));
