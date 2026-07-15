@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { getBlessing } from '../../../../shared/src/blessings.js';
 import { query } from '../../db/index.js';
 import { encrypt, decrypt } from '@timemark/shared/crypto';
+import { requireMasterKey } from '../../utils/secrets.js';
 
 // ============================================================================
 // OpenClaw 微信插件服务
@@ -41,7 +42,7 @@ const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
 let healthCheckTimer: ReturnType<typeof setInterval> | null = null;
 
 function getMasterKey(): string {
-  return process.env.MASTER_KEY || 'timemark-default-master-key-change-in-production-2026';
+  return requireMasterKey();
 }
 
 /**
@@ -761,7 +762,7 @@ async function runHeartbeat(): Promise<void> {
 
       if (row.session_data) {
         try {
-          const masterKey = process.env.MASTER_KEY || 'timemark-default-master-key-change-in-production-2026';
+          const masterKey = requireMasterKey();
           let sessionStr: string;
           try {
             sessionStr = decrypt(row.session_data, masterKey);

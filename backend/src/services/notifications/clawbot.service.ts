@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { getBlessing } from '../../../../shared/src/blessings.js';
 import { query } from '../../db/index.js';
 import { encrypt, decrypt } from '@timemark/shared/crypto';
+import { requireMasterKey } from '../../utils/secrets.js';
 
 const ILINK_BASE = 'https://ilinkai.weixin.qq.com';
 
@@ -26,7 +27,7 @@ interface ClawBotSession {
 const activeSessions = new Map<string, ClawBotSession>();
 
 function getMasterKey(): string {
-  return process.env.MASTER_KEY || 'timemark-default-master-key-change-in-production-2026';
+  return requireMasterKey();
 }
 
 /**
@@ -489,7 +490,7 @@ async function runHeartbeat(): Promise<void> {
       // Try to extract token from session_data
       if (row.session_data) {
         try {
-          const masterKey = process.env.MASTER_KEY || 'timemark-default-master-key-change-in-production-2026';
+          const masterKey = requireMasterKey();
           let sessionStr: string;
           try {
             sessionStr = decrypt(row.session_data, masterKey);
@@ -507,7 +508,7 @@ async function runHeartbeat(): Promise<void> {
       // Fallback to token column
       if (!token && row.token) {
         try {
-          const masterKey = process.env.MASTER_KEY || 'timemark-default-master-key-change-in-production-2026';
+          const masterKey = requireMasterKey();
           token = decrypt(row.token, masterKey);
         } catch {
           token = row.token;

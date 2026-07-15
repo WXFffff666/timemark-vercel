@@ -22,10 +22,7 @@ function getVapidKeys(): { publicKey: string; privateKey: string } {
     } else {
       // 生成新密钥
       vapidKeys = webPush.generateVAPIDKeys();
-      console.log('[Push] Generated new VAPID keys');
-      console.log('[Push] Public Key:', vapidKeys.publicKey);
-      console.log('[Push] Private Key:', vapidKeys.privateKey);
-      console.log('[Push] Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY env vars to persist');
+      console.warn('[Push] Generated ephemeral VAPID keys — set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY env vars to persist');
     }
     
     // 设置 web-push 配置

@@ -27,12 +27,14 @@ cd D:\Works_Cursor\timemark-vercel
 .\scripts\setup-turnstile.ps1
 ```
 
-或手动在 **Vercel → timemark-vercel → Settings → Environment Variables → Production** 添加：
+或手动在 **Vercel → timemark-vercel → Settings → Environment Variables → Production** 添加（**仅勾选 Production，勿勾选 Preview**）：
 
 | 变量名 | 值 |
 |--------|-----|
 | `TURNSTILE_SITE_KEY` | Cloudflare 的 Site Key（勿写成 `SiteKey`） |
 | `TURNSTILE_SECRET_KEY` | Cloudflare 的 Secret Key（勿写成 `SecretKey`） |
+
+> `TURNSTILE_SECRET_KEY` 与 `JWT_SECRET` / `MASTER_KEY` / `CRON_SECRET` 一样，**仅 Production**。Preview 部署受 Vercel Standard Protection 保护，不应携带生产密钥。
 
 保存后 **Redeploy** 一次生产部署。
 

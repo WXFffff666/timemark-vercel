@@ -112,7 +112,7 @@ async function migrate(): Promise<void> {
 
       console.log('✅ created');
       console.log(`   Username : ${username}`);
-      console.log(`   Password : ${password}`);
+      console.log('   Password : (hidden — use DEFAULT_ADMIN_PASSWORD env or change after first login)');
       console.log('⚠️  Change the default password after first login!');
     } else {
       console.log('👤 Users already exist — skipping admin creation');

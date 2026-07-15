@@ -255,7 +255,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             set({ user, isAuthenticated: true, isLoading: false });
             return;
           } catch (refreshError) {
-            console.error('Token refresh failed:', refreshError);
+            // Token refresh failed — clear session silently
             // Only clear tokens if refresh also fails
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');

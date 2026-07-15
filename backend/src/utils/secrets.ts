@@ -140,3 +140,18 @@ export function getSecretKeys(): KeyConfig {
   }
   return { JWT_SECRET: jwtSecret, MASTER_KEY: masterKey };
 }
+
+/** Legacy key used only for decrypting data encrypted before key rotation. */
+export const LEGACY_MASTER_KEY = 'timemark-default-master-key-change-in-production-2026';
+
+/**
+ * Returns MASTER_KEY for encryption/decryption. Never falls back to a weak default in production.
+ */
+export function requireMasterKey(): string {
+  const key = process.env.MASTER_KEY;
+  if (key) return key;
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    throw new Error('MASTER_KEY must be set in production');
+  }
+  throw new Error('Secret keys not initialized. Call initSecretKeys() first.');
+}

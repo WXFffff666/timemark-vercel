@@ -7,6 +7,39 @@ const data = new Hono<{ Variables: { user: User } }>();
 
 data.use('*', authMiddleware);
 
+const SENSITIVE_ACCOUNT_FIELDS = ['token', 'secret', 'webhook', 'session_data'] as const;
+const SENSITIVE_CONFIG_FIELDS = [
+  'smtp_password',
+  'resend_api_key',
+  'sendgrid_api_key',
+  'mailgun_api_key',
+  'brevo_api_key',
+  'postmark_api_key',
+  'ses_secret_key',
+  'webhook_secret',
+] as const;
+
+function redactFields<T extends Record<string, unknown>>(
+  row: T,
+  fields: readonly string[],
+): T {
+  const copy = { ...row };
+  for (const field of fields) {
+    if (copy[field] != null && copy[field] !== '') {
+      (copy as Record<string, unknown>)[field] = '[redacted]';
+    }
+  }
+  return copy;
+}
+
+function sanitizeNotificationAccount(row: Record<string, unknown>) {
+  return redactFields(row, SENSITIVE_ACCOUNT_FIELDS);
+}
+
+function sanitizeUserConfig(row: Record<string, unknown>) {
+  return redactFields(row, SENSITIVE_CONFIG_FIELDS);
+}
+
 // 导出用户所有数据
 data.get('/export', async (c) => {
   const user = c.get('user');
@@ -27,8 +60,8 @@ data.get('/export', async (c) => {
       exportedAt: new Date().toISOString(),
       user: { id: user.id, username: user.username },
       events: events.rows,
-      configs: configs.rows,
-      notificationAccounts: accounts.rows,
+      configs: configs.rows.map((row) => sanitizeUserConfig(row)),
+      notificationAccounts: accounts.rows.map((row) => sanitizeNotificationAccount(row)),
       relationshipMappings: mappings.rows,
       eventTemplates: templates.rows,
       triggerLogs: triggerLogs.rows,
@@ -38,7 +71,7 @@ data.get('/export', async (c) => {
     c.header('Content-Type', 'application/json');
     return c.json(exportData);
   } catch (error: any) {
-    console.error('[Data Export] Failed:', error);
+    console.error('[Data Export] Failed:', error.message || error);
     return c.json({ success: false, error: error.message || 'Export failed' }, 500);
   }
 });
@@ -109,7 +142,7 @@ data.post('/import', async (c) => {
 
     return c.json({ success: true, data: imported });
   } catch (error: any) {
-    console.error('[Data Import] Failed:', error);
+    console.error('[Data Import] Failed:', error.message || error);
     return c.json({ success: false, error: error.message || 'Import failed' }, 500);
   }
 });

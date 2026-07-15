@@ -171,8 +171,7 @@ async function bootstrap() {
       [username, passwordHash]
     );
 
-    console.log(`✅ 默认用户已创建 (用户名: ${username}, 密码: ${password})`);
-    console.log('⚠️  请登录后立即修改默认密码！');
+    log.info({ username }, 'Default admin user created — change password on first login');
 
   } else {
     log.info('数据库已初始化，已存在用户');
