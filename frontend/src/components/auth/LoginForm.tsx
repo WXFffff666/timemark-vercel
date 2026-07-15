@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
-import { Lock, User } from 'lucide-react';
+import { Lock, User, Fingerprint } from 'lucide-react';
 import { LockIcon } from '@/components/icons';
 import { api } from '@/lib/api';
+import { isPasskeySupported } from '@/lib/webauthn';
 
 declare global {
   interface Window {
@@ -55,7 +56,9 @@ export function LoginForm() {
   const widgetIdRef = useRef<string | null>(null);
   const pendingSubmitRef = useRef(false);
   const login = useAuthStore((state) => state.login);
+  const loginPasskey = useAuthStore((state) => state.loginPasskey);
   const navigate = useNavigate();
+  const passkeySupported = isPasskeySupported();
 
   const isLocked = lockoutSeconds > 0;
 
@@ -192,6 +195,30 @@ export function LoginForm() {
     await submitLogin();
   };
 
+  const handlePasskeyLogin = async () => {
+    if (isLocked) return;
+    const trimmedUsername = username.trim();
+    if (trimmedUsername.length < 3) {
+      setError('请先输入用户名');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      await loginPasskey(trimmedUsername, rememberMe, totpCode || undefined);
+    } catch (err: unknown) {
+      const e = err as Error & { requiresTotp?: boolean; code?: string };
+      if (e.requiresTotp || e.message?.includes('双因素')) {
+        setShowTotp(true);
+        setError('请输入双因素验证码后重试 Passkey 登录');
+      } else {
+        setError(e.message || 'Passkey 登录失败');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card className="w-full glass-panel border-0 ring-1 ring-black/5 dark:ring-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
       <CardHeader className="text-center pb-4 pt-12">
@@ -259,10 +286,15 @@ export function LoginForm() {
               {error}
             </motion.div>
           )}
-          <motion.div variants={itemVariants} className="pt-4">
-            <Button type="submit" variant="vision" size="lg" className="w-full text-base font-semibold shadow-lg shadow-primary-500/20" disabled={loading || isLocked}>
+          <motion.div variants={itemVariants} className="pt-4 space-y-3">
+            <Button type="submit" variant="vision" size="lg" className="w-full text-base font-semibold shadow-lg shadow-primary-500/20 min-h-11" disabled={loading || isLocked} aria-label="登录">
               {loading ? '登录中...' : isLocked ? `锁定中 (${formatLockTime(lockoutSeconds)})` : '登 录'}
             </Button>
+            {passkeySupported && (
+              <Button type="button" variant="outline" size="lg" className="w-full min-h-11" onClick={handlePasskeyLogin} disabled={loading || isLocked}>
+                <Fingerprint className="w-4 h-4 mr-2" /> 使用 Passkey 登录
+              </Button>
+            )}
           </motion.div>
         </motion.form>
       </CardContent>

@@ -436,6 +436,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created ON audit_logs(user_id, created_at DESC);`,
     },
+    {
+      version: 26,
+      name: 'reminder_claims_v26',
+      sql: `CREATE TABLE IF NOT EXISTS reminder_send_claims (
+  event_id INTEGER NOT NULL,
+  trigger_date TEXT NOT NULL,
+  claimed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (event_id, trigger_date)
+);
+CREATE INDEX IF NOT EXISTS idx_reminder_claims_claimed ON reminder_send_claims(claimed_at);`,
+    },
   ];
 
   for (const migration of migrations) {

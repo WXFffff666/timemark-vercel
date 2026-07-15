@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,6 +53,7 @@ export default function Contacts() {
   const [groupName, setGroupName] = useState('');
   const [groupEmails, setGroupEmails] = useState('');
   const [error, setError] = useState('');
+  const [importing, setImporting] = useState(false);
 
   const loadContacts = async () => {
     const data = await api.get<FixedContact[]>('/contacts');
@@ -108,6 +109,32 @@ export default function Contacts() {
     await loadContacts();
   };
 
+  const importVcard = async (file: File) => {
+    setImporting(true);
+    setError('');
+    try {
+      const text = await file.text();
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const res = await fetch('/api/contacts/import-vcard', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'text/vcard',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: text,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || '导入失败');
+      alert(`已从 vCard 导入 ${data.data?.imported ?? 0} 个生日事件`);
+      await loadContacts();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '导入失败');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const membersFor = (groupId: number) => members.filter((m) => m.group_id === groupId);
 
   return (
@@ -126,6 +153,24 @@ export default function Contacts() {
         >
           <Plus className="w-4 h-4 mr-1" /> 添加
         </Button>
+        {tab === 'contacts' && (
+          <label className="inline-flex">
+            <input
+              type="file"
+              accept=".vcf,.vcard,text/vcard"
+              className="sr-only"
+              disabled={importing}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importVcard(file);
+                e.target.value = '';
+              }}
+            />
+            <Button type="button" variant="outline" className="min-h-11" disabled={importing} asChild>
+              <span><Upload className="w-4 h-4 mr-1" />{importing ? '导入中…' : 'vCard'}</span>
+            </Button>
+          </label>
+        )}
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'contacts' | 'groups')} className="mb-6">

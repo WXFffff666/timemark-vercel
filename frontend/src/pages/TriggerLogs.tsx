@@ -79,15 +79,16 @@ export default function TriggerLogs() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
-
-  useEffect(() => {
-    fetchLogs();
-  }, []);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [channelFilter, setChannelFilter] = useState('');
 
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const res = await api.getRaw<TriggerLog[]>('/trigger-logs?limit=100');
+      const params = new URLSearchParams({ limit: '100' });
+      if (statusFilter) params.set('status', statusFilter);
+      if (channelFilter) params.set('channel', channelFilter);
+      const res = await api.getRaw<TriggerLog[]>(`/trigger-logs?${params.toString()}`);
       setLogs(res.data || []);
       setTotal((res.pagination?.total as number) || 0);
     } catch (error) {
@@ -96,6 +97,26 @@ export default function TriggerLogs() {
     } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, [statusFilter, channelFilter]);
+
+  const exportCsv = async () => {
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    const response = await fetch('/api/trigger-logs/export.csv', {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) return alert('导出失败');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `trigger-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const clearLogs = async () => {
@@ -160,7 +181,10 @@ export default function TriggerLogs() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={fetchLogs} disabled={loading}>
+            <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={exportCsv}>
+              导出 CSV
+            </Button>
+            <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={fetchLogs} disabled={loading}>
               <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
             </Button>
             <Button variant="ghost" size="sm" className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={clearLogs} disabled={clearing || logs.length === 0}>
@@ -170,6 +194,20 @@ export default function TriggerLogs() {
           </div>
         </div>
       </header>
+      <div className="max-w-4xl mx-auto px-6 mt-3 flex flex-wrap gap-2">
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border text-sm" aria-label="状态筛选">
+          <option value="">全部状态</option>
+          <option value="success">成功</option>
+          <option value="failed">失败</option>
+        </select>
+        <input
+          value={channelFilter}
+          onChange={(e) => setChannelFilter(e.target.value)}
+          placeholder="渠道筛选"
+          className="h-11 px-3 rounded-xl border text-sm"
+          aria-label="渠道筛选"
+        />
+      </div>
       <main className="max-w-4xl mx-auto px-6 py-10 mt-2">
         {loading ? (
           <div className="space-y-4">

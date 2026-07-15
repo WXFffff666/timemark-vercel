@@ -147,4 +147,30 @@ calendarImport.post('/sync-external', async (c) => {
   return c.json({ success: true, data: result });
 });
 
+calendarImport.post('/caldav', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  const url = typeof body.url === 'string' ? body.url.trim() : '';
+  const username = typeof body.username === 'string' ? body.username.trim() : '';
+  const password = typeof body.password === 'string' ? body.password : '';
+  if (url) {
+    const safe = await import('../utils/url-safety.js').then((m) => m.isSafePublicUrl(url));
+    if (!safe.safe) return c.json({ success: false, error: safe.reason || 'URL 不安全' }, 400);
+  }
+  const { encrypt } = await import('@timemark/shared/crypto');
+  const masterKey = process.env.MASTER_KEY;
+  if (!masterKey) return c.json({ success: false, error: 'MASTER_KEY 未配置' }, 500);
+  const encPassword = password ? encrypt(password, masterKey) : null;
+  await query(
+    `INSERT INTO user_configs (user_id, caldav_url, caldav_username, caldav_password_encrypted)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id) DO UPDATE SET
+       caldav_url = EXCLUDED.caldav_url,
+       caldav_username = EXCLUDED.caldav_username,
+       caldav_password_encrypted = COALESCE(EXCLUDED.caldav_password_encrypted, user_configs.caldav_password_encrypted)`,
+    [Number(user.id), url || null, username || null, encPassword],
+  );
+  return c.json({ success: true });
+});
+
 export default calendarImport;

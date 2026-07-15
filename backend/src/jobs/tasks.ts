@@ -309,16 +309,27 @@ export async function sendReminders() {
     const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
     const channels = await resolveReminderChannels(event.user_id, baseChannels, event.daysUntil ?? 0);
     if (channels.length > 0) {
-      // Check if already sent today
       const timeZone = getUserTimezone(event.user_id);
       const today = getTodayString(now, timeZone);
+
+      const claim = await query(
+        `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING RETURNING event_id`,
+        [event.id, today],
+      );
+      if (claim.rows.length === 0) {
+        log.debug({ eventId: event.id }, 'Reminder already claimed by another worker');
+        continue;
+      }
+
       const alreadySent = await query(
         `SELECT id FROM event_trigger_logs 
          WHERE event_id = $1 AND trigger_date = $2 AND status = 'success'
          LIMIT 1`,
-        [event.id, today]
+        [event.id, today],
       );
       if (alreadySent.rows.length > 0) {
+        await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [event.id, today]);
         log.debug({ eventId: event.id }, 'Already reminded today, skipping');
         continue;
       }
@@ -350,6 +361,7 @@ export async function sendReminders() {
         }
       } catch (error) {
         log.error({ eventId: event.id, err: error }, 'Failed to send notifications');
+        await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [event.id, today]);
         await recordEventTrigger(event.id, event.user_id, 'scheduled', today, 'failed', String(error));
       }
     }

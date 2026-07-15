@@ -35,6 +35,7 @@ import { testConnection } from '../services/notifications/test-connection.js';
 import { getChannelTemplate } from '../services/notifications/channels.config.js';
 import { query } from '../db/index.js';
 import { resolveEmailRecipientForTest } from '../utils/notification-recipients.js';
+import { logAudit } from '../services/audit.service.js';
 
 const config = new Hono<{ Variables: { user: User } }>();
 
@@ -55,6 +56,7 @@ config.post('/', async (c) => {
     return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
   }
   await saveUserConfig(Number(user.id), parsed.data);
+  await logAudit(Number(user.id), 'update', 'user_config', user.id, { keys: Object.keys(parsed.data) });
   return c.json({ success: true });
 });
 
@@ -117,6 +119,7 @@ config.post('/accounts', async (c) => {
     }).catch(() => {});
   }
   
+  await logAudit(Number(user.id), 'create', 'notification_account', account.id, { type: parsed.data.type, name: parsed.data.name });
   return c.json({ success: true, data: account }, 201);
 });
 
@@ -148,7 +151,12 @@ config.put('/accounts/:id', async (c) => {
   if (!account) {
     return c.json({ success: false, error: 'Account not found' }, 404);
   }
-  
+
+  await logAudit(Number(user.id), 'update', 'notification_account', id, {
+    name: parsed.data.name,
+    isActive: parsed.data.isActive,
+    type: account.type,
+  });
   return c.json({ success: true, data: account });
 });
 
@@ -161,7 +169,8 @@ config.delete('/accounts/:id', async (c) => {
   if (!deleted) {
     return c.json({ success: false, error: 'Account not found' }, 404);
   }
-  
+
+  await logAudit(Number(user.id), 'delete', 'notification_account', id);
   return c.json({ success: true });
 });
 

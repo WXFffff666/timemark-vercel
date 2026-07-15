@@ -40,6 +40,9 @@ export default function Security() {
   const [passkeyName, setPasskeyName] = useState('');
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const passkeySupported = isPasskeySupported();
+  const [newMasterKey, setNewMasterKey] = useState('');
+  const [deployToken, setDeployToken] = useState('');
+  const [rotatingKey, setRotatingKey] = useState(false);
 
   const [loadError, setLoadError] = useState('');
 
@@ -130,6 +133,41 @@ export default function Security() {
       load();
     } catch (e) {
       alert(e instanceof Error ? e.message : '删除失败');
+    }
+  };
+
+  const rotateMasterKey = async () => {
+    if (!newMasterKey || newMasterKey.length < 32) {
+      alert('新 MASTER_KEY 至少 32 字符');
+      return;
+    }
+    if (!deployToken.trim()) {
+      alert('请填写 DEPLOY_TOKEN');
+      return;
+    }
+    if (!confirm('将使用新密钥重加密当前账户的通知渠道凭证，确认继续？')) return;
+    setRotatingKey(true);
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const res = await fetch('/api/security/rotate-master-key', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-deploy-token': deployToken.trim(),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ newMasterKey }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || '轮换失败');
+      alert(`已重加密 ${data.data?.accountsMigrated ?? 0} 个账户。${data.data?.note || ''}`);
+      setNewMasterKey('');
+      setDeployToken('');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '轮换失败');
+    } finally {
+      setRotatingKey(false);
     }
   };
 
@@ -270,6 +308,32 @@ export default function Security() {
                 <Button size="sm" variant="outline" onClick={() => unbanIp(b.ip)}>解封</Button>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Key className="w-4 h-4" />MASTER_KEY 轮换</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              轮换加密密钥前，请先在 Vercel 生成新 MASTER_KEY。本操作仅重加密当前用户的通知账户凭证，需同时提供 DEPLOY_TOKEN。
+            </p>
+            <Input
+              type="password"
+              placeholder="新 MASTER_KEY（至少 32 字符）"
+              value={newMasterKey}
+              onChange={(e) => setNewMasterKey(e.target.value)}
+              aria-label="新 MASTER_KEY"
+            />
+            <Input
+              type="password"
+              placeholder="DEPLOY_TOKEN"
+              value={deployToken}
+              onChange={(e) => setDeployToken(e.target.value)}
+              aria-label="DEPLOY_TOKEN"
+            />
+            <Button size="sm" onClick={rotateMasterKey} disabled={rotatingKey}>
+              {rotatingKey ? '处理中...' : '执行重加密'}
+            </Button>
           </CardContent>
         </Card>
 

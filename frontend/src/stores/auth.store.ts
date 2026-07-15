@@ -133,6 +133,7 @@ interface AuthState {
   mustChangePassword: boolean;
   setUser: (user: User | null) => void;
   login: (username: string, password: string, rememberMe?: boolean, extras?: { turnstileToken?: string; totpCode?: string }) => Promise<{ mustChangePassword: boolean }>;
+  loginPasskey: (username: string, rememberMe?: boolean, totpCode?: string) => Promise<{ mustChangePassword: boolean }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   clearMustChangePassword: () => void;
@@ -161,6 +162,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       totpCode: extras.totpCode,
     });
     return applyLoginResponse(response, rememberMe);
+  },
+
+  loginPasskey: async (username, rememberMe = false, totpCode?: string) => {
+    const { loginWithPasskey } = await import('../lib/webauthn');
+    const response = await loginWithPasskey(username.trim(), rememberMe, totpCode);
+    return applyLoginResponse({ ...response, authMode: 'cookie' }, rememberMe);
   },
 
   logout: async () => {

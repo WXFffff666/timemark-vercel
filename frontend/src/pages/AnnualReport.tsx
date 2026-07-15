@@ -63,7 +63,7 @@ interface AnnualReportData {
   eventsByType: Array<{ type: string; count: number }>;
 
   monthlyHeatmap: MonthlyHeatmapItem[];
-
+  channelSuccessRates?: Array<{ channel: string; total: number; success: number; rate: number }>;
 }
 
 
@@ -268,7 +268,19 @@ export default function AnnualReport() {
 
           </div>
 
-
+          {data.channelSuccessRates && data.channelSuccessRates.length > 0 && (
+            <div>
+              <h3 className="font-medium mb-3">分渠道成功率</h3>
+              <ul className="space-y-2">
+                {data.channelSuccessRates.map((ch) => (
+                  <li key={ch.channel} className="flex justify-between text-sm border-b border-slate-100 dark:border-slate-800 py-2">
+                    <span className="font-medium">{ch.channel}</span>
+                    <span>{ch.success}/{ch.total} ({ch.rate}%)</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {heatmapChartData.length > 0 && (
 

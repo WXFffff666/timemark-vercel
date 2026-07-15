@@ -901,6 +901,14 @@ const tokenChannels: ChannelTemplate[] = [
         type: 'password',
         required: true,
         description: 'Pushover 应用 API Token'
+      },
+      {
+        name: 'priority',
+        label: '优先级',
+        type: 'select',
+        required: false,
+        description: 'Pushover 消息优先级（-2 静默 ~ 2 紧急）',
+        placeholder: '0'
       }
     ],
     docsUrl: 'https://pushover.net/api'

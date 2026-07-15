@@ -95,6 +95,12 @@ export default function Settings() {
   const [inboxReceiveUrl, setInboxReceiveUrl] = useState<string | null>(null);
   const [calendarFeedUrl, setCalendarFeedUrl] = useState<string | null>(null);
   const [externalCalendarUrls, setExternalCalendarUrls] = useState<string[]>([]);
+  const [calendarFeedTokens, setCalendarFeedTokens] = useState<Array<{ name: string; url: string }>>([]);
+  const [syncStrategy, setSyncStrategy] = useState<'add_only' | 'replace'>('add_only');
+  const [caldavUrl, setCaldavUrl] = useState('');
+  const [caldavUsername, setCaldavUsername] = useState('');
+  const [caldavPassword, setCaldavPassword] = useState('');
+  const [encryptBackupPassword, setEncryptBackupPassword] = useState('');
   const [integrationsSaving, setIntegrationsSaving] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
@@ -111,7 +117,14 @@ export default function Settings() {
       api.get<{ timezone?: string; alert_channels?: unknown; default_test_email?: string; reminder_emails?: string[]; quiet_hours_start?: string | null; quiet_hours_end?: string | null }>('/config').catch(() => null),
       api.get('/config/accounts').catch(() => []),
       api.get<any[]>('/email-logs?limit=50').catch(() => []),
-      api.get<{ webhookUrl?: string | null; inboxReceiveUrl?: string | null; calendarFeedUrl?: string | null; externalCalendarUrls?: string[] }>('/calendar/integrations').catch(() => null),
+      api.get<{
+        webhookUrl?: string | null;
+        inboxReceiveUrl?: string | null;
+        calendarFeedUrl?: string | null;
+        calendarFeedTokens?: Array<{ name: string; url: string }>;
+        externalCalendarUrls?: string[];
+        externalCalendarSyncStrategy?: string;
+      }>('/calendar/integrations').catch(() => null),
       api.get<{ markdown_email_template?: string | null; api_scopes?: string }>('/config/notification-advanced').catch(() => null),
     ])
       .then(([config, accounts, logs, integrations, advanced]) => {
@@ -133,6 +146,8 @@ export default function Settings() {
           setInboxReceiveUrl(integrations.inboxReceiveUrl ?? null);
           setCalendarFeedUrl(integrations.calendarFeedUrl ?? null);
           setExternalCalendarUrls(Array.isArray(integrations.externalCalendarUrls) ? integrations.externalCalendarUrls : []);
+          setCalendarFeedTokens(Array.isArray(integrations.calendarFeedTokens) ? integrations.calendarFeedTokens : []);
+          if (integrations.externalCalendarSyncStrategy === 'replace') setSyncStrategy('replace');
         }
         if (advanced?.markdown_email_template) setMarkdownTemplate(advanced.markdown_email_template);
         if (advanced?.api_scopes) setApiScopes(advanced.api_scopes);
@@ -189,6 +204,7 @@ export default function Settings() {
     try {
       await api.post('/calendar/integrations', {
         externalCalendarUrls: externalCalendarUrls.filter((u) => u.trim()),
+        externalCalendarSyncStrategy: syncStrategy,
       });
       alert('外部日历 URL 已保存');
     } catch (e) {
@@ -198,14 +214,77 @@ export default function Settings() {
     }
   };
 
+  const addFeedToken = async () => {
+    const name = prompt('Feed 名称', `日历 ${calendarFeedTokens.length + 1}`);
+    if (!name) return;
+    try {
+      const result = await api.post<{ url: string }>('/calendar/feed-tokens', { name });
+      setCalendarFeedTokens((prev) => [...prev, { name, url: result.url }]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '创建失败');
+    }
+  };
+
+  const saveCalDav = async () => {
+    setIntegrationsSaving(true);
+    try {
+      await api.post('/calendar/caldav', {
+        url: caldavUrl.trim(),
+        username: caldavUsername.trim(),
+        password: caldavPassword || undefined,
+      });
+      setCaldavPassword('');
+      alert('CalDAV 配置已保存');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setIntegrationsSaving(false);
+    }
+  };
+
+  const handleEncryptedExport = async () => {
+    if (!encryptBackupPassword || encryptBackupPassword.length < 8) {
+      alert('加密导出需要至少 8 位密码');
+      return;
+    }
+    setBackupLoading(true);
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const response = await fetch('/api/data/export-encrypted', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ password: encryptBackupPassword }),
+      });
+      if (!response.ok) throw new Error('加密导出失败');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `timemark-encrypted-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      setEncryptBackupPassword('');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '加密导出失败');
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
   const syncExternalCalendars = async () => {
     setSyncLoading(true);
     setSyncResult(null);
     try {
-      const result = await api.post<{ imported: number; errors: string[] }>('/calendar/sync-external');
+      const result = await api.post<{ imported: number; deleted?: number; errors: string[] }>('/calendar/sync-external');
+      const parts = [`导入 ${result.imported} 条`];
+      if (result.deleted) parts.push(`删除旧数据 ${result.deleted} 条`);
       const msg = result.errors?.length
-        ? `导入 ${result.imported} 条；${result.errors.length} 个错误`
-        : `成功导入 ${result.imported} 条事件`;
+        ? `${parts.join('，')}；${result.errors.length} 个错误`
+        : `成功${parts.join('，')}`;
       setSyncResult(msg);
     } catch (e) {
       setSyncResult(e instanceof Error ? e.message : '同步失败');
@@ -609,9 +688,42 @@ export default function Settings() {
                   )}
                 </div>
                 <p className="text-xs text-slate-400 mt-1">在 Google Calendar / Outlook 中添加「通过 URL 订阅」</p>
+                {calendarFeedTokens.length > 0 && (
+                  <ul className="mt-2 space-y-1 text-xs font-mono">
+                    {calendarFeedTokens.map((t) => (
+                      <li key={t.url} className="flex gap-2 items-center">
+                        <span className="text-slate-500 shrink-0">{t.name}:</span>
+                        <span className="truncate">{t.url}</span>
+                        <Button variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={() => copyToClipboard(t.url, t.name)}>
+                          <Copy size={14} />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Button variant="outline" size="sm" className="mt-2 min-h-11" onClick={addFeedToken}>新建 Feed Token</Button>
               </div>
 
               <div>
+                <label className="text-xs font-semibold text-slate-500 mb-2 block">CalDAV 只读订阅</label>
+                <Input placeholder="CalDAV / ICS URL" value={caldavUrl} onChange={(e) => setCaldavUrl(e.target.value)} className="mb-2" />
+                <div className="flex gap-2 mb-2">
+                  <Input placeholder="用户名" value={caldavUsername} onChange={(e) => setCaldavUsername(e.target.value)} />
+                  <Input type="password" placeholder="密码（留空不修改）" value={caldavPassword} onChange={(e) => setCaldavPassword(e.target.value)} />
+                </div>
+                <Button size="sm" className="min-h-11" onClick={saveCalDav} disabled={integrationsSaving}>保存 CalDAV</Button>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 mb-2 block">外部 ICS 同步策略</label>
+                <select
+                  value={syncStrategy}
+                  onChange={(e) => setSyncStrategy(e.target.value as 'add_only' | 'replace')}
+                  className="h-11 px-3 rounded-xl border text-sm w-full max-w-xs mb-3"
+                >
+                  <option value="add_only">只增不删</option>
+                  <option value="replace">替换同步</option>
+                </select>
                 <label className="text-xs font-semibold text-slate-500 mb-2 block">外部 ICS 订阅 URL（最多 5 个）</label>
                 <div className="space-y-2">
                   {externalCalendarUrls.map((url, idx) => (
@@ -845,9 +957,19 @@ export default function Settings() {
                     <p className="text-xs text-slate-500">导出或导入全部事件与配置</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" disabled={backupLoading} onClick={handleExportData}>
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  <Button variant="secondary" size="sm" className="min-h-11" disabled={backupLoading} onClick={handleExportData}>
                     导出
+                  </Button>
+                  <Input
+                    type="password"
+                    placeholder="加密导出密码"
+                    value={encryptBackupPassword}
+                    onChange={(e) => setEncryptBackupPassword(e.target.value)}
+                    className="max-w-[160px] min-h-11"
+                  />
+                  <Button variant="secondary" size="sm" className="min-h-11" disabled={backupLoading} onClick={handleEncryptedExport}>
+                    加密导出
                   </Button>
                   <Button
                     variant="outline"

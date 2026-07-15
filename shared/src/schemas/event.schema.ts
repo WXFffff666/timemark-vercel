@@ -8,6 +8,7 @@ export const reminderConfigSchema = z.object({
   channels: z.array(z.string()).optional(),
   accountIds: z.array(z.string()).optional(),
   reminderTimes: z.array(z.string()).optional(), // 多选提醒时间 HH:mm 数组
+  importSource: z.string().optional(),
 });
 
 export const recurringConfigSchema = z.object({

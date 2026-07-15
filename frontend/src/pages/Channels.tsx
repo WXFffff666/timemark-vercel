@@ -301,6 +301,9 @@ export default function Channels() {
         case 'roomId':
           form.roomId = chatId;
           break;
+        case 'priority':
+          form.priority = chatId || '0';
+          break;
         default:
           if (!(field.name in form)) form[field.name] = '';
       }
@@ -330,6 +333,8 @@ export default function Channels() {
       if (selectedTemplate.id === 'matrix') {
         webhook = configForm.homeserver || undefined;
         chatId = configForm.roomId || undefined;
+      } else if (selectedTemplate.id === 'pushover') {
+        chatId = configForm.priority || '0';
       }
       
       const accountData = {
@@ -395,6 +400,25 @@ export default function Channels() {
     }
   };
 
+  const importAppriseUrls = async () => {
+    let text = '';
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      text = prompt('粘贴 Apprise 通知 URL（每行一个，如 tgram://...）') || '';
+    }
+    const lines = text.split(/\n+/).map((l) => l.trim()).filter((l) => /:\/\//.test(l));
+    if (!lines.length) {
+      alert('未解析到有效 URL');
+      return;
+    }
+    setConfigForm((prev) => ({
+      ...prev,
+      token: lines.join('\n'),
+      name: prev.name || 'Apprise 渠道',
+    }));
+  };
+
   const filteredTemplates = templates.filter(t => t.configMethod === activeTab);
 
   const connectedAccounts = accounts.filter(a => getAccountStatus(a) === 'connected');
@@ -456,9 +480,10 @@ export default function Channels() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="rounded-lg"
+                className="rounded-lg min-h-11 min-w-11"
                 onClick={() => testConnection(account)}
                 disabled={testingConnection === account.id}
+                aria-label="测试渠道连接"
               >
                 {testingConnection === account.id ? (
                   <Loader2 size={14} className="mr-1 animate-spin" />
@@ -470,16 +495,18 @@ export default function Channels() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="rounded-lg"
+                className="rounded-lg min-h-11"
                 onClick={() => openEditModal(account)}
+                aria-label="编辑渠道配置"
               >
                 <Settings size={14} className="mr-1" /> 配置
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="rounded-lg text-red-500 hover:text-red-600"
+                className="rounded-lg text-red-500 hover:text-red-600 min-h-11 min-w-11"
                 onClick={() => deleteAccount(account)}
+                aria-label="删除渠道"
               >
                 <Link2Off size={14} />
               </Button>
@@ -495,7 +522,7 @@ export default function Channels() {
       <header className="sticky top-6 z-40 px-4 max-w-[90rem] mx-auto">
         <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}>
+            <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={() => navigate(-1)} aria-label="返回">
               <ArrowLeft size={20} />
             </Button>
             <div>
@@ -636,7 +663,7 @@ export default function Channels() {
                       <button
                         key={template.id}
                         onClick={() => selectTemplate(template)}
-                        className="text-left p-4 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-all group"
+                        className="text-left p-4 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-all group min-h-11"
                       >
                         <div className="flex items-start gap-4">
                           <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center group-hover:bg-primary-100 dark:group-hover:bg-primary-900/50 group-hover:text-primary-600 transition-colors">
@@ -734,6 +761,17 @@ export default function Channels() {
                     onChange={(e) => setConfigForm({ ...configForm, [field.name]: e.target.value })}
                     className="w-full h-24 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                   />
+                ) : field.type === 'select' ? (
+                  <select
+                    value={configForm[field.name] || '0'}
+                    onChange={(e) => setConfigForm({ ...configForm, [field.name]: e.target.value })}
+                    className="w-full h-12 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    aria-label={field.label}
+                  >
+                    {['-2', '-1', '0', '1', '2'].map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
                 ) : (
                   <Input
                     type={field.type}
@@ -755,6 +793,12 @@ export default function Channels() {
               <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl px-4 py-3">
                 未填写渠道收件人时，将使用「设置 → 通知默认邮箱」中的默认测试邮箱。
               </p>
+            )}
+
+            {selectedTemplate?.id === 'apprise' && (
+              <Button type="button" variant="outline" className="min-h-11" onClick={importAppriseUrls}>
+                从剪贴板导入 Apprise URL
+              </Button>
             )}
 
             {selectedTemplate?.docsUrl && (

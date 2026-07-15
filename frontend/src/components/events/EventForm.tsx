@@ -208,12 +208,60 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   const [fixedContacts, setFixedContacts] = useState<{ id: number; name: string; nickname?: string }[]>([]);
 
   useEffect(() => {
+    if (!open || !formData.type || event) return;
+    api.get<{ daysBefore: number[]; source: string }>(`/features/smart-days/${formData.type}`)
+      .then((res) => {
+        if (res?.daysBefore?.length) {
+          setFormData((prev) => ({
+            ...prev,
+            reminderConfig: {
+              ...prev.reminderConfig!,
+              daysBeforeList: res.daysBefore,
+            },
+          }));
+        }
+      })
+      .catch(() => {});
+  }, [open, formData.type]);
+
+  useEffect(() => {
+    if (!open) return;
     api.get<{ id: number; name: string; nickname?: string }[]>('/contacts')
       .then((data) => setFixedContacts(Array.isArray(data) ? data : []))
       .catch(() => setFixedContacts([]));
   }, [open]);
+
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('birthday');
   const [userTemplates, setUserTemplates] = useState<Array<{id: string; name: string; content: string}>>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    const templates = EVENT_TYPE_TEMPLATES[formData.type] || EVENT_TYPE_TEMPLATES.other;
+    const recipient = formData.reminderRecipientName?.trim();
+    if (!recipient) {
+      setSelectedTemplateId(templates[0] || 'generic');
+      return;
+    }
+    api.get<Array<{ from_relation: string; to_relation: string; recipient_type?: string }>>('/config/relationships')
+      .then((mappings) => {
+        const list = Array.isArray(mappings) ? mappings : [];
+        const hit = list.find((m) =>
+          m.from_relation === recipient
+          || m.to_relation === recipient
+          || m.recipient_type === recipient,
+        );
+        if (hit?.recipient_type === 'family' && formData.type === 'holiday') {
+          setSelectedTemplateId('holiday_family');
+        } else if (hit?.recipient_type === 'family' && formData.type === 'birthday') {
+          setSelectedTemplateId('birthday_detailed');
+        } else if (hit?.recipient_type === 'colleague' && formData.type === 'meeting') {
+          setSelectedTemplateId('meeting');
+        } else {
+          setSelectedTemplateId(templates[0] || 'generic');
+        }
+      })
+      .catch(() => setSelectedTemplateId(templates[0] || 'generic'));
+  }, [open, formData.type, formData.reminderRecipientName]);
 
   // 加载自定义模板
   useEffect(() => {

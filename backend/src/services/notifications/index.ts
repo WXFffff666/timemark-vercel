@@ -211,7 +211,7 @@ const channelToAccountType: Record<string, string> = {
 function getChannelConfigFromAccount(
   account: any,
   channel: string
-): { webhook?: string; token?: string; secret?: string; chat_id?: string; server_url?: string; sessionData?: any; toUser?: string; email?: string; apiKey?: string; emails?: string[]; fromEmail?: string } | null {
+): { webhook?: string; token?: string; secret?: string; chat_id?: string; priority?: number; server_url?: string; sessionData?: any; toUser?: string; email?: string; apiKey?: string; emails?: string[]; fromEmail?: string } | null {
   // 直接使用账户的字段
   switch (channel) {
     // Email channels
@@ -332,10 +332,12 @@ function getChannelConfigFromAccount(
         ? { webhook: account.webhook, token: account.token }
         : null;
     
-    case 'pushover':
-      return (account.token && account.secret)
-        ? { token: account.token, secret: account.secret }
-        : null;
+    case 'pushover': {
+      if (!account.token || !account.secret) return null;
+      const rawPriority = account.chat_id != null ? parseInt(String(account.chat_id), 10) : 0;
+      const priority = Number.isFinite(rawPriority) && rawPriority >= -2 && rawPriority <= 2 ? rawPriority : 0;
+      return { token: account.token, secret: account.secret, priority };
+    }
     
     case 'apprise':
       return account.webhook
