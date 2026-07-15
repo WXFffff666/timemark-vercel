@@ -455,10 +455,12 @@ export default function Settings() {
 
           {/* 通知默认邮箱 */}
           <section>
-            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">通知默认邮箱</h2>
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider flex items-center gap-2">
+              <Mail className="w-4 h-4" /> 通知默认邮箱
+            </h2>
             <div className="glass-panel rounded-[2.5rem] p-6 space-y-4 ring-1 ring-black/5 dark:ring-white/10">
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                渠道测试、事件未单独配置收件人时，将使用以下邮箱。建议填写你常用的收件地址。
+                渠道测试、事件未单独配置收件人时，将使用以下邮箱。Resend 等邮件渠道也可在「通知渠道」中为每个账号单独填写收件人。
               </p>
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">默认测试/收件邮箱</label>

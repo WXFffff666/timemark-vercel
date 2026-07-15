@@ -272,12 +272,12 @@ export async function saveNotificationDefaults(
     `INSERT INTO user_configs (user_id, default_test_email, reminder_emails)
      VALUES ($1, $2, $3)
      ON CONFLICT (user_id) DO UPDATE SET
-       default_test_email = COALESCE($2, user_configs.default_test_email),
-       reminder_emails = COALESCE($3, user_configs.reminder_emails)`,
+       default_test_email = EXCLUDED.default_test_email,
+       reminder_emails = EXCLUDED.reminder_emails`,
     [
       userId,
       data.default_test_email ?? null,
-      data.reminder_emails ? JSON.stringify(data.reminder_emails) : null,
+      data.reminder_emails !== undefined ? JSON.stringify(data.reminder_emails) : null,
     ],
   );
 }

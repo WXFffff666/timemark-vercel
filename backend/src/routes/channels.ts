@@ -12,6 +12,7 @@ import type { User } from '@timemark/shared';
 import { query } from '../db/index.js';
 import { testConnection } from '../services/notifications/test-connection.js';
 import { checkAllChannels, checkChannel } from '../services/notifications/network-check.js';
+import { getNotificationAccounts } from '../services/config.service.js';
 
 const channels = new Hono<{ Variables: { user: User } }>();
 
@@ -66,22 +67,53 @@ channels.post('/test', async (c) => {
   }
 
   const accountId = typeof body.accountId === 'number' ? body.accountId : null;
+  const userId = Number(user.id);
 
+  let testType = parsed.data.type;
+  let testConfigMethod = parsed.data.configMethod || 'webhook';
+  let testToken = parsed.data.token || undefined;
   let testChatId = parsed.data.chatId || undefined;
   let testWebhook = parsed.data.webhook || undefined;
-  if ((parsed.data.type === 'email' || parsed.data.type === 'resend') && !testChatId) {
-    const cfg = await query('SELECT default_test_email FROM user_configs WHERE user_id = $1', [Number(user.id)]);
+  let testSecret = parsed.data.secret || undefined;
+
+  if (accountId) {
+    const accounts = await getNotificationAccounts(userId);
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) {
+      return c.json({ success: false, error: '通知渠道不存在' }, 404);
+    }
+    testType = account.type;
+    testConfigMethod = account.config_method || testConfigMethod;
+    testToken = testToken || account.token || undefined;
+    testChatId = testChatId || account.chat_id || undefined;
+    testWebhook = testWebhook || account.webhook || undefined;
+    testSecret = testSecret || account.secret || undefined;
+  }
+
+  if ((testType === 'email' || testType === 'resend') && !testChatId) {
+    const cfg = await query('SELECT default_test_email FROM user_configs WHERE user_id = $1', [userId]);
     testChatId = cfg.rows[0]?.default_test_email || testChatId;
+  }
+
+  if ((testType === 'email' || testType === 'resend') && !testChatId) {
+    return c.json({
+      success: false,
+      error: '未配置收件邮箱：请在渠道中填写收件人邮箱，或在「设置 → 通知默认邮箱」中填写默认测试邮箱',
+    }, 400);
+  }
+
+  if ((testType === 'email' || testType === 'resend') && !testToken) {
+    return c.json({ success: false, error: 'Resend API Key 不能为空' }, 400);
   }
 
   try {
     const result = await testConnection({
-      type: parsed.data.type,
-      configMethod: parsed.data.configMethod || 'webhook',
+      type: testType,
+      configMethod: testConfigMethod,
       webhook: testWebhook,
-      token: parsed.data.token || undefined,
+      token: testToken,
       chatId: testChatId,
-      secret: parsed.data.secret || undefined,
+      secret: testSecret,
     });
 
     if (accountId) {
@@ -93,9 +125,17 @@ channels.post('/test', async (c) => {
       );
     }
 
+    if (!result.success) {
+      return c.json({
+        success: false,
+        error: result.message,
+        data: { success: false, message: result.message, details: result.details },
+      }, 400);
+    }
+
     return c.json({
       success: true,
-      data: { success: result.success, message: result.message, details: result.details },
+      data: { success: true, message: result.message, details: result.details },
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '测试连接失败';

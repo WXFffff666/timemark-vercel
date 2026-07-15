@@ -129,24 +129,21 @@ export default function Channels() {
     try {
       const result = await api.post<{ success: boolean; message: string }>(
         '/channels/test',
-        {
-          accountId: Number(account.id),
-          type: account.type,
-          configMethod: (account as any).configMethod || (account as any).config_method || 'webhook',
-          webhook: account.webhook,
-          token: account.token,
-          chatId: (account as any).chatId || (account as any).chat_id,
-          secret: (account as any).secret,
-          sessionData: (account as any).sessionData,
-        }
+        { accountId: Number(account.id) },
       );
-      const status: ConnectionTestResult = result?.success
-        ? { status: 'connected', message: result.message, timestamp: Date.now() }
-        : { status: 'error', message: result?.message || '测试失败', timestamp: Date.now() };
+      const status: ConnectionTestResult = {
+        status: 'connected',
+        message: result?.message || '连接成功',
+        timestamp: Date.now(),
+      };
       setConnectionStatus(prev => ({ ...prev, [account.id]: status }));
       return status;
     } catch (error: any) {
-      const status: ConnectionTestResult = { status: 'error', message: error.message || '连接失败', timestamp: Date.now() };
+      const status: ConnectionTestResult = {
+        status: 'error',
+        message: error.message || '连接失败',
+        timestamp: Date.now(),
+      };
       setConnectionStatus(prev => ({ ...prev, [account.id]: status }));
       return status;
     }
@@ -251,19 +248,42 @@ export default function Channels() {
     
     setSelectedTemplate(template);
     setSelectedAccount(account);
-    
-    const roomId = (account as any).roomId || (account as any).room_id || (account as any).chatId || (account as any).chat_id || '';
-    setConfigForm({
-      name: account.name || '',
-      homeserver: account.webhook || '',
-      token: account.token || '',
-      roomId: roomId,
-      secret: (account as any).secret || '',
-    });
+    setConfigForm(buildConfigFormFromAccount(account, template));
     
     // Set modal back stack properly so cancel returns to main, not template
     setModalBackStack(['main', 'config']);
     setShowConfigModal(true);
+  };
+
+  const buildConfigFormFromAccount = (account: Account, template: ChannelTemplate): Record<string, string> => {
+    const form: Record<string, string> = { name: account.name || '' };
+    const chatId = String((account as any).chatId || (account as any).chat_id || '');
+
+    for (const field of template.fields) {
+      switch (field.name) {
+        case 'webhook':
+          form.webhook = account.webhook || '';
+          break;
+        case 'token':
+          form.token = account.token || '';
+          break;
+        case 'chat_id':
+          form.chat_id = chatId;
+          break;
+        case 'secret':
+          form.secret = (account as any).secret || '';
+          break;
+        case 'homeserver':
+          form.homeserver = account.webhook || '';
+          break;
+        case 'roomId':
+          form.roomId = chatId;
+          break;
+        default:
+          if (!(field.name in form)) form[field.name] = '';
+      }
+    }
+    return form;
   };
 
   const saveConfig = async () => {
@@ -282,15 +302,10 @@ export default function Channels() {
 
     setSaving(true);
     try {
-      // For email channel, fromEmail goes to webhook, recipientEmail goes to chatId
-      // For Matrix channel, homeserver goes to webhook, roomId goes to chatId
       let webhook = configForm.webhook || undefined;
       let chatId = configForm.chat_id || undefined;
-      
-      if (selectedTemplate.id === 'email') {
-        webhook = configForm.fromEmail || configForm.webhook || undefined;
-        chatId = configForm.recipientEmail || configForm.chat_id || undefined;
-      } else if (selectedTemplate.id === 'matrix') {
+
+      if (selectedTemplate.id === 'matrix') {
         webhook = configForm.homeserver || undefined;
         chatId = configForm.roomId || undefined;
       }
@@ -701,6 +716,12 @@ export default function Channels() {
                 )}
               </div>
             ))}
+
+            {(selectedTemplate?.id === 'resend' || selectedTemplate?.id === 'email') && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl px-4 py-3">
+                未填写渠道收件人时，将使用「设置 → 通知默认邮箱」中的默认测试邮箱。
+              </p>
+            )}
 
             {selectedTemplate?.docsUrl && (
               <a

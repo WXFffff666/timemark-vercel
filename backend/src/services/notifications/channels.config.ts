@@ -267,6 +267,14 @@ const tokenChannels: ChannelTemplate[] = [
         required: false,
         placeholder: 'noreply@yourdomain.com',
         description: '已验证域名的邮箱地址，如 noreply@email.the37777777.top。留空使用测试地址 onboarding@resend.dev（仅能发送到自己的邮箱）'
+      },
+      {
+        name: 'chat_id',
+        label: '收件人邮箱',
+        type: 'text',
+        required: false,
+        placeholder: 'you@example.com',
+        description: '本渠道的默认收件地址。留空时将使用「设置 → 通知默认邮箱」中的默认测试邮箱'
       }
     ],
     docsUrl: 'https://resend.com/docs'

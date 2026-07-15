@@ -210,13 +210,15 @@ function getChannelConfigFromAccount(
   switch (channel) {
     // Email channels
     case 'email':
-    case 'resend':
-      return { 
-        apiKey: account.token,  // Resend API Key
-        emails: [account.chat_id || account.name],  // Recipient emails as array
-        // 使用已验证域名的邮箱地址，或Resend测试地址（仅能发送到自己的邮箱）
-        fromEmail: account.webhook || 'onboarding@resend.dev'
+    case 'resend': {
+      const recipient = account.chat_id?.trim();
+      const emails = recipient && recipient.includes('@') ? [recipient] : [];
+      return {
+        apiKey: account.token,
+        emails,
+        fromEmail: account.webhook || 'onboarding@resend.dev',
       };
+    }
     
     case 'smtp':
       return (account.webhook && account.token && account.chat_id)
