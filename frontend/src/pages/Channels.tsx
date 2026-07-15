@@ -43,6 +43,9 @@ interface ChannelTemplate {
 interface Account extends NotificationAccount {
   is_active?: boolean;
   token?: string;
+  chat_id?: string;
+  last_test_result?: 'success' | 'failed' | null;
+  connection_status?: string | null;
 }
 
 // Icon mapping
@@ -195,9 +198,28 @@ export default function Channels() {
     return iconMap[iconName] || MessageSquare;
   };
 
-  const getAccountStatus = (account: Account) => {
+  const getAccountStatus = (account: Account): 'disabled' | 'connected' | 'failed' | 'untested' => {
     if (!account.is_active) return 'disabled';
-    return 'connected';
+    const live = connectionStatus[account.id];
+    if (live?.status === 'error') return 'failed';
+    if (live?.status === 'connected') return 'connected';
+    if (account.last_test_result === 'failed' || account.connection_status === 'unhealthy') return 'failed';
+    if (account.last_test_result === 'success' || account.connection_status === 'healthy') return 'connected';
+    return 'untested';
+  };
+
+  const getStatusBadge = (account: Account) => {
+    const status = getAccountStatus(account);
+    switch (status) {
+      case 'connected':
+        return { variant: 'success' as const, label: '已验证', icon: <CheckCircle2 size={12} /> };
+      case 'failed':
+        return { variant: 'destructive' as const, label: '测试失败', icon: <AlertCircle size={12} /> };
+      case 'untested':
+        return { variant: 'secondary' as const, label: '未测试', icon: null };
+      default:
+        return { variant: 'secondary' as const, label: '已禁用', icon: null };
+    }
   };
 
   const openTemplateModal = () => {
@@ -322,10 +344,8 @@ export default function Channels() {
       };
 
       if (selectedAccount) {
-        // Update existing
         await api.put(`/config/accounts/${selectedAccount.id}`, accountData);
       } else {
-        // Create new
         await api.post('/config/accounts', accountData);
       }
 
@@ -333,10 +353,10 @@ export default function Channels() {
       setSelectedTemplate(null);
       setSelectedAccount(null);
       setConfigForm({});
-      fetchData();
-    } catch (error) {
+      await fetchData();
+    } catch (error: unknown) {
       console.error('Failed to save config:', error);
-      alert('保存配置失败，请检查输入格式');
+      alert(error instanceof Error ? error.message : '保存配置失败，请检查输入格式');
     } finally {
       setSaving(false);
     }
@@ -378,7 +398,97 @@ export default function Channels() {
   const filteredTemplates = templates.filter(t => t.configMethod === activeTab);
 
   const connectedAccounts = accounts.filter(a => getAccountStatus(a) === 'connected');
+  const failedAccounts = accounts.filter(a => getAccountStatus(a) === 'failed');
+  const untestedAccounts = accounts.filter(a => getAccountStatus(a) === 'untested');
   const disabledAccounts = accounts.filter(a => getAccountStatus(a) === 'disabled');
+
+  const renderAccountCard = (account: Account) => {
+    const template = templates.find(t => t.id === account.type);
+    const Icon = template ? getTemplateIcon(template.icon) : MessageSquare;
+    const badge = getStatusBadge(account);
+    const status = getAccountStatus(account);
+
+    return (
+      <motion.div key={account.id} variants={itemVariants}>
+        <div className={`glass-panel rounded-3xl p-6 transition-all duration-300 ring-1 ${
+          status === 'connected' ? 'ring-primary-500/30 shadow-lg shadow-primary-500/5' :
+          status === 'failed' ? 'ring-red-500/30' : 'ring-slate-200/60 dark:ring-slate-700/50'
+        }`}>
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
+                <Icon size={24} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">{account.name}</h3>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className={`text-xs ${getStatusIndicator(account.id).color}`} title={connectionStatus[account.id]?.message || getStatusIndicator(account.id).label}>
+                    {getStatusIndicator(account.id).dot}
+                  </span>
+                  <Badge variant={badge.variant} className="gap-1 text-xs">
+                    {badge.icon}
+                    {badge.label}
+                  </Badge>
+                  {template && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${getMethodColor(template.configMethod)}`}>
+                      {getMethodLabel(template.configMethod)}
+                    </span>
+                  )}
+                  {connectionStatus[account.id]?.timestamp && (
+                    <span className="text-[10px] text-slate-400" title={connectionStatus[account.id]?.message}>
+                      {new Date(connectionStatus[account.id].timestamp!).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <Switch
+              checked={account.is_active !== false}
+              onCheckedChange={() => toggleAccount(account)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-4 border-t border-slate-200/60 dark:border-slate-700/50">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              类型: {template?.name || account.type}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-lg"
+                onClick={() => testConnection(account)}
+                disabled={testingConnection === account.id}
+              >
+                {testingConnection === account.id ? (
+                  <Loader2 size={14} className="mr-1 animate-spin" />
+                ) : (
+                  <Settings size={14} className="mr-1" />
+                )}
+                {testingConnection === account.id ? '测试中' : '测试'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-lg"
+                onClick={() => openEditModal(account)}
+              >
+                <Settings size={14} className="mr-1" /> 配置
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-lg text-red-500 hover:text-red-600"
+                onClick={() => deleteAccount(account)}
+              >
+                <Link2Off size={14} />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
@@ -423,103 +533,27 @@ export default function Channels() {
           </div>
         ) : (
           <>
-            {/* Connected Accounts */}
-            {connectedAccounts.length > 0 && (
-              <section className="mb-10">
+            {[ 
+              { title: '已验证的渠道', accounts: connectedAccounts, icon: <CheckCircle2 className="w-5 h-5 text-green-500" /> },
+              { title: '待测试的渠道', accounts: untestedAccounts, icon: <AlertCircle className="w-5 h-5 text-amber-500" /> },
+              { title: '测试失败的渠道', accounts: failedAccounts, icon: <AlertCircle className="w-5 h-5 text-red-500" /> },
+              { title: '已禁用的渠道', accounts: disabledAccounts, icon: <Link2Off className="w-5 h-5 text-slate-400" /> },
+            ].map((section) => section.accounts.length > 0 && (
+              <section key={section.title} className="mb-10">
                 <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-500" />
-                  已连接的渠道
+                  {section.icon}
+                  {section.title}
                 </h2>
-                <motion.div 
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
-                  variants={containerVariants} 
-                  initial="hidden" 
+                <motion.div
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                  variants={containerVariants}
+                  initial="hidden"
                   animate="visible"
                 >
-                  {connectedAccounts.map((account) => {
-                    const template = templates.find(t => t.id === account.type);
-                    const Icon = template ? getTemplateIcon(template.icon) : MessageSquare;
-                    
-                    return (
-                      <motion.div key={account.id} variants={itemVariants}>
-                        <div className="glass-panel rounded-3xl p-6 transition-all duration-300 ring-1 ring-primary-500/30 shadow-lg shadow-primary-500/5">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
-                                <Icon size={24} />
-                              </div>
-                              <div>
-                                <h3 className="font-semibold text-slate-900 dark:text-white">{account.name}</h3>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className={`text-xs ${getStatusIndicator(account.id).color}`} title={connectionStatus[account.id]?.message || getStatusIndicator(account.id).label}>
-                                    {getStatusIndicator(account.id).dot}
-                                  </span>
-                                  <Badge variant="success" className="gap-1 text-xs">
-                                    <CheckCircle2 size={12} /> 已连接
-                                  </Badge>
-                                  {template && (
-                                    <span className={`text-xs px-2 py-0.5 rounded-full ${getMethodColor(template.configMethod)}`}>
-                                      {getMethodLabel(template.configMethod)}
-                                    </span>
-                                  )}
-                                  {connectionStatus[account.id]?.timestamp && (
-                                    <span className="text-[10px] text-slate-400" title={connectionStatus[account.id]?.message}>
-                                      {new Date(connectionStatus[account.id].timestamp!).toLocaleTimeString()}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <Switch 
-                              checked={account.is_active !== false} 
-                              onCheckedChange={() => toggleAccount(account)} 
-                            />
-                          </div>
-                          
-                          <div className="flex items-center justify-between pt-4 border-t border-slate-200/60 dark:border-slate-700/50">
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              类型: {template?.name || account.type}
-                            </span>
-                            <div className="flex gap-2">
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="rounded-lg"
-                                onClick={() => testConnection(account)}
-                                disabled={testingConnection === account.id}
-                              >
-                                {testingConnection === account.id ? (
-                                  <Loader2 size={14} className="mr-1 animate-spin" />
-                                ) : (
-                                  <Settings size={14} className="mr-1" />
-                                )} 
-                                {testingConnection === account.id ? '测试中' : '测试'}
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="rounded-lg"
-                                onClick={() => openEditModal(account)}
-                              >
-                                <Settings size={14} className="mr-1" /> 配置
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="rounded-lg text-red-500 hover:text-red-600"
-                                onClick={() => deleteAccount(account)}
-                              >
-                                <Link2Off size={14} className="mr-1" /> 删除
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
+                  {section.accounts.map((account) => renderAccountCard(account))}
                 </motion.div>
               </section>
-            )}
+            ))}
 
             {/* Empty State */}
             {accounts.length === 0 && (

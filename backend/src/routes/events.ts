@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { createEvent, getEventsByUserId, getEventsByUserIdPaginated, updateEvent, deleteEvent, deleteEventsByIds } from '../services/event.service.js';
-import { createEventSchema, updateEventSchema, batchDeleteSchema, csvImportSchema } from '@timemark/shared';
+import { createEventSchema, updateEventSchema, batchDeleteSchema, csvImportSchema, formatZodError } from '@timemark/shared';
 import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
 
@@ -38,7 +38,7 @@ events.post('/', async (c) => {
   const parsed = createEventSchema.safeParse(body);
 
   if (!parsed.success) {
-    return c.json({ success: false, error: 'Invalid input', details: parsed.error }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
   }
 
   // Validate notification_account_ids if provided
@@ -171,7 +171,7 @@ events.put('/:id', async (c) => {
   const parsed = updateEventSchema.safeParse(body);
 
   if (!parsed.success) {
-    return c.json({ success: false, error: 'Invalid input', details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
   }
 
   // Validate notification_account_ids if provided
@@ -221,7 +221,7 @@ events.delete('/batch', async (c) => {
   const parsed = batchDeleteSchema.safeParse(body);
 
   if (!parsed.success) {
-    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
   }
 
   const deleted = await deleteEventsByIds(parsed.data.ids, user.id);
@@ -250,7 +250,7 @@ events.post('/import-csv', async (c) => {
     const parsed = csvImportSchema.safeParse(body);
     
     if (!parsed.success) {
-      return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+      return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
     }
     
     const { csvData } = parsed.data;

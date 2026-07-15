@@ -92,9 +92,22 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
         lockMinutes?: number;
         requiresTotp?: boolean;
         code?: string;
+        details?: {
+          fieldErrors?: Record<string, string[]>;
+          formErrors?: string[];
+        };
       };
       if (errData.error) {
         message = errData.error;
+      }
+      if (
+        errData.details?.fieldErrors &&
+        (message === 'Validation failed' || message === 'Invalid input' || message === '请求参数无效')
+      ) {
+        const detailText = Object.entries(errData.details.fieldErrors)
+          .flatMap(([field, msgs]) => (msgs?.length ? [`${field}: ${msgs.join(', ')}`] : []))
+          .join('；');
+        if (detailText) message = detailText;
       }
       if (errData.locked) locked = true;
       if (typeof errData.remainingSeconds === 'number' && errData.remainingSeconds > 0) {

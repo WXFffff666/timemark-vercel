@@ -4,7 +4,8 @@
 
 ### 通知系统修复与完善
 
-- **收件人解析**：统一 `resolveRecipientEmails()`，优先级为事件 → 渠道 `chat_id` → 默认测试邮箱 → `reminder_emails`
+- **渠道测试 Validation failed**：`testConnectionSchema` 支持仅传 `accountId`；统一收件人回退逻辑
+- **渠道状态显示**：不再对所有启用渠道假显示「已连接」；按已验证/未测试/失败/禁用分组
 - **Resend 渠道**：恢复「收件人邮箱」字段；编辑表单通用回填；测试失败返回 HTTP 400 与明确错误信息
 - **设置页**：「通知默认邮箱」可保存与清空；近 30 天「邮件记录」
 - **测试发送**：`test-send` 写入 `event_trigger_logs`；渠道测试传递 `accountId` 并持久化 `last_test_result`

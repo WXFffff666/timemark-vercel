@@ -7,9 +7,9 @@ import {
   type ChannelConfigMethod,
 } from '../services/notifications/channels.config.js';
 import { isSupportedChannel } from '../services/notifications/supported-channels.js';
-import { testConnectionSchema } from '@timemark/shared';
+import { testConnectionSchema, formatZodError } from '@timemark/shared';
 import type { User } from '@timemark/shared';
-import type { ZodError } from 'zod';
+import { resolveEmailRecipientForTest } from '../utils/notification-recipients.js';
 import { query } from '../db/index.js';
 import { testConnection } from '../services/notifications/test-connection.js';
 import { checkAllChannels, checkChannel } from '../services/notifications/network-check.js';
@@ -18,16 +18,6 @@ import { getNotificationAccounts } from '../services/config.service.js';
 const channels = new Hono<{ Variables: { user: User } }>();
 
 channels.use('*', authMiddleware);
-
-function formatValidationError(error: ZodError): string {
-  const flat = error.flatten();
-  const parts: string[] = [];
-  for (const [field, messages] of Object.entries(flat.fieldErrors)) {
-    if (messages?.length) parts.push(`${field}: ${messages.join(', ')}`);
-  }
-  if (flat.formErrors.length) parts.push(...flat.formErrors);
-  return parts.join('；') || '请求参数无效';
-}
 
 channels.get('/templates', async (c) => {
   return c.json({ success: true, data: getSupportedChannelTemplates() });
@@ -73,7 +63,7 @@ channels.post('/test', async (c) => {
   if (!parsed.success) {
     return c.json({
       success: false,
-      error: formatValidationError(parsed.error),
+      error: formatZodError(parsed.error),
       details: parsed.error.flatten(),
     }, 400);
   }
@@ -113,9 +103,8 @@ channels.post('/test', async (c) => {
     return c.json({ success: false, error: '该通知渠道在云端部署中不可用' }, 400);
   }
 
-  if ((testType === 'email' || testType === 'resend') && !testChatId) {
-    const cfg = await query('SELECT default_test_email FROM user_configs WHERE user_id = $1', [userId]);
-    testChatId = cfg.rows[0]?.default_test_email || testChatId;
+  if ((testType === 'email' || testType === 'resend' || testType === 'smtp') && !testChatId) {
+    testChatId = await resolveEmailRecipientForTest(userId, testType, testChatId);
   }
 
   if ((testType === 'email' || testType === 'resend') && !testChatId) {

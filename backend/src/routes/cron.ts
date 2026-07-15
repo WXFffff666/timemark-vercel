@@ -9,6 +9,7 @@ import { pingHeartbeat } from '../utils/heartbeat.js';
 import { testConnection } from '../services/notifications/test-connection.js';
 import { isSupportedChannel } from '../services/notifications/supported-channels.js';
 import { getChannelTemplate } from '../services/notifications/channels.config.js';
+import { resolveEmailRecipientForTest } from '../utils/notification-recipients.js';
 
 const cronRoutes = new Hono();
 
@@ -179,7 +180,7 @@ cronRoutes.get('/channel-health', async (c) => {
   let failed = 0;
   try {
     const accounts = await query(
-      `SELECT id, type, webhook, token, secret, chat_id, config_method
+      `SELECT id, user_id, type, webhook, token, secret, chat_id, config_method
        FROM notification_accounts WHERE is_active = TRUE`,
     );
     for (const row of accounts.rows) {
@@ -188,12 +189,17 @@ cronRoutes.get('/channel-health', async (c) => {
       if (!tpl) continue;
       tested++;
       try {
+        const chatId = await resolveEmailRecipientForTest(
+          row.user_id as number,
+          row.type as string,
+          row.chat_id as string | null,
+        );
         const result = await testConnection({
           type: row.type,
           configMethod: row.config_method || tpl.configMethod,
           webhook: row.webhook || undefined,
           token: row.token || undefined,
-          chatId: row.chat_id || undefined,
+          chatId: chatId || undefined,
           secret: row.secret || undefined,
         });
         const status = result.success ? 'healthy' : 'unhealthy';
