@@ -12,7 +12,7 @@ export function LoginPage() {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: -20 }}
         transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-        className="w-full max-w-[420px]"
+        className="w-full max-w-[440px]"
       >
         <LoginForm />
       </motion.div>

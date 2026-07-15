@@ -23,6 +23,7 @@ declare global {
           'timeout-callback'?: () => void;
           theme?: 'light' | 'dark' | 'auto';
           size?: 'normal' | 'compact';
+          appearance?: 'always' | 'execute' | 'interaction-only';
         },
       ) => string;
       reset: (id: string) => void;
@@ -30,8 +31,6 @@ declare global {
     };
   }
 }
-
-const TURNSTILE_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
@@ -177,53 +176,82 @@ export function LoginForm() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (!turnstileSiteKey || !turnstileRef.current) return;
-
-    const mountWidget = () => {
-      if (!window.turnstile || !turnstileRef.current || widgetIdRef.current) return;
-      widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
-        sitekey: turnstileSiteKey,
-        theme: 'auto',
-        size: 'normal',
-        callback: (token: string) => {
-          setTurnstileToken(token);
-          setError('');
-          if (pendingSubmitRef.current) {
-            void submitLoginRef.current(token);
-          }
-        },
-        'expired-callback': () => setTurnstileToken(''),
-        'error-callback': () => {
-          setTurnstileToken('');
-          setError('人机验证加载失败，请刷新页面重试');
-        },
-        'timeout-callback': () => setTurnstileToken(''),
-      });
-      setTurnstileReady(true);
-    };
-
-    if (window.turnstile) {
-      mountWidget();
-      return;
+  const mountWidget = useCallback(() => {
+    if (!turnstileSiteKey || !turnstileRef.current || !window.turnstile || widgetIdRef.current) {
+      return false;
     }
-
-    let script = document.querySelector<HTMLScriptElement>(`script[src^="${TURNSTILE_SCRIPT.split('?')[0]}"]`);
-    if (!script) {
-      script = document.createElement('script');
-      script.src = TURNSTILE_SCRIPT;
-      script.async = true;
-      document.body.appendChild(script);
-    }
-
-    const onLoad = () => mountWidget();
-    script.addEventListener('load', onLoad);
-    if (window.turnstile) mountWidget();
-
-    return () => {
-      script?.removeEventListener('load', onLoad);
-    };
+    const isDark = document.documentElement.classList.contains('dark');
+    widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
+      sitekey: turnstileSiteKey,
+      theme: isDark ? 'dark' : 'light',
+      size: 'normal',
+      appearance: 'always',
+      callback: (token: string) => {
+        setTurnstileToken(token);
+        setError('');
+        if (pendingSubmitRef.current) {
+          void submitLoginRef.current(token);
+        }
+      },
+      'expired-callback': () => setTurnstileToken(''),
+      'error-callback': () => {
+        setTurnstileToken('');
+        setError('人机验证加载失败，请刷新页面重试');
+      },
+      'timeout-callback': () => setTurnstileToken(''),
+    });
+    setTurnstileReady(true);
+    return true;
   }, [turnstileSiteKey]);
+
+  const loadTurnstileScript = useCallback((): Promise<void> => {
+    if (window.turnstile) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const base = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+      let script = document.querySelector<HTMLScriptElement>(`script[src^="${base}"]`);
+      if (!script) {
+        script = document.createElement('script');
+        script.src = `${base}?render=explicit`;
+        script.async = true;
+        document.body.appendChild(script);
+      }
+      const done = () => {
+        if (window.turnstile) resolve();
+        else reject(new Error('turnstile unavailable'));
+      };
+      script.addEventListener('load', done, { once: true });
+      script.addEventListener('error', () => reject(new Error('turnstile script failed')), { once: true });
+      if (window.turnstile) resolve();
+    });
+  }, []);
+
+  const bindTurnstileContainer = useCallback((node: HTMLDivElement | null) => {
+    turnstileRef.current = node;
+    if (!node || !turnstileSiteKey) return;
+    void loadTurnstileScript()
+      .then(() => {
+        if (!mountWidget()) {
+          requestAnimationFrame(() => mountWidget());
+        }
+      })
+      .catch(() => setError('人机验证脚本加载失败，请检查网络或刷新页面'));
+  }, [turnstileSiteKey, loadTurnstileScript, mountWidget]);
+
+  useEffect(() => {
+    if (!turnstileSiteKey) return;
+    let cancelled = false;
+    let frames = 0;
+    const retryMount = () => {
+      if (cancelled || mountWidget()) return;
+      if (frames++ < 30) requestAnimationFrame(retryMount);
+    };
+    void loadTurnstileScript().then(() => {
+      if (!cancelled) retryMount();
+    }).catch(() => {
+      if (!cancelled) setError('人机验证脚本加载失败，请检查网络或刷新页面');
+    });
+    return () => { cancelled = true; };
+  }, [turnstileSiteKey, loadTurnstileScript, mountWidget]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -275,7 +303,7 @@ export function LoginForm() {
   };
 
   return (
-    <Card className="w-full glass-panel border-0 ring-1 ring-black/5 dark:ring-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
+    <Card className="w-full glass-panel border-0 ring-1 ring-black/5 dark:ring-white/10 rounded-[2.5rem] shadow-2xl overflow-visible">
       <CardHeader className="text-center pb-4 pt-12">
         <motion.div
           initial={{ scale: 0, rotate: -10 }}
@@ -331,12 +359,16 @@ export function LoginForm() {
             </motion.div>
           )}
           {turnstileSiteKey && (
-            <motion.div variants={itemVariants} className="flex flex-col items-center gap-2">
-              <div ref={turnstileRef} className="min-h-[65px] flex items-center justify-center" aria-label="Cloudflare 人机验证" />
+            <div className="space-y-2">
+              <div
+                ref={bindTurnstileContainer}
+                className="turnstile-host"
+                aria-label="Cloudflare 人机验证"
+              />
               {!turnstileReady && (
-                <p className="text-xs text-hint">人机验证加载中…</p>
+                <p className="text-xs text-hint text-center">人机验证加载中…</p>
               )}
-            </motion.div>
+            </div>
           )}
           <motion.div variants={itemVariants} className="flex items-center gap-3 pt-1 alive-interactive w-max" onClick={() => !isLocked && setRememberMe(!rememberMe)}>
              <input type="checkbox" checked={rememberMe} readOnly disabled={isLocked} aria-label="保持登录 30 天" className="peer w-5 h-5 rounded-md border-slate-300 dark:border-slate-600 text-primary-500 focus:ring-primary-500/30 bg-white dark:bg-black/50 transition-all disabled:opacity-50" />

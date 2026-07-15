@@ -5,7 +5,7 @@
 ### 修复
 - **登录 Turnstile**：修复 `execute` 模式下验证回调使用陈旧闭包，导致用空用户名/密码提交并显示 `Invalid input`
 - 改为页面加载时显示可见 Turnstile 组件；验证完成后可自动登录
-- 登录校验失败返回中文 `请求参数无效` 及字段详情
+- **Turnstile 显示**：去除卡片 `overflow-hidden` 与 motion 透明动画包裹；增加 `.turnstile-host` 底色边框；`appearance: always`；回调 ref 可靠挂载
 
 ## v2.14.2 (2026-07-15)
 
