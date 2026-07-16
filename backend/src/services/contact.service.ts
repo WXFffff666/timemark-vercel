@@ -69,7 +69,9 @@ export async function createFixedContact(userId: number, input: CreateFixedConta
     ],
   );
   return mapContactRow(result.rows[0]);
-}(userId: number, id: number, input: UpdateFixedContactInput) {
+}
+
+export async function updateFixedContact(userId: number, id: number, input: UpdateFixedContactInput) {
   const existing = await query('SELECT * FROM fixed_contacts WHERE id = $1 AND user_id = $2', [id, userId]);
   if (!existing.rows[0]) return null;
 
