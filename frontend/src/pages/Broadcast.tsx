@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Send, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
@@ -10,6 +11,14 @@ interface Contact {
   id: number;
   name: string;
   email?: string;
+  channel_account_ids?: number[];
+}
+
+interface EmailAccount {
+  id: number;
+  name: string;
+  type: string;
+  is_active?: boolean;
 }
 
 interface Campaign {
@@ -24,7 +33,10 @@ interface Campaign {
 
 export default function Broadcast() {
   const navigate = useNavigate();
+  const goBack = useSmartBack('/dashboard');
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
+  const [accountId, setAccountId] = useState<number | ''>('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [subject, setSubject] = useState('');
   const [html, setHtml] = useState('<p>您好，</p><p>这是一条来自 TimeMark 的消息。</p>');
@@ -36,6 +48,11 @@ export default function Broadcast() {
 
   useEffect(() => {
     api.get<Contact[]>('/contacts').then((d) => setContacts(d || [])).catch(() => {});
+    api.get<EmailAccount[]>('/config/accounts').then((d) => {
+      const email = (d || []).filter((a) => a.is_active !== false && ['resend', 'email', 'smtp'].includes(a.type));
+      setEmailAccounts(email);
+      if (email.length > 0) setAccountId(email[0].id);
+    }).catch(() => {});
     api.get<Campaign[]>('/broadcast/campaigns').then((d) => setCampaigns(d || [])).catch(() => {});
   }, []);
 
@@ -58,6 +75,7 @@ export default function Broadcast() {
         html,
         contactIds: selectedIds.length ? selectedIds : undefined,
         recipientEmails: emails.length ? emails : undefined,
+        accountId: accountId || undefined,
         totpCode: totpCode || undefined,
       });
       setMessage(`发送完成：${result.successCount}/${result.recipientCount} 成功，状态 ${result.status}`);
@@ -73,12 +91,12 @@ export default function Broadcast() {
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24">
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
+        <Button variant="ghost" size="icon" onClick={goBack}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Mail className="w-6 h-6" />批量邮件</h1>
-          <p className="text-sm text-slate-500">基于 Resend 账户，每批最多 100 封</p>
+          <p className="text-sm text-slate-500">选择通知渠道，向联系人快捷群发</p>
         </div>
       </div>
 
@@ -93,6 +111,26 @@ export default function Broadcast() {
             ))}
           </div>
         </div>
+        {emailAccounts.length > 0 ? (
+          <div>
+            <label className="text-sm font-medium">通知渠道</label>
+            <select
+              className="w-full mt-1 rounded-md border p-2 text-sm bg-transparent"
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : '')}
+            >
+              {emailAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.type === 'smtp' ? 'SMTP' : 'Resend'})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <p className="text-sm text-amber-600">
+            请先在<button type="button" className="underline mx-1" onClick={() => navigate('/channels')}>通知渠道</button>配置 Resend 或 SMTP 邮件账号
+          </p>
+        )}
         <Input placeholder="邮件主题" value={subject} onChange={(e) => setSubject(e.target.value)} />
         <textarea
           className="w-full min-h-[120px] rounded-md border p-3 text-sm bg-transparent"
@@ -109,9 +147,9 @@ export default function Broadcast() {
           value={totpCode}
           onChange={(e) => setTotpCode(e.target.value)}
         />
-        {contacts.length > 0 && (
+        {contacts.filter((c) => c.email).length > 0 && (
           <div>
-            <p className="text-sm font-medium mb-2">从固定联系人选择（有邮箱的）</p>
+            <p className="text-sm font-medium mb-2">从固定联系人选择</p>
             <div className="flex flex-wrap gap-2">
               {contacts.filter((c) => c.email).map((c) => (
                 <Button
@@ -119,14 +157,17 @@ export default function Broadcast() {
                   size="sm"
                   variant={selectedIds.includes(c.id) ? 'default' : 'outline'}
                   onClick={() => toggleContact(c.id)}
+                  title={c.email}
                 >
                   {c.name}
+                  {(c.channel_account_ids?.length ?? 0) > 0 && ' ✓'}
                 </Button>
               ))}
             </div>
+            <p className="text-xs text-slate-400 mt-1">带 ✓ 表示已绑定通知渠道</p>
           </div>
         )}
-        <Button className="w-full" disabled={sending || !subject || !html} onClick={send}>
+        <Button className="w-full" disabled={sending || !subject || !html || emailAccounts.length === 0} onClick={send}>
           <Send className="w-4 h-4 mr-2" />{sending ? '发送中…' : '发送'}
         </Button>
         {message && <p className="text-sm text-center text-slate-600">{message}</p>}

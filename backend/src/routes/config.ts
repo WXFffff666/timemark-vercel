@@ -18,6 +18,7 @@ import {
   getEventTemplate,
   saveEventTemplate,
   deleteEventTemplate,
+  saveAlertSettings,
 } from '../services/config.service.js';
 import {
   createNotificationAccountSchema,
@@ -57,6 +58,28 @@ config.post('/', async (c) => {
   }
   await saveUserConfig(Number(user.id), parsed.data);
   await logAudit(Number(user.id), 'update', 'user_config', user.id, { keys: Object.keys(parsed.data) });
+  return c.json({ success: true });
+});
+
+config.post('/alert-settings', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  const alertEmails = Array.isArray(body.alert_emails)
+    ? body.alert_emails.filter((e: unknown) => typeof e === 'string' && e.includes('@'))
+    : undefined;
+  const alertAccountIds = Array.isArray(body.alert_account_ids)
+    ? body.alert_account_ids.map(Number).filter((n: number) => n > 0)
+    : undefined;
+  const alertChannels = Array.isArray(body.alert_channels)
+    ? body.alert_channels.filter((x: unknown) => typeof x === 'string')
+    : undefined;
+
+  await saveAlertSettings(Number(user.id), {
+    alert_emails: alertEmails,
+    alert_account_ids: alertAccountIds,
+    alert_channels: alertChannels,
+  });
+  await logAudit(Number(user.id), 'update', 'alert_settings', user.id, {});
   return c.json({ success: true });
 });
 

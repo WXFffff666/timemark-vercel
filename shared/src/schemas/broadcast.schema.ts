@@ -7,6 +7,8 @@ const broadcastBaseSchema = z.object({
   contactIds: z.array(z.number().int().positive()).max(500).optional(),
   useAllContacts: z.boolean().optional(),
   totpCode: z.string().length(6).optional(),
+  /** 指定邮件通知渠道账号（resend / smtp） */
+  accountId: z.number().int().positive().optional(),
 });
 
 export const broadcastEmailSchema = broadcastBaseSchema.refine(

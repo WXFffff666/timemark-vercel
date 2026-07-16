@@ -455,6 +455,12 @@ ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS google_oauth_email TEXT;
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS google_calendar_id TEXT DEFAULT 'primary';
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS google_oauth_connected_at TIMESTAMP;`,
     },
+    {
+      version: 28,
+      name: 'alert_settings_v28',
+      sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS alert_emails JSONB DEFAULT '[]';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS alert_account_ids JSONB DEFAULT '[]';`,
+    },
   ];
 
   for (const migration of migrations) {

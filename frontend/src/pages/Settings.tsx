@@ -74,7 +74,8 @@ export default function Settings() {
   
   // Alert channel states
   const [alertAccounts, setAlertAccounts] = useState<any[]>([]);
-  const [selectedAlertChannels, setSelectedAlertChannels] = useState<string[]>([]);
+  const [selectedAlertAccountIds, setSelectedAlertAccountIds] = useState<number[]>([]);
+  const [alertEmails, setAlertEmails] = useState('');
   const [alertSaving, setAlertSaving] = useState(false);
 
   // Timezone setting
@@ -121,7 +122,7 @@ export default function Settings() {
     setPageLoading(true);
     setPageError('');
     Promise.all([
-      api.get<{ timezone?: string; alert_channels?: unknown; default_test_email?: string; reminder_emails?: string[]; quiet_hours_start?: string | null; quiet_hours_end?: string | null }>('/config').catch(() => null),
+      api.get<{ timezone?: string; alert_channels?: unknown; alert_emails?: string[]; alert_account_ids?: number[]; default_test_email?: string; reminder_emails?: string[]; quiet_hours_start?: string | null; quiet_hours_end?: string | null }>('/config').catch(() => null),
       api.get('/config/accounts').catch(() => []),
       api.get<any[]>('/email-logs?limit=50').catch(() => []),
       api.get<{
@@ -144,10 +145,20 @@ export default function Settings() {
         if (Array.isArray(config?.reminder_emails)) {
           setDefaultReminderEmails(config.reminder_emails.join(', '));
         }
-        if (config?.alert_channels != null) {
-          setSelectedAlertChannels(parseAlertChannels(config.alert_channels));
+        if (Array.isArray(config?.alert_emails)) {
+          setAlertEmails(config.alert_emails.join(', '));
         }
-        setAlertAccounts(ensureArray(accounts));
+        const accountList = ensureArray<any>(accounts);
+        if (Array.isArray(config?.alert_account_ids) && config.alert_account_ids.length > 0) {
+          setSelectedAlertAccountIds(config.alert_account_ids);
+        } else if (config?.alert_channels != null) {
+          const legacyTypes = parseAlertChannels(config.alert_channels);
+          const legacyIds = accountList
+            .filter((a: any) => a.is_active && legacyTypes.includes(a.type))
+            .map((a: any) => Number(a.id));
+          setSelectedAlertAccountIds(legacyIds);
+        }
+        setAlertAccounts(accountList);
         setEmailLogs(ensureArray(logs));
         if (integrations) {
           setWebhookUrl(integrations.webhookUrl ?? null);
@@ -421,14 +432,26 @@ export default function Settings() {
     localStorage.setItem('timemark_sound_enabled', String(checked));
   };
 
-  const toggleAlertChannel = (type: string) => {
-    setSelectedAlertChannels(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
+  const toggleAlertAccount = (accountId: number) => {
+    setSelectedAlertAccountIds((prev) =>
+      prev.includes(accountId) ? prev.filter((id) => id !== accountId) : [...prev, accountId],
+    );
   };
 
   const saveAlertChannels = async () => {
     setAlertSaving(true);
-    try { await api.post('/config', { alert_channels: selectedAlertChannels }); } catch (e) { console.error(e); }
-    setAlertSaving(false);
+    try {
+      const emails = alertEmails.split(/[,，\s]+/).map((e) => e.trim()).filter((e) => e.includes('@'));
+      await api.post('/config/alert-settings', {
+        alert_emails: emails,
+        alert_account_ids: selectedAlertAccountIds,
+      });
+      alert('安全告警设置已保存');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setAlertSaving(false);
+    }
   };
 
   const handleExportData = async () => {
@@ -1109,24 +1132,51 @@ export default function Settings() {
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider flex items-center gap-2">
               <Shield className="w-4 h-4" /> 安全告警渠道
             </h2>
-            <div className="glass-panel rounded-[2.5rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
-              <p className="text-sm text-slate-500 mb-4">选择接收安全告警的通知渠道（登录失败、账户锁定等）</p>
+            <div className="glass-panel rounded-[2.5rem] p-6 ring-1 ring-black/5 dark:ring-white/10 space-y-4">
+              <p className="text-sm text-slate-500">接收登录失败、账户锁定等安全告警。可独立填写邮箱，也可绑定通知渠道账号。</p>
+              <div>
+                <label className="text-sm font-medium">告警邮箱（逗号分隔）</label>
+                <Input
+                  className="mt-1"
+                  placeholder="admin@example.com, security@example.com"
+                  value={alertEmails}
+                  onChange={(e) => setAlertEmails(e.target.value)}
+                />
+                <p className="text-xs text-slate-400 mt-1">直接发送到以上邮箱，使用已配置的 Resend / SMTP 账号发信</p>
+              </div>
               {alertAccounts.length === 0 ? (
-                <p className="text-sm text-slate-400">请先<a href="/channels" className="text-indigo-500 underline ml-1">配置通知渠道</a></p>
+                <p className="text-sm text-slate-400">绑定渠道：请先<button type="button" className="text-indigo-500 underline mx-1" onClick={() => navigate('/channels')}>配置通知渠道</button></p>
               ) : (
-                <div className="space-y-3">
-                  {alertAccounts.filter((a: any) => a.is_active).map((account: any) => (
-                    <label key={account.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
-                      <input type="checkbox" checked={selectedAlertChannels.includes(account.type)} onChange={() => toggleAlertChannel(account.type)} className="w-4 h-4 rounded border-slate-300" />
-                      <span className="text-sm font-medium">{account.name}</span>
-                      <span className="text-xs text-slate-400">({account.type})</span>
-                    </label>
-                  ))}
-                  <button onClick={saveAlertChannels} disabled={alertSaving} className="mt-4 px-4 py-2 bg-indigo-500 text-white rounded-xl text-sm hover:bg-indigo-600 disabled:opacity-50">
-                    {alertSaving ? '保存中...' : '保存告警渠道'}
-                  </button>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">绑定通知渠道账号</p>
+                  {['resend', 'email', 'smtp', 'feishu', 'wecom', 'dingtalk', 'telegram', 'discord', 'slack'].map((type) => {
+                    const typeAccounts = alertAccounts.filter((a: any) => a.is_active && a.type === type);
+                    if (typeAccounts.length === 0) return null;
+                    return (
+                      <div key={type} className="rounded-xl border p-3 space-y-2">
+                        <p className="text-xs font-semibold text-slate-500 uppercase">{type}</p>
+                        {typeAccounts.map((account: any) => (
+                          <label key={account.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedAlertAccountIds.includes(Number(account.id))}
+                              onChange={() => toggleAlertAccount(Number(account.id))}
+                              className="w-4 h-4 rounded border-slate-300"
+                            />
+                            <span className="text-sm font-medium">{account.name}</span>
+                            {account.chat_id && (type === 'resend' || type === 'email' || type === 'smtp') && (
+                              <span className="text-xs text-slate-400 truncate">→ {account.chat_id}</span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
+              <button onClick={saveAlertChannels} disabled={alertSaving} className="px-4 py-2 bg-indigo-500 text-white rounded-xl text-sm hover:bg-indigo-600 disabled:opacity-50">
+                {alertSaving ? '保存中...' : '保存告警设置'}
+              </button>
             </div>
           </section>
 
@@ -1134,7 +1184,7 @@ export default function Settings() {
           <section>
             <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">联系人与群发</h2>
             <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10 space-y-1">
-              <div className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer" onClick={() => navigate('/contacts')}>
+              <div className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer" onClick={() => navigate('/contacts', { state: { backTo: '/settings' } })}>
                 <div className="flex items-center gap-4">
                   <div className="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center"><User size={22} /></div>
                   <div>
@@ -1144,7 +1194,7 @@ export default function Settings() {
                 </div>
                 <ChevronRight className="text-slate-400" />
               </div>
-              <div className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer" onClick={() => navigate('/broadcast')}>
+              <div className="flex items-center justify-between p-4 hover:bg-slate-100/50 dark:hover:bg-white/5 rounded-[2rem] alive-interactive cursor-pointer" onClick={() => navigate('/broadcast', { state: { backTo: '/settings' } })}>
                 <div className="flex items-center gap-4">
                   <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center"><Mail size={22} /></div>
                   <div>

@@ -174,8 +174,21 @@ export async function getUserConfig(userId: number): Promise<any> {
     })(),
     alert_channels: (() => {
       const raw = r.alert_channels;
-      if (!raw) return ['email'];
-      try { return JSON.parse(raw); } catch { return ['email']; }
+      if (!raw) return [];
+      try { return JSON.parse(raw); } catch { return []; }
+    })(),
+    alert_emails: (() => {
+      const raw = r.alert_emails;
+      if (!raw) return [];
+      try { return JSON.parse(raw); } catch { return []; }
+    })(),
+    alert_account_ids: (() => {
+      const raw = r.alert_account_ids;
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map(Number).filter((n) => n > 0) : [];
+      } catch { return []; }
     })(),
     timezone: r.timezone || 'Asia/Shanghai',
     quiet_hours_start: r.quiet_hours_start || null,
@@ -626,8 +639,27 @@ export async function deleteEventTemplate(userId: number, eventType: string): Pr
 
 // ============ API Key 管理 ============
 
+export async function saveAlertSettings(
+  userId: number,
+  settings: { alert_emails?: string[]; alert_account_ids?: number[]; alert_channels?: string[] },
+): Promise<void> {
+  await query(
+    `INSERT INTO user_configs (user_id, alert_emails, alert_account_ids, alert_channels)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id) DO UPDATE SET
+       alert_emails = COALESCE(EXCLUDED.alert_emails, user_configs.alert_emails),
+       alert_account_ids = COALESCE(EXCLUDED.alert_account_ids, user_configs.alert_account_ids),
+       alert_channels = COALESCE(EXCLUDED.alert_channels, user_configs.alert_channels)`,
+    [
+      userId,
+      settings.alert_emails !== undefined ? JSON.stringify(settings.alert_emails) : null,
+      settings.alert_account_ids !== undefined ? JSON.stringify(settings.alert_account_ids) : null,
+      settings.alert_channels !== undefined ? JSON.stringify(settings.alert_channels) : null,
+    ],
+  );
+}
+
 /**
- * Generate a new API key for a user.
  * Stores SHA-256 hash in DB, returns plaintext once for user to save.
  */
 export async function generateApiKey(userId: number): Promise<string> {
