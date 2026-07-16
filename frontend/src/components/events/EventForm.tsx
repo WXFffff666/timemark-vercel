@@ -205,7 +205,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   // 通知预览状态
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [fixedContacts, setFixedContacts] = useState<{ id: number; name: string; nickname?: string }[]>([]);
+  const [fixedContacts, setFixedContacts] = useState<{ id: number; name: string; nickname?: string; email?: string }[]>([]);
 
   useEffect(() => {
     if (!open || !formData.type || event) return;
@@ -859,13 +859,21 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                       key={`r-${c.id}`}
                       type="button"
                       className="text-xs px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 hover:border-indigo-400"
-                      onClick={() => setFormData((prev) => ({
-                        ...prev,
-                        reminderRecipientName: c.nickname || c.name,
-                      }))}
-                      title="填入提醒人"
+                      onClick={() => setFormData((prev) => {
+                        const emails = [...(prev.reminderConfig?.emailRecipients || [])];
+                        if (c.email && !emails.includes(c.email)) emails.push(c.email);
+                        return {
+                          ...prev,
+                          reminderRecipientName: c.nickname || c.name,
+                          reminderConfig: {
+                            ...prev.reminderConfig,
+                            emailRecipients: emails,
+                          },
+                        };
+                      })}
+                      title={c.email ? `填入提醒人及邮箱 ${c.email}` : '填入提醒人'}
                     >
-                      提醒→{c.name}
+                      提醒→{c.name}{c.email ? ' 📧' : ''}
                     </button>
                   ))}
                 </div>

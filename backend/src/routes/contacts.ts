@@ -4,6 +4,7 @@ import type { User } from '@timemark/shared';
 import {
   createFixedContactSchema,
   updateFixedContactSchema,
+  contactSendEmailSchema,
 } from '@timemark/shared';
 import {
   listFixedContacts,
@@ -12,6 +13,7 @@ import {
   deleteFixedContact,
   validateContactFields,
 } from '../services/contact.service.js';
+import { sendContactEmail } from '../services/contact-send.service.js';
 import { query } from '../db/index.js';
 
 const contacts = new Hono<{ Variables: { user: User } }>();
@@ -131,6 +133,26 @@ contacts.post('/import-vcard', async (c) => {
     imported++;
   }
   return c.json({ success: true, data: { imported } });
+});
+
+contacts.post('/:id/send-email', async (c) => {
+  const user = c.get('user');
+  const userId = Number(user.id);
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(id)) {
+    return c.json({ success: false, error: '无效的联系人 ID' }, 400);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = contactSendEmailSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+  try {
+    const result = await sendContactEmail(userId, id, parsed.data);
+    return c.json({ success: true, data: result });
+  } catch (e) {
+    return c.json({ success: false, error: e instanceof Error ? e.message : '发送失败' }, 400);
+  }
 });
 
 export default contacts;

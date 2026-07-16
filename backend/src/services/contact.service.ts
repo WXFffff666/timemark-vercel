@@ -1,7 +1,15 @@
 import { query } from '../db/index.js';
 import type { CreateFixedContactInput, UpdateFixedContactInput } from '@timemark/shared';
+import { parseChannelAccountIds } from '@timemark/shared';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function mapContactRow(row: Record<string, unknown>) {
+  return {
+    ...row,
+    channel_account_ids: parseChannelAccountIds(row.preferred_channels),
+  };
+}
 
 export function validateContactFields(contact: {
   email?: string | null;
@@ -27,7 +35,7 @@ export async function listFixedContacts(userId: number) {
      FROM fixed_contacts WHERE user_id = $1 ORDER BY name ASC`,
     [userId],
   );
-  return result.rows;
+  return result.rows.map(mapContactRow);
 }
 
 export async function createFixedContact(userId: number, input: CreateFixedContactInput) {
@@ -56,14 +64,12 @@ export async function createFixedContact(userId: number, input: CreateFixedConta
       input.telegramChatId || null,
       input.qq || null,
       input.wxpusherUid || null,
-      JSON.stringify(input.preferredChannels || []),
+      JSON.stringify(input.channelAccountIds || []),
       input.notes || null,
     ],
   );
-  return result.rows[0];
-}
-
-export async function updateFixedContact(userId: number, id: number, input: UpdateFixedContactInput) {
+  return mapContactRow(result.rows[0]);
+}(userId: number, id: number, input: UpdateFixedContactInput) {
   const existing = await query('SELECT * FROM fixed_contacts WHERE id = $1 AND user_id = $2', [id, userId]);
   if (!existing.rows[0]) return null;
 
@@ -97,10 +103,10 @@ export async function updateFixedContact(userId: number, id: number, input: Upda
       values.push(val === '' ? null : val);
     }
   }
-  if (input.preferredChannels !== undefined) {
+  if (input.channelAccountIds !== undefined) {
     i++;
     fields.push(`preferred_channels = $${i}`);
-    values.push(JSON.stringify(input.preferredChannels));
+    values.push(JSON.stringify(input.channelAccountIds));
   }
   i++;
   fields.push(`validation_status = $${i}`);
@@ -115,7 +121,12 @@ export async function updateFixedContact(userId: number, id: number, input: Upda
     `UPDATE fixed_contacts SET ${fields.join(', ')} WHERE id = $${i} AND user_id = $${i + 1} RETURNING *`,
     values,
   );
-  return result.rows[0] || null;
+  return result.rows[0] ? mapContactRow(result.rows[0]) : null;
+}
+
+export async function getFixedContact(userId: number, id: number) {
+  const result = await query('SELECT * FROM fixed_contacts WHERE id = $1 AND user_id = $2', [id, userId]);
+  return result.rows[0] ? mapContactRow(result.rows[0]) : null;
 }
 
 export async function deleteFixedContact(userId: number, id: number) {
@@ -129,5 +140,5 @@ export async function getContactsByIds(userId: number, ids: number[]) {
     `SELECT * FROM fixed_contacts WHERE user_id = $1 AND id = ANY($2::int[])`,
     [userId, ids],
   );
-  return result.rows;
+  return result.rows.map(mapContactRow);
 }

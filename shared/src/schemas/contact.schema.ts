@@ -11,8 +11,15 @@ const contactBaseSchema = z.object({
   telegramChatId: optionalText,
   qq: optionalText,
   wxpusherUid: optionalText,
-  preferredChannels: z.array(z.string()).default([]),
+  /** 绑定的通知渠道账号 ID 列表 */
+  channelAccountIds: z.array(z.number().int().positive()).default([]),
   notes: z.string().max(500).optional(),
+});
+
+export const contactSendEmailSchema = z.object({
+  accountId: z.number().int().positive().optional(),
+  subject: z.string().min(1, '主题不能为空').max(200),
+  html: z.string().min(1, '内容不能为空').max(50000),
 });
 
 export const createFixedContactSchema = contactBaseSchema.refine(
@@ -26,3 +33,4 @@ export const updateFixedContactSchema = contactBaseSchema.partial().extend({
 
 export type CreateFixedContactInput = z.infer<typeof contactBaseSchema>;
 export type UpdateFixedContactInput = z.infer<typeof updateFixedContactSchema>;
+export type ContactSendEmailInput = z.infer<typeof contactSendEmailSchema>;

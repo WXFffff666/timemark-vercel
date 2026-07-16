@@ -51,7 +51,7 @@ broadcast.post('/email', async (c) => {
     }
   }
 
-  if (parsed.data.useAllContacts || (parsed.data.recipientEmails?.length ?? 0) > 10) {
+  if (parsed.data.useAllContacts || (parsed.data.recipientEmails?.length ?? 0) > 10 || (parsed.data.contactIds?.length ?? 0) > 10) {
     if (!totpSecret) {
       return c.json({ success: false, error: '大批量发送请先开启双因素认证' }, 403);
     }

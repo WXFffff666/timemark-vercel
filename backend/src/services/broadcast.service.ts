@@ -1,7 +1,6 @@
-import { Resend } from 'resend';
 import { query } from '../db/index.js';
-import { getUserConfig, getNotificationAccounts } from './config.service.js';
 import { getContactsByIds, listFixedContacts } from './contact.service.js';
+import { resolveEmailAccount, sendRawEmail } from './email-send.service.js';
 import { escapeHtml } from '../utils/html.js';
 import type { BroadcastEmailInput } from '@timemark/shared';
 
@@ -25,22 +24,6 @@ async function resolveRecipients(userId: number, input: BroadcastEmailInput): Pr
   return [...emails];
 }
 
-async function getResendApiKey(userId: number): Promise<{ apiKey: string; fromEmail: string } | null> {
-  const accounts = await getNotificationAccounts(userId);
-  const resend = accounts.find((a) => a.type === 'resend' && a.is_active && a.token);
-  if (resend?.token) {
-    return {
-      apiKey: resend.token,
-      fromEmail: resend.webhook || 'TimeMark <onboarding@resend.dev>',
-    };
-  }
-  const config = await getUserConfig(userId);
-  if (config?.resend_api_key) {
-    return { apiKey: config.resend_api_key, fromEmail: 'TimeMark <onboarding@resend.dev>' };
-  }
-  return null;
-}
-
 export async function sendBroadcastEmail(userId: number, input: BroadcastEmailInput) {
   const recipients = await resolveRecipients(userId, input);
   if (recipients.length === 0) {
@@ -50,10 +33,7 @@ export async function sendBroadcastEmail(userId: number, input: BroadcastEmailIn
     throw new Error('单次最多发送 500 封邮件');
   }
 
-  const creds = await getResendApiKey(userId);
-  if (!creds) {
-    throw new Error('请先配置 Resend 邮件通知账户');
-  }
+  const creds = await resolveEmailAccount(userId, input.accountId);
 
   const campaign = await query(
     `INSERT INTO broadcast_campaigns (user_id, subject, body_html, recipient_count, status, recipient_source)
@@ -68,44 +48,25 @@ export async function sendBroadcastEmail(userId: number, input: BroadcastEmailIn
   );
   const campaignId = campaign.rows[0].id as number;
 
-  const resend = new Resend(creds.apiKey);
-  const batchSize = 100;
   let successCount = 0;
   let failedCount = 0;
   const errors: string[] = [];
 
-  const footer = `<p style="font-size:12px;color:#94a3b8;margin-top:24px">由 TimeMark 发送 · 如需退订请联系管理员</p>`;
-
-  for (let i = 0; i < recipients.length; i += batchSize) {
-    const chunk = recipients.slice(i, i + batchSize);
-    const payload = chunk.map((to) => ({
-      from: creds.fromEmail,
-      to: [to],
-      subject: input.subject,
-      html: `${input.html}${footer}`,
-    }));
-
+  for (const to of recipients) {
     try {
-      const { error } = await resend.batch.send(payload, {
-        headers: { 'x-batch-validation': 'permissive' },
-      } as Parameters<typeof resend.batch.send>[1]);
-
-      if (error) {
-        failedCount += chunk.length;
-        errors.push(String((error as { message?: string }).message || error));
-      } else {
-        successCount += chunk.length;
-      }
-
-      for (const to of chunk) {
-        await query(
-          `INSERT INTO email_logs (recipient, status, message_id, broadcast_id) VALUES ($1, $2, $3, $4)`,
-          [to, error ? 'failed' : 'sent', null, campaignId],
-        ).catch(() => {});
-      }
+      await sendRawEmail(creds, to, input.subject, input.html);
+      successCount++;
+      await query(
+        `INSERT INTO email_logs (recipient, status, message_id, broadcast_id) VALUES ($1, 'sent', $2, $3)`,
+        [to, null, campaignId],
+      ).catch(() => {});
     } catch (err) {
-      failedCount += chunk.length;
+      failedCount++;
       errors.push(err instanceof Error ? err.message : String(err));
+      await query(
+        `INSERT INTO email_logs (recipient, status, broadcast_id) VALUES ($1, 'failed', $2)`,
+        [to, campaignId],
+      ).catch(() => {});
     }
   }
 
@@ -121,6 +82,8 @@ export async function sendBroadcastEmail(userId: number, input: BroadcastEmailIn
     successCount,
     failedCount,
     status,
+    accountId: creds.id,
+    accountName: creds.name,
     errors: errors.slice(0, 10),
   };
 }
