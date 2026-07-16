@@ -186,7 +186,7 @@ export default function DeployWizard() {
             一键配置：在项目根目录运行{' '}
             <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">.\scripts\setup-external-cron.ps1 -CronJobOrgApiKey &quot;你的密钥&quot;</code>
           </p>
-          <p>外部 Cron 请求需携带 <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">Authorization: Bearer CRON_SECRET</code>。</p>
+          <p>外部 Cron 请求需携带 <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">Authorization: Bearer &lt;CRONSECRET&gt;</code>（Vercel 环境变量名，与 CRON_SECRET 等价）。</p>
 
           {cronJobs.map((job) => (
             <div key={job.path} className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-1">

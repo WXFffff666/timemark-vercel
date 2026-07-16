@@ -9,6 +9,7 @@ import { deleteSessionById, deleteAllUserSessions } from '../services/session.se
 import { lookupGeoLabel } from '../utils/geoip.js';
 import type { User } from '@timemark/shared';
 import { isTurnstileEnabled } from '../utils/turnstile.js';
+import { getCronSecret } from '../utils/cron-secret.js';
 
 const security = new Hono<{ Variables: { user: User } }>();
 security.use('*', authMiddleware);
@@ -240,7 +241,7 @@ security.get('/deploy-info', async (c) => {
   }
 
   const turnstileConfigured = isTurnstileEnabled();
-  const cronSecretConfigured = !!process.env.CRON_SECRET?.trim();
+  const cronSecretConfigured = !!getCronSecret();
   const jwtConfigured = !!process.env.JWT_SECRET?.trim();
   const masterKeyConfigured = !!process.env.MASTER_KEY?.trim();
   const databaseUrlConfigured = !!process.env.DATABASE_URL?.trim();
@@ -302,9 +303,9 @@ security.get('/deploy-info', async (c) => {
         },
         {
           id: 'cronSecret',
-          label: 'CRON_SECRET',
+          label: 'CRON_SECRET / CRONSECRET',
           ok: cronSecretConfigured,
-          hint: '外部 Cron 调用 /api/cron/* 时的 Bearer 令牌',
+          hint: '外部 Cron 调用 /api/cron/* 时的 Bearer 令牌（Vercel 可用 CRONSECRET）',
         },
         {
           id: 'turnstile',

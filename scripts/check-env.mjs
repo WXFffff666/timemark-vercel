@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-const required = ['DATABASE_URL', 'JWT_SECRET', 'MASTER_KEY', 'CRON_SECRET'];
+const required = ['DATABASE_URL', 'JWT_SECRET', 'MASTER_KEY'];
+const cronOk = !!(process.env.CRON_SECRET?.trim() || process.env.CRONSECRET?.trim());
 const optional = ['TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'CORS_ORIGIN', 'ALLOW_VERCEL_PREVIEW', 'TZ', 'WEBAUTHN_RP_ID', 'WEBAUTHN_ORIGIN'];
 
 let ok = true;
@@ -11,6 +12,12 @@ for (const key of required) {
   } else {
     console.log(`✅ ${key}`);
   }
+}
+if (cronOk) {
+  console.log('✅ CRON_SECRET / CRONSECRET');
+} else {
+  console.log('❌ CRON_SECRET / CRONSECRET — 未设置');
+  ok = false;
 }
 for (const key of optional) {
   console.log(process.env[key] ? `✅ ${key} (optional)` : `⚪ ${key} (optional, 未设置)`);

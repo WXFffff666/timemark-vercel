@@ -15,6 +15,7 @@ import { testConnection } from '../services/notifications/test-connection.js';
 import { isSupportedChannel } from '../services/notifications/supported-channels.js';
 import { getChannelTemplate } from '../services/notifications/channels.config.js';
 import { resolveEmailRecipientForTest } from '../utils/notification-recipients.js';
+import { getCronSecret } from '../utils/cron-secret.js';
 
 const cronRoutes = new Hono();
 
@@ -41,9 +42,9 @@ async function logCronRun(
 // Multiple schedulers (Vercel daily + cron-job.org minute-level) can run in parallel;
 // reminder_send_claims prevents duplicate notification sends.
 cronRoutes.use('*', async (c, next) => {
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = getCronSecret();
   if (!cronSecret) {
-    return c.json({ error: 'CRON_SECRET not configured' }, 500);
+    return c.json({ error: 'CRON_SECRET / CRONSECRET not configured' }, 500);
   }
   const isVercelCron = !!c.req.header('x-vercel-cron-auth-token');
   const authHeader = c.req.header('Authorization');

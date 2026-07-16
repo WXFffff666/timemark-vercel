@@ -46,7 +46,7 @@ $vars = @{
 
   CORS_ORIGIN = "https://timemark.the37777777.top"
 
-  CRON_SECRET = (New-HexSecret 24)
+  CRONSECRET = (New-HexSecret 24)
 
   NODEJS_HELPERS = "0"
 
@@ -114,7 +114,7 @@ Write-Host "    首次登录将强制修改密码。"
 
 Write-Host ""
 
-Write-Host "==> 敏感变量（JWT_SECRET / MASTER_KEY / TURNSTILE_SECRET_KEY / CRON_SECRET）"
+Write-Host "==> 敏感变量（JWT_SECRET / MASTER_KEY / TURNSTILE_SECRET_KEY / CRONSECRET）"
 
 Write-Host "    请仅在 Vercel Environment Variables 中勾选 Production，勿勾选 Preview。"
 

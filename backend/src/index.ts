@@ -15,6 +15,7 @@ import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
 import { hashPassword } from './utils/password.js';
 import { initSecretKeys } from './utils/secrets.js';
 import { isTurnstileEnabled } from './utils/turnstile.js';
+import { getCronSecret } from './utils/cron-secret.js';
 import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
 import configRoutes from './routes/config.js';
@@ -124,7 +125,7 @@ app.get('/api/health', async (c) => {
     checks.databaseUrl = !!process.env.DATABASE_URL;
     checks.jwtSecret = !!process.env.JWT_SECRET;
     checks.masterKey = !!process.env.MASTER_KEY;
-    checks.cronSecret = !!process.env.CRON_SECRET;
+    checks.cronSecret = !!getCronSecret();
   }
   if (!process.env.DATABASE_URL) {
     checks.database = false;

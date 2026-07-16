@@ -24,7 +24,7 @@ function Get-CronSecretFromEnvFile {
   param([string]$Path)
   if (-not (Test-Path $Path)) { return $null }
   foreach ($line in Get-Content $Path) {
-    if ($line -match '^\s*CRON_SECRET\s*=\s*"?([^"\r\n]+)"?\s*$') {
+    if ($line -match '^\s*CRON_?SECRET\s*=\s*"?([^"\r\n]+)"?\s*$') {
       return $Matches[1].Trim()
     }
   }
@@ -45,7 +45,7 @@ if (-not $CronSecret) {
 }
 
 if (-not $CronSecret) {
-  throw 'CRON_SECRET not found. Pass -CronSecret or run: vercel env pull .env.production.local'
+  throw 'CRON secret not found (CRON_SECRET or CRONSECRET). Pass -CronSecret or run: vercel env pull .env.production.local'
 }
 
 $base = $BaseUrl.TrimEnd('/')
