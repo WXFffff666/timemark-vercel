@@ -19,6 +19,12 @@ export interface ContactChannelFields {
 
 export const EMAIL_CHANNEL_TYPES = new Set(['resend', 'email', 'smtp']);
 
+export function normalizeEmail(email?: string | null): string | null {
+  if (!email) return null;
+  const v = email.trim().toLowerCase();
+  return v || null;
+}
+
 export function parseChannelAccountIds(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0);

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import { clearStaleBearerTokens } from '../lib/api';
 import type { User } from '@timemark/shared';
 
 const SESSION_ID_KEY = 'timemark_session_id';
@@ -88,10 +89,7 @@ function applyLoginResponse(
   rememberMe: boolean,
 ) {
   if (response.authMode === 'cookie') {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    sessionStorage.removeItem('accessToken');
-    sessionStorage.removeItem('refreshToken');
+    clearStaleBearerTokens();
     if (response.sessionId) {
       localStorage.setItem(SESSION_ID_KEY, response.sessionId);
     }
@@ -202,10 +200,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       refreshToken = sessionStorage.getItem('refreshToken');
     }
     
-    // Check for session ID (persistent login indicator)
     const sessionId = localStorage.getItem(SESSION_ID_KEY);
+    if (sessionId) {
+      clearStaleBearerTokens();
+    }
     
-    // 超时保护：如果 checkAuth 超过 5 秒还没完成，使用缓存用户
+    // 超时保护
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Auth check timeout')), 5000)
     );

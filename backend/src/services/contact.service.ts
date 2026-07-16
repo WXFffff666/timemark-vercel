@@ -1,6 +1,6 @@
 import { query } from '../db/index.js';
 import type { CreateFixedContactInput, UpdateFixedContactInput } from '@timemark/shared';
-import { parseChannelAccountIds } from '@timemark/shared';
+import { parseChannelAccountIds, normalizeEmail } from '@timemark/shared';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -78,7 +78,7 @@ export async function createFixedContact(userId: number, input: CreateFixedConta
       userId,
       input.name,
       input.nickname || null,
-      input.email || null,
+      normalizeEmail(input.email || null),
       input.phone || null,
       input.telegramChatId || null,
       input.qq || null,
@@ -95,7 +95,7 @@ export async function updateFixedContact(userId: number, id: number, input: Upda
   if (!existing.rows[0]) return null;
 
   const merged = {
-    email: input.email !== undefined ? input.email : existing.rows[0].email,
+    email: input.email !== undefined ? normalizeEmail(input.email || null) : existing.rows[0].email,
     phone: input.phone !== undefined ? input.phone : existing.rows[0].phone,
     telegram_chat_id: input.telegramChatId !== undefined ? input.telegramChatId : existing.rows[0].telegram_chat_id,
     qq: input.qq !== undefined ? input.qq : existing.rows[0].qq,

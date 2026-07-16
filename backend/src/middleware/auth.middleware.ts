@@ -14,7 +14,18 @@ export async function authMiddleware(c: Context<{ Variables: { user: User } }>, 
   }
 
   const authHeader = c.req.header('Authorization');
-  const token = authHeader?.replace('Bearer ', '') || getAccessTokenFromCookie(c);
+  let token = authHeader?.replace(/^Bearer\s+/i, '').trim() || undefined;
+  if (token === '') token = undefined;
+  let payload = token ? await verifyToken(token) : null;
+
+  // Bearer 无效或缺失时，回退 HttpOnly Cookie
+  if (!payload) {
+    const cookieToken = getAccessTokenFromCookie(c);
+    if (cookieToken) {
+      token = cookieToken;
+      payload = await verifyToken(cookieToken);
+    }
+  }
 
   if (!token) {
     const apiKey = c.req.header('X-API-Key');
@@ -23,8 +34,6 @@ export async function authMiddleware(c: Context<{ Variables: { user: User } }>, 
     }
     return c.json({ success: false, error: 'Unauthorized' }, 401);
   }
-
-  const payload = await verifyToken(token);
 
   if (!payload) {
     return c.json({ success: false, error: 'Invalid token' }, 401);

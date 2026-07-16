@@ -1,4 +1,5 @@
 import { query } from '../db/index.js';
+import { Lunar, Solar } from 'lunar-javascript';
 import type { Event, CreateEventRequest, RecurringConfig, ReminderConfig, EventType, CalendarType } from '@timemark/shared';
 
 /**
@@ -75,6 +76,16 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
   const reminderConfig = data.reminderConfig 
     ? { ...defaultConfig, ...data.reminderConfig }
     : defaultConfig;
+
+  if (reminderConfig.emailRecipients?.length) {
+    reminderConfig.emailRecipients = [
+      ...new Set(
+        reminderConfig.emailRecipients
+          .map((e) => (e || '').trim().toLowerCase())
+          .filter((e) => e.includes('@')),
+      ),
+    ];
+  }
   
   // Extract channels for separate column storage
   const notificationChannels = reminderConfig.channels || [];
@@ -85,7 +96,12 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
   // 计算下次发生日期（如果是重复事件）
   let nextOccurrence = null;
   if (data.recurringConfig?.enabled) {
-    nextOccurrence = calculateNextOccurrence(data.date, data.recurringConfig);
+    nextOccurrence = calculateNextOccurrence(
+      data.date,
+      data.recurringConfig,
+      data.calendarType,
+      data.lunarDate ?? undefined,
+    );
   }
   
   try {
@@ -102,7 +118,7 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
         data.birthDate || null,
         data.birthDateLunar || null,
         data.reminderRecipientName || null,
-        data.reminderRecipientEmail || null,
+        data.reminderRecipientEmail ? data.reminderRecipientEmail.toLowerCase() : null,
         data.recurringConfig ? JSON.stringify(data.recurringConfig) : null,
         nextOccurrence]
     );
@@ -115,24 +131,57 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
   }
 }
 
-/**
- * 计算下次发生日期
- */
+function formatSolarYmd(solar: { getYear(): number; getMonth(): number; getDay(): number }): string {
+  return `${solar.getYear()}-${String(solar.getMonth()).padStart(2, '0')}-${String(solar.getDay()).padStart(2, '0')}`;
+}
+
+function calculateNextLunarYearlyOccurrence(
+  lunarDate: { year: number; month: number; day: number; isLeap?: boolean },
+): string | null {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const lunarMonth = lunarDate.isLeap ? -lunarDate.month : lunarDate.month;
+  const startLunarYear = Solar.fromDate(now).getLunar().getYear();
+
+  for (let y = startLunarYear; y <= startLunarYear + 12; y++) {
+    try {
+      const lunar = Lunar.fromYmd(y, lunarMonth, lunarDate.day);
+      const solar = lunar.getSolar();
+      const candidate = new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay());
+      if (candidate > now) {
+        return formatSolarYmd(solar);
+      }
+    } catch {
+      // 闰月等无效组合跳过
+    }
+  }
+  return null;
+}
+
 /**
  * Calculate the next occurrence date for a recurring event
- * 
- * @param date - Base event date in YYYY-MM-DD format
- * @param config - Recurring configuration (frequency, interval, end type)
- * @returns Next occurrence date in YYYY-MM-DD format, or null if no more occurrences
  */
-function calculateNextOccurrence(date: string, config: RecurringConfig): string | null {
+function calculateNextOccurrence(
+  date: string,
+  config: RecurringConfig,
+  calendarType?: CalendarType | string,
+  lunarDate?: { year: number; month: number; day: number; isLeap?: boolean } | null,
+): string | null {
   try {
-    const baseDate = new Date(date + 'T00:00:00');
     const now = new Date();
-    
-    // 如果基础日期已经过了，需要计算下一个发生日期
+    now.setHours(0, 0, 0, 0);
+
+    if (
+      config.frequency === 'yearly' &&
+      (calendarType === 'lunar' || calendarType === 'both') &&
+      lunarDate
+    ) {
+      return calculateNextLunarYearlyOccurrence(lunarDate);
+    }
+
+    const baseDate = new Date(date + 'T00:00:00');
     let nextDate = new Date(baseDate);
-    
+
     while (nextDate <= now) {
       switch (config.frequency) {
         case 'daily':
@@ -150,8 +199,7 @@ function calculateNextOccurrence(date: string, config: RecurringConfig): string 
         default:
           return null;
       }
-      
-      // 检查是否超过结束条件
+
       if (config.endType === 'date' && config.endDate) {
         const endDate = new Date(config.endDate + 'T00:00:00');
         if (nextDate > endDate) {
@@ -159,8 +207,7 @@ function calculateNextOccurrence(date: string, config: RecurringConfig): string 
         }
       }
     }
-    
-    // 格式化为 YYYY-MM-DD
+
     return `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
   } catch (error) {
     console.error('[calculateNextOccurrence] Error:', error);
@@ -428,13 +475,33 @@ export async function updateEvent(id: string, userId: string, data: UpdateEventD
   if (data.birthDate !== undefined) { updates.push(`birth_date = $${paramIndex++}`); values.push(data.birthDate || null); }
   if (data.birthDateLunar !== undefined) { updates.push(`birth_date_lunar = $${paramIndex++}`); values.push(data.birthDateLunar || null); }
   if (data.reminderRecipientName !== undefined) { updates.push(`reminder_recipient_name = $${paramIndex++}`); values.push(data.reminderRecipientName || null); }
-  if (data.reminderRecipientEmail !== undefined) { updates.push(`reminder_recipient_email = $${paramIndex++}`); values.push(data.reminderRecipientEmail || null); }
+  if (data.reminderRecipientEmail !== undefined) {
+    updates.push(`reminder_recipient_email = $${paramIndex++}`);
+    values.push(data.reminderRecipientEmail ? data.reminderRecipientEmail.toLowerCase() : null);
+  }
   if (data.recurringConfig !== undefined) { 
     updates.push(`recurring_config = $${paramIndex++}`); 
     values.push(data.recurringConfig ? JSON.stringify(data.recurringConfig) : null);
-    // 计算下次发生日期
-    if (data.recurringConfig?.enabled && data.recurringConfig?.frequency && data.recurringConfig?.interval && data.date) {
-      const nextOccurrence = calculateNextOccurrence(data.date.split('T')[0], data.recurringConfig as RecurringConfig);
+    if (data.recurringConfig?.enabled && data.recurringConfig?.frequency && data.recurringConfig?.interval) {
+      const existingRow = await query(
+        'SELECT date, calendar_type, lunar_date FROM events WHERE id = $1 AND user_id = $2',
+        [id, numericUserId],
+      );
+      const row = existingRow.rows[0] as { date?: string; calendar_type?: string; lunar_date?: string } | undefined;
+      const rawDate = data.date || row?.date;
+      const dateStr = rawDate ? String(rawDate).split('T')[0] : '';
+      const calendarType = data.calendarType || row?.calendar_type;
+      let lunarDate = data.lunarDate ?? undefined;
+      if (!lunarDate && row?.lunar_date) {
+        try {
+          lunarDate = JSON.parse(row.lunar_date);
+        } catch {
+          lunarDate = undefined;
+        }
+      }
+      const nextOccurrence = dateStr
+        ? calculateNextOccurrence(dateStr, data.recurringConfig as RecurringConfig, calendarType, lunarDate)
+        : null;
       updates.push(`next_occurrence = $${paramIndex++}`);
       values.push(nextOccurrence);
     } else {

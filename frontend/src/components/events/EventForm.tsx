@@ -12,10 +12,11 @@ import { Lunar, Solar } from 'lunar-javascript';
 import { useNavigate } from 'react-router-dom';
 import {
   applyContactAsPerson,
-  applyContactAsReminder,
+  applyContactsAsReminders,
   mergeContactIntoReminderConfig,
   type FixedContactForEvent,
 } from '@/lib/contact-event-bridge';
+import { normalizeEmail } from '@timemark/shared';
 import { api, fetchAvailableChannels, type AvailableChannel } from '@/lib/api';
 import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
 import { getBlessing } from '@timemark/shared/blessings';
@@ -212,6 +213,48 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   // 通知预览状态
   const [previewOpen, setPreviewOpen] = useState(false);
   const [fixedContacts, setFixedContacts] = useState<FixedContactForEvent[]>([]);
+  const [selectedReminderContactIds, setSelectedReminderContactIds] = useState<number[]>([]);
+
+  const toggleReminderContactSelect = (id: number) => {
+    setSelectedReminderContactIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const applySelectedReminderContacts = () => {
+    const selected = fixedContacts.filter((c) => selectedReminderContactIds.includes(c.id));
+    if (selected.length === 0) return;
+    setFormData((prev) => {
+      const applied = applyContactsAsReminders(
+        selected,
+        accounts,
+        prev.reminderConfig || defaultReminderConfig,
+        prev,
+      );
+      return {
+        ...prev,
+        reminderRecipientName: applied.reminderRecipientName,
+        reminderRecipientEmail: applied.reminderRecipientEmail,
+        reminderConfig: applied.reminderConfig,
+      };
+    });
+  };
+
+  const addEmailRecipient = (raw: string) => {
+    const email = normalizeEmail(raw);
+    if (!email) return;
+    setFormData((prev) => {
+      const current = prev.reminderConfig?.emailRecipients || [];
+      if (current.includes(email)) return prev;
+      return {
+        ...prev,
+        reminderConfig: {
+          ...prev.reminderConfig!,
+          emailRecipients: [...current, email],
+        },
+      };
+    });
+  };
 
   useEffect(() => {
     if (!open || !formData.type || event) return;
@@ -867,26 +910,28 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                     <button
                       key={`r-${c.id}`}
                       type="button"
-                      className="text-xs px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 hover:border-indigo-400"
-                      onClick={() => setFormData((prev) => {
-                        const applied = applyContactAsReminder(
-                          c,
-                          accounts,
-                          prev.reminderConfig || defaultReminderConfig,
-                          prev,
-                        );
-                        return {
-                          ...prev,
-                          reminderRecipientName: applied.reminderRecipientName,
-                          reminderRecipientEmail: applied.reminderRecipientEmail,
-                          reminderConfig: applied.reminderConfig,
-                        };
-                      })}
-                      title={c.email ? `填入提醒人、邮箱及绑定渠道` : '填入提醒人及绑定渠道'}
+                      className={`text-xs px-2 py-1 rounded-lg border ${
+                        selectedReminderContactIds.includes(c.id)
+                          ? 'bg-indigo-500 text-white border-indigo-500'
+                          : 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-700 hover:border-indigo-400'
+                      }`}
+                      onClick={() => toggleReminderContactSelect(c.id)}
+                      title={c.email ? `选择为提醒人（${c.email}）` : '选择为提醒人'}
                     >
                       提醒→{c.name}{c.email ? ' 📧' : ''}{(c.channel_account_ids?.length ?? 0) > 0 ? ' ✓' : ''}
                     </button>
                   ))}
+                  {selectedReminderContactIds.length > 0 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="text-xs h-7"
+                      onClick={applySelectedReminderContacts}
+                    >
+                      应用 {selectedReminderContactIds.length} 位提醒人
+                    </Button>
+                  )}
                 </div>
               )}
               
@@ -933,19 +978,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        if (customEmail && customEmail.includes('@')) {
-                          const currentEmails = formData.reminderConfig.emailRecipients || [];
-                          if (!currentEmails.includes(customEmail)) {
-                            setFormData({
-                              ...formData,
-                              reminderConfig: {
-                                ...formData.reminderConfig,
-                                emailRecipients: [...currentEmails, customEmail]
-                              }
-                            });
-                          }
-                          setCustomEmail('');
-                        }
+                        addEmailRecipient(customEmail);
+                        setCustomEmail('');
                       }
                     }}
                   />
@@ -955,19 +989,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                     size="sm"
                     className="h-10 px-3"
                     onClick={() => {
-                      if (customEmail && customEmail.includes('@')) {
-                        const currentEmails = formData.reminderConfig.emailRecipients || [];
-                        if (!currentEmails.includes(customEmail)) {
-                          setFormData({
-                            ...formData,
-                            reminderConfig: {
-                              ...formData.reminderConfig,
-                              emailRecipients: [...currentEmails, customEmail]
-                            }
-                          });
-                        }
-                        setCustomEmail('');
-                      }
+                      addEmailRecipient(customEmail);
+                      setCustomEmail('');
                     }}
                   >
                     <Plus size={14} />

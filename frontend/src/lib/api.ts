@@ -1,47 +1,63 @@
 import type { ApiResponse } from '@timemark/shared';
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3000/api' : '/api';
+const SESSION_ID_KEY = 'timemark_session_id';
 
-const getTokens = () => ({
-  accessToken: localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken'),
-  refreshToken: localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken'),
-  sessionId: localStorage.getItem('timemark_session_id'),
-});
+export const usesCookieAuth = () => !!localStorage.getItem(SESSION_ID_KEY);
 
-const setAccessToken = (token: string) => {
-  const { sessionId } = getTokens();
-  if (sessionId) {
-    localStorage.setItem('accessToken', token);
-  } else {
-    sessionStorage.setItem('accessToken', token);
+/** 清除可能干扰 HttpOnly Cookie 认证的过期 Bearer */
+export function clearStaleBearerTokens() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  sessionStorage.removeItem('accessToken');
+  sessionStorage.removeItem('refreshToken');
+}
+
+const getTokens = () => {
+  if (usesCookieAuth()) {
+    return {
+      accessToken: null as string | null,
+      refreshToken: null as string | null,
+      sessionId: localStorage.getItem(SESSION_ID_KEY),
+    };
   }
+  return {
+    accessToken: localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken'),
+    refreshToken: localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken'),
+    sessionId: null as string | null,
+  };
 };
 
-async function refreshAccessToken(refreshToken: string): Promise<string | null> {
+const setAccessToken = (token: string) => {
+  if (usesCookieAuth()) return;
+  sessionStorage.setItem('accessToken', token);
+};
+
+async function refreshSession(refreshToken?: string | null): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ refreshToken }),
+      body: JSON.stringify(refreshToken ? { refreshToken } : {}),
     });
-
-    if (!response.ok) return null;
-
-    const data: ApiResponse<{ accessToken: string }> = await response.json();
-    if (!data.success) return null;
-
-    return data.data.accessToken;
+    if (!response.ok) return false;
+    const data: ApiResponse<{ accessToken?: string }> = await response.json();
+    if (!data.success) return false;
+    if (data.data?.accessToken && !usesCookieAuth()) {
+      setAccessToken(data.data.accessToken);
+    }
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 
 let isRefreshing = false;
-let refreshPromise: Promise<string | null> | null = null;
+let refreshPromise: Promise<boolean> | null = null;
 
-async function request<T>(url: string, options?: RequestInit, retryAfterRefresh = false): Promise<T> {
-  const { accessToken, refreshToken, sessionId } = getTokens();
+async function request<T>(url: string, options?: RequestInit, retryCount = 0): Promise<T> {
+  const { accessToken, refreshToken } = getTokens();
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -52,31 +68,27 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
 
   const response = await fetch(`${API_BASE}${url}`, { ...options, headers, credentials: 'include' });
 
-  // If 401 and not already retried, try to refresh token
-  if (response.status === 401 && !retryAfterRefresh && refreshToken) {
-    // Prevent multiple simultaneous refresh attempts
-    if (!isRefreshing) {
-      isRefreshing = true;
-      refreshPromise = refreshAccessToken(refreshToken);
+  if (response.status === 401 && retryCount < 2) {
+    if (retryCount === 0) {
+      if (!isRefreshing) {
+        isRefreshing = true;
+        refreshPromise = refreshSession(refreshToken);
+      }
+      const refreshed = await refreshPromise;
+      isRefreshing = false;
+      refreshPromise = null;
+      if (refreshed) {
+        return request<T>(url, options, 1);
+      }
     }
 
-    const newAccessToken = await refreshPromise;
-    isRefreshing = false;
-
-    if (newAccessToken) {
-      // Store new token and retry
-      setAccessToken(newAccessToken);
-      return request<T>(url, options, true);
+    if (retryCount <= 1) {
+      clearStaleBearerTokens();
+      return request<T>(url, options, 2);
     }
 
-    // Refresh failed, clear tokens
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    sessionStorage.removeItem('accessToken');
-    sessionStorage.removeItem('refreshToken');
-    localStorage.removeItem('timemark_session_id');
-
-    throw new Error('HTTP 401: Token expired and refresh failed');
+    localStorage.removeItem(SESSION_ID_KEY);
+    throw new Error('HTTP 401: 登录已过期，请重新登录');
   }
 
   if (!response.ok) {
@@ -89,17 +101,11 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
       const errData = await response.json() as ApiResponse<unknown> & {
         remainingSeconds?: number;
         locked?: boolean;
-        lockMinutes?: number;
         requiresTotp?: boolean;
         code?: string;
-        details?: {
-          fieldErrors?: Record<string, string[]>;
-          formErrors?: string[];
-        };
+        details?: { fieldErrors?: Record<string, string[]> };
       };
-      if (errData.error) {
-        message = errData.error;
-      }
+      if (errData.error) message = errData.error;
       if (
         errData.details?.fieldErrors &&
         (message === 'Validation failed' || message === 'Invalid input' || message === '请求参数无效')
@@ -110,13 +116,11 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
         if (detailText) message = detailText;
       }
       if (errData.locked) locked = true;
-      if (typeof errData.remainingSeconds === 'number' && errData.remainingSeconds > 0) {
-        remainingSeconds = errData.remainingSeconds;
-      }
+      if (typeof errData.remainingSeconds === 'number') remainingSeconds = errData.remainingSeconds;
       if (errData.requiresTotp) requiresTotp = true;
       if (errData.code) code = errData.code;
     } catch {
-      // ignore non-JSON error bodies
+      // ignore
     }
     const err = new Error(message) as Error & {
       locked?: boolean;
@@ -132,11 +136,7 @@ async function request<T>(url: string, options?: RequestInit, retryAfterRefresh 
   }
 
   const data: ApiResponse<T> = await response.json();
-
-  if (!data.success) {
-    throw new Error(data.error || 'Request failed');
-  }
-
+  if (!data.success) throw new Error(data.error || 'Request failed');
   return data.data as T;
 }
 
@@ -163,7 +163,6 @@ export const api = {
   },
 };
 
-// Channel availability types
 export interface AvailableChannel {
   id: number;
   type: string;

@@ -1,4 +1,5 @@
 import type { ReminderConfig } from '@timemark/shared';
+import { normalizeEmail } from '@timemark/shared';
 
 export interface FixedContactForEvent {
   id: number;
@@ -53,8 +54,9 @@ export function mergeContactIntoReminderConfig(
   existing: ReminderConfig,
 ): ReminderConfig {
   const emailRecipients = [...(existing.emailRecipients || [])];
-  if (contact.email && !emailRecipients.includes(contact.email)) {
-    emailRecipients.push(contact.email);
+  const normalized = normalizeEmail(contact.email);
+  if (normalized && !emailRecipients.includes(normalized)) {
+    emailRecipients.push(normalized);
   }
 
   const channels = new Set(existing.channels || []);
@@ -90,6 +92,30 @@ export function applyContactAsPerson(
   return updates;
 }
 
+export function applyContactsAsReminders(
+  contacts: FixedContactForEvent[],
+  accounts: Array<{ id: string | number; type: string }>,
+  existingConfig: ReminderConfig,
+  prev: { reminderRecipientName?: string },
+): {
+  reminderRecipientName: string;
+  reminderRecipientEmail?: string;
+  reminderConfig: ReminderConfig;
+} {
+  let config = { ...existingConfig };
+  const names: string[] = [];
+  for (const c of contacts) {
+    names.push(c.nickname || c.name);
+    config = mergeContactIntoReminderConfig(c, accounts, config);
+  }
+  const firstEmail = contacts.map((c) => normalizeEmail(c.email)).find(Boolean);
+  return {
+    reminderRecipientName: names.join('、') || prev.reminderRecipientName || '',
+    reminderRecipientEmail: firstEmail || undefined,
+    reminderConfig: config,
+  };
+}
+
 export function applyContactAsReminder(
   contact: FixedContactForEvent,
   accounts: Array<{ id: string | number; type: string }>,
@@ -100,9 +126,5 @@ export function applyContactAsReminder(
   reminderRecipientEmail?: string;
   reminderConfig: ReminderConfig;
 } {
-  return {
-    reminderRecipientName: contact.nickname || contact.name,
-    reminderRecipientEmail: contact.email || prev.reminderRecipientEmail,
-    reminderConfig: mergeContactIntoReminderConfig(contact, accounts, existingConfig),
-  };
+  return applyContactsAsReminders([contact], accounts, existingConfig, prev);
 }
