@@ -1,30 +1,23 @@
-# 一键配置 cron-job.org 外部 Cron（与 Vercel 内置 daily-maintenance 并存）
-#
-# 用法:
-#   .\scripts\setup-external-cron.ps1 -CronJobOrgApiKey "你的API密钥"
-#
-# 可选参数:
-#   -BaseUrl   默认 https://timemark.the37777777.top
-#   -CronSecret  留空则尝试从 .env.production.local 读取 CRON_SECRET
-#
-# API 密钥获取: https://console.cron-job.org → Settings → API
+# Setup cron-job.org external cron jobs (works alongside Vercel daily-maintenance)
+# Usage: .\scripts\setup-external-cron.ps1 -CronJobOrgApiKey "YOUR_API_KEY"
+# Optional: -BaseUrl, -CronSecret
 
 param(
   [Parameter(Mandatory = $true)]
   [string]$CronJobOrgApiKey,
 
-  [string]$BaseUrl = "https://timemark.the37777777.top",
+  [string]$BaseUrl = 'https://timemark.the37777777.top',
 
-  [string]$CronSecret = ""
+  [string]$CronSecret = ''
 )
 
-$ErrorActionPreference = "Stop"
-Set-Location (Join-Path $PSScriptRoot "..")
+$ErrorActionPreference = 'Stop'
+Set-Location (Join-Path $PSScriptRoot '..')
 
-$apiEndpoint = "https://api.cron-job.org"
+$apiEndpoint = 'https://api.cron-job.org'
 $headers = @{
-  Authorization = "Bearer $CronJobOrgApiKey"
-  "Content-Type" = "application/json"
+  Authorization  = "Bearer $CronJobOrgApiKey"
+  'Content-Type' = 'application/json'
 }
 
 function Get-CronSecretFromEnvFile {
@@ -39,57 +32,61 @@ function Get-CronSecretFromEnvFile {
 }
 
 if (-not $CronSecret) {
-  Write-Host "==> 尝试读取 CRON_SECRET ..."
-  $CronSecret = Get-CronSecretFromEnvFile ".env.production.local"
+  Write-Host '==> Loading CRON_SECRET ...'
+  $CronSecret = Get-CronSecretFromEnvFile '.env.production.local'
   if (-not $CronSecret) {
-    $CronSecret = Get-CronSecretFromEnvFile ".env.local"
+    $CronSecret = Get-CronSecretFromEnvFile '.env.local'
   }
   if (-not $CronSecret) {
-    Write-Host "    未找到本地 CRON_SECRET，执行 vercel env pull ..."
+    Write-Host '    Running: vercel env pull .env.production.local'
     npx vercel env pull .env.production.local --environment=production --yes 2>&1 | Out-Null
-    $CronSecret = Get-CronSecretFromEnvFile ".env.production.local"
+    $CronSecret = Get-CronSecretFromEnvFile '.env.production.local'
   }
 }
 
 if (-not $CronSecret) {
-  throw "无法获取 CRON_SECRET。请传入 -CronSecret 或在 Vercel 中配置后运行 vercel env pull .env.production.local"
+  throw 'CRON_SECRET not found. Pass -CronSecret or run: vercel env pull .env.production.local'
 }
 
-$base = $BaseUrl.TrimEnd("/")
+$base = $BaseUrl.TrimEnd('/')
 $authHeaderValue = "Bearer $CronSecret"
 
+$scheduleEveryMinute = @{
+  timezone  = 'Asia/Shanghai'
+  expiresAt = 0
+  hours     = @(-1)
+  mdays     = @(-1)
+  minutes   = @(-1)
+  months    = @(-1)
+  wdays     = @(-1)
+}
+
+$scheduleEvery10Min = @{
+  timezone  = 'Asia/Shanghai'
+  expiresAt = 0
+  hours     = @(-1)
+  mdays     = @(-1)
+  minutes   = @(0, 10, 20, 30, 40, 50)
+  months    = @(-1)
+  wdays     = @(-1)
+}
+
 $jobsToCreate = @(
-  @{
-    title = "TimeMark reminder-check"
-    path = "/api/cron/reminder-check"
-    schedule = @{
-      timezone = "Asia/Shanghai"
-      expiresAt = 0
-      hours = @(-1)
-      mdays = @(-1)
-      minutes = @(-1)
-      months = @(-1)
-      wdays = @(-1)
-    }
-    note = "每分钟 — 必须（与 Vercel daily-maintenance 并存，防重发由服务端处理）"
+  [PSCustomObject]@{
+    Title    = 'TimeMark reminder-check'
+    Path     = '/api/cron/reminder-check'
+    Schedule = $scheduleEveryMinute
+    Note     = 'every minute (required)'
   },
-  @{
-    title = "TimeMark retry-notifications"
-    path = "/api/cron/retry-notifications"
-    schedule = @{
-      timezone = "Asia/Shanghai"
-      expiresAt = 0
-      hours = @(-1)
-      mdays = @(-1)
-      minutes = @(0, 10, 20, 30, 40, 50)
-      months = @(-1)
-      wdays = @(-1)
-    }
-    note = "每 10 分钟 — 重试失败通知"
+  [PSCustomObject]@{
+    Title    = 'TimeMark retry-notifications'
+    Path     = '/api/cron/retry-notifications'
+    Schedule = $scheduleEvery10Min
+    Note     = 'every 10 minutes (retry failed notifications)'
   }
 )
 
-Write-Host "==> 查询 cron-job.org 已有任务 ..."
+Write-Host '==> Fetching existing cron-job.org jobs ...'
 $existing = Invoke-RestMethod -Uri "$apiEndpoint/jobs" -Headers $headers -Method Get
 $existingUrls = @{}
 foreach ($j in $existing.jobs) {
@@ -97,62 +94,46 @@ foreach ($j in $existing.jobs) {
 }
 
 foreach ($def in $jobsToCreate) {
-  $url = "$base$($def.path)"
-  Write-Host ""
-  Write-Host "==> $($def.title)"
-  Write-Host "    $($def.note)"
+  $url = "$base$($def.Path)"
+  Write-Host ''
+  Write-Host "==> $($def.Title)"
+  Write-Host "    $($def.Note)"
   Write-Host "    $url"
+
+  $jobPayload = @{
+    enabled        = $true
+    title          = $def.Title
+    url            = $url
+    saveResponses  = $false
+    requestMethod  = 0
+    requestTimeout = 60
+    schedule       = $def.Schedule
+    extendedData   = @{
+      headers = @{
+        Authorization = $authHeaderValue
+      }
+    }
+  }
 
   if ($existingUrls.ContainsKey($url)) {
     $jobId = $existingUrls[$url]
-    Write-Host "    已存在 (jobId=$jobId)，更新调度与 Header ..."
-    $body = @{
-      job = @{
-        enabled = $true
-        title = $def.title
-        url = $url
-        saveResponses = $false
-        requestMethod = 0
-        requestTimeout = 60
-        schedule = $def.schedule
-        extendedData = @{
-          headers = @{
-            Authorization = $authHeaderValue
-          }
-        }
-      }
-    } | ConvertTo-Json -Depth 6
+    Write-Host "    exists (jobId=$jobId), updating ..."
+    $body = @{ job = $jobPayload } | ConvertTo-Json -Depth 6 -Compress
     Invoke-RestMethod -Uri "$apiEndpoint/jobs/$jobId" -Headers $headers -Method Patch -Body $body | Out-Null
-    Write-Host "    已更新"
+    Write-Host '    updated'
     continue
   }
 
-  $body = @{
-    job = @{
-      enabled = $true
-      title = $def.title
-      url = $url
-      saveResponses = $false
-      requestMethod = 0
-      requestTimeout = 60
-      schedule = $def.schedule
-      extendedData = @{
-        headers = @{
-          Authorization = $authHeaderValue
-        }
-      }
-    }
-  } | ConvertTo-Json -Depth 6
-
+  $body = @{ job = $jobPayload } | ConvertTo-Json -Depth 6 -Compress
   $result = Invoke-RestMethod -Uri "$apiEndpoint/jobs" -Headers $headers -Method Put -Body $body
-  Write-Host "    已创建 (jobId=$($result.jobId))"
+  Write-Host "    created (jobId=$($result.jobId))"
 }
 
-Write-Host ""
-Write-Host "==> 完成。当前架构："
-Write-Host "    Vercel 内置: daily-maintenance (每天 1 次，vercel.json)"
-Write-Host "    cron-job.org: reminder-check (每分钟) + retry-notifications (每 10 分钟)"
-Write-Host ""
-Write-Host "==> 验证（约 1–2 分钟后）："
-Write-Host "    curl $base/api/health"
-Write-Host "    期望 lastCronJob = reminder-check，且 lastCronAt 为最近时间"
+Write-Host ''
+Write-Host '==> Done.'
+Write-Host '    Vercel built-in: daily-maintenance (once per day)'
+Write-Host '    cron-job.org: reminder-check + retry-notifications'
+Write-Host ''
+Write-Host '==> Verify in 1-2 minutes:'
+Write-Host "    $base/api/health"
+Write-Host '    expect lastCronJob = reminder-check'
