@@ -4,9 +4,28 @@ import { parseChannelAccountIds } from '@timemark/shared';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function mapContactRow(row: Record<string, unknown>) {
+export interface FixedContactRow {
+  id: number;
+  user_id?: number;
+  name: string;
+  nickname?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  telegram_chat_id?: string | null;
+  qq?: string | null;
+  wxpusher_uid?: string | null;
+  preferred_channels?: unknown;
+  channel_account_ids: number[];
+  notes?: string | null;
+  validation_status?: string | null;
+  last_validated_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+function mapContactRow(row: Record<string, unknown>): FixedContactRow {
   return {
-    ...row,
+    ...(row as Omit<FixedContactRow, 'channel_account_ids'>),
     channel_account_ids: parseChannelAccountIds(row.preferred_channels),
   };
 }
@@ -28,7 +47,7 @@ export function validateContactFields(contact: {
   return { valid: errors.length === 0, errors };
 }
 
-export async function listFixedContacts(userId: number) {
+export async function listFixedContacts(userId: number): Promise<FixedContactRow[]> {
   const result = await query(
     `SELECT id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid,
             preferred_channels, notes, validation_status, last_validated_at, created_at, updated_at
@@ -38,7 +57,7 @@ export async function listFixedContacts(userId: number) {
   return result.rows.map(mapContactRow);
 }
 
-export async function createFixedContact(userId: number, input: CreateFixedContactInput) {
+export async function createFixedContact(userId: number, input: CreateFixedContactInput): Promise<FixedContactRow> {
   const validation = validateContactFields({
     email: input.email || null,
     phone: input.phone || null,
@@ -71,7 +90,7 @@ export async function createFixedContact(userId: number, input: CreateFixedConta
   return mapContactRow(result.rows[0]);
 }
 
-export async function updateFixedContact(userId: number, id: number, input: UpdateFixedContactInput) {
+export async function updateFixedContact(userId: number, id: number, input: UpdateFixedContactInput): Promise<FixedContactRow | null> {
   const existing = await query('SELECT * FROM fixed_contacts WHERE id = $1 AND user_id = $2', [id, userId]);
   if (!existing.rows[0]) return null;
 
@@ -126,7 +145,7 @@ export async function updateFixedContact(userId: number, id: number, input: Upda
   return result.rows[0] ? mapContactRow(result.rows[0]) : null;
 }
 
-export async function getFixedContact(userId: number, id: number) {
+export async function getFixedContact(userId: number, id: number): Promise<FixedContactRow | null> {
   const result = await query('SELECT * FROM fixed_contacts WHERE id = $1 AND user_id = $2', [id, userId]);
   return result.rows[0] ? mapContactRow(result.rows[0]) : null;
 }
@@ -136,7 +155,7 @@ export async function deleteFixedContact(userId: number, id: number) {
   return result.rowCount ? true : false;
 }
 
-export async function getContactsByIds(userId: number, ids: number[]) {
+export async function getContactsByIds(userId: number, ids: number[]): Promise<FixedContactRow[]> {
   if (ids.length === 0) return [];
   const result = await query(
     `SELECT * FROM fixed_contacts WHERE user_id = $1 AND id = ANY($2::int[])`,
