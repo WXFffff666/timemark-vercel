@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Send, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
@@ -32,6 +33,7 @@ interface Campaign {
 
 export default function Broadcast() {
   const navigate = useNavigate();
+  const goBack = useSmartBack('/dashboard');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
   const [accountId, setAccountId] = useState<number | ''>('');
@@ -89,7 +91,7 @@ export default function Broadcast() {
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24">
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
+        <Button variant="ghost" size="icon" onClick={goBack}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div>
@@ -126,7 +128,7 @@ export default function Broadcast() {
           </div>
         ) : (
           <p className="text-sm text-amber-600">
-            请先在<a href="/channels" className="underline mx-1">通知渠道</a>配置 Resend 或 SMTP 邮件账号
+            请先在<button type="button" className="underline mx-1" onClick={() => navigate('/channels')}>通知渠道</button>配置 Resend 或 SMTP 邮件账号
           </p>
         )}
         <Input placeholder="邮件主题" value={subject} onChange={(e) => setSubject(e.target.value)} />

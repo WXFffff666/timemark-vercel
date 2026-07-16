@@ -10,6 +10,12 @@ import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, Gra
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lunar, Solar } from 'lunar-javascript';
 import { useNavigate } from 'react-router-dom';
+import {
+  applyContactAsPerson,
+  applyContactAsReminder,
+  mergeContactIntoReminderConfig,
+  type FixedContactForEvent,
+} from '@/lib/contact-event-bridge';
 import { api, fetchAvailableChannels, type AvailableChannel } from '@/lib/api';
 import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
 import { getBlessing } from '@timemark/shared/blessings';
@@ -205,7 +211,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   // 通知预览状态
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [fixedContacts, setFixedContacts] = useState<{ id: number; name: string; nickname?: string; email?: string }[]>([]);
+  const [fixedContacts, setFixedContacts] = useState<FixedContactForEvent[]>([]);
 
   useEffect(() => {
     if (!open || !formData.type || event) return;
@@ -226,7 +232,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   useEffect(() => {
     if (!open) return;
-    api.get<{ id: number; name: string; nickname?: string }[]>('/contacts')
+    api.get<FixedContactForEvent[]>('/contacts')
       .then((data) => setFixedContacts(Array.isArray(data) ? data : []))
       .catch(() => setFixedContacts([]));
   }, [open]);
@@ -839,7 +845,10 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
               {fixedContacts.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-[10px] text-slate-400 w-full">从固定联系人快捷填入：</span>
+                  <span className="text-[10px] text-slate-400 w-full flex items-center justify-between">
+                    <span>从固定联系人快捷填入（自动适配渠道与邮箱）：</span>
+                    <button type="button" className="text-indigo-500 hover:underline" onClick={() => { onClose(); navigate('/contacts', { state: { backTo: '/dashboard' } }); }}>管理联系人</button>
+                  </span>
                   {fixedContacts.map((c) => (
                     <button
                       key={c.id}
@@ -847,7 +856,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                       className="text-xs px-2 py-1 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:border-primary-400"
                       onClick={() => setFormData((prev) => ({
                         ...prev,
-                        personName: c.nickname || c.name,
+                        ...applyContactAsPerson(c, prev),
                       }))}
                       title="填入被提醒人"
                     >
@@ -860,20 +869,22 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                       type="button"
                       className="text-xs px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 hover:border-indigo-400"
                       onClick={() => setFormData((prev) => {
-                        const emails = [...(prev.reminderConfig?.emailRecipients || [])];
-                        if (c.email && !emails.includes(c.email)) emails.push(c.email);
+                        const applied = applyContactAsReminder(
+                          c,
+                          accounts,
+                          prev.reminderConfig || defaultReminderConfig,
+                          prev,
+                        );
                         return {
                           ...prev,
-                          reminderRecipientName: c.nickname || c.name,
-                          reminderConfig: {
-                            ...prev.reminderConfig,
-                            emailRecipients: emails,
-                          },
+                          reminderRecipientName: applied.reminderRecipientName,
+                          reminderRecipientEmail: applied.reminderRecipientEmail,
+                          reminderConfig: applied.reminderConfig,
                         };
                       })}
-                      title={c.email ? `填入提醒人及邮箱 ${c.email}` : '填入提醒人'}
+                      title={c.email ? `填入提醒人、邮箱及绑定渠道` : '填入提醒人及绑定渠道'}
                     >
-                      提醒→{c.name}{c.email ? ' 📧' : ''}
+                      提醒→{c.name}{c.email ? ' 📧' : ''}{(c.channel_account_ids?.length ?? 0) > 0 ? ' ✓' : ''}
                     </button>
                   ))}
                 </div>
@@ -991,6 +1002,28 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                 )}
                 
                 <p className="text-[10px] text-slate-400">不填则使用通知渠道的默认邮箱，支持添加多个收件人</p>
+                {fixedContacts.filter((c) => c.email).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    <span className="text-[10px] text-slate-400 w-full">从联系人添加邮箱：</span>
+                    {fixedContacts.filter((c) => c.email).map((c) => (
+                      <button
+                        key={`email-${c.id}`}
+                        type="button"
+                        className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-400"
+                        onClick={() => setFormData((prev) => ({
+                          ...prev,
+                          reminderConfig: mergeContactIntoReminderConfig(
+                            c,
+                            accounts,
+                            prev.reminderConfig || defaultReminderConfig,
+                          ),
+                        }))}
+                      >
+                        {c.name} ({c.email})
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>

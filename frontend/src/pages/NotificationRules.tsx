@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, Trash2, GitBranch } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +20,7 @@ const CHANNEL_OPTIONS = [
 
 export default function NotificationRules() {
   const navigate = useNavigate();
+  const goBack = useSmartBack('/settings');
   const [rules, setRules] = useState<ConditionalRule[]>([]);
   const [preset, setPreset] = useState('');
   const [presetSaving, setPresetSaving] = useState(false);
@@ -77,7 +79,7 @@ export default function NotificationRules() {
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24">
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/settings')} aria-label="返回设置">
+        <Button variant="ghost" size="icon" onClick={goBack} aria-label="返回">
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1">

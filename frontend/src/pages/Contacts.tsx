@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users, Upload, Mail, Pencil, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -62,6 +63,7 @@ const CHANNEL_TYPE_LABELS: Record<string, string> = {
 
 export default function Contacts() {
   const navigate = useNavigate();
+  const goBack = useSmartBack('/dashboard');
   const [tab, setTab] = useState<'contacts' | 'groups'>('contacts');
   const [contacts, setContacts] = useState<FixedContact[]>([]);
   const [accounts, setAccounts] = useState<NotificationAccount[]>([]);
@@ -109,6 +111,15 @@ export default function Contacts() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // 路由切换时关闭弹窗，避免 Dialog 焦点陷阱导致页面卡住
+  useEffect(() => {
+    return () => {
+      setOpen(false);
+      setGroupOpen(false);
+      setSendOpen(false);
+    };
+  }, []);
 
   const openCreate = () => {
     setEditingId(null);
@@ -267,9 +278,9 @@ export default function Contacts() {
   };
 
   return (
-    <div id="main-content" className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24" tabIndex={-1}>
+    <div id="main-content" className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24">
       <div className="flex items-center gap-3 mb-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/settings')} aria-label="返回" className="min-h-11 min-w-11">
+        <Button variant="ghost" size="icon" onClick={() => { setOpen(false); setSendOpen(false); goBack(); }} aria-label="返回" className="min-h-11 min-w-11">
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1">
@@ -318,7 +329,7 @@ export default function Contacts() {
             <p>暂无联系人，点击右上角添加</p>
             {accounts.length === 0 && (
               <p className="text-xs mt-2">
-                请先在<a href="/channels" className="text-indigo-500 underline mx-1">通知渠道</a>配置邮件账号
+                请先在<button type="button" className="text-indigo-500 underline mx-1" onClick={() => navigate('/channels')}>通知渠道</button>配置邮件账号
               </p>
             )}
           </div>

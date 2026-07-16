@@ -42,6 +42,8 @@ export const saveUserConfigSchema = z.object({
   channel_webhooks: z.record(z.string()).optional().nullable(),
   reminder_emails: z.array(z.string().email()).optional(),
   alert_channels: z.array(z.string()).optional(),
+  alert_emails: z.array(z.string().email()).optional(),
+  alert_account_ids: z.array(z.number().int().positive()).optional(),
   timezone: z.string().max(50).optional().nullable(),
   default_test_email: z.string().email().optional().nullable(),
 }).passthrough();
