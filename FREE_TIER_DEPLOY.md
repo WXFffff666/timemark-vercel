@@ -78,6 +78,16 @@ Authorization: Bearer 你的CRON_SECRET
 
 完整 URL 示例：`https://你的域名/api/cron/reminder-check`
 
+**双路并存（推荐）**：Vercel 内置 `daily-maintenance`（每天 1 次）+ cron-job.org 分钟级任务可同时启用；重复触发不会重复发通知。
+
+一键配置 cron-job.org（需先在 [console.cron-job.org](https://console.cron-job.org) → Settings 生成 API 密钥）：
+
+```powershell
+.\scripts\setup-external-cron.ps1 -CronJobOrgApiKey "你的cron-job.org-API密钥"
+```
+
+脚本会自动读取 Vercel 中的 `CRON_SECRET` 并创建 `reminder-check`（每分钟）与 `retry-notifications`（每 10 分钟）。
+
 应用内 **设置 → 部署向导** 可复制各端点 URL 与 curl 示例。
 
 ### 6. 配置通知（Resend 邮件示例）

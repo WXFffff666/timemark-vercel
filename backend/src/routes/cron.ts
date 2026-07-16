@@ -36,14 +36,19 @@ async function logCronRun(
   }
 }
 
-// CRON_SECRET Bearer token validation middleware for all cron endpoints
+// Auth: external callers use Bearer CRON_SECRET; Vercel built-in cron may send
+// x-vercel-cron-auth-token (infra-validated) and/or Bearer CRON_SECRET.
+// Multiple schedulers (Vercel daily + cron-job.org minute-level) can run in parallel;
+// reminder_send_claims prevents duplicate notification sends.
 cronRoutes.use('*', async (c, next) => {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     return c.json({ error: 'CRON_SECRET not configured' }, 500);
   }
+  const isVercelCron = !!c.req.header('x-vercel-cron-auth-token');
   const authHeader = c.req.header('Authorization');
-  if (!authHeader || authHeader !== `Bearer ${cronSecret}`) {
+  const bearerOk = authHeader === `Bearer ${cronSecret}`;
+  if (!isVercelCron && !bearerOk) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
   const allowedIps = (process.env.CRON_ALLOWED_IPS || '').split(',').map((s) => s.trim()).filter(Boolean);

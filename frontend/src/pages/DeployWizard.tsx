@@ -177,7 +177,16 @@ export default function DeployWizard() {
       <Card>
         <CardHeader><CardTitle className="text-base">外部 Cron 配置（cron-job.org 免费）</CardTitle></CardHeader>
         <CardContent className="space-y-4 text-sm">
-          <p>Hobby 计划需用外部服务定时调用以下端点。所有请求需携带 <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">Authorization: Bearer CRON_SECRET</code>。</p>
+          <p>
+            Hobby 计划需用外部服务（如 cron-job.org）定时调用分钟级端点；Vercel 内置 Cron 仅负责每天一次的{' '}
+            <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">daily-maintenance</code>。
+            两路可同时启用，重复触发不会重复发通知（服务端有防重发锁）。
+          </p>
+          <p className="text-xs text-slate-500">
+            一键配置：在项目根目录运行{' '}
+            <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">.\scripts\setup-external-cron.ps1 -CronJobOrgApiKey &quot;你的密钥&quot;</code>
+          </p>
+          <p>外部 Cron 请求需携带 <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">Authorization: Bearer CRON_SECRET</code>。</p>
 
           {cronJobs.map((job) => (
             <div key={job.path} className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-1">
