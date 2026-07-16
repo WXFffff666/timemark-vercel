@@ -9,7 +9,7 @@ import { deleteSessionById, deleteAllUserSessions } from '../services/session.se
 import { lookupGeoLabel } from '../utils/geoip.js';
 import type { User } from '@timemark/shared';
 import { isTurnstileEnabled } from '../utils/turnstile.js';
-import { getCronSecret } from '../utils/cron-secret.js';
+import { getCronSecret } from '../utils/heartbeat.js';
 
 const security = new Hono<{ Variables: { user: User } }>();
 security.use('*', authMiddleware);

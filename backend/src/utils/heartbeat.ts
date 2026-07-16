@@ -2,6 +2,13 @@
  * Optional dead-man's switch ping after successful cron jobs.
  * Set HEALTHCHECK_URL (e.g. Healthchecks.io ping URL) in Vercel env.
  */
+
+/** CRON_SECRET or CRONSECRET (Vercel UI may not allow underscore). */
+export function getCronSecret(): string | undefined {
+  const secret = process.env.CRON_SECRET?.trim() || process.env.CRONSECRET?.trim();
+  return secret || undefined;
+}
+
 export async function pingHeartbeat(jobName: string): Promise<void> {
   const base = process.env.HEALTHCHECK_URL?.trim();
   if (!base) return;

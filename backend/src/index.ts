@@ -15,7 +15,7 @@ import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
 import { hashPassword } from './utils/password.js';
 import { initSecretKeys } from './utils/secrets.js';
 import { isTurnstileEnabled } from './utils/turnstile.js';
-import { getCronSecret } from './utils/cron-secret.js';
+import { getCronSecret } from './utils/heartbeat.js';
 import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
 import configRoutes from './routes/config.js';

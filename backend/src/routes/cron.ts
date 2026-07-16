@@ -15,7 +15,7 @@ import { testConnection } from '../services/notifications/test-connection.js';
 import { isSupportedChannel } from '../services/notifications/supported-channels.js';
 import { getChannelTemplate } from '../services/notifications/channels.config.js';
 import { resolveEmailRecipientForTest } from '../utils/notification-recipients.js';
-import { getCronSecret } from '../utils/cron-secret.js';
+import { getCronSecret } from '../utils/heartbeat.js';
 
 const cronRoutes = new Hono();
 
