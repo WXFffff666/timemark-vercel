@@ -486,6 +486,12 @@ UPDATE fixed_contacts SET contact_methods = jsonb_build_object(
   'wxpusherUids', CASE WHEN wxpusher_uid IS NOT NULL AND wxpusher_uid <> '' THEN jsonb_build_array(jsonb_build_object('label', '默认', 'value', wxpusher_uid)) ELSE '[]'::jsonb END
 ) WHERE contact_methods IS NULL OR contact_methods = '{}'::jsonb;`,
     },
+    {
+      version: 31,
+      name: 'contact_relationship_gender_v31',
+      sql: `ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS relationship TEXT;
+ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'unknown';`,
+    },
   ];
 
   for (const migration of migrations) {

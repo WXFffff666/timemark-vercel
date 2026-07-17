@@ -1,10 +1,17 @@
 import type { ReminderConfig, ContactLabeledEntry } from '@timemark/shared';
-import { normalizeEmail } from '@timemark/shared';
+import {
+  normalizeEmail,
+  resolveContactGreetingName,
+  resolveContactPersonName,
+  resolveContactDearSalutation,
+} from '@timemark/shared';
 
 export interface FixedContactForEvent {
   id: number;
   name: string;
   nickname?: string;
+  relationship?: string | null;
+  gender?: string | null;
   email?: string;
   phone?: string;
   telegram_chat_id?: string;
@@ -96,12 +103,14 @@ export function applyContactAsPerson(
   contact: FixedContactForEvent,
   prev: { personName?: string; name?: string; type?: string },
 ): Partial<{ personName: string; name: string }> {
-  const displayName = contact.nickname || contact.name;
+  const personName = resolveContactPersonName(contact);
   const updates: Partial<{ personName: string; name: string }> = {
-    personName: displayName,
+    personName,
   };
   if (!prev.name?.trim() && prev.type === 'birthday') {
-    updates.name = `${contact.name} 生日`;
+    updates.name = `${personName} 生日`;
+  } else if (!prev.name?.trim() && prev.type === 'anniversary') {
+    updates.name = `${personName} 纪念日`;
   }
   return updates;
 }
@@ -119,7 +128,7 @@ export function applyContactsAsReminders(
   let config = { ...existingConfig };
   const names: string[] = [];
   for (const c of contacts) {
-    names.push(c.nickname || c.name);
+    names.push(resolveContactGreetingName(c));
     config = mergeContactIntoReminderConfig(c, accounts, config);
   }
   const firstEmail = contacts.flatMap((c) => getContactEmails(c)).find(Boolean);
@@ -142,3 +151,5 @@ export function applyContactAsReminder(
 } {
   return applyContactsAsReminders([contact], accounts, existingConfig, prev);
 }
+
+export { resolveContactGreetingName, resolveContactPersonName, resolveContactDearSalutation };

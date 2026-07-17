@@ -14,9 +14,11 @@ import {
   applyContactAsPerson,
   applyContactsAsReminders,
   mergeContactIntoReminderConfig,
+  resolveContactPersonName,
+  resolveContactGreetingName,
   type FixedContactForEvent,
 } from '@/lib/contact-event-bridge';
-import { normalizeEmail } from '@timemark/shared';
+import { normalizeEmail, suggestTemplateForContact, isFamilyLikeContact } from '@timemark/shared';
 import { contactHasAnyEmail, getContactEmailList } from '@/lib/contact-utils';
 import { api, fetchAvailableChannels, type AvailableChannel } from '@/lib/api';
 import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
@@ -287,9 +289,27 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   useEffect(() => {
     if (!open) return;
     const templates = EVENT_TYPE_TEMPLATES[formData.type] || EVENT_TYPE_TEMPLATES.other;
-    const recipient = formData.reminderRecipientName?.trim();
+    const recipient = formData.reminderRecipientName?.trim() || formData.personName?.trim();
     if (!recipient) {
       setSelectedTemplateId(templates[0] || 'generic');
+      return;
+    }
+    const matchedContact = fixedContacts.find(
+      (c) =>
+        resolveContactGreetingName(c) === recipient
+        || resolveContactPersonName(c) === recipient
+        || c.name === recipient,
+    );
+    if (matchedContact) {
+      const suggested = suggestTemplateForContact(matchedContact, formData.type);
+      if (suggested && templates.includes(suggested)) {
+        setSelectedTemplateId(suggested);
+        return;
+      }
+    }
+    if (isFamilyLikeContact({ name: recipient, relationship: recipient })) {
+      if (formData.type === 'holiday') setSelectedTemplateId('holiday_family');
+      else if (formData.type === 'birthday') setSelectedTemplateId('birthday_detailed');
       return;
     }
     api.get<Array<{ from_relation: string; to_relation: string; recipient_type?: string }>>('/config/relationships')
@@ -311,7 +331,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         }
       })
       .catch(() => setSelectedTemplateId(templates[0] || 'generic'));
-  }, [open, formData.type, formData.reminderRecipientName]);
+  }, [open, formData.type, formData.reminderRecipientName, formData.personName, fixedContacts]);
 
   // 加载自定义模板
   useEffect(() => {
@@ -911,13 +931,17 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                       key={c.id}
                       type="button"
                       className="text-xs px-2 py-1 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:border-primary-400"
-                      onClick={() => setFormData((prev) => ({
-                        ...prev,
-                        ...applyContactAsPerson(c, prev),
-                      }))}
-                      title="填入被提醒人"
+                      onClick={() => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          ...applyContactAsPerson(c, prev),
+                        }));
+                        const suggested = suggestTemplateForContact(c, formData.type);
+                        if (suggested) setSelectedTemplateId(suggested);
+                      }}
+                      title={`填入被提醒人（${resolveContactPersonName(c)}）`}
                     >
-                      {c.name}
+                      {c.name}{c.relationship ? ` · ${resolveContactPersonName(c)}` : ''}
                     </button>
                   ))}
                   {fixedContacts.map((c) => (
@@ -1056,7 +1080,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                           ),
                         }))}
                       >
-                        {c.name} ({getContactEmailList(c).join('、')})
+                        {c.name} ({resolveContactGreetingName(c)} · {getContactEmailList(c).join('、')})
                       </button>
                     ))}
                   </div>

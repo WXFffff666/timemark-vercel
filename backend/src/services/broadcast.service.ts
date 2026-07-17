@@ -2,7 +2,7 @@ import { query } from '../db/index.js';
 import { getContactsByIds, listFixedContacts, getContactAllEmails } from './contact.service.js';
 import { resolveEmailAccount, sendRawEmail } from './email-send.service.js';
 import { escapeHtml } from '../utils/html.js';
-import { renderBroadcastTemplate } from '@timemark/shared';
+import { renderBroadcastTemplate, resolveContactGreetingName } from '@timemark/shared';
 import type { BroadcastEmailInput } from '@timemark/shared';
 
 interface BroadcastRecipient {
@@ -32,8 +32,8 @@ async function resolveRecipients(userId: number, input: BroadcastEmailInput): Pr
     for (const c of contacts) {
       const emails = getContactAllEmails(c);
       if (emails.length) {
-        for (const email of emails) add(email, c.name || c.nickname || undefined);
-      } else if (c.email) add(c.email, c.name || c.nickname || undefined);
+        for (const email of emails) add(email, resolveContactGreetingName(c));
+      } else if (c.email) add(c.email, resolveContactGreetingName(c));
     }
   }
   if (input.useAllContacts) {
@@ -41,8 +41,8 @@ async function resolveRecipients(userId: number, input: BroadcastEmailInput): Pr
     for (const c of all) {
       const emails = getContactAllEmails(c);
       if (emails.length) {
-        for (const email of emails) add(email, c.name || c.nickname || undefined);
-      } else if (c.email) add(c.email, c.name || c.nickname || undefined);
+        for (const email of emails) add(email, resolveContactGreetingName(c));
+      } else if (c.email) add(c.email, resolveContactGreetingName(c));
     }
   }
   return [...byEmail.values()];

@@ -224,7 +224,7 @@ security.post('/totp/disable', async (c) => {
 // ============ Deploy / system info ============
 
 // Keep in sync with latest migration version in db/migrate.ts
-const EXPECTED_SCHEMA_VERSION = 30;
+const EXPECTED_SCHEMA_VERSION = 31;
 
 security.get('/deploy-info', async (c) => {
   const jwtAge = process.env.JWT_SECRET_ROTATED_AT || null;

@@ -12,6 +12,12 @@ import { api } from '@/lib/api';
 import {
   EMAIL_CHANNEL_TYPES,
   contactHasChannelAddress,
+  CONTACT_RELATIONSHIP_GROUPS,
+  CONTACT_GENDER_OPTIONS,
+  resolveRelationshipOption,
+  resolveContactGreetingName,
+  resolveContactDearSalutation,
+  formatContactListLabel,
   type ContactLabeledEntry,
 } from '@timemark/shared';
 import {
@@ -35,6 +41,8 @@ interface FixedContact {
   telegrams?: ContactLabeledEntry[];
   qqs?: ContactLabeledEntry[];
   wxpusher_uids?: ContactLabeledEntry[];
+  relationship?: string | null;
+  gender?: string | null;
   validation_status?: string;
   channel_account_ids?: number[];
 }
@@ -59,6 +67,8 @@ interface GroupMember {
 interface ContactForm {
   name: string;
   nickname: string;
+  relationship: string;
+  gender: string;
   emails: ContactLabeledEntry[];
   phones: ContactLabeledEntry[];
   telegrams: ContactLabeledEntry[];
@@ -70,6 +80,8 @@ interface ContactForm {
 const emptyForm = (): ContactForm => ({
   name: '',
   nickname: '',
+  relationship: '',
+  gender: 'unknown',
   emails: [{ label: '', value: '' }],
   phones: [{ label: '', value: '' }],
   telegrams: [{ label: '', value: '' }],
@@ -163,6 +175,8 @@ export default function Contacts() {
     setForm({
       name: c.name,
       nickname: c.nickname || '',
+      relationship: c.relationship || '',
+      gender: c.gender || 'unknown',
       emails: ensureLabeledEntries(c.emails, c.email),
       phones: ensureLabeledEntries(c.phones, c.phone),
       telegrams: ensureLabeledEntries(c.telegrams, c.telegram_chat_id),
@@ -205,6 +219,8 @@ export default function Contacts() {
   const buildPayload = () => ({
     name: form.name.trim(),
     nickname: form.nickname.trim() || undefined,
+    relationship: form.relationship || undefined,
+    gender: (form.gender as 'male' | 'female' | 'unknown') || 'unknown',
     emails: normalizeEntriesForSave(form.emails),
     phones: normalizeEntriesForSave(form.phones),
     telegrams: normalizeEntriesForSave(form.telegrams),
@@ -259,7 +275,7 @@ export default function Contacts() {
     setSendingContact(c);
     setSendAvailableEmails(emails);
     setSendSubject(`来自 TimeMark 的消息 - ${c.name}`);
-    setSendHtml(`<p>您好 ${c.nickname || c.name}，</p><p>这是一条来自 TimeMark 的消息。</p>`);
+    setSendHtml(`<p>${resolveContactDearSalutation(c)}，</p><p>这是一条来自 TimeMark 的消息。</p>`);
     setSendAccountId(boundEmail?.id ?? emailAccounts[0]?.id ?? '');
     setError('');
 
@@ -445,8 +461,15 @@ export default function Contacts() {
               <div key={c.id} className="rounded-xl border bg-white/70 dark:bg-slate-900/70 p-4 flex gap-3 items-start">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold">{c.name}</span>
-                    {c.nickname && <span className="text-sm text-slate-500">({c.nickname})</span>}
+                    <span className="font-semibold">{formatContactListLabel(c)}</span>
+                    {c.nickname && c.relationship && (
+                      <span className="text-sm text-slate-500">昵称 {c.nickname}</span>
+                    )}
+                    {c.relationship && resolveRelationshipOption(c.relationship, c.name, c.nickname) && (
+                      <Badge variant="outline" className="text-xs">
+                        称呼：{resolveContactGreetingName(c)}
+                      </Badge>
+                    )}
                     {c.validation_status === 'valid' ? (
                       <Badge className="bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3 mr-1" />已验证</Badge>
                     ) : (
@@ -515,7 +538,61 @@ export default function Contacts() {
           </DialogHeader>
           <div className="space-y-4">
             <Input placeholder="姓名 *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label="姓名" />
-            <Input placeholder="昵称" value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} />
+            <Input placeholder="昵称（可选，优先用于称呼）" value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium mb-1 block">与我的关系</label>
+                <select
+                  className="w-full rounded-xl border p-2.5 text-sm bg-transparent"
+                  value={form.relationship}
+                  onChange={(e) => {
+                    const relationship = e.target.value;
+                    const opt = resolveRelationshipOption(relationship);
+                    setForm((prev) => ({
+                      ...prev,
+                      relationship,
+                      gender: prev.gender === 'unknown' && opt?.defaultGender ? opt.defaultGender : prev.gender,
+                    }));
+                  }}
+                  aria-label="与我的关系"
+                >
+                  <option value="">未设置（按姓名+性别）</option>
+                  {CONTACT_RELATIONSHIP_GROUPS.map((group) => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.options.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">性别</label>
+                <select
+                  className="w-full rounded-xl border p-2.5 text-sm bg-transparent"
+                  value={form.gender}
+                  onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                  aria-label="性别"
+                >
+                  {CONTACT_GENDER_OPTIONS.map((g) => (
+                    <option key={g.value} value={g.value}>{g.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-400 mt-1">非亲属时用于先生/女士尊称</p>
+              </div>
+            </div>
+
+            {(form.name || form.relationship) && (
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 px-3 py-2">
+                邮件称呼预览：{resolveContactDearSalutation({
+                  name: form.name,
+                  nickname: form.nickname,
+                  relationship: form.relationship,
+                  gender: form.gender,
+                })}
+              </p>
+            )}
 
             <LabeledFieldsEditor
               label="邮箱"

@@ -35,6 +35,8 @@ export interface FixedContactRow {
   wxpusher_uids: ContactLabeledEntry[];
   preferred_channels?: unknown;
   channel_account_ids: number[];
+  relationship?: string | null;
+  gender?: string | null;
   notes?: string | null;
   validation_status?: string | null;
   last_validated_at?: string | null;
@@ -141,7 +143,8 @@ function inputToMethods(input: CreateFixedContactInput | UpdateFixedContactInput
 export async function listFixedContacts(userId: number): Promise<FixedContactRow[]> {
   const result = await query(
     `SELECT id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid,
-            contact_methods, preferred_channels, notes, validation_status, last_validated_at, created_at, updated_at
+            contact_methods, preferred_channels, relationship, gender, notes,
+            validation_status, last_validated_at, created_at, updated_at
      FROM fixed_contacts WHERE user_id = $1 ORDER BY name ASC`,
     [userId],
   );
@@ -157,8 +160,8 @@ export async function createFixedContact(userId: number, input: CreateFixedConta
 
   const result = await query(
     `INSERT INTO fixed_contacts
-     (user_id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid, contact_methods, preferred_channels, notes, validation_status, last_validated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'valid',CURRENT_TIMESTAMP)
+     (user_id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid, contact_methods, preferred_channels, relationship, gender, notes, validation_status, last_validated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'valid',CURRENT_TIMESTAMP)
      RETURNING *`,
     [
       userId,
@@ -171,6 +174,8 @@ export async function createFixedContact(userId: number, input: CreateFixedConta
       legacy.wxpusher_uid,
       JSON.stringify(serializeContactMethods(methods)),
       JSON.stringify(input.channelAccountIds || []),
+      input.relationship?.trim() || null,
+      input.gender || 'unknown',
       input.notes || null,
     ],
   );
@@ -218,6 +223,16 @@ export async function updateFixedContact(userId: number, id: number, input: Upda
     i++;
     fields.push(`notes = $${i}`);
     values.push(input.notes || null);
+  }
+  if (input.relationship !== undefined) {
+    i++;
+    fields.push(`relationship = $${i}`);
+    values.push(input.relationship?.trim() || null);
+  }
+  if (input.gender !== undefined) {
+    i++;
+    fields.push(`gender = $${i}`);
+    values.push(input.gender || 'unknown');
   }
 
   const contactFieldsTouched =

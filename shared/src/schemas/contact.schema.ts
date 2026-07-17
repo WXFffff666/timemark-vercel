@@ -26,6 +26,10 @@ const contactBaseSchema = z.object({
   wxpusherUids: labeledList,
   /** 绑定的通知渠道账号 ID 列表（可多选） */
   channelAccountIds: z.array(z.number().int().positive()).default([]),
+  /** 与我的关系（见 contact-relationship.ts 预设列表） */
+  relationship: optionalText,
+  /** 性别：用于非亲属称呼先生/女士 */
+  gender: z.enum(['male', 'female', 'unknown']).optional().default('unknown'),
   notes: z.string().max(500).optional(),
 });
 
