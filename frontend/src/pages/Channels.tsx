@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { normalizeEmail, SMTP_PROVIDER_PRESETS, applySmtpProviderToForm, getSmtpProviderPreset, inferSmtpProviderId } from '@timemark/shared';
+import { normalizeEmail, SMTP_PROVIDER_PRESETS, applySmtpProviderToForm, getSmtpProviderPreset, inferSmtpProviderId, inferSmtpEncryption } from '@timemark/shared';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -247,6 +247,7 @@ export default function Channels() {
     });
     if (template.id === 'smtp') {
       initialForm.smtpProvider = '';
+      initialForm.smtpEncryption = 'ssl';
     }
     setConfigForm(initialForm);
     
@@ -327,13 +328,30 @@ export default function Channels() {
         inferSmtpProviderId(account.webhook, (account as any).secret) ||
         'custom';
       form.smtpProvider = provider;
+      form.smtpEncryption = inferSmtpEncryption((account as any).secret);
     }
 
     return form;
   };
 
   const handleSmtpProviderChange = (providerId: string) => {
-    setConfigForm((prev) => applySmtpProviderToForm(providerId as any, prev));
+    setConfigForm((prev) => applySmtpProviderToForm(providerId as any, {
+      ...prev,
+      smtpEncryption: prev.smtpEncryption || 'ssl',
+    }));
+    setConfigTestMessage(null);
+  };
+
+  const handleSmtpEncryptionChange = (encryption: 'ssl' | 'starttls') => {
+    setConfigForm((prev) => {
+      const preset = getSmtpProviderPreset(prev.smtpProvider);
+      const port = encryption === 'starttls' && preset.altPort ? preset.altPort : preset.port;
+      return {
+        ...prev,
+        smtpEncryption: encryption,
+        secret: preset.id === 'custom' ? prev.secret : String(port),
+      };
+    });
     setConfigTestMessage(null);
   };
 
@@ -418,7 +436,10 @@ export default function Channels() {
       
       const sessionData =
         selectedTemplate.id === 'smtp'
-          ? { smtpProvider: configForm.smtpProvider || 'custom' }
+          ? {
+              smtpProvider: configForm.smtpProvider || 'custom',
+              smtpEncryption: configForm.smtpEncryption || 'ssl',
+            }
           : configForm.sessionData || undefined;
 
       const accountData = {
@@ -804,9 +825,9 @@ export default function Channels() {
           goBackInModal();
         }
       }}>
-        <DialogContent className="glass-panel rounded-[2rem]">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
+        <DialogContent className="glass-panel rounded-[2rem] max-h-[min(92vh,820px)] w-[calc(100%-1.5rem)] max-w-lg flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="shrink-0 px-5 sm:px-6 pt-5 sm:pt-6 pb-3 border-b border-slate-200/80 dark:border-slate-700/80">
+            <div className="flex items-center gap-3 pr-8">
               {canGoBack && (
                 <button 
                   onClick={goBackInModal}
@@ -815,8 +836,8 @@ export default function Channels() {
                   <ArrowLeft size={24} className="text-slate-600 dark:text-slate-400" />
                 </button>
               )}
-              <div className="flex items-center gap-3 flex-1">
-                <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-xl text-primary-600 dark:text-primary-400">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-xl text-primary-600 dark:text-primary-400 shrink-0">
                   {selectedTemplate && (
                     (() => {
                       const Icon = getTemplateIcon(selectedTemplate.icon);
@@ -824,20 +845,20 @@ export default function Channels() {
                     })()
                   )}
                 </div>
-                <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white">
+                <DialogTitle className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white truncate">
                   {selectedTemplate ? (selectedAccount ? '编辑' : '配置') + ' ' + selectedTemplate.name : ''}
                 </DialogTitle>
               </div>
             </div>
           </DialogHeader>
 
-          <div className="space-y-4 mt-4">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain px-5 sm:px-6 py-4 space-y-4 scroll-smooth touch-pan-y">
             <div>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                 渠道名称 *
               </label>
               <Input
-                placeholder="例如：工作钉钉群"
+                placeholder="例如：我的163邮箱"
                 value={configForm.name || ''}
                 onChange={(e) => setConfigForm({ ...configForm, name: e.target.value })}
                 className="h-12"
@@ -863,22 +884,53 @@ export default function Channels() {
                   </select>
                 </div>
 
-                {configForm.smtpProvider && (
-                  <div className="text-xs text-slate-600 dark:text-slate-400 space-y-2">
-                    <p>{getSmtpProviderPreset(configForm.smtpProvider).setupGuide}</p>
-                    {getSmtpProviderPreset(configForm.smtpProvider).docsUrl && (
-                      <a
-                        href={getSmtpProviderPreset(configForm.smtpProvider).docsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-primary-500 hover:text-primary-600"
-                      >
-                        查看官方配置说明
-                        <ExternalLink size={12} />
-                      </a>
-                    )}
+                {configForm.smtpProvider && getSmtpProviderPreset(configForm.smtpProvider).altPort && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                      加密方式
+                    </label>
+                    <select
+                      value={configForm.smtpEncryption || 'ssl'}
+                      onChange={(e) => handleSmtpEncryptionChange(e.target.value as 'ssl' | 'starttls')}
+                      className="w-full h-12 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      aria-label="SMTP 加密方式"
+                    >
+                      <option value="ssl">SSL（端口 465，推荐）</option>
+                      <option value="starttls">STARTTLS（端口 587）</option>
+                    </select>
                   </div>
                 )}
+
+                {configForm.smtpProvider && (() => {
+                  const preset = getSmtpProviderPreset(configForm.smtpProvider);
+                  return (
+                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-2">
+                      <p>{preset.setupGuide}</p>
+                      {preset.servers && (
+                        <div className="rounded-xl bg-white/70 dark:bg-slate-900/50 px-3 py-2 space-y-1 font-mono text-[11px] leading-relaxed">
+                          <p>SMTP: {preset.servers.smtp}</p>
+                          {preset.servers.pop3 && <p>POP3: {preset.servers.pop3}</p>}
+                          {preset.servers.imap && <p>IMAP: {preset.servers.imap}</p>}
+                          {preset.servers.sslNote && <p className="font-sans text-slate-500 pt-1">{preset.servers.sslNote}</p>}
+                        </div>
+                      )}
+                      {preset.cloudWarning && (
+                        <p className="text-amber-600 dark:text-amber-400">{preset.cloudWarning}</p>
+                      )}
+                      {preset.docsUrl && (
+                        <a
+                          href={preset.docsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-primary-500 hover:text-primary-600"
+                        >
+                          查看官方配置说明
+                          <ExternalLink size={12} />
+                        </a>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -886,11 +938,6 @@ export default function Channels() {
               const smtpPreset = selectedTemplate.id === 'smtp' && configForm.smtpProvider
                 ? getSmtpProviderPreset(configForm.smtpProvider)
                 : null;
-              const isSmtpPresetLocked =
-                selectedTemplate.id === 'smtp' &&
-                configForm.smtpProvider &&
-                configForm.smtpProvider !== 'custom' &&
-                (field.name === 'webhook' || field.name === 'secret');
 
               let fieldLabel = field.label;
               let fieldDescription = field.description;
@@ -932,7 +979,6 @@ export default function Channels() {
                 ) : (
                   <Input
                     type={field.type}
-                    readOnly={isSmtpPresetLocked}
                     placeholder={
                       selectedAccount && field.name === 'token' && selectedAccount.tokenConfigured
                         ? '已配置，留空则不修改'
@@ -942,7 +988,7 @@ export default function Channels() {
                     }
                     value={configForm[field.name] || ''}
                     onChange={(e) => setConfigForm({ ...configForm, [field.name]: e.target.value })}
-                    className={`h-12 ${isSmtpPresetLocked ? 'bg-slate-100 dark:bg-slate-900/60' : ''}`}
+                    className="h-12"
                   />
                 )}
                 {fieldDescription && (
@@ -973,13 +1019,10 @@ export default function Channels() {
                   )}
                 </Button>
                 {configTestMessage && (
-                  <p className={`text-sm ${configTestMessage.includes('成功') ? 'text-green-600' : 'text-red-500'}`}>
+                  <p className={`text-sm break-words ${configTestMessage.includes('成功') ? 'text-green-600' : 'text-red-500'}`}>
                     {configTestMessage}
                   </p>
                 )}
-                <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl px-4 py-3">
-                  大厂邮箱 SMTP 从你自己的邮箱发出，Gmail/QQ 收件箱通常比 Resend 更不容易进垃圾箱。QQ/163 需使用授权码，Gmail 需使用应用专用密码。
-                </p>
               </div>
             )}
 
@@ -1007,41 +1050,39 @@ export default function Channels() {
                 <ExternalLink size={12} />
               </a>
             )}
+          </div>
 
-            <div className="pt-4 flex gap-3">
-              <Button
-                variant="secondary"
-                className="flex-1 h-12 rounded-2xl font-bold"
-                onClick={() => {
-                  // 点击取消返回上一级，而不是直接关闭
-                  if (modalBackStack.length > 1) {
-                    goBackInModal();
-                  } else {
-                    // 如果是第一层，返回到模板选择
-                    setShowConfigModal(false);
-                    setShowTemplateModal(true);
-                    setModalBackStack(['main', 'template']);
-                  }
-                }}
-              >
-                取消
-              </Button>
-              <Button
-                variant="vision"
-                className="flex-1 h-12 rounded-2xl font-bold shadow-lg shadow-primary-500/30"
-                onClick={saveConfig}
-                disabled={saving}
-              >
-                {saving ? (
-                  <>
-                    <Loader2 size={16} className="mr-2 animate-spin" />
-                    保存中...
-                  </>
-                ) : (
-                  selectedAccount ? '保存修改' : '添加渠道'
-                )}
-              </Button>
-            </div>
+          <div className="shrink-0 px-5 sm:px-6 py-4 border-t border-slate-200/80 dark:border-slate-700/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur flex gap-3">
+            <Button
+              variant="secondary"
+              className="flex-1 h-12 rounded-2xl font-bold"
+              onClick={() => {
+                if (modalBackStack.length > 1) {
+                  goBackInModal();
+                } else {
+                  setShowConfigModal(false);
+                  setShowTemplateModal(true);
+                  setModalBackStack(['main', 'template']);
+                }
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              variant="vision"
+              className="flex-1 h-12 rounded-2xl font-bold shadow-lg shadow-primary-500/30"
+              onClick={saveConfig}
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                  保存中...
+                </>
+              ) : (
+                selectedAccount ? '保存修改' : '添加渠道'
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

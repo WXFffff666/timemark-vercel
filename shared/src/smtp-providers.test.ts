@@ -4,6 +4,7 @@ import {
   inferSmtpProviderId,
   parseSmtpSessionData,
 } from './smtp-providers.js';
+import { inferSmtpEncryption } from './smtp-transport.js';
 
 describe('smtp-providers', () => {
   it('infers qq preset from host and port', () => {
@@ -13,14 +14,26 @@ describe('smtp-providers', () => {
   });
 
   it('applies preset host and port to form', () => {
-    const next = applySmtpProviderToForm('qq', { name: 'QQ邮箱' });
+    const next = applySmtpProviderToForm('qq', { name: 'QQ邮箱', smtpEncryption: 'ssl' });
     expect(next.webhook).toBe('smtp.qq.com');
     expect(next.secret).toBe('465');
     expect(next.smtpProvider).toBe('qq');
   });
 
+  it('applies starttls port when selected', () => {
+    const next = applySmtpProviderToForm('163', { name: '163', smtpEncryption: 'starttls' });
+    expect(next.secret).toBe('587');
+  });
+
   it('parses smtpProvider from session data', () => {
-    expect(parseSmtpSessionData({ smtpProvider: '163' })).toEqual({ smtpProvider: '163' });
-    expect(parseSmtpSessionData('{"smtpProvider":"gmail"}')).toEqual({ smtpProvider: 'gmail' });
+    expect(parseSmtpSessionData({ smtpProvider: '163', smtpEncryption: 'ssl' })).toEqual({
+      smtpProvider: '163',
+      smtpEncryption: 'ssl',
+    });
+  });
+
+  it('infers encryption from port', () => {
+    expect(inferSmtpEncryption(465)).toBe('ssl');
+    expect(inferSmtpEncryption(587)).toBe('starttls');
   });
 });

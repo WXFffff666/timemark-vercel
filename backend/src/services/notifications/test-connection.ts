@@ -919,22 +919,58 @@ async function testSmtpChannel(
 
   const start = Date.now();
   try {
-    const nodemailer = await import('nodemailer');
-    const { buildSmtpTransportOptions } = await import('@timemark/shared');
-    const transporter = nodemailer.default.createTransport(
-      buildSmtpTransportOptions(smtpHost, port, fromEmail, password),
-    );
+    const { createSmtpTransporter } = await import('../../utils/smtp-transporter.js');
+    const transporter = createSmtpTransporter(smtpHost, port, fromEmail, password);
 
-    await transporter.verify();
-    const latency = Date.now() - start;
-    return { success: true, message: `SMTP 连接成功（${smtpHost}:${port}）`, latency };
+    let verified = false;
+    try {
+      await transporter.verify();
+      verified = true;
+    } catch {
+      // 部分邮箱（如 163）对 verify 响应不佳，改发一封自测邮件
+      await transporter.sendMail({
+        from: fromEmail,
+        to: fromEmail,
+        subject: 'TimeMark SMTP 连接测试',
+        text: '这是一封 TimeMark SMTP 连接测试邮件。收到即表示配置正确。',
+      });
+      verified = true;
+    }
+
+    if (verified) {
+      const latency = Date.now() - start;
+      return { success: true, message: `SMTP 连接成功（${smtpHost}:${port}）`, latency };
+    }
+    return { success: false, message: 'SMTP 连接失败' };
   } catch (error: any) {
     const latency = Date.now() - start;
     if (error.code === 'EAUTH') {
-      return { success: false, message: 'SMTP 认证失败，请检查邮箱地址和授权码/应用密码', latency, details: '认证信息无效' };
+      return {
+        success: false,
+        message: 'SMTP 认证失败：请确认使用客户端授权码（不是登录密码），且发件人邮箱填写完整',
+        latency,
+        details: error.response || error.message,
+      };
     }
     if (error.code === 'ECONNREFUSED') {
-      return { success: false, message: 'SMTP 服务器连接被拒绝，请检查服务器地址和端口', latency, details: '请确认服务器地址与端口正确' };
+      return { success: false, message: 'SMTP 服务器连接被拒绝，请检查服务器地址和端口', latency };
+    }
+    if (error.code === 'ETIMEDOUT' || error.code === 'ESOCKET') {
+      return {
+        success: false,
+        message: 'SMTP 连接超时：云服务器 IP 可能被邮箱服务商限制，可尝试 STARTTLS(587) 或改用 Resend',
+        latency,
+        details: error.message,
+      };
+    }
+    const hostLower = smtpHost.toLowerCase();
+    if (hostLower.includes('163.com') || hostLower.includes('126.com') || hostLower.includes('qq.com')) {
+      return {
+        success: false,
+        message: `SMTP 连接失败: ${error.message}。网易/QQ 邮箱需使用授权码，且可能限制云服务器 IP`,
+        latency,
+        details: '可在配置中切换 SSL(465) / STARTTLS(587) 后重试',
+      };
     }
     return { success: false, message: `SMTP 连接失败: ${error.message}`, latency };
   }

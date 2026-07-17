@@ -14,10 +14,18 @@ export interface SmtpProviderPreset {
   label: string;
   host: string;
   port: number;
+  altPort?: number;
+  servers?: {
+    smtp: string;
+    pop3?: string;
+    imap?: string;
+    sslNote?: string;
+  };
   passwordLabel: string;
   passwordDescription: string;
   fromEmailPlaceholder: string;
   setupGuide: string;
+  cloudWarning?: string;
   docsUrl?: string;
 }
 
@@ -38,10 +46,18 @@ export const SMTP_PROVIDER_PRESETS: SmtpProviderPreset[] = [
     label: '网易 163 邮箱',
     host: 'smtp.163.com',
     port: 465,
-    passwordLabel: '163 授权码',
-    passwordDescription: '在 163 邮箱设置中开启 SMTP 并获取客户端授权码',
+    altPort: 587,
+    servers: {
+      smtp: 'smtp.163.com',
+      pop3: 'pop.163.com',
+      imap: 'imap.163.com',
+      sslNote: 'POP3/SMTP/IMAP 均支持 SSL；发信推荐 SSL 465 或 STARTTLS 587',
+    },
+    passwordLabel: '163 客户端授权码',
+    passwordDescription: '必须使用「客户端授权密码」，不是邮箱登录密码。在 设置 → POP3/SMTP/IMAP 中开启服务后生成',
     fromEmailPlaceholder: 'yourname@163.com',
-    setupGuide: '登录 mail.163.com → 设置 → POP3/SMTP/IMAP → 开启 SMTP → 新增授权码',
+    setupGuide: 'mail.163.com → 设置 → POP3/SMTP/IMAP → 开启 IMAP/SMTP → 新增授权密码（只显示一次，请保存）',
+    cloudWarning: '163 可能限制云服务器 IP。若网页已开启 SMTP 但此处测试失败，可尝试切换为 STARTTLS(587)，或改用 Resend。',
     docsUrl: 'https://help.mail.163.com/faqDetail.do?code=d7a5dc8471cd0c0e8b4b8f4f8e8ab0f0de1cd332cae813900ca0dcbfe7f9b4a1eda321afd4b6cbf5',
   },
   {
@@ -49,10 +65,18 @@ export const SMTP_PROVIDER_PRESETS: SmtpProviderPreset[] = [
     label: '网易 126 邮箱',
     host: 'smtp.126.com',
     port: 465,
-    passwordLabel: '126 授权码',
-    passwordDescription: '在 126 邮箱设置中开启 SMTP 并获取客户端授权码',
+    altPort: 587,
+    servers: {
+      smtp: 'smtp.126.com',
+      pop3: 'pop.126.com',
+      imap: 'imap.126.com',
+      sslNote: '均支持 SSL 连接',
+    },
+    passwordLabel: '126 客户端授权码',
+    passwordDescription: '必须使用客户端授权码，不是登录密码',
     fromEmailPlaceholder: 'yourname@126.com',
-    setupGuide: '登录 mail.126.com → 设置 → 开启 SMTP → 新增授权码',
+    setupGuide: 'mail.126.com → 设置 → 开启 SMTP → 新增授权码',
+    cloudWarning: '126 可能限制云服务器 IP，测试失败时可尝试 STARTTLS(587) 或改用 Resend。',
   },
   {
     id: 'gmail',
@@ -144,21 +168,32 @@ export function applySmtpProviderToForm(
   if (preset.id === 'custom') {
     return { ...form, smtpProvider: providerId };
   }
+  const encryption = form.smtpEncryption || 'ssl';
+  const port = encryption === 'starttls' && preset.altPort ? preset.altPort : preset.port;
   return {
     ...form,
     smtpProvider: providerId,
     webhook: preset.host,
-    secret: String(preset.port),
+    secret: String(port),
+    smtpEncryption: encryption,
   };
 }
 
-export function parseSmtpSessionData(sessionData: unknown): { smtpProvider?: SmtpProviderId } {
+export function parseSmtpSessionData(sessionData: unknown): {
+  smtpProvider?: SmtpProviderId;
+  smtpEncryption?: 'ssl' | 'starttls';
+} {
   if (!sessionData) return {};
-  if (typeof sessionData === 'object' && sessionData !== null && 'smtpProvider' in sessionData) {
-    const id = String((sessionData as { smtpProvider?: string }).smtpProvider || '');
-    if (SMTP_PROVIDER_PRESETS.some((p) => p.id === id)) {
-      return { smtpProvider: id as SmtpProviderId };
+  if (typeof sessionData === 'object' && sessionData !== null) {
+    const data = sessionData as { smtpProvider?: string; smtpEncryption?: string };
+    const result: { smtpProvider?: SmtpProviderId; smtpEncryption?: 'ssl' | 'starttls' } = {};
+    if (data.smtpProvider && SMTP_PROVIDER_PRESETS.some((p) => p.id === data.smtpProvider)) {
+      result.smtpProvider = data.smtpProvider as SmtpProviderId;
     }
+    if (data.smtpEncryption === 'ssl' || data.smtpEncryption === 'starttls') {
+      result.smtpEncryption = data.smtpEncryption;
+    }
+    return result;
   }
   if (typeof sessionData === 'string') {
     try {
