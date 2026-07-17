@@ -309,7 +309,7 @@ export default function Broadcast() {
         )}
       </div>
 
-      {campaigns.length > 0 && (
+      {campaigns.length > 0 ? (
         <div className="mt-8">
           <h2 className="font-semibold mb-3">发送记录</h2>
           <div className="space-y-2">
@@ -321,6 +321,8 @@ export default function Broadcast() {
             ))}
           </div>
         </div>
+      ) : (
+        <p className="mt-6 text-center text-sm text-slate-400">暂无批量发送记录，成功发送后会显示在页面底部</p>
       )}
     </div>
   );

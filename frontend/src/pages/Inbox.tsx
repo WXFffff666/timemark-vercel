@@ -26,28 +26,7 @@ const sourceLabels: Record<string, string> = {
   broadcast: '广播',
 };
 
-const formatTime = (timeStr: string) => {
-  if (!timeStr) return '';
-  const match = timeStr.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2}))?/);
-  if (!match) return timeStr;
-
-  const year = parseInt(match[1]);
-  const month = parseInt(match[2]);
-  const day = parseInt(match[3]);
-  const hour = match[4] ? parseInt(match[4]) : 0;
-  const minute = match[5] ? parseInt(match[5]) : 0;
-
-  const targetTime = new Date(year, month - 1, day, hour, minute).getTime();
-  const now = Date.now();
-  const diff = now - targetTime;
-
-  if (diff < 60000) return '刚刚';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
-  if (diff < 172800000) return '昨天';
-
-  return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-};
+import { formatRelativeTime } from '@/lib/format-time';
 
 export default function Inbox() {
   const navigate = useNavigate();
@@ -158,7 +137,7 @@ export default function Inbox() {
           <div className="text-center py-16 glass-panel rounded-[2.5rem] ring-1 ring-black/5 dark:ring-white/10">
             <InboxIcon size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">收件箱为空</h3>
-            <p className="text-slate-500 dark:text-slate-400">外部推送与提醒通知将显示在此处</p>
+            <p className="text-slate-500 dark:text-slate-400">外部系统通过收件 API 推送的消息将显示在此处（不含您自己发出的提醒）</p>
           </div>
         ) : (
           <motion.div variants={containerVariants} initial="hidden" animate="visible" className="relative">
@@ -187,7 +166,7 @@ export default function Inbox() {
                       </div>
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         <div className="text-sm font-bold text-slate-400 whitespace-nowrap bg-slate-100/50 dark:bg-slate-800/50 px-3 py-1 rounded-lg">
-                          {formatTime(msg.created_at)}
+                          {formatRelativeTime(msg.created_at)}
                         </div>
                         <div className="flex gap-1">
                           {!msg.is_read && (

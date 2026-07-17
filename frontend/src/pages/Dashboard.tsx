@@ -93,11 +93,21 @@ export function Dashboard() {
     try {
       const result = await testSendEvent(id);
       const results = result?.channelResults || {};
-      const failed = Object.entries(results).filter(([, r]) => !r.success);
+      const failed = Object.entries(results).filter(([key, r]) => !key.startsWith('_') && !r.success);
+      const succeeded = Object.entries(results).filter(([key, r]) => !key.startsWith('_') && r.success);
       if (failed.length > 0) {
         alert(`部分渠道失败：\n${failed.map(([ch, r]) => `${ch}: ${r.error || '未知错误'}`).join('\n')}`);
+      } else if (succeeded.length === 0) {
+        alert('未找到可用通知渠道，请先在「通知渠道」配置并测试通过。');
       } else {
-        alert('测试通知已发送！可在「提醒日志」查看记录。');
+        const detail = succeeded.map(([ch, r]) => {
+          const emails = r.recipients?.length ? ` → ${r.recipients.join(', ')}` : '';
+          return `${ch}${emails}`;
+        }).join('\n');
+        const goLogs = confirm(
+          `测试通知已发出：\n${detail}\n\n邮件渠道若使用 Resend 测试地址，仅可发到注册邮箱；请检查垃圾箱。\n\n点击「确定」打开提醒日志查看详情。`,
+        );
+        if (goLogs) navigate('/trigger-logs');
       }
     } catch (error) {
       alert(error instanceof Error ? error.message : '发送失败，请检查通知渠道与设置中的默认邮箱');
@@ -184,7 +194,7 @@ export function Dashboard() {
                   </span>
                 )}
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/trigger-logs')} aria-label="触发日志">
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/trigger-logs')} aria-label="提醒日志" title="提醒日志">
                 <ListChecks size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </Button>
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/analytics')} aria-label="数据看板">

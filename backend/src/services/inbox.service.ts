@@ -69,9 +69,10 @@ export async function listInboxMessages(
   const offset = Math.max(options.offset ?? 0, 0);
   const unreadOnly = options.unreadOnly === true;
 
+  // 收件箱仅展示外部推送（inbound），出站提醒/广播回执见「提醒日志」
   const where = unreadOnly
-    ? 'WHERE user_id = $1 AND is_read = FALSE'
-    : 'WHERE user_id = $1';
+    ? "WHERE user_id = $1 AND source = 'inbound' AND is_read = FALSE"
+    : "WHERE user_id = $1 AND source = 'inbound'";
   const params: unknown[] = [userId];
 
   const [listResult, countResult, unreadResult] = await Promise.all([
@@ -84,7 +85,7 @@ export async function listInboxMessages(
       params,
     ),
     query(
-      `SELECT COUNT(*)::int AS unread FROM inbox_messages WHERE user_id = $1 AND is_read = FALSE`,
+      `SELECT COUNT(*)::int AS unread FROM inbox_messages WHERE user_id = $1 AND source = 'inbound' AND is_read = FALSE`,
       [userId],
     ),
   ]);

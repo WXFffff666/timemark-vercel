@@ -10,7 +10,10 @@ interface EventState {
   updateEvent: (id: string, data: Partial<CreateEventRequest>) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
   deleteEventsBatch: (ids: string[]) => Promise<number>;
-  testSendEvent: (id: string) => Promise<{ channelResults?: Record<string, { success: boolean; error?: string }>; status?: string }>;
+  testSendEvent: (id: string) => Promise<{
+    channelResults?: Record<string, { success: boolean; error?: string; recipients?: string[] }>;
+    status?: string;
+  }>;
 }
 
 export const useEventStore = create<EventState>((set, get) => ({

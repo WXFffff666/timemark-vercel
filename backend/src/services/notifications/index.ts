@@ -54,7 +54,6 @@ import { query } from '../../db/index.js';
 import { logEmail } from '../email-log.service.js';
 import { enqueueNotificationRetry } from '../notification-retry.service.js';
 import { getConflictHint } from '../conflict-hint.service.js';
-import { createInboxMessage } from '../inbox.service.js';
 import { mapWithConcurrency } from '../../utils/concurrency.js';
 import { classifyErrorForRetry } from '../../utils/retry-classifier.js';
 
@@ -429,7 +428,7 @@ export async function sendNotifications(
   userId: number,
   channels: string[],
   options?: { skipQuietHours?: boolean },
-): Promise<Record<string, { success: boolean; error?: string; accountId?: number }>> {
+): Promise<Record<string, { success: boolean; error?: string; accountId?: number; recipients?: string[] }>> {
   event = normalizeEventForNotification(event as Record<string, unknown>);
   const config = await getUserConfig(userId);
 
@@ -618,7 +617,8 @@ export async function sendNotifications(
   }
   
   // 发送通知（每个渠道可能有多个账号配置，独立发送）
-  const channelResults: Record<string, { success: boolean; error?: string; accountId?: number }> = {};
+  const channelResults: Record<string, { success: boolean; error?: string; accountId?: number; recipients?: string[] }> = {};
+  const channelSendMeta: Record<string, { recipients?: string[] }> = {};
   
   // Build account ID lookup for bound accounts
   const configToAccountId = new Map<any, number>();
@@ -714,6 +714,7 @@ export async function sendNotifications(
                 channelType: ch,
               });
             }
+            channelSendMeta[ch] = { recipients: recipientEmails };
           } catch (error) {
             const errMsg = error instanceof Error ? error.message : String(error);
             for (const email of recipientEmails) {
@@ -781,6 +782,9 @@ export async function sendNotifications(
           await retryWithBackoff(() => sendPushoverNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.priority));
         else if (ch === 'apprise' && chConfig.webhook)
           await retryWithBackoff(() => sendAppriseNotification(mappedEvent, chConfig.webhook, chConfig.token));
+        else {
+          throw new Error(`渠道 ${ch} 配置不完整，无法发送`);
+        }
       } catch (e) {
         console.error(`Failed ${ch}:`, e);
         throw e;
@@ -803,7 +807,12 @@ export async function sendNotifications(
     const task = result.task;
     const ch = task.channel;
     if (result.status === 'fulfilled') {
-      channelResults[ch] = { success: true, accountId: task.accountId };
+      const meta = channelSendMeta[ch];
+      channelResults[ch] = {
+        success: true,
+        accountId: task.accountId,
+        ...(meta?.recipients?.length ? { recipients: meta.recipients } : {}),
+      };
       // Reset consecutive failure count on success
       if (task.accountId) {
         try {
@@ -889,17 +898,6 @@ export async function sendNotifications(
     .filter(([key, r]) => r.success && !key.startsWith('_'))
     .map(([ch]) => ch);
   if (successfulChannels.length > 0) {
-    const bodyText = mappedEvent.customMessage
-      || `已通过 ${successfulChannels.join(', ')} 发送提醒`;
-    createInboxMessage({
-      userId,
-      title: `提醒已发送：${event.name}`,
-      body: bodyText,
-      source: 'notification',
-      channel: successfulChannels.join(','),
-      eventId: event.id ? Number(event.id) : null,
-    }).catch(() => {});
-
     // C13: 出站 webhook
     if (config?.outbound_webhook_url) {
       sendGenericWebhookNotification(

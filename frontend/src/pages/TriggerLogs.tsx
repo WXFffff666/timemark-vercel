@@ -50,28 +50,7 @@ const getEventTypeLabel = (type?: string): string => {
   return type ? (labels[type] || type) : '未知';
 };
 
-const formatTime = (timeStr: string) => {
-  if (!timeStr) return '';
-  const match = timeStr.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2}))?/);
-  if (!match) return timeStr;
-
-  const year = parseInt(match[1]);
-  const month = parseInt(match[2]);
-  const day = parseInt(match[3]);
-  const hour = match[4] ? parseInt(match[4]) : 0;
-  const minute = match[5] ? parseInt(match[5]) : 0;
-
-  const targetTime = new Date(year, month - 1, day, hour, minute).getTime();
-  const now = Date.now();
-  const diff = now - targetTime;
-
-  if (diff < 60000) return '刚刚';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
-  if (diff < 172800000) return '昨天';
-
-  return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-};
+import { formatRelativeTime } from '@/lib/format-time';
 
 export default function TriggerLogs() {
   const navigate = useNavigate();
@@ -289,7 +268,7 @@ export default function TriggerLogs() {
                         </div>
                         <div className="flex flex-col items-end gap-2">
                         <div className="text-sm font-bold text-slate-400 whitespace-nowrap bg-slate-100/50 dark:bg-slate-800/50 px-3 py-1 rounded-lg">
-                          {formatTime(log.created_at)}
+                          {formatRelativeTime(log.created_at)}
                         </div>
                         {!isSuccess && (
                           <Button
