@@ -131,7 +131,7 @@ Vercel will:
 Once deployed, check:
 
 - `https://<your-project>.vercel.app/api/health` returns `{ "status": "ok", "checks": { "database": true } }`
-- Log in → **Settings → Deploy Wizard** → system self-check shows schema **v27**
+- Log in → **Settings → Deploy Wizard** → system self-check shows schema **v30**
 - Frontend loads without JavaScript errors
 - Configure external cron jobs (see Section 6)
 
@@ -266,14 +266,14 @@ Each cron handler validates an `Authorization: Bearer <CRON_SECRET>` header. If 
 
 ### Database migrations
 
-Incremental migrations (currently **v27**) run automatically on serverless cold start via `runMigrations()` in `backend/src/db/migrate.ts`. Manual run:
+Incremental migrations (currently **v30**) run automatically on serverless cold start via `runMigrations()` in `backend/src/db/migrate.ts`. Manual run:
 
 ```bash
 vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-Verify in **Settings → Deploy Wizard** that schema version is **v27**.
+Verify in **Settings → Deploy Wizard** that schema version is **v30**.
 
 ---
 

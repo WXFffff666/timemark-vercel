@@ -1,5 +1,40 @@
 # Changelog
 
+## v2.15.0 (2026-07-17)
+
+### 固定联系人
+
+- **多联系方式**：每个联系人支持多个邮箱、手机、Telegram / QQ / WxPusher，带标签（如「工作」「妈妈」）
+- 数据模型：`fixed_contacts.contact_methods` JSONB（迁移 **v30**），旧单字段自动迁入
+- **快捷发信**：仅 1 个邮箱直接进入编辑；多个邮箱先进入二级界面手动勾选（默认不全选）
+- **批量邮件 / 事件提醒**：选中联系人时自动合并其全部邮箱
+- API：`POST/PUT /api/contacts` 支持 `emails`/`phones` 等数组；`recipientEmails` 可指定子集
+
+### 近期待办
+
+- **打勾完成**：`/todos` 与首页待办同步服务端 `todo_completions`（迁移 **v29**）
+- **自动移出**：事件过期或离开提醒窗口后从当前列表隐藏
+- **完成历史**：「完成历史」标签页查看已归档记录
+- **定期清理**：`daily-maintenance` 删除 `occurrence_date` 超过 365 天的完成记录
+
+### 日历
+
+- 年 / 月 / 日视图切换；日期格子可点击；默认展示本月事件列表
+
+### 安全加固
+
+- **发信白名单**：`POST /api/contacts/:id/send-email` 的 `recipientEmails` 必须属于该联系人，修复开放邮件中继风险
+- **API 密钥脱敏**：`GET/PUT/POST /api/config/accounts` 响应不返回明文 `token`/`secret`，以 `tokenConfigured` 等标志代替
+- **HSTS**：应用层与 `vercel.json` 增加 `Strict-Transport-Security`
+- **SMTP TLS**：587 端口 `requireTLS: true`
+- **CORS**：禁止 `CORS_ORIGIN=*` 与 credentials 组合
+- 快捷发信写入 `email_logs` 时附带 `user_id`
+
+### 文档
+
+- 更新 README、SECURITY_AUDIT、NOTIFICATIONS、OPTIONAL_FEATURES、OPTIMIZATION_PLAN
+- 部署自检期望 schema 版本 **v30**
+
 ## v2.14.3 (2026-07-15)
 
 ### 修复

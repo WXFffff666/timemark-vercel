@@ -86,11 +86,24 @@ Google OAuth 完整步骤：[GOOGLE_CALENDAR_OAUTH.md](./GOOGLE_CALENDAR_OAUTH.m
 | `retry-notifications` | 建议 | 失败重试 |
 | `calendar-sync` | 可选 | 仅在使用外部 ICS / Google OAuth 时需要 |
 | `caldav-sync` | 可选 | 仅配置 CalDAV 时需要 |
-| `daily-maintenance` | 建议 | 日志清理、统计聚合 |
+| `daily-maintenance` | 建议 | 日志清理、统计聚合、待办历史清理（365 天） |
 
 ---
 
-## 7. 用户操作速查
+## 7. 固定联系人与近期待办（应用内）
+
+| 功能 | 路径 | 说明 |
+|------|------|------|
+| 固定联系人 | `/contacts` | 多邮箱/手机/IM；绑定通知渠道；快捷发信 |
+| 批量邮件 | `/broadcast` | 从联系人选收件人（展开全部邮箱） |
+| 近期待办 | `/todos` | 提醒窗口内事件打勾完成 |
+| 完成历史 | `/todos` → 完成历史 | 过期后自动归档的可查记录 |
+
+数据库迁移：**v29** `todo_completions`、**v30** `contact_methods`。
+
+---
+
+## 8. 用户操作速查
 
 ```
 只想本地记事件、邮件提醒？
@@ -113,4 +126,4 @@ Google OAuth 完整步骤：[GOOGLE_CALENDAR_OAUTH.md](./GOOGLE_CALENDAR_OAUTH.m
 
 - [NOTIFICATIONS.md](./NOTIFICATIONS.md) — 通知流程
 - [INTEGRATIONS.md](./INTEGRATIONS.md) — Webhook / 日历
-- [GOOGLE_CALENDAR_OAUTH.md](./GOOGLE_CALENDAR_OAUTH.md) — Google OAuth 可选配置
+- [SECURITY_AUDIT.md](./SECURITY_AUDIT.md) — 安全评估与复测
