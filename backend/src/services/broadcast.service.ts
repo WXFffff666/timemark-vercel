@@ -2,26 +2,52 @@ import { query } from '../db/index.js';
 import { getContactsByIds, listFixedContacts } from './contact.service.js';
 import { resolveEmailAccount, sendRawEmail } from './email-send.service.js';
 import { escapeHtml } from '../utils/html.js';
+import { renderBroadcastTemplate } from '@timemark/shared';
 import type { BroadcastEmailInput } from '@timemark/shared';
 
-async function resolveRecipients(userId: number, input: BroadcastEmailInput): Promise<string[]> {
-  const emails = new Set<string>();
+interface BroadcastRecipient {
+  email: string;
+  name?: string;
+}
+
+async function resolveRecipients(userId: number, input: BroadcastEmailInput): Promise<BroadcastRecipient[]> {
+  const byEmail = new Map<string, BroadcastRecipient>();
+
+  const add = (email: string, name?: string) => {
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!normalized.includes('@')) return;
+    const existing = byEmail.get(normalized);
+    if (!existing) {
+      byEmail.set(normalized, { email: normalized, name: name?.trim() || undefined });
+    } else if (name?.trim() && !existing.name) {
+      existing.name = name.trim();
+    }
+  };
+
   if (input.recipientEmails) {
-    for (const e of input.recipientEmails) emails.add(e.toLowerCase());
+    for (const e of input.recipientEmails) add(e);
   }
   if (input.contactIds?.length) {
     const contacts = await getContactsByIds(userId, input.contactIds);
     for (const c of contacts) {
-      if (c.email) emails.add(String(c.email).toLowerCase());
+      if (c.email) add(c.email, c.name || c.nickname || undefined);
     }
   }
   if (input.useAllContacts) {
     const all = await listFixedContacts(userId);
     for (const c of all) {
-      if (c.email) emails.add(String(c.email).toLowerCase());
+      if (c.email) add(c.email, c.name || c.nickname || undefined);
     }
   }
-  return [...emails];
+  return [...byEmail.values()];
+}
+
+function personalizeBroadcast(subject: string, html: string, recipient: BroadcastRecipient) {
+  const vars = { contact_name: recipient.name, subject };
+  return {
+    subject: renderBroadcastTemplate(subject, vars),
+    html: renderBroadcastTemplate(html, vars),
+  };
 }
 
 export async function sendBroadcastEmail(userId: number, input: BroadcastEmailInput) {
@@ -52,20 +78,21 @@ export async function sendBroadcastEmail(userId: number, input: BroadcastEmailIn
   let failedCount = 0;
   const errors: string[] = [];
 
-  for (const to of recipients) {
+  for (const recipient of recipients) {
+    const { subject, html } = personalizeBroadcast(input.subject, input.html, recipient);
     try {
-      await sendRawEmail(creds, to, input.subject, input.html);
+      await sendRawEmail(creds, recipient.email, subject, html);
       successCount++;
       await query(
         `INSERT INTO email_logs (recipient, status, message_id, broadcast_id) VALUES ($1, 'sent', $2, $3)`,
-        [to, null, campaignId],
+        [recipient.email, null, campaignId],
       ).catch(() => {});
     } catch (err) {
       failedCount++;
-      errors.push(err instanceof Error ? err.message : String(err));
+      errors.push(`${recipient.email}: ${err instanceof Error ? err.message : String(err)}`);
       await query(
         `INSERT INTO email_logs (recipient, status, broadcast_id) VALUES ($1, 'failed', $2)`,
-        [to, campaignId],
+        [recipient.email, campaignId],
       ).catch(() => {});
     }
   }

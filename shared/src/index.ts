@@ -10,5 +10,6 @@ export * from './channels.js';
 export * from './contact-channels.js';
 export * from './blessings.js';
 export * from './templates.js';
+export * from './broadcast-templates.js';
 export * from './event-templates.js';
 export * from './utils/zod-errors.js';

@@ -266,33 +266,9 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
   },
 ];
 
-/** 批量邮件预设模板 */
-export const BROADCAST_PRESET_TEMPLATES: NotificationTemplate[] = [
-  {
-    id: 'broadcast_notice',
-    name: '系统通知',
-    content: '<h2>{{subject}}</h2><p>您好，</p><p>这是一条来自 TimeMark 的通知消息。</p>',
-    isPreset: true,
-    variables: [],
-    description: '通用系统通知',
-  },
-  {
-    id: 'broadcast_holiday',
-    name: '节日问候',
-    content: '<h2>🎊 节日问候</h2><p>祝您节日快乐，万事如意！</p>',
-    isPreset: true,
-    variables: [],
-    description: '节日批量问候',
-  },
-  {
-    id: 'broadcast_reminder_digest',
-    name: '提醒汇总',
-    content: '<h2>📅 本周提醒汇总</h2><p>以下是您近期需要关注的重要日期，请查收。</p>',
-    isPreset: true,
-    variables: [],
-    description: '周期性提醒_digest',
-  },
-];
+/** 批量邮件预设 — 见 broadcast-templates.ts */
+export { BROADCAST_PRESET_TEMPLATES, BROADCAST_TEMPLATE_CATEGORIES, buildBroadcastEmail, renderBroadcastTemplate } from './broadcast-templates.js';
+export type { BroadcastTemplateCategory, BroadcastGreetingVariant } from './broadcast-templates.js';
 
 // 事件类型到模板的映射
 export const EVENT_TYPE_TEMPLATES: Record<string, string[]> = {
