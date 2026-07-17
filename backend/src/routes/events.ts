@@ -126,6 +126,13 @@ events.post('/:id/test-send', async (c) => {
   try {
     const channelResults = await sendNotifications(event, Number(user.id), channels, { skipQuietHours: true });
     const values = Object.values(channelResults);
+    if (values.length === 0) {
+      return c.json({
+        success: false,
+        error: '未找到可用通知账号。请在「通知渠道」配置并测试通过，或在事件中勾选渠道。',
+        data: { channelResults },
+      }, 400);
+    }
     const hasFailure = values.some((r) => !r.success);
     const allFailed = values.length > 0 && values.every((r) => !r.success);
     const status = allFailed ? 'failed' : hasFailure ? 'partial' : 'success';

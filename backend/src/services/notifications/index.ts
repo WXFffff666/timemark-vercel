@@ -178,6 +178,7 @@ const channelToAccountType: Record<string, string> = {
   'mattermost': 'mattermost',
   'msteams': 'msteams',
   'nextcloud_talk': 'nextcloud_talk',
+  'nextcloudtalk': 'nextcloud_talk',
   'nostr': 'nostr',
   'irc': 'irc',
   'synologychat': 'synologychat',
@@ -495,9 +496,20 @@ export async function sendNotifications(
           if (accountConfig) configs.push(accountConfig);
         }
       }
+    } else {
+      // 未显式绑定时，使用该渠道所有已启用的通知账号（与渠道测试页一致）
+      const accountType = channelToAccountType[ch];
+      if (accountType) {
+        for (const account of allAccounts) {
+          if (account.type === accountType && account.is_active) {
+            const accountConfig = getChannelConfigFromAccount(account, ch);
+            if (accountConfig) configs.push(accountConfig);
+          }
+        }
+      }
     }
     
-    // 如果没有绑定的账户配置，使用全局配置
+    // 最后回退 legacy user_configs 全局字段
     if (configs.length === 0) {
       const globalConfig: any = {};
       switch (ch) {

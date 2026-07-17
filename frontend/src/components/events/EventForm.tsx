@@ -1042,7 +1042,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                           ),
                         }))}
                       >
-                        {c.name} ({c.email})
+                        {c.name} ({normalizeEmail(c.email) ?? c.email})
                       </button>
                     ))}
                   </div>

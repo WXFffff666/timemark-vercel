@@ -110,7 +110,9 @@ export async function updateFixedContact(userId: number, id: number, input: Upda
   const map: Record<string, unknown> = {
     name: input.name,
     nickname: input.nickname,
-    email: input.email,
+    email: input.email !== undefined
+      ? (input.email === '' ? null : normalizeEmail(input.email) ?? input.email)
+      : undefined,
     phone: input.phone,
     telegram_chat_id: input.telegramChatId,
     qq: input.qq,

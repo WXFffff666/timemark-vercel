@@ -149,7 +149,7 @@ export default function Settings() {
           setAlertEmails(config.alert_emails.join(', '));
         }
         const accountList = ensureArray<any>(accounts);
-        if (Array.isArray(config?.alert_account_ids) && config.alert_account_ids.length > 0) {
+        if (Array.isArray(config?.alert_account_ids)) {
           setSelectedAlertAccountIds(config.alert_account_ids);
         } else if (config?.alert_channels != null) {
           const legacyTypes = parseAlertChannels(config.alert_channels);

@@ -131,6 +131,18 @@ export async function createEvent(userId: string, data: CreateEventRequest): Pro
   }
 }
 
+function parseNotificationAccountIds(raw: unknown): string[] {
+  const parsed = (() => {
+    if (raw == null || raw === '') return [];
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch { return []; }
+    }
+    return raw;
+  })();
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map((id) => String(id)).filter((id) => id && id !== 'NaN');
+}
+
 function formatSolarYmd(solar: { getYear(): number; getMonth(): number; getDay(): number }): string {
   return `${solar.getYear()}-${String(solar.getMonth()).padStart(2, '0')}-${String(solar.getDay()).padStart(2, '0')}`;
 }
@@ -268,6 +280,7 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
     }
     // Ensure channels is in reminderConfig
     reminderConfig.channels = notificationChannels;
+    reminderConfig.accountIds = parseNotificationAccountIds(row.notification_account_ids);
     
     // Parse recurring config
     let recurringConfig = undefined;
@@ -374,6 +387,7 @@ export async function getEventsByUserIdPaginated(userId: string, limit: number, 
       console.error('Failed to parse notification_channels:', e);
     }
     reminderConfig.channels = notificationChannels;
+    reminderConfig.accountIds = parseNotificationAccountIds(row.notification_account_ids);
     
     let recurringConfig = undefined;
     try {

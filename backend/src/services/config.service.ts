@@ -6,6 +6,30 @@ import { encrypt, decrypt } from '@timemark/shared/crypto';
 // Existing Docker users who never set MASTER_KEY have data encrypted with this.
 const LEGACY_MASTER_KEY = 'timemark-default-master-key-change-in-production-2026';
 
+/** node-pg returns JSON/JSONB columns as parsed values; legacy rows may still be strings. */
+function parseJsonColumn<T>(raw: unknown, fallback: T): T {
+  if (raw == null || raw === '') return fallback;
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return raw as T;
+}
+
+function parseStringArrayColumn(raw: unknown): string[] {
+  const parsed = parseJsonColumn<unknown>(raw, []);
+  return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+}
+
+function parseNumberArrayColumn(raw: unknown): number[] {
+  const parsed = parseJsonColumn<unknown>(raw, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map(Number).filter((n) => !Number.isNaN(n) && n > 0);
+}
+
 function getMasterKey(): string {
   const key = process.env.MASTER_KEY;
   if (!key) {
@@ -167,29 +191,10 @@ export async function getUserConfig(userId: number): Promise<any> {
       try { return JSON.parse(raw); } catch { return {}; }
     })(),
     telegram_chat_id: r.telegram_chat_id,
-    reminder_emails: (() => {
-      const raw = r.reminder_emails;
-      if (!raw) return [];
-      try { return JSON.parse(raw); } catch { return []; }
-    })(),
-    alert_channels: (() => {
-      const raw = r.alert_channels;
-      if (!raw) return [];
-      try { return JSON.parse(raw); } catch { return []; }
-    })(),
-    alert_emails: (() => {
-      const raw = r.alert_emails;
-      if (!raw) return [];
-      try { return JSON.parse(raw); } catch { return []; }
-    })(),
-    alert_account_ids: (() => {
-      const raw = r.alert_account_ids;
-      if (!raw) return [];
-      try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed.map(Number).filter((n) => n > 0) : [];
-      } catch { return []; }
-    })(),
+    reminder_emails: parseStringArrayColumn(r.reminder_emails),
+    alert_channels: parseStringArrayColumn(r.alert_channels),
+    alert_emails: parseStringArrayColumn(r.alert_emails),
+    alert_account_ids: parseNumberArrayColumn(r.alert_account_ids),
     timezone: r.timezone || 'Asia/Shanghai',
     quiet_hours_start: r.quiet_hours_start || null,
     quiet_hours_end: r.quiet_hours_end || null,
@@ -558,11 +563,7 @@ export async function getReminderSettings(userId: number): Promise<ReminderSetti
     enabled: r.reminders_enabled !== false,
     dailyTime: r.daily_check_time || '08:00:00',
     daysBeforeList: r.days_before_list || [1, 3, 7],
-    emailAddresses: (() => {
-      const raw = r.reminder_emails;
-      if (!raw) return [];
-      try { return JSON.parse(raw); } catch { return []; }
-    })(),
+    emailAddresses: parseStringArrayColumn(r.reminder_emails),
   };
 }
 
