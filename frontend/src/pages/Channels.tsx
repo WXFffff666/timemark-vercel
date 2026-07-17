@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { normalizeEmail } from '@timemark/shared';
+import { normalizeEmail, SMTP_PROVIDER_PRESETS, applySmtpProviderToForm, getSmtpProviderPreset, inferSmtpProviderId } from '@timemark/shared';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -45,6 +45,9 @@ interface Account extends NotificationAccount {
   is_active?: boolean;
   token?: string;
   chat_id?: string;
+  secret?: string;
+  webhook?: string;
+  smtpProvider?: string | null;
   tokenConfigured?: boolean;
   secretConfigured?: boolean;
   sessionConfigured?: boolean;
@@ -95,6 +98,8 @@ export default function Channels() {
   const [configForm, setConfigForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [testingConnection, setTestingConnection] = useState<number | null>(null);
+  const [testingConfig, setTestingConfig] = useState(false);
+  const [configTestMessage, setConfigTestMessage] = useState<string | null>(null);
 
   // Connection status tracking
   interface ConnectionTestResult {
@@ -233,14 +238,16 @@ export default function Channels() {
 
   const selectTemplate = (template: ChannelTemplate) => {
     setSelectedTemplate(template);
-    // 先关闭模板弹窗，稍后打开配置弹窗
     setShowTemplateModal(false);
+    setConfigTestMessage(null);
     
-    // 初始化表单
     const initialForm: Record<string, string> = { name: '' };
     template.fields.forEach(field => {
       initialForm[field.name] = '';
     });
+    if (template.id === 'smtp') {
+      initialForm.smtpProvider = '';
+    }
     setConfigForm(initialForm);
     
     // 延迟设置 back stack 和打开 config modal，确保状态正确更新
@@ -275,6 +282,7 @@ export default function Channels() {
     setSelectedTemplate(template);
     setSelectedAccount(account);
     setConfigForm(buildConfigFormFromAccount(account, template));
+    setConfigTestMessage(null);
     
     // Set modal back stack properly so cancel returns to main, not template
     setModalBackStack(['main', 'config']);
@@ -312,7 +320,62 @@ export default function Channels() {
           if (!(field.name in form)) form[field.name] = '';
       }
     }
+
+    if (template.id === 'smtp') {
+      const provider =
+        account.smtpProvider ||
+        inferSmtpProviderId(account.webhook, (account as any).secret) ||
+        'custom';
+      form.smtpProvider = provider;
+    }
+
     return form;
+  };
+
+  const handleSmtpProviderChange = (providerId: string) => {
+    setConfigForm((prev) => applySmtpProviderToForm(providerId as any, prev));
+    setConfigTestMessage(null);
+  };
+
+  const testSmtpConfig = async () => {
+    if (!selectedTemplate || selectedTemplate.id !== 'smtp') return;
+    if (!configForm.smtpProvider) {
+      alert('请先选择邮箱服务商');
+      return;
+    }
+    if (!configForm.chat_id?.trim() || !configForm.webhook?.trim() || !configForm.secret?.trim()) {
+      alert('请填写发件人邮箱、SMTP 服务器和端口');
+      return;
+    }
+    if (!configForm.token?.trim() && !(selectedAccount?.tokenConfigured)) {
+      alert('请填写授权码或应用专用密码');
+      return;
+    }
+
+    setTestingConfig(true);
+    setConfigTestMessage(null);
+    try {
+      const payload: Record<string, unknown> = {
+        type: 'smtp',
+        configMethod: 'token',
+        webhook: configForm.webhook,
+        secret: configForm.secret,
+        chatId: configForm.chat_id.trim(),
+      };
+      if (configForm.token?.trim()) {
+        payload.token = configForm.token;
+      }
+      if (selectedAccount?.id) {
+        payload.accountId = Number(selectedAccount.id);
+      }
+
+      const result = await api.post<{ success: boolean; message: string }>('/channels/test', payload);
+      setConfigTestMessage(result?.message || 'SMTP 连接成功');
+    } catch (error: any) {
+      setConfigTestMessage(error.message || 'SMTP 连接失败');
+    } finally {
+      setTestingConfig(false);
+    }
   };
 
   const saveConfig = async () => {
@@ -345,8 +408,19 @@ export default function Channels() {
         chatId = configForm.priority || '0';
       } else if (selectedTemplate.id === 'resend' || selectedTemplate.id === 'email') {
         chatId = chatId ? (normalizeEmail(chatId) ?? chatId.trim().toLowerCase()) : undefined;
+      } else if (selectedTemplate.id === 'smtp') {
+        if (!configForm.smtpProvider) {
+          alert('请选择邮箱服务商');
+          setSaving(false);
+          return;
+        }
       }
       
+      const sessionData =
+        selectedTemplate.id === 'smtp'
+          ? { smtpProvider: configForm.smtpProvider || 'custom' }
+          : configForm.sessionData || undefined;
+
       const accountData = {
         name: configForm.name,
         type: selectedTemplate.id,
@@ -355,7 +429,7 @@ export default function Channels() {
         token: configForm.token || undefined,
         chatId: chatId,
         secret: configForm.secret || undefined,
-        sessionData: configForm.sessionData || undefined,
+        sessionData,
       };
 
       if (selectedAccount) {
@@ -770,14 +844,76 @@ export default function Channels() {
               />
             </div>
 
-            {selectedTemplate?.fields.map((field) => (
+            {selectedTemplate?.id === 'smtp' && (
+              <div className="space-y-4 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50/80 dark:bg-slate-800/40">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                    邮箱服务商 *
+                  </label>
+                  <select
+                    value={configForm.smtpProvider || ''}
+                    onChange={(e) => handleSmtpProviderChange(e.target.value)}
+                    className="w-full h-12 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    aria-label="邮箱服务商"
+                  >
+                    <option value="">请选择邮箱服务商</option>
+                    {SMTP_PROVIDER_PRESETS.map((preset) => (
+                      <option key={preset.id} value={preset.id}>{preset.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {configForm.smtpProvider && (
+                  <div className="text-xs text-slate-600 dark:text-slate-400 space-y-2">
+                    <p>{getSmtpProviderPreset(configForm.smtpProvider).setupGuide}</p>
+                    {getSmtpProviderPreset(configForm.smtpProvider).docsUrl && (
+                      <a
+                        href={getSmtpProviderPreset(configForm.smtpProvider).docsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-primary-500 hover:text-primary-600"
+                      >
+                        查看官方配置说明
+                        <ExternalLink size={12} />
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedTemplate?.fields.map((field) => {
+              const smtpPreset = selectedTemplate.id === 'smtp' && configForm.smtpProvider
+                ? getSmtpProviderPreset(configForm.smtpProvider)
+                : null;
+              const isSmtpPresetLocked =
+                selectedTemplate.id === 'smtp' &&
+                configForm.smtpProvider &&
+                configForm.smtpProvider !== 'custom' &&
+                (field.name === 'webhook' || field.name === 'secret');
+
+              let fieldLabel = field.label;
+              let fieldDescription = field.description;
+              let fieldPlaceholder = field.placeholder;
+
+              if (smtpPreset) {
+                if (field.name === 'token') {
+                  fieldLabel = smtpPreset.passwordLabel;
+                  fieldDescription = smtpPreset.passwordDescription;
+                }
+                if (field.name === 'chat_id') {
+                  fieldPlaceholder = smtpPreset.fromEmailPlaceholder;
+                }
+              }
+
+              return (
               <div key={field.name}>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                  {field.label} {field.required && '*'}
+                  {fieldLabel} {field.required && '*'}
                 </label>
                 {field.type === 'textarea' ? (
                   <textarea
-                    placeholder={field.placeholder}
+                    placeholder={fieldPlaceholder}
                     value={configForm[field.name] || ''}
                     onChange={(e) => setConfigForm({ ...configForm, [field.name]: e.target.value })}
                     className="w-full h-24 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
@@ -787,7 +923,7 @@ export default function Channels() {
                     value={configForm[field.name] || '0'}
                     onChange={(e) => setConfigForm({ ...configForm, [field.name]: e.target.value })}
                     className="w-full h-12 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                    aria-label={field.label}
+                    aria-label={fieldLabel}
                   >
                     {['-2', '-1', '0', '1', '2'].map((v) => (
                       <option key={v} value={v}>{v}</option>
@@ -796,25 +932,56 @@ export default function Channels() {
                 ) : (
                   <Input
                     type={field.type}
+                    readOnly={isSmtpPresetLocked}
                     placeholder={
                       selectedAccount && field.name === 'token' && selectedAccount.tokenConfigured
                         ? '已配置，留空则不修改'
                         : selectedAccount && field.name === 'secret' && selectedAccount.secretConfigured
                           ? '已配置，留空则不修改'
-                          : field.placeholder
+                          : fieldPlaceholder
                     }
                     value={configForm[field.name] || ''}
                     onChange={(e) => setConfigForm({ ...configForm, [field.name]: e.target.value })}
-                    className="h-12"
+                    className={`h-12 ${isSmtpPresetLocked ? 'bg-slate-100 dark:bg-slate-900/60' : ''}`}
                   />
                 )}
-                {field.description && (
+                {fieldDescription && (
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    {field.description}
+                    {fieldDescription}
                   </p>
                 )}
               </div>
-            ))}
+            );
+            })}
+
+            {selectedTemplate?.id === 'smtp' && (
+              <div className="space-y-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full min-h-11"
+                  onClick={testSmtpConfig}
+                  disabled={testingConfig}
+                >
+                  {testingConfig ? (
+                    <>
+                      <Loader2 size={16} className="mr-2 animate-spin" />
+                      正在测试 SMTP 连接...
+                    </>
+                  ) : (
+                    '测试 SMTP 连接'
+                  )}
+                </Button>
+                {configTestMessage && (
+                  <p className={`text-sm ${configTestMessage.includes('成功') ? 'text-green-600' : 'text-red-500'}`}>
+                    {configTestMessage}
+                  </p>
+                )}
+                <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl px-4 py-3">
+                  大厂邮箱 SMTP 从你自己的邮箱发出，Gmail/QQ 收件箱通常比 Resend 更不容易进垃圾箱。QQ/163 需使用授权码，Gmail 需使用应用专用密码。
+                </p>
+              </div>
+            )}
 
             {(selectedTemplate?.id === 'resend' || selectedTemplate?.id === 'email') && (
               <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl px-4 py-3">

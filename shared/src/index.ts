@@ -14,4 +14,6 @@ export * from './blessings.js';
 export * from './templates.js';
 export * from './broadcast-templates.js';
 export * from './event-templates.js';
+export * from './smtp-providers.js';
+export * from './smtp-transport.js';
 export * from './utils/zod-errors.js';

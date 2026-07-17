@@ -1,0 +1,171 @@
+export type SmtpProviderId =
+  | 'qq'
+  | '163'
+  | '126'
+  | 'gmail'
+  | 'outlook'
+  | 'tencent_ex'
+  | 'ali_ex'
+  | 'ali_personal'
+  | 'custom';
+
+export interface SmtpProviderPreset {
+  id: SmtpProviderId;
+  label: string;
+  host: string;
+  port: number;
+  passwordLabel: string;
+  passwordDescription: string;
+  fromEmailPlaceholder: string;
+  setupGuide: string;
+  docsUrl?: string;
+}
+
+export const SMTP_PROVIDER_PRESETS: SmtpProviderPreset[] = [
+  {
+    id: 'qq',
+    label: 'QQ 邮箱',
+    host: 'smtp.qq.com',
+    port: 465,
+    passwordLabel: 'QQ 邮箱授权码',
+    passwordDescription: '在 QQ 邮箱 → 设置 → 账户 → POP3/SMTP 中开启服务并生成授权码（不是 QQ 密码）',
+    fromEmailPlaceholder: 'yourname@qq.com',
+    setupGuide: '登录 mail.qq.com → 设置 → 账户 → 开启 SMTP → 生成授权码',
+    docsUrl: 'https://service.mail.qq.com/detail/0/75',
+  },
+  {
+    id: '163',
+    label: '网易 163 邮箱',
+    host: 'smtp.163.com',
+    port: 465,
+    passwordLabel: '163 授权码',
+    passwordDescription: '在 163 邮箱设置中开启 SMTP 并获取客户端授权码',
+    fromEmailPlaceholder: 'yourname@163.com',
+    setupGuide: '登录 mail.163.com → 设置 → POP3/SMTP/IMAP → 开启 SMTP → 新增授权码',
+    docsUrl: 'https://help.mail.163.com/faqDetail.do?code=d7a5dc8471cd0c0e8b4b8f4f8e8ab0f0de1cd332cae813900ca0dcbfe7f9b4a1eda321afd4b6cbf5',
+  },
+  {
+    id: '126',
+    label: '网易 126 邮箱',
+    host: 'smtp.126.com',
+    port: 465,
+    passwordLabel: '126 授权码',
+    passwordDescription: '在 126 邮箱设置中开启 SMTP 并获取客户端授权码',
+    fromEmailPlaceholder: 'yourname@126.com',
+    setupGuide: '登录 mail.126.com → 设置 → 开启 SMTP → 新增授权码',
+  },
+  {
+    id: 'gmail',
+    label: 'Gmail / Google 邮箱',
+    host: 'smtp.gmail.com',
+    port: 587,
+    passwordLabel: 'Google 应用专用密码',
+    passwordDescription: '需开启两步验证后，在 Google 账号 → 安全性 → 应用专用密码 中生成 16 位密码',
+    fromEmailPlaceholder: 'yourname@gmail.com',
+    setupGuide: 'Google 账号开启两步验证 → 应用专用密码 → 选择「邮件」生成密码',
+    docsUrl: 'https://support.google.com/accounts/answer/185833',
+  },
+  {
+    id: 'outlook',
+    label: 'Outlook / Microsoft 365',
+    host: 'smtp.office365.com',
+    port: 587,
+    passwordLabel: '邮箱密码或应用密码',
+    passwordDescription: '个人 Outlook 通常用登录密码；若开启 MFA 需在 Microsoft 账号中创建应用密码',
+    fromEmailPlaceholder: 'yourname@outlook.com',
+    setupGuide: '使用完整邮箱作为用户名；企业账号以 IT 部门 SMTP 设置为准',
+    docsUrl: 'https://support.microsoft.com/office/pop-imap-and-smtp-settings',
+  },
+  {
+    id: 'tencent_ex',
+    label: '腾讯企业邮',
+    host: 'smtp.exmail.qq.com',
+    port: 465,
+    passwordLabel: '企业邮箱密码或客户端专用密码',
+    passwordDescription: '使用完整企业邮箱地址登录；部分企业要求使用客户端专用密码',
+    fromEmailPlaceholder: 'yourname@yourcompany.com',
+    setupGuide: '腾讯企业邮管理后台确认已开启 SMTP；用户名填完整邮箱地址',
+    docsUrl: 'https://service.exmail.qq.com/cgi-bin/help?id=28',
+  },
+  {
+    id: 'ali_ex',
+    label: '阿里企业邮',
+    host: 'smtp.mxhichina.com',
+    port: 465,
+    passwordLabel: '企业邮箱密码或客户端密码',
+    passwordDescription: '使用完整企业邮箱地址；若控制台提供客户端专用密码请使用该密码',
+    fromEmailPlaceholder: 'yourname@yourcompany.com',
+    setupGuide: '阿里企业邮控制台 → 邮箱管理 → 确认 SMTP 已开启',
+    docsUrl: 'https://help.aliyun.com/document_detail/36576.html',
+  },
+  {
+    id: 'ali_personal',
+    label: '阿里个人邮箱',
+    host: 'smtp.aliyun.com',
+    port: 465,
+    passwordLabel: '邮箱授权码',
+    passwordDescription: '在阿里邮箱设置中开启 SMTP 并获取授权码',
+    fromEmailPlaceholder: 'yourname@aliyun.com',
+    setupGuide: '登录 mail.aliyun.com → 设置 → 客户端设置 → 开启 SMTP',
+  },
+  {
+    id: 'custom',
+    label: '自定义 SMTP',
+    host: '',
+    port: 587,
+    passwordLabel: '邮箱密码 / 授权码',
+    passwordDescription: '按邮件服务商要求填写密码或授权码',
+    fromEmailPlaceholder: 'noreply@yourdomain.com',
+    setupGuide: '手动填写 SMTP 服务器地址与端口（常用 587 或 465）',
+  },
+];
+
+export function getSmtpProviderPreset(id?: string | null): SmtpProviderPreset {
+  return SMTP_PROVIDER_PRESETS.find((p) => p.id === id) ?? SMTP_PROVIDER_PRESETS.find((p) => p.id === 'custom')!;
+}
+
+export function inferSmtpProviderId(host?: string | null, port?: string | number | null): SmtpProviderId | null {
+  const normalizedHost = (host || '').trim().toLowerCase();
+  const normalizedPort = String(port ?? '').trim();
+  if (!normalizedHost) return null;
+
+  const match = SMTP_PROVIDER_PRESETS.find((preset) => {
+    if (preset.id === 'custom' || !preset.host) return false;
+    return preset.host.toLowerCase() === normalizedHost && String(preset.port) === normalizedPort;
+  });
+  return match?.id ?? null;
+}
+
+export function applySmtpProviderToForm(
+  providerId: SmtpProviderId,
+  form: Record<string, string>,
+): Record<string, string> {
+  const preset = getSmtpProviderPreset(providerId);
+  if (preset.id === 'custom') {
+    return { ...form, smtpProvider: providerId };
+  }
+  return {
+    ...form,
+    smtpProvider: providerId,
+    webhook: preset.host,
+    secret: String(preset.port),
+  };
+}
+
+export function parseSmtpSessionData(sessionData: unknown): { smtpProvider?: SmtpProviderId } {
+  if (!sessionData) return {};
+  if (typeof sessionData === 'object' && sessionData !== null && 'smtpProvider' in sessionData) {
+    const id = String((sessionData as { smtpProvider?: string }).smtpProvider || '');
+    if (SMTP_PROVIDER_PRESETS.some((p) => p.id === id)) {
+      return { smtpProvider: id as SmtpProviderId };
+    }
+  }
+  if (typeof sessionData === 'string') {
+    try {
+      return parseSmtpSessionData(JSON.parse(sessionData));
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}

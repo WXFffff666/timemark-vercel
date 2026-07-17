@@ -282,41 +282,41 @@ const tokenChannels: ChannelTemplate[] = [
   {
     id: 'smtp',
     name: 'SMTP 邮件',
-    description: 'SMTP 协议邮件推送（支持 Gmail、Outlook、自建邮箱等）',
+    description: '大厂邮箱 SMTP 发信（QQ / 163 / Gmail / Outlook / 腾讯企业邮 / 阿里企业邮等）',
     icon: 'Mail',
     configMethod: 'token',
     isBuiltIn: true,
     fields: [
       {
+        name: 'chat_id',
+        label: '发件人邮箱',
+        type: 'text',
+        required: true,
+        placeholder: 'yourname@qq.com',
+        description: '完整邮箱地址，同时作为 SMTP 登录用户名'
+      },
+      {
+        name: 'token',
+        label: '授权码 / 应用密码',
+        type: 'password',
+        required: true,
+        description: 'QQ/163 填授权码；Gmail 填应用专用密码；企业邮填邮箱密码或客户端密码'
+      },
+      {
         name: 'webhook',
         label: 'SMTP 服务器',
         type: 'text',
         required: true,
-        placeholder: 'smtp.gmail.com',
-        description: 'SMTP 服务器地址'
+        placeholder: 'smtp.qq.com',
+        description: '选择邮箱服务商后自动填充；自定义时可手动修改'
       },
       {
         name: 'secret',
         label: 'SMTP 端口',
         type: 'text',
         required: true,
-        placeholder: '587',
-        description: 'SMTP 端口号（通常 587 或 465）'
-      },
-      {
-        name: 'token',
-        label: '邮箱密码/授权码',
-        type: 'password',
-        required: true,
-        description: '邮箱密码或应用专用密码/授权码'
-      },
-      {
-        name: 'chat_id',
-        label: '发件人邮箱',
-        type: 'text',
-        required: true,
-        placeholder: 'user@gmail.com',
-        description: '发件人邮箱地址（也用作 SMTP 用户名和收件人）'
+        placeholder: '465',
+        description: '常用 465（SSL）或 587（STARTTLS）'
       }
     ],
     docsUrl: 'https://nodemailer.com/about/'

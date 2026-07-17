@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 import { getNotificationAccounts } from './config.service.js';
-import { EMAIL_CHANNEL_TYPES } from '@timemark/shared';
+import { EMAIL_CHANNEL_TYPES, buildSmtpTransportOptions } from '@timemark/shared';
 
 export interface EmailAccountCreds {
   id: number;
@@ -95,13 +95,9 @@ export async function sendRawEmail(
 
   if (creds.type === 'smtp') {
     const port = creds.smtpPort ?? 587;
-    const transporter = nodemailer.createTransport({
-      host: creds.smtpHost,
-      port,
-      secure: port === 465,
-      requireTLS: port === 587,
-      auth: { user: creds.fromEmail, pass: creds.smtpPassword },
-    });
+    const transporter = nodemailer.createTransport(
+      buildSmtpTransportOptions(creds.smtpHost!, port, creds.fromEmail, creds.smtpPassword!),
+    );
     await transporter.sendMail({ from: creds.fromEmail, to, subject, html: body });
     return;
   }

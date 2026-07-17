@@ -14,6 +14,7 @@ import { query } from '../db/index.js';
 import { testConnection } from '../services/notifications/test-connection.js';
 import { checkAllChannels, checkChannel } from '../services/notifications/network-check.js';
 import { getNotificationAccounts } from '../services/config.service.js';
+import { SMTP_PROVIDER_PRESETS } from '@timemark/shared';
 
 const channels = new Hono<{ Variables: { user: User } }>();
 
@@ -21,6 +22,10 @@ channels.use('*', authMiddleware);
 
 channels.get('/templates', async (c) => {
   return c.json({ success: true, data: getSupportedChannelTemplates() });
+});
+
+channels.get('/smtp-providers', async (c) => {
+  return c.json({ success: true, data: SMTP_PROVIDER_PRESETS });
 });
 
 channels.get('/templates/:method', async (c) => {
@@ -103,7 +108,7 @@ channels.post('/test', async (c) => {
     return c.json({ success: false, error: '该通知渠道在云端部署中不可用' }, 400);
   }
 
-  if ((testType === 'email' || testType === 'resend' || testType === 'smtp') && !testChatId) {
+  if ((testType === 'email' || testType === 'resend') && !testChatId) {
     testChatId = await resolveEmailRecipientForTest(userId, testType, testChatId);
   }
 
@@ -116,6 +121,18 @@ channels.post('/test', async (c) => {
 
   if ((testType === 'email' || testType === 'resend') && !testToken) {
     return c.json({ success: false, error: 'Resend API Key 不能为空' }, 400);
+  }
+
+  if (testType === 'smtp') {
+    if (!testWebhook?.trim()) {
+      return c.json({ success: false, error: 'SMTP 服务器不能为空' }, 400);
+    }
+    if (!testChatId?.trim() || !testChatId.includes('@')) {
+      return c.json({ success: false, error: '请填写完整的发件人邮箱地址' }, 400);
+    }
+    if (!testToken?.trim() && !accountId) {
+      return c.json({ success: false, error: '请填写邮箱授权码或应用专用密码' }, 400);
+    }
   }
 
   try {

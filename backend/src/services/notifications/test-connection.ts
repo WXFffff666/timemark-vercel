@@ -47,7 +47,7 @@ export async function testConnection(config: {
         return await testWebhookChannel(webhook!, secret);
       
       case 'token':
-        return await testTokenChannel(type, token!, chatId, webhook);
+        return await testTokenChannel(type, token!, chatId, webhook, secret);
       
       case 'plugin':
         return await testPluginChannel(type, sessionData);
@@ -108,7 +108,8 @@ async function testTokenChannel(
   type: string, 
   token: string, 
   chatId?: string,
-  fromEmail?: string
+  webhook?: string,
+  secret?: string,
 ): Promise<TestConnectionResult> {
   if (!token) {
     return { success: false, message: 'Token 不能为空' };
@@ -117,10 +118,10 @@ async function testTokenChannel(
   switch (type) {
     case 'email':
     case 'resend':
-      return await testEmailChannel(token, fromEmail!, chatId!);
+      return await testEmailChannel(token, webhook!, chatId!);
     
     case 'smtp':
-      return await testSmtpChannel(fromEmail!, token, chatId!);
+      return await testSmtpChannel(webhook!, token, chatId!, parseInt(String(secret || '587'), 10));
     
     case 'telegram':
       return await testTelegramChannel(token, chatId!);
@@ -135,19 +136,19 @@ async function testTokenChannel(
       return await testLineChannel(token, chatId!);
     
     case 'nextcloud_talk':
-      return await testNextcloudTalkChannel(fromEmail!, token, chatId!);
+      return await testNextcloudTalkChannel(webhook!, token, chatId!);
     
     case 'mattermost':
-      return await testMattermostChannel(fromEmail!, token, chatId!);
+      return await testMattermostChannel(webhook!, token, chatId!);
     
     case 'matrix':
-      return await testMatrixChannel(fromEmail!, token, chatId!);
+      return await testMatrixChannel(webhook!, token, chatId!);
     
     case 'msteams':
-      return await testMsTeamsChannel(fromEmail!);
+      return await testMsTeamsChannel(webhook!);
     
     case 'nostr':
-      return await testNostrChannel(fromEmail!, token);
+      return await testNostrChannel(webhook!, token);
     
     case 'serverchan':
       return await testServerChanChannel(token);
@@ -156,10 +157,10 @@ async function testTokenChannel(
       return await testPushPlusChannel(token, chatId);
     
     case 'bark':
-      return await testBarkChannel(fromEmail!, token);
+      return await testBarkChannel(webhook!, token);
     
     case 'gotify':
-      return await testGotifyChannel(fromEmail!, token);
+      return await testGotifyChannel(webhook!, token);
     
     case 'meow':
       return await testMeowChannel(token);
@@ -168,10 +169,10 @@ async function testTokenChannel(
       return await testPushMeChannel(token);
 
     case 'pushdeer':
-      return await testPushDeerChannel(token, fromEmail);
+      return await testPushDeerChannel(token, webhook);
     
     case 'ntfy':
-      return await testNtfyChannel(fromEmail!, token);
+      return await testNtfyChannel(webhook!, token);
     
     case 'pushover':
       return await testPushoverChannel(token, chatId!);
@@ -906,34 +907,34 @@ async function testNostrChannel(relayUrl: string, privateKey: string): Promise<T
   }
 }
 
-async function testSmtpChannel(smtpHost: string, password: string, fromEmail: string): Promise<TestConnectionResult> {
+async function testSmtpChannel(
+  smtpHost: string,
+  password: string,
+  fromEmail: string,
+  port = 587,
+): Promise<TestConnectionResult> {
   if (!smtpHost || !password || !fromEmail) {
-    return { success: false, message: 'SMTP 服务器、密码和发件邮箱都不能为空' };
+    return { success: false, message: 'SMTP 服务器、授权码和发件邮箱都不能为空' };
   }
 
   const start = Date.now();
   try {
     const nodemailer = await import('nodemailer');
-    const transporter = nodemailer.default.createTransport({
-      host: smtpHost,
-      port: 587,
-      secure: false,
-      auth: {
-        user: fromEmail,
-        pass: password,
-      },
-    });
+    const { buildSmtpTransportOptions } = await import('@timemark/shared');
+    const transporter = nodemailer.default.createTransport(
+      buildSmtpTransportOptions(smtpHost, port, fromEmail, password),
+    );
 
     await transporter.verify();
     const latency = Date.now() - start;
-    return { success: true, message: 'SMTP 连接成功', latency };
+    return { success: true, message: `SMTP 连接成功（${smtpHost}:${port}）`, latency };
   } catch (error: any) {
     const latency = Date.now() - start;
     if (error.code === 'EAUTH') {
-      return { success: false, message: 'SMTP 认证失败，请检查邮箱和密码/授权码', latency, details: '认证信息无效，请检查 Token/API Key' };
+      return { success: false, message: 'SMTP 认证失败，请检查邮箱地址和授权码/应用密码', latency, details: '认证信息无效' };
     }
     if (error.code === 'ECONNREFUSED') {
-      return { success: false, message: 'SMTP 服务器连接被拒绝，请检查服务器地址', latency, details: '请确认服务器正在运行' };
+      return { success: false, message: 'SMTP 服务器连接被拒绝，请检查服务器地址和端口', latency, details: '请确认服务器地址与端口正确' };
     }
     return { success: false, message: `SMTP 连接失败: ${error.message}`, latency };
   }

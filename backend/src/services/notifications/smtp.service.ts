@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { getBlessing } from '../../../../shared/src/blessings.js';
+import { buildSmtpTransportOptions } from '@timemark/shared';
 import { escapeHtml } from '../../utils/html.js';
 
 export async function sendSmtpNotification(
@@ -11,16 +12,9 @@ export async function sendSmtpNotification(
   toEmail: string
 ): Promise<void> {
   const port = smtpPort || 587;
-  const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port,
-    secure: port === 465,
-    requireTLS: port === 587,
-    auth: {
-      user: fromEmail,
-      pass: password,
-    },
-  });
+  const transporter = nodemailer.createTransport(
+    buildSmtpTransportOptions(smtpHost, port, fromEmail, password),
+  );
 
   const blessing = getBlessing(
     event.type,
