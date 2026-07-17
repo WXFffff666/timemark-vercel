@@ -40,6 +40,15 @@ export function contactHasChannelAddress(
   return !!(value && String(value).trim());
 }
 
+export function normalizeNotificationChatId(type: string, chatId?: string | null): string | undefined {
+  const trimmed = chatId?.trim();
+  if (!trimmed) return undefined;
+  if (EMAIL_CHANNEL_TYPES.has(type)) {
+    return normalizeEmail(trimmed) ?? undefined;
+  }
+  return trimmed;
+}
+
 export function getContactAddressForChannel(
   channelType: string,
   contact: ContactChannelFields,

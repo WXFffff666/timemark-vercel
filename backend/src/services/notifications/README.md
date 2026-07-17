@@ -15,10 +15,12 @@ This directory contains notification channel implementations and configuration.
 
 When sending email (`email` or `resend` channel), recipients are resolved in order:
 
-1. Event `reminder_config.emailRecipients`
-2. Channel account `chat_id` (must be a valid email)
-3. User `default_test_email` (Settings page)
-4. User `reminder_emails` list
+1. Event `reminder_config.emailRecipients` (explicit per-event)
+2. User `default_test_email` (Settings → 默认测试/收件邮箱)
+3. User `reminder_emails` list
+4. Channel account `chat_id` (optional per-channel override, lowest priority)
+
+`reminder_recipient_email` is metadata only and does not override the above.
 
 Channel test and event test-send use the same logic. Failures return explicit errors (no silent success).
 

@@ -460,10 +460,25 @@ export async function updateEvent(id: string, userId: string, data: UpdateEventD
   if (data.calendarType) { updates.push(`calendar_type = $${paramIndex++}`); values.push(data.calendarType); }
   if (data.lunarDate) { updates.push(`lunar_date = $${paramIndex++}`); values.push(JSON.stringify(data.lunarDate)); }
   if (data.reminderConfig) {
+    const reminderConfig = { ...data.reminderConfig };
+    if (reminderConfig.emailRecipients?.length) {
+      reminderConfig.emailRecipients = [
+        ...new Set(
+          reminderConfig.emailRecipients
+            .map((e) => (e || '').trim().toLowerCase())
+            .filter((e) => e.includes('@')),
+        ),
+      ];
+    }
+    // 同步隐藏字段：无邮箱时清空，避免旧联系人邮箱继续生效
+    if (!reminderConfig.emailRecipients?.length && data.reminderRecipientEmail === undefined) {
+      updates.push(`reminder_recipient_email = $${paramIndex++}`);
+      values.push(null);
+    }
     // Extract channels from reminderConfig for separate column storage
-    const channels = data.reminderConfig.channels || [];
+    const channels = reminderConfig.channels || [];
     updates.push(`reminder_config = $${paramIndex++}`);
-    values.push(JSON.stringify(data.reminderConfig));
+    values.push(JSON.stringify(reminderConfig));
     // Also update notification_channels column
     updates.push(`notification_channels = $${paramIndex++}`);
     values.push(JSON.stringify(channels));

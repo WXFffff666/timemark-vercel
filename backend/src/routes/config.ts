@@ -358,9 +358,12 @@ config.post('/notification-advanced', async (c) => {
 config.post('/notification-defaults', async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
-  const defaultTestEmail = typeof body.default_test_email === 'string' ? body.default_test_email.trim() : undefined;
+  const defaultTestEmail = typeof body.default_test_email === 'string' ? body.default_test_email.trim().toLowerCase() : undefined;
   const reminderEmails = Array.isArray(body.reminder_emails)
-    ? body.reminder_emails.filter((e: unknown) => typeof e === 'string')
+    ? body.reminder_emails
+        .filter((e: unknown) => typeof e === 'string')
+        .map((e: string) => e.trim().toLowerCase())
+        .filter((e: string) => e.includes('@'))
     : undefined;
 
   if (defaultTestEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(defaultTestEmail)) {

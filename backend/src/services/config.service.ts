@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from 'crypto';
 import { query } from '../db/index.js';
 import { encrypt, decrypt } from '@timemark/shared/crypto';
+import { normalizeNotificationChatId } from '@timemark/shared';
 
 // The old hardcoded default key used before auto-generation was implemented.
 // Existing Docker users who never set MASTER_KEY have data encrypted with this.
@@ -357,7 +358,10 @@ export async function createNotificationAccount(
       e(data.webhook), 
       e(data.token), 
       e(data.secret), 
-      data.chat_id ? encrypt(data.chat_id, MASTER_KEY()) : null,
+      (() => {
+        const chatId = normalizeNotificationChatId(data.type, data.chat_id);
+        return chatId ? encrypt(chatId, MASTER_KEY()) : null;
+      })(),
       data.config_method || 'webhook',
       data.session_data ? encrypt(JSON.stringify(data.session_data), MASTER_KEY()) : null,
       data.plugin_package || null
@@ -403,7 +407,13 @@ export async function updateNotificationAccount(
   }
   if (data.chat_id !== undefined) {
     updates.push(`chat_id = $${paramIndex++}`);
-    values.push(data.chat_id ? encrypt(data.chat_id, MASTER_KEY()) : null);
+    if (!data.chat_id?.trim()) {
+      values.push(null);
+    } else {
+      const row = await query('SELECT type FROM notification_accounts WHERE id = $1 AND user_id = $2', [id, userId]);
+      const chatId = normalizeNotificationChatId(String(row.rows[0]?.type ?? ''), data.chat_id);
+      values.push(chatId ? encrypt(chatId, MASTER_KEY()) : null);
+    }
   }
   if (data.is_active !== undefined) {
     updates.push(`is_active = $${paramIndex++}`);

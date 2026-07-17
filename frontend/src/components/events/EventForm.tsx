@@ -483,9 +483,22 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         dateStr = `${year}-${month}-${day}`;
       }
       
+      const emailRecipients = [
+        ...new Set(
+          (formData.reminderConfig?.emailRecipients || [])
+            .map((e) => normalizeEmail(e))
+            .filter((e): e is string => !!e),
+        ),
+      ];
+
       const submissionData: CreateEventRequest = {
         ...formData,
         date: dateStr,
+        reminderConfig: {
+          ...formData.reminderConfig!,
+          emailRecipients,
+        },
+        reminderRecipientEmail: emailRecipients[0] || null,
       };
       
       await onSubmit(submissionData);
@@ -1024,7 +1037,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   </div>
                 )}
                 
-                <p className="text-[10px] text-slate-400">不填则使用通知渠道的默认邮箱，支持添加多个收件人</p>
+                <p className="text-[10px] text-slate-400">不填则使用「设置 → 默认测试/收件邮箱」；从联系人添加的邮箱会显示为小写</p>
                 {fixedContacts.filter((c) => c.email).length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     <span className="text-[10px] text-slate-400 w-full">从联系人添加邮箱：</span>

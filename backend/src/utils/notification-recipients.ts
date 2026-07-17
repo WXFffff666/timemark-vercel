@@ -9,7 +9,7 @@ export async function resolveEmailRecipientForTest(
   chatId?: string | null,
 ): Promise<string | undefined> {
   const trimmed = chatId?.trim();
-  if (trimmed && trimmed.includes('@')) return trimmed;
+  if (trimmed && trimmed.includes('@')) return trimmed.toLowerCase();
   if (!EMAIL_CHANNEL_TYPES.has(channelType)) return trimmed || undefined;
 
   const cfg = await query(

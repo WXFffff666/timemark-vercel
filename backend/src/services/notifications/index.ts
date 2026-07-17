@@ -95,9 +95,13 @@ export function normalizeEventForNotification(row: Record<string, unknown>): Rec
 }
 
 export function resolveRecipientEmails(event: Record<string, unknown>, chConfig: { emails?: string[] }, userConfig: Record<string, unknown> | null): string[] {
-  if (event.reminder_recipient_email) {
-    return [String(event.reminder_recipient_email)];
-  }
+  const normalizeList = (list: string[]): string[] => [
+    ...new Set(
+      list
+        .map((e) => String(e || '').trim().toLowerCase())
+        .filter((e) => e.includes('@')),
+    ),
+  ];
 
   let parsedReminderConfig: { emailRecipients?: string[] } = {};
   try {
@@ -109,18 +113,30 @@ export function resolveRecipientEmails(event: Record<string, unknown>, chConfig:
     // ignore
   }
 
+  // 1. 事件里明确填写的提醒人邮箱
   if (parsedReminderConfig.emailRecipients?.length) {
-    return parsedReminderConfig.emailRecipients;
+    const emails = normalizeList(parsedReminderConfig.emailRecipients);
+    if (emails.length) return emails;
   }
-  if (chConfig.emails?.length) {
-    return chConfig.emails.filter(Boolean);
-  }
-  if (Array.isArray(userConfig?.reminder_emails) && userConfig.reminder_emails.length) {
-    return userConfig.reminder_emails as string[];
-  }
+
+  // 2. 设置 → 默认测试/收件邮箱（未填事件邮箱时发给自己）
   if (userConfig?.default_test_email) {
-    return [String(userConfig.default_test_email)];
+    const email = String(userConfig.default_test_email).trim().toLowerCase();
+    if (email.includes('@')) return [email];
   }
+
+  // 3. 设置 → 默认提醒收件人列表
+  if (Array.isArray(userConfig?.reminder_emails) && userConfig.reminder_emails.length) {
+    const emails = normalizeList(userConfig.reminder_emails as string[]);
+    if (emails.length) return emails;
+  }
+
+  // 4. 通知渠道账号上可选填的收件地址（最低优先级）
+  if (chConfig.emails?.length) {
+    const emails = normalizeList(chConfig.emails);
+    if (emails.length) return emails;
+  }
+
   return [];
 }
 
@@ -255,7 +271,8 @@ function getChannelConfigFromAccount(
     case 'email':
     case 'resend': {
       const recipient = account.chat_id?.trim();
-      const emails = recipient && recipient.includes('@') ? [recipient] : [];
+      const normalized = recipient && recipient.includes('@') ? recipient.toLowerCase() : null;
+      const emails = normalized ? [normalized] : [];
       return {
         apiKey: account.token,
         emails,

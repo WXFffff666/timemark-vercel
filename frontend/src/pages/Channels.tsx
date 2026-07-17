@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { normalizeEmail } from '@timemark/shared';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -335,6 +336,8 @@ export default function Channels() {
         chatId = configForm.roomId || undefined;
       } else if (selectedTemplate.id === 'pushover') {
         chatId = configForm.priority || '0';
+      } else if (selectedTemplate.id === 'resend' || selectedTemplate.id === 'email') {
+        chatId = chatId ? (normalizeEmail(chatId) ?? chatId.trim().toLowerCase()) : undefined;
       }
       
       const accountData = {

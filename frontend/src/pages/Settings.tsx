@@ -686,7 +686,7 @@ export default function Settings() {
             </h2>
             <div className="glass-panel rounded-[2.5rem] p-6 space-y-4 ring-1 ring-black/5 dark:ring-white/10">
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                渠道测试、事件未单独配置收件人时，将使用以下邮箱。Resend 等邮件渠道也可在「通知渠道」中为每个账号单独填写收件人。
+                事件未单独填写收件邮箱时，优先使用下方默认邮箱（高于通知渠道里填的联系人邮箱）。渠道账号上的收件人仅作最后兜底。
               </p>
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">默认测试/收件邮箱</label>
