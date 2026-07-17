@@ -34,9 +34,24 @@ export function isEventInTodoWindow(event: Event, ref = new Date()): boolean {
   return days >= 0 && days <= maxBefore;
 }
 
-export function getTodoEvents(events: Event[], ref = new Date()): Event[] {
+export function todoCompletionKey(eventId: string | number, date: string): string {
+  return `${eventId}:${date.slice(0, 10)}`;
+}
+
+export function buildCompletedSet(
+  completions: Array<{ eventId: number; occurrenceDate: string }>,
+): Set<string> {
+  return new Set(completions.map((c) => todoCompletionKey(c.eventId, c.occurrenceDate)));
+}
+
+export function getTodoEvents(
+  events: Event[],
+  ref = new Date(),
+  completedKeys?: Set<string>,
+): Event[] {
   return events
     .filter((e) => isEventInTodoWindow(e, ref))
+    .filter((e) => !completedKeys?.has(todoCompletionKey(e.id, e.date)))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 

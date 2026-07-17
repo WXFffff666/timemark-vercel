@@ -43,6 +43,7 @@ import inboxPublicRoutes from './routes/inbox-public.js';
 import cronMonitorRoutes from './routes/cron-monitor.js';
 import resendWebhookRoutes from './routes/resend-webhook.js';
 import conditionalRulesRoutes from './routes/conditional-rules.js';
+import todosRoutes from './routes/todos.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -110,6 +111,7 @@ app.route('/api/inbox', inboxPublicRoutes);
 app.route('/api/cron-monitor', cronMonitorRoutes);
 app.route('/api/webhook/resend', resendWebhookRoutes);
 app.route('/api/conditional-rules', conditionalRulesRoutes);
+app.route('/api/todos', todosRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {

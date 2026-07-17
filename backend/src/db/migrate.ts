@@ -461,6 +461,19 @@ ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS google_oauth_connected_at TIME
       sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS alert_emails JSONB DEFAULT '[]';
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS alert_account_ids JSONB DEFAULT '[]';`,
     },
+    {
+      version: 29,
+      name: 'todo_completions_v29',
+      sql: `CREATE TABLE IF NOT EXISTS todo_completions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  occurrence_date DATE NOT NULL,
+  completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, event_id, occurrence_date)
+);
+CREATE INDEX IF NOT EXISTS idx_todo_completions_user ON todo_completions(user_id);`,
+    },
   ];
 
   for (const migration of migrations) {
