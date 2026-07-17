@@ -10,6 +10,7 @@ const loaders: Record<string, () => Promise<unknown>> = {
   '/contacts': () => import('../pages/Contacts'),
   '/broadcast': () => import('../pages/Broadcast'),
   '/calendar': () => import('../pages/Calendar'),
+  '/todos': () => import('../pages/Todos'),
   '/inbox': () => import('../pages/Inbox'),
   '/notification-rules': () => import('../pages/NotificationRules'),
   '/trigger-logs': () => import('../pages/TriggerLogs'),

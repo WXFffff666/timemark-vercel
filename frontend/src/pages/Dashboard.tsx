@@ -14,6 +14,7 @@ import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { api } from '@/lib/api';
 import { prefetchRoute } from '@/lib/prefetch-routes';
+import { getTodoEvents } from '@/lib/calendar-utils';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -33,6 +34,7 @@ export function Dashboard() {
     prefetchRoute('/inbox');
     prefetchRoute('/channels');
     prefetchRoute('/calendar');
+    prefetchRoute('/todos');
     prefetchRoute('/settings');
   }, []);
 
@@ -52,11 +54,7 @@ export function Dashboard() {
       .catch(() => setConflicts([]));
   }, [events.length]);
 
-  const upcomingWeek = events.filter((e) => {
-    const d = new Date(e.date);
-    const diff = (d.getTime() - Date.now()) / 86400000;
-    return diff >= 0 && diff <= 7;
-  }).length;
+  const todoCount = getTodoEvents(events).length;
   const todayCount = events.filter((e) => {
     const d = new Date(e.date);
     const t = new Date();
@@ -233,7 +231,17 @@ export function Dashboard() {
       <main id="main-content" className="max-w-7xl mx-auto px-6 py-8 mt-4" tabIndex={-1}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">今日事件</p><p className="text-2xl font-bold">{todayCount}</p></div>
-          <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">本周待办</p><p className="text-2xl font-bold">{upcomingWeek}</p></div>
+          <div
+            className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-amber-400/50 transition"
+            onClick={() => navigate('/todos')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && navigate('/todos')}
+          >
+            <p className="text-xs text-slate-500">近期待办</p>
+            <p className="text-2xl font-bold">{todoCount}</p>
+            <p className="text-[10px] text-slate-400 mt-1">进入提醒窗口的事件</p>
+          </div>
           <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">总事件</p><p className="text-2xl font-bold">{events.length}</p></div>
           <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-emerald-400/50 transition" onClick={() => navigate('/contacts')}>
             <p className="text-xs text-slate-500 flex items-center gap-1"><Users size={12} />固定联系人</p>
