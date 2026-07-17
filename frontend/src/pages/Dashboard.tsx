@@ -37,6 +37,10 @@ export function Dashboard() {
   }, []);
 
   useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
+
+  useEffect(() => {
     api.getRaw<unknown[]>('/inbox?limit=1')
       .then((res) => setInboxUnread((res.pagination?.unreadCount as number) || 0))
       .catch(() => setInboxUnread(0));

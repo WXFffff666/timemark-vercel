@@ -28,8 +28,8 @@ export const useEventStore = create<EventState>((set, get) => ({
   },
 
   createEvent: async (data) => {
-    const event = await api.post<Event>('/events', data);
-    set({ events: [...get().events, event] });
+    await api.post<Event>('/events', data);
+    await get().fetchEvents();
   },
 
   updateEvent: async (id, data) => {
