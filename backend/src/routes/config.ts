@@ -147,7 +147,7 @@ config.post('/accounts', async (c) => {
   }
   
   await logAudit(Number(user.id), 'create', 'notification_account', account.id, { type: parsed.data.type, name: parsed.data.name });
-  return c.json({ success: true, data: account }, 201);
+  return c.json({ success: true, data: maskNotificationAccountForClient(account as unknown as Record<string, unknown>) }, 201);
 });
 
 config.put('/accounts/:id', async (c) => {
