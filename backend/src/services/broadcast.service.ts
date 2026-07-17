@@ -1,5 +1,5 @@
 import { query } from '../db/index.js';
-import { getContactsByIds, listFixedContacts } from './contact.service.js';
+import { getContactsByIds, listFixedContacts, getContactAllEmails } from './contact.service.js';
 import { resolveEmailAccount, sendRawEmail } from './email-send.service.js';
 import { escapeHtml } from '../utils/html.js';
 import { renderBroadcastTemplate } from '@timemark/shared';
@@ -30,13 +30,19 @@ async function resolveRecipients(userId: number, input: BroadcastEmailInput): Pr
   if (input.contactIds?.length) {
     const contacts = await getContactsByIds(userId, input.contactIds);
     for (const c of contacts) {
-      if (c.email) add(c.email, c.name || c.nickname || undefined);
+      const emails = getContactAllEmails(c);
+      if (emails.length) {
+        for (const email of emails) add(email, c.name || c.nickname || undefined);
+      } else if (c.email) add(c.email, c.name || c.nickname || undefined);
     }
   }
   if (input.useAllContacts) {
     const all = await listFixedContacts(userId);
     for (const c of all) {
-      if (c.email) add(c.email, c.name || c.nickname || undefined);
+      const emails = getContactAllEmails(c);
+      if (emails.length) {
+        for (const email of emails) add(email, c.name || c.nickname || undefined);
+      } else if (c.email) add(c.email, c.name || c.nickname || undefined);
     }
   }
   return [...byEmail.values()];

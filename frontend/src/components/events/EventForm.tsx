@@ -17,6 +17,7 @@ import {
   type FixedContactForEvent,
 } from '@/lib/contact-event-bridge';
 import { normalizeEmail } from '@timemark/shared';
+import { contactHasAnyEmail, getContactEmailList } from '@/lib/contact-utils';
 import { api, fetchAvailableChannels, type AvailableChannel } from '@/lib/api';
 import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
 import { getBlessing } from '@timemark/shared/blessings';
@@ -929,9 +930,9 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                           : 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-700 hover:border-indigo-400'
                       }`}
                       onClick={() => toggleReminderContactSelect(c.id)}
-                      title={c.email ? `选择为提醒人（${c.email}）` : '选择为提醒人'}
+                      title={getContactEmailList(c).length ? `选择为提醒人（${getContactEmailList(c).join('、')}）` : '选择为提醒人'}
                     >
-                      提醒→{c.name}{c.email ? ' 📧' : ''}{(c.channel_account_ids?.length ?? 0) > 0 ? ' ✓' : ''}
+                      提醒→{c.name}{contactHasAnyEmail(c) ? ' 📧' : ''}{(c.channel_account_ids?.length ?? 0) > 0 ? ' ✓' : ''}
                     </button>
                   ))}
                   {selectedReminderContactIds.length > 0 && (
@@ -1038,10 +1039,10 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                 )}
                 
                 <p className="text-[10px] text-slate-400">不填则使用「设置 → 默认测试/收件邮箱」；从联系人添加的邮箱会显示为小写</p>
-                {fixedContacts.filter((c) => c.email).length > 0 && (
+                {fixedContacts.filter((c) => contactHasAnyEmail(c)).length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     <span className="text-[10px] text-slate-400 w-full">从联系人添加邮箱：</span>
-                    {fixedContacts.filter((c) => c.email).map((c) => (
+                    {fixedContacts.filter((c) => contactHasAnyEmail(c)).map((c) => (
                       <button
                         key={`email-${c.id}`}
                         type="button"
@@ -1055,7 +1056,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                           ),
                         }))}
                       >
-                        {c.name} ({normalizeEmail(c.email) ?? c.email})
+                        {c.name} ({getContactEmailList(c).join('、')})
                       </button>
                     ))}
                   </div>

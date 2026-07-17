@@ -11,8 +11,9 @@ import {
   createFixedContact,
   updateFixedContact,
   deleteFixedContact,
-  validateContactFields,
+  validateContactMethods,
 } from '../services/contact.service.js';
+import { mergeContactMethodsInput } from '@timemark/shared';
 import { sendContactEmail } from '../services/contact-send.service.js';
 import { query } from '../db/index.js';
 
@@ -67,13 +68,19 @@ contacts.delete('/:id', async (c) => {
 
 contacts.post('/validate', async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const result = validateContactFields({
+  const methods = mergeContactMethodsInput({
+    emails: body.emails,
+    phones: body.phones,
+    telegrams: body.telegrams,
+    qqs: body.qqs,
+    wxpusherUids: body.wxpusherUids,
     email: body.email,
     phone: body.phone,
-    telegram_chat_id: body.telegramChatId,
+    telegramChatId: body.telegramChatId,
     qq: body.qq,
-    wxpusher_uid: body.wxpusherUid,
+    wxpusherUid: body.wxpusherUid,
   });
+  const result = validateContactMethods(methods);
   return c.json({ success: true, data: result });
 });
 

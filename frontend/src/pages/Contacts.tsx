@@ -7,8 +7,19 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { LabeledFieldsEditor, normalizeEntriesForSave } from '@/components/contacts/LabeledFieldsEditor';
 import { api } from '@/lib/api';
-import { EMAIL_CHANNEL_TYPES, contactHasChannelAddress } from '@timemark/shared';
+import {
+  EMAIL_CHANNEL_TYPES,
+  contactHasChannelAddress,
+  type ContactLabeledEntry,
+} from '@timemark/shared';
+import {
+  ensureLabeledEntries,
+  formatLabeledList,
+  getContactEmailList,
+  contactHasAnyEmail,
+} from '@/lib/contact-utils';
 
 interface FixedContact {
   id: number;
@@ -19,6 +30,11 @@ interface FixedContact {
   telegram_chat_id?: string;
   qq?: string;
   wxpusher_uid?: string;
+  emails?: ContactLabeledEntry[];
+  phones?: ContactLabeledEntry[];
+  telegrams?: ContactLabeledEntry[];
+  qqs?: ContactLabeledEntry[];
+  wxpusher_uids?: ContactLabeledEntry[];
   validation_status?: string;
   channel_account_ids?: number[];
 }
@@ -40,16 +56,27 @@ interface GroupMember {
   email: string;
 }
 
-const emptyForm = {
+interface ContactForm {
+  name: string;
+  nickname: string;
+  emails: ContactLabeledEntry[];
+  phones: ContactLabeledEntry[];
+  telegrams: ContactLabeledEntry[];
+  qqs: ContactLabeledEntry[];
+  wxpusherUids: ContactLabeledEntry[];
+  channelAccountIds: number[];
+}
+
+const emptyForm = (): ContactForm => ({
   name: '',
   nickname: '',
-  email: '',
-  phone: '',
-  telegramChatId: '',
-  qq: '',
-  wxpusherUid: '',
-  channelAccountIds: [] as number[],
-};
+  emails: [{ label: '', value: '' }],
+  phones: [{ label: '', value: '' }],
+  telegrams: [{ label: '', value: '' }],
+  qqs: [{ label: '', value: '' }],
+  wxpusherUids: [{ label: '', value: '' }],
+  channelAccountIds: [],
+});
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
   resend: 'Resend 邮件',
@@ -75,12 +102,14 @@ export default function Contacts() {
   const [sendOpen, setSendOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [sendingContact, setSendingContact] = useState<FixedContact | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<ContactForm>(emptyForm());
   const [groupName, setGroupName] = useState('');
   const [groupEmails, setGroupEmails] = useState('');
   const [sendSubject, setSendSubject] = useState('');
   const [sendHtml, setSendHtml] = useState('<p>您好，</p><p>这是一条来自 TimeMark 的消息。</p>');
   const [sendAccountId, setSendAccountId] = useState<number | ''>('');
+  const [sendAvailableEmails, setSendAvailableEmails] = useState<string[]>([]);
+  const [sendSelectedEmails, setSendSelectedEmails] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [importing, setImporting] = useState(false);
@@ -112,7 +141,6 @@ export default function Contacts() {
 
   useEffect(() => { load(); }, []);
 
-  // 路由切换时关闭弹窗，避免 Dialog 焦点陷阱导致页面卡住
   useEffect(() => {
     return () => {
       setOpen(false);
@@ -123,7 +151,7 @@ export default function Contacts() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm(emptyForm());
     setError('');
     setOpen(true);
   };
@@ -133,11 +161,11 @@ export default function Contacts() {
     setForm({
       name: c.name,
       nickname: c.nickname || '',
-      email: c.email || '',
-      phone: c.phone || '',
-      telegramChatId: c.telegram_chat_id || '',
-      qq: c.qq || '',
-      wxpusherUid: c.wxpusher_uid || '',
+      emails: ensureLabeledEntries(c.emails, c.email),
+      phones: ensureLabeledEntries(c.phones, c.phone),
+      telegrams: ensureLabeledEntries(c.telegrams, c.telegram_chat_id),
+      qqs: ensureLabeledEntries(c.qqs, c.qq),
+      wxpusherUids: ensureLabeledEntries(c.wxpusher_uids, c.wxpusher_uid),
       channelAccountIds: c.channel_account_ids || [],
     });
     setError('');
@@ -154,11 +182,16 @@ export default function Contacts() {
   };
 
   const contactFields = {
-    email: form.email,
-    phone: form.phone,
-    telegramChatId: form.telegramChatId,
-    qq: form.qq,
-    wxpusherUid: form.wxpusherUid,
+    email: normalizeEntriesForSave(form.emails)[0]?.value,
+    emails: normalizeEntriesForSave(form.emails),
+    phone: normalizeEntriesForSave(form.phones)[0]?.value,
+    phones: normalizeEntriesForSave(form.phones),
+    telegramChatId: normalizeEntriesForSave(form.telegrams)[0]?.value,
+    telegrams: normalizeEntriesForSave(form.telegrams),
+    qq: normalizeEntriesForSave(form.qqs)[0]?.value,
+    qqs: normalizeEntriesForSave(form.qqs),
+    wxpusherUid: normalizeEntriesForSave(form.wxpusherUids)[0]?.value,
+    wxpusherUids: normalizeEntriesForSave(form.wxpusherUids),
   };
 
   const compatibleAccounts = accounts.filter((a) =>
@@ -167,16 +200,28 @@ export default function Contacts() {
 
   const emailAccounts = accounts.filter((a) => EMAIL_CHANNEL_TYPES.has(a.type));
 
+  const buildPayload = () => ({
+    name: form.name.trim(),
+    nickname: form.nickname.trim() || undefined,
+    emails: normalizeEntriesForSave(form.emails),
+    phones: normalizeEntriesForSave(form.phones),
+    telegrams: normalizeEntriesForSave(form.telegrams),
+    qqs: normalizeEntriesForSave(form.qqs),
+    wxpusherUids: normalizeEntriesForSave(form.wxpusherUids),
+    channelAccountIds: form.channelAccountIds,
+  });
+
   const save = async () => {
     setError('');
     try {
+      const payload = buildPayload();
       if (editingId) {
-        await api.put(`/contacts/${editingId}`, form);
+        await api.put(`/contacts/${editingId}`, payload);
       } else {
-        await api.post('/contacts', form);
+        await api.post('/contacts', payload);
       }
       setOpen(false);
-      setForm(emptyForm);
+      setForm(emptyForm());
       setEditingId(null);
       await loadContacts();
     } catch (e) {
@@ -205,10 +250,13 @@ export default function Contacts() {
   };
 
   const openQuickSend = (c: FixedContact) => {
+    const emails = getContactEmailList(c);
     const boundEmail = (c.channel_account_ids || [])
       .map((id) => emailAccounts.find((a) => a.id === id))
       .find(Boolean);
     setSendingContact(c);
+    setSendAvailableEmails(emails);
+    setSendSelectedEmails(emails);
     setSendSubject(`来自 TimeMark 的消息 - ${c.name}`);
     setSendHtml(`<p>您好 ${c.nickname || c.name}，</p><p>这是一条来自 TimeMark 的消息。</p>`);
     setSendAccountId(boundEmail?.id ?? emailAccounts[0]?.id ?? '');
@@ -216,19 +264,30 @@ export default function Contacts() {
     setSendOpen(true);
   };
 
+  const toggleSendEmail = (email: string) => {
+    setSendSelectedEmails((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email],
+    );
+  };
+
   const quickSend = async () => {
-    if (!sendingContact) return;
+    if (!sendingContact || sendSelectedEmails.length === 0) return;
     setSending(true);
     setError('');
     try {
-      await api.post(`/contacts/${sendingContact.id}/send-email`, {
+      const result = await api.post<{
+        recipients: string[];
+        failed?: string[];
+      }>(`/contacts/${sendingContact.id}/send-email`, {
         subject: sendSubject,
         html: sendHtml,
         accountId: sendAccountId || undefined,
+        recipientEmails: sendSelectedEmails,
       });
       setSendOpen(false);
       setSendingContact(null);
-      alert(`已向 ${sendingContact.email} 发送邮件`);
+      const sent = result?.recipients?.join('、') || sendSelectedEmails.join('、');
+      alert(`已向 ${sent} 发送邮件`);
     } catch (e) {
       setError(e instanceof Error ? e.message : '发送失败');
     } finally {
@@ -271,10 +330,37 @@ export default function Contacts() {
   };
 
   const canQuickSend = (c: FixedContact) => {
-    if (!c.email || emailAccounts.length === 0) return false;
+    if (!contactHasAnyEmail(c) || emailAccounts.length === 0) return false;
     const bound = c.channel_account_ids || [];
     if (bound.length === 0) return true;
     return bound.some((id) => emailAccounts.some((a) => a.id === id));
+  };
+
+  const renderContactMethods = (c: FixedContact) => {
+    const rows: { icon: string; text: string }[] = [];
+    const emails = formatLabeledList(c.emails, c.email);
+    const phones = formatLabeledList(c.phones, c.phone);
+    const telegrams = formatLabeledList(c.telegrams, c.telegram_chat_id);
+    const qqs = formatLabeledList(c.qqs, c.qq);
+    const wx = formatLabeledList(c.wxpusher_uids, c.wxpusher_uid);
+    if (emails) rows.push({ icon: '📧', text: emails });
+    if (phones) rows.push({ icon: '📱', text: phones });
+    if (telegrams) rows.push({ icon: '✈️', text: `Telegram ${telegrams}` });
+    if (qqs) rows.push({ icon: '🐧', text: `QQ ${qqs}` });
+    if (wx) rows.push({ icon: '💬', text: `WxPusher ${wx}` });
+    return rows;
+  };
+
+  const channelHint = (acc: NotificationAccount) => {
+    if (EMAIL_CHANNEL_TYPES.has(acc.type)) {
+      const list = contactFields.emails.map((e) => e.value).filter(Boolean);
+      return list.length ? `→ ${list.join('、')}` : '';
+    }
+    if (acc.type === 'telegram') return contactFields.telegrams[0]?.value ? `→ ${contactFields.telegrams[0].value}` : '';
+    if (acc.type === 'qq') return contactFields.qqs[0]?.value ? `→ ${contactFields.qqs[0].value}` : '';
+    if (acc.type === 'wxpusher') return contactFields.wxpusherUids[0]?.value ? `→ ${contactFields.wxpusherUids[0].value}` : '';
+    if (acc.type === 'twilio') return contactFields.phones[0]?.value ? `→ ${contactFields.phones[0].value}` : '';
+    return '';
   };
 
   return (
@@ -285,7 +371,7 @@ export default function Contacts() {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold">固定联系人</h1>
-          <p className="text-sm text-slate-500">绑定通知渠道后可快捷发信</p>
+          <p className="text-sm text-slate-500">支持多个邮箱/手机，绑定通知渠道后可快捷发信</p>
         </div>
         <Button
           onClick={() => (tab === 'contacts' ? openCreate() : setGroupOpen(true))}
@@ -348,11 +434,9 @@ export default function Contacts() {
                     )}
                   </div>
                   <div className="text-sm text-slate-600 dark:text-slate-400 mt-1 space-y-0.5">
-                    {c.email && <div>📧 {c.email}</div>}
-                    {c.phone && <div>📱 {c.phone}</div>}
-                    {c.telegram_chat_id && <div>✈️ Telegram {c.telegram_chat_id}</div>}
-                    {c.qq && <div>🐧 QQ {c.qq}</div>}
-                    {c.wxpusher_uid && <div>💬 WxPusher {c.wxpusher_uid}</div>}
+                    {renderContactMethods(c).map((row, i) => (
+                      <div key={i}>{row.icon} {row.text}</div>
+                    ))}
                   </div>
                   {(c.channel_account_ids?.length ?? 0) > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
@@ -405,31 +489,58 @@ export default function Contacts() {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId ? '编辑联系人' : '添加固定联系人'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <Input placeholder="姓名 *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label="姓名" />
             <Input placeholder="昵称" value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} />
-            <Input placeholder="邮箱" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <Input placeholder="手机" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            <Input placeholder="Telegram Chat ID" value={form.telegramChatId} onChange={(e) => setForm({ ...form, telegramChatId: e.target.value })} />
-            <Input placeholder="QQ 号" value={form.qq} onChange={(e) => setForm({ ...form, qq: e.target.value })} />
-            <Input placeholder="WxPusher UID" value={form.wxpusherUid} onChange={(e) => setForm({ ...form, wxpusherUid: e.target.value })} />
+
+            <LabeledFieldsEditor
+              label="邮箱"
+              placeholder="邮箱地址"
+              type="email"
+              entries={form.emails}
+              onChange={(emails) => setForm({ ...form, emails })}
+            />
+            <LabeledFieldsEditor
+              label="手机"
+              placeholder="手机号码"
+              entries={form.phones}
+              onChange={(phones) => setForm({ ...form, phones })}
+            />
+            <LabeledFieldsEditor
+              label="Telegram"
+              placeholder="Chat ID"
+              entries={form.telegrams}
+              onChange={(telegrams) => setForm({ ...form, telegrams })}
+            />
+            <LabeledFieldsEditor
+              label="QQ"
+              placeholder="QQ 号"
+              entries={form.qqs}
+              onChange={(qqs) => setForm({ ...form, qqs })}
+            />
+            <LabeledFieldsEditor
+              label="WxPusher"
+              placeholder="UID_xxx"
+              entries={form.wxpusherUids}
+              onChange={(wxpusherUids) => setForm({ ...form, wxpusherUids })}
+            />
 
             {accounts.length > 0 && (
               <div className="rounded-xl border p-3 space-y-2">
                 <p className="text-sm font-medium">绑定通知渠道</p>
                 <p className="text-xs text-slate-500">
-                  勾选后，快捷发信将通过对应渠道发送。邮件类渠道使用上方邮箱作为收件地址。
+                  勾选后，提醒与快捷发信将通过对应渠道发送。邮件类渠道使用上方邮箱作为收件地址。
                 </p>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {compatibleAccounts.length === 0 ? (
                     <p className="text-xs text-amber-600">请先填写对应渠道的联系方式</p>
                   ) : (
                     compatibleAccounts.map((acc) => (
-                      <label key={acc.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <label key={acc.id} className="flex items-center gap-2 text-sm cursor-pointer flex-wrap">
                         <input
                           type="checkbox"
                           checked={form.channelAccountIds.includes(acc.id)}
@@ -438,11 +549,8 @@ export default function Contacts() {
                         />
                         <span>{acc.name}</span>
                         <span className="text-xs text-slate-400">({CHANNEL_TYPE_LABELS[acc.type] || acc.type})</span>
-                        {EMAIL_CHANNEL_TYPES.has(acc.type) && form.email && (
-                          <span className="text-xs text-slate-400">→ {form.email}</span>
-                        )}
-                        {acc.type === 'telegram' && form.telegramChatId && (
-                          <span className="text-xs text-slate-400">→ {form.telegramChatId}</span>
+                        {channelHint(acc) && (
+                          <span className="text-xs text-slate-400">{channelHint(acc)}</span>
                         )}
                       </label>
                     ))
@@ -463,7 +571,23 @@ export default function Contacts() {
             <DialogTitle>快捷发信 — {sendingContact?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-slate-500">收件人：{sendingContact?.email}</p>
+            <div>
+              <p className="text-sm font-medium mb-2">收件邮箱</p>
+              <div className="space-y-1">
+                {sendAvailableEmails.map((email) => (
+                  <label key={email} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sendSelectedEmails.includes(email)}
+                      onChange={() => toggleSendEmail(email)}
+                      className="rounded"
+                    />
+                    {email}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">未勾选任何邮箱时不会发送</p>
+            </div>
             {emailAccounts.length > 1 && (
               <div>
                 <label className="text-sm font-medium">通知渠道</label>
@@ -487,7 +611,7 @@ export default function Contacts() {
               onChange={(e) => setSendHtml(e.target.value)}
             />
             {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button className="w-full min-h-11" disabled={sending || !sendSubject} onClick={quickSend}>
+            <Button className="w-full min-h-11" disabled={sending || !sendSubject || sendSelectedEmails.length === 0} onClick={quickSend}>
               <Send className="w-4 h-4 mr-2" />{sending ? '发送中…' : '发送邮件'}
             </Button>
           </div>

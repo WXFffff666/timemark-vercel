@@ -474,6 +474,18 @@ ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS alert_account_ids JSONB DEFAUL
 );
 CREATE INDEX IF NOT EXISTS idx_todo_completions_user ON todo_completions(user_id);`,
     },
+    {
+      version: 30,
+      name: 'contact_methods_v30',
+      sql: `ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS contact_methods JSONB DEFAULT '{}';
+UPDATE fixed_contacts SET contact_methods = jsonb_build_object(
+  'emails', CASE WHEN email IS NOT NULL AND email <> '' THEN jsonb_build_array(jsonb_build_object('label', '默认', 'value', email)) ELSE '[]'::jsonb END,
+  'phones', CASE WHEN phone IS NOT NULL AND phone <> '' THEN jsonb_build_array(jsonb_build_object('label', '默认', 'value', phone)) ELSE '[]'::jsonb END,
+  'telegrams', CASE WHEN telegram_chat_id IS NOT NULL AND telegram_chat_id <> '' THEN jsonb_build_array(jsonb_build_object('label', '默认', 'value', telegram_chat_id)) ELSE '[]'::jsonb END,
+  'qqs', CASE WHEN qq IS NOT NULL AND qq <> '' THEN jsonb_build_array(jsonb_build_object('label', '默认', 'value', qq)) ELSE '[]'::jsonb END,
+  'wxpusherUids', CASE WHEN wxpusher_uid IS NOT NULL AND wxpusher_uid <> '' THEN jsonb_build_array(jsonb_build_object('label', '默认', 'value', wxpusher_uid)) ELSE '[]'::jsonb END
+) WHERE contact_methods IS NULL OR contact_methods = '{}'::jsonb;`,
+    },
   ];
 
   for (const migration of migrations) {

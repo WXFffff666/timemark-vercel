@@ -1,4 +1,4 @@
-import type { ReminderConfig } from '@timemark/shared';
+import type { ReminderConfig, ContactLabeledEntry } from '@timemark/shared';
 import { normalizeEmail } from '@timemark/shared';
 
 export interface FixedContactForEvent {
@@ -11,6 +11,8 @@ export interface FixedContactForEvent {
   qq?: string;
   wxpusher_uid?: string;
   channel_account_ids?: number[];
+  emails?: ContactLabeledEntry[];
+  phones?: ContactLabeledEntry[];
 }
 
 /** 通知账号 type → 事件表单 channel value */
@@ -48,15 +50,27 @@ export const ACCOUNT_TYPE_TO_CHANNEL: Record<string, string> = {
   apprise: 'apprise',
 };
 
+function getContactEmails(contact: FixedContactForEvent): string[] {
+  const set = new Set<string>();
+  for (const e of contact.emails || []) {
+    const n = normalizeEmail(e.value);
+    if (n) set.add(n);
+  }
+  const legacy = normalizeEmail(contact.email);
+  if (legacy) set.add(legacy);
+  return [...set];
+}
+
 export function mergeContactIntoReminderConfig(
   contact: FixedContactForEvent,
   accounts: Array<{ id: string | number; type: string }>,
   existing: ReminderConfig,
 ): ReminderConfig {
   const emailRecipients = [...(existing.emailRecipients || [])];
-  const normalized = normalizeEmail(contact.email);
-  if (normalized && !emailRecipients.includes(normalized)) {
-    emailRecipients.push(normalized);
+  for (const email of getContactEmails(contact)) {
+    if (!emailRecipients.includes(email)) {
+      emailRecipients.push(email);
+    }
   }
 
   const channels = new Set(existing.channels || []);
@@ -108,7 +122,7 @@ export function applyContactsAsReminders(
     names.push(c.nickname || c.name);
     config = mergeContactIntoReminderConfig(c, accounts, config);
   }
-  const firstEmail = contacts.map((c) => normalizeEmail(c.email)).find(Boolean);
+  const firstEmail = contacts.flatMap((c) => getContactEmails(c)).find(Boolean);
   return {
     reminderRecipientName: names.join('、') || prev.reminderRecipientName || '',
     reminderRecipientEmail: firstEmail || undefined,

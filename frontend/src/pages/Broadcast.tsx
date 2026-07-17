@@ -10,11 +10,14 @@ import {
   buildBroadcastEmail,
   type BroadcastTemplateCategory,
 } from '@timemark/shared';
+import { contactHasAnyEmail, getContactEmailList } from '@/lib/contact-utils';
+import type { ContactLabeledEntry } from '@timemark/shared';
 
 interface Contact {
   id: number;
   name: string;
   email?: string;
+  emails?: ContactLabeledEntry[];
   channel_account_ids?: number[];
 }
 
@@ -55,17 +58,16 @@ export default function Broadcast() {
   const [showPreview, setShowPreview] = useState(false);
 
   const contactsWithEmail = useMemo(
-    () => contacts.filter((c) => c.email),
+    () => contacts.filter((c) => contactHasAnyEmail(c)),
     [contacts],
   );
 
   const recipientCount = useMemo(() => {
     const manual = manualEmails.split(/[,;\s]+/).map((e) => e.trim()).filter((e) => e.includes('@'));
-    const fromContacts = selectedIds.length;
-    return new Set([
-      ...manual,
-      ...contactsWithEmail.filter((c) => selectedIds.includes(c.id)).map((c) => c.email!.toLowerCase()),
-    ]).size || fromContacts + manual.length;
+    const fromContacts = contactsWithEmail
+      .filter((c) => selectedIds.includes(c.id))
+      .flatMap((c) => getContactEmailList(c));
+    return new Set([...manual, ...fromContacts]).size;
   }, [manualEmails, selectedIds, contactsWithEmail]);
 
   useEffect(() => {
@@ -273,7 +275,7 @@ export default function Broadcast() {
                   size="sm"
                   variant={selectedIds.includes(c.id) ? 'default' : 'outline'}
                   onClick={() => toggleContact(c.id)}
-                  title={c.email}
+                  title={getContactEmailList(c).join('、')}
                 >
                   {c.name}
                   {(c.channel_account_ids?.length ?? 0) > 0 && ' ✓'}

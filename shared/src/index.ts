@@ -8,6 +8,7 @@ export * from './schemas/contact.schema.js';
 export * from './schemas/broadcast.schema.js';
 export * from './channels.js';
 export * from './contact-channels.js';
+export * from './contact-methods.js';
 export * from './blessings.js';
 export * from './templates.js';
 export * from './broadcast-templates.js';
