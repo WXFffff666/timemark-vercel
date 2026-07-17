@@ -240,19 +240,27 @@ export interface NotificationAccount {
   updated_at: string;
 }
 
+const SMTP_SESSION_KEYS = new Set(['smtpProvider', 'smtpEncryption']);
+
+function sanitizeSmtpSessionData(sessionData: unknown): Record<string, string> | null {
+  if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) return null;
+  const input = sessionData as Record<string, unknown>;
+  const safe: Record<string, string> = {};
+  if (typeof input.smtpProvider === 'string' && input.smtpProvider.length <= 32) {
+    safe.smtpProvider = input.smtpProvider;
+  }
+  if (input.smtpEncryption === 'ssl' || input.smtpEncryption === 'starttls') {
+    safe.smtpEncryption = input.smtpEncryption;
+  }
+  return Object.keys(safe).length > 0 ? safe : null;
+}
+
 function decryptNotificationField(
   value: unknown,
   pendingUpdates?: Record<string, string>,
   column?: string
 ): string | null {
   if (value == null || value === '') return null;
-  if (typeof value === 'object') {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return null;
-    }
-  }
   if (typeof value !== 'string') return null;
   // Try current key
   try {
@@ -275,23 +283,44 @@ function decryptNotificationField(
   }
 }
 
-function serializeSessionDataForDb(type: string, sessionData: unknown): unknown {
+/** Encrypt session metadata for JSONB/TEXT column (stored as JSON string primitive in JSONB). */
+function serializeSessionDataForDb(type: string, sessionData: unknown): string | null {
   if (!sessionData) return null;
-  if (type === 'smtp') {
-    return sessionData;
-  }
-  return encrypt(JSON.stringify(sessionData), MASTER_KEY());
+  const payload =
+    type === 'smtp'
+      ? sanitizeSmtpSessionData(sessionData)
+      : sessionData;
+  if (!payload) return null;
+  return encrypt(JSON.stringify(payload), MASTER_KEY());
 }
 
 function parseSessionDataFromDb(raw: unknown, pendingUpdates?: Record<string, string>): unknown {
   if (raw == null || raw === '') return null;
-  if (typeof raw === 'object') return raw;
+
+  // Migrate legacy plain JSONB objects (brief insecure window) back to encrypted storage
+  if (typeof raw === 'object') {
+    const sanitized = sanitizeSmtpSessionData(raw) ?? raw;
+    if (pendingUpdates) {
+      pendingUpdates.session_data = encrypt(JSON.stringify(sanitized), MASTER_KEY());
+    }
+    return sanitized;
+  }
+
+  if (typeof raw !== 'string') return null;
+
   const decrypted = decryptNotificationField(raw, pendingUpdates, 'session_data');
   if (!decrypted) return null;
   try {
-    return JSON.parse(decrypted);
+    const parsed = JSON.parse(decrypted) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>;
+      if (Object.keys(obj).every((k) => SMTP_SESSION_KEYS.has(k))) {
+        return sanitizeSmtpSessionData(parsed) ?? parsed;
+      }
+    }
+    return parsed;
   } catch {
-    return decrypted;
+    return null;
   }
 }
 

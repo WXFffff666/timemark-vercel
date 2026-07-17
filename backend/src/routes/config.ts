@@ -110,6 +110,17 @@ config.post('/accounts', async (c) => {
   if (parsed.data.configMethod === 'plugin') {
     return c.json({ success: false, error: '插件类通知渠道在云端部署中不可用' }, 400);
   }
+  if (parsed.data.type === 'smtp') {
+    if (!parsed.data.chatId?.trim() || !parsed.data.chatId.includes('@')) {
+      return c.json({ success: false, error: '请填写完整的发件人邮箱' }, 400);
+    }
+    if (!parsed.data.token?.trim()) {
+      return c.json({ success: false, error: '请填写邮箱授权码或应用专用密码' }, 400);
+    }
+    if (!parsed.data.webhook?.trim() || !parsed.data.secret?.trim()) {
+      return c.json({ success: false, error: '请填写 SMTP 服务器和端口' }, 400);
+    }
+  }
   
   const account = await createNotificationAccount(Number(user.id), {
     type: parsed.data.type,
@@ -153,8 +164,7 @@ config.post('/accounts', async (c) => {
   return c.json({ success: true, data: maskNotificationAccountForClient(account as unknown as Record<string, unknown>) }, 201);
   } catch (error: unknown) {
     console.error('[config] create notification account failed:', error);
-    const message = error instanceof Error ? error.message : '创建通知渠道失败';
-    return c.json({ success: false, error: `保存失败：${message}` }, 500);
+    return c.json({ success: false, error: '保存失败，请检查配置后重试' }, 500);
   }
 });
 
@@ -196,8 +206,7 @@ config.put('/accounts/:id', async (c) => {
   return c.json({ success: true, data: maskNotificationAccountForClient(account as unknown as Record<string, unknown>) });
   } catch (error: unknown) {
     console.error('[config] update notification account failed:', error);
-    const message = error instanceof Error ? error.message : '更新通知渠道失败';
-    return c.json({ success: false, error: `保存失败：${message}` }, 500);
+    return c.json({ success: false, error: '保存失败，请检查配置后重试' }, 500);
   }
 });
 
