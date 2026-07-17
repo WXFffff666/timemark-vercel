@@ -23,25 +23,35 @@ export function maskNotificationAccountForClient<T extends Record<string, unknow
   tokenConfigured: boolean;
   secretConfigured: boolean;
   sessionConfigured: boolean;
+  webhookConfigured: boolean;
+  chatIdConfigured: boolean;
   smtpProvider?: string | null;
 } {
   const tokenConfigured = !!account.token;
   const secretConfigured = !!account.secret;
   const sessionConfigured = !!account.session_data;
+  const webhookConfigured = !!account.webhook;
+  const chatIdConfigured = !!account.chat_id;
   const smtpProvider = resolveSmtpProviderForClient(account);
   return {
     ...account,
     token: tokenConfigured ? null : account.token,
     secret: secretConfigured ? null : account.secret,
+    webhook: webhookConfigured ? null : account.webhook,
+    chat_id: chatIdConfigured ? null : account.chat_id,
     session_data: sessionConfigured ? null : account.session_data,
     smtpProvider,
     tokenConfigured,
     secretConfigured,
     sessionConfigured,
+    webhookConfigured,
+    chatIdConfigured,
   } as T & {
     tokenConfigured: boolean;
     secretConfigured: boolean;
     sessionConfigured: boolean;
+    webhookConfigured: boolean;
+    chatIdConfigured: boolean;
     smtpProvider?: string | null;
   };
 }

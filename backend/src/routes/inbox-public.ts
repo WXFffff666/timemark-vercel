@@ -36,6 +36,16 @@ inboxPublic.post('/receive/:token', receiveLimit, async (c) => {
   }
 
   const signature = c.req.header('x-timemark-signature') || c.req.header('x-hub-signature-256');
+  const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+
+  if (!secret) {
+    if (isProduction) {
+      return c.json({ success: false, error: '收件接口未配置签名密钥，请在设置中启用' }, 403);
+    }
+  } else if (!signature) {
+    return c.json({ success: false, error: '缺少签名头 X-Timemark-Signature' }, 401);
+  }
+
   if (secret && signature) {
     const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
     const provided = signature.replace(/^sha256=/, '');
@@ -48,8 +58,6 @@ inboxPublic.post('/receive/:token', receiveLimit, async (c) => {
     } catch {
       return c.json({ success: false, error: 'Invalid signature' }, 401);
     }
-  } else if (secret && !signature) {
-    return c.json({ success: false, error: '缺少签名头 X-Timemark-Signature' }, 401);
   }
 
   let body: Record<string, unknown>;

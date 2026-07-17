@@ -42,8 +42,13 @@ webhookInbound.post('/receive/:token', inboundLimit, async (c) => {
     return c.json({ success: false, error: 'Payload too large (max 64KB)' }, 413);
   }
   const signature = c.req.header('x-timemark-signature') || c.req.header('x-hub-signature-256');
+  const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
 
-  if (secret && !signature) {
+  if (!secret) {
+    if (isProduction) {
+      return c.json({ success: false, error: 'Webhook 未配置签名密钥，请在设置中启用' }, 403);
+    }
+  } else if (!signature) {
     return c.json({ success: false, error: '缺少签名头 X-Timemark-Signature' }, 401);
   }
 

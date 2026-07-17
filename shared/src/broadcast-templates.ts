@@ -1,12 +1,10 @@
 /**
- * 批量邮件模板：分类 + 问候语变体（二级选择）
+ * 批量邮件模板：语气尽量像个人写信，避免营销/系统通知感
  */
 
 export interface BroadcastGreetingVariant {
   id: string;
-  /** 问候语名称，如「温馨正式」 */
   name: string;
-  /** 开头问候 HTML 片段，支持 {{contact_name}} */
   greetingHtml: string;
 }
 
@@ -16,11 +14,8 @@ export interface BroadcastTemplateCategory {
   emoji: string;
   description: string;
   defaultSubject: string;
-  /** 问候语变体（二级选项） */
   greetingVariants: BroadcastGreetingVariant[];
-  /** 正文（问候语之后），支持 {{contact_name}} */
   bodyHtml: string;
-  /** 结尾 */
   closingHtml: string;
 }
 
@@ -30,98 +25,97 @@ export const BROADCAST_TEMPLATE_CATEGORIES: BroadcastTemplateCategory[] = [
     name: '节日问候',
     emoji: '🎊',
     description: '春节、中秋等节日群发祝福',
-    defaultSubject: '节日快乐 · 来自 TimeMark',
+    defaultSubject: '节日快乐',
     greetingVariants: [
-      { id: 'warm', name: '温馨祝福', greetingHtml: '<p>亲爱的 {{contact_name}}，</p><p>佳节将至，谨祝您与家人幸福安康、万事顺意！</p>' },
-      { id: 'formal', name: '正式问候', greetingHtml: '<p>{{contact_name}} 您好，</p><p>值此佳节，恭祝您节日快乐、阖家欢乐。</p>' },
-      { id: 'lively', name: '活泼轻松', greetingHtml: '<p>嗨 {{contact_name}}！🎉</p><p>节日快乐呀～愿你好心情天天在线！</p>' },
-      { id: 'spring', name: '春节专属', greetingHtml: '<p>{{contact_name}} 新年好！🧧</p><p>祝您龙年大吉、财源广进、心想事成！</p>' },
+      { id: 'warm', name: '温馨', greetingHtml: '<p>{{contact_name}}，</p><p>佳节快到了，祝你一切都好。</p>' },
+      { id: 'formal', name: '正式', greetingHtml: '<p>{{contact_name}} 您好，</p><p>节日快乐，顺祝阖家安康。</p>' },
+      { id: 'lively', name: '轻松', greetingHtml: '<p>{{contact_name}}，</p><p>节日快乐～</p>' },
+      { id: 'spring', name: '春节', greetingHtml: '<p>{{contact_name}}，新年好。</p><p>祝你新的一年顺心如意。</p>' },
     ],
-    bodyHtml: '<p>感谢您一直以来的支持与信任。愿新的一年里，所盼皆所达，所行皆坦途。</p>',
-    closingHtml: '<p style="margin-top:16px">此致<br/>敬礼</p>',
+    bodyHtml: '<p>最近还好吗？有空聊聊。</p>',
+    closingHtml: '',
   },
   {
     id: 'birthday',
     name: '生日祝福',
     emoji: '🎂',
     description: '联系人生日群发祝福',
-    defaultSubject: '🎂 生日快乐！',
+    defaultSubject: '生日快乐',
     greetingVariants: [
-      { id: 'warm', name: '温馨祝福', greetingHtml: '<p>亲爱的 {{contact_name}}，</p><p>在这个特别的日子里，祝您生日快乐！🎂</p>' },
-      { id: 'fun', name: '活泼俏皮', greetingHtml: '<p>嗨 {{contact_name}}！🥳</p><p>生日快乐！又年轻一岁啦～</p>' },
-      { id: 'formal', name: '正式得体', greetingHtml: '<p>{{contact_name}} 您好，</p><p>谨祝您生日快乐，身体健康、工作顺利。</p>' },
-      { id: 'family', name: '家人口吻', greetingHtml: '<p>亲爱的 {{contact_name}}：</p><p>生日快乐！愿你被温柔以待，岁岁常欢愉。</p>' },
+      { id: 'warm', name: '温馨', greetingHtml: '<p>{{contact_name}}，</p><p>生日快乐。</p>' },
+      { id: 'fun', name: '轻松', greetingHtml: '<p>{{contact_name}}，</p><p>生日快乐呀～</p>' },
+      { id: 'formal', name: '正式', greetingHtml: '<p>{{contact_name}} 您好，</p><p>祝您生日快乐，万事顺意。</p>' },
+      { id: 'family', name: '亲近', greetingHtml: '<p>{{contact_name}}，</p><p>又长大一岁啦，生日快乐。</p>' },
     ],
-    bodyHtml: '<p>愿您在新的一岁里，心想事成、笑口常开，每一天都充满阳光与惊喜。</p>',
-    closingHtml: '<p style="margin-top:16px">最美好的祝愿送给最特别的您 💐</p>',
+    bodyHtml: '<p>愿你新的一岁里，想做的事都能如愿。</p>',
+    closingHtml: '',
   },
   {
     id: 'work',
     name: '工作通知',
     emoji: '📋',
     description: '会议、截止、事项提醒',
-    defaultSubject: '【TimeMark】工作事项通知',
+    defaultSubject: '有个事跟你说一下',
     greetingVariants: [
-      { id: 'neutral', name: '标准通知', greetingHtml: '<p>{{contact_name}} 您好，</p><p>以下是与您相关的工作事项，请查收：</p>' },
-      { id: 'urgent', name: '紧急提醒', greetingHtml: '<p>{{contact_name}} 您好，</p><p><strong>【重要】</strong> 请优先处理以下事项：</p>' },
-      { id: 'meeting', name: '会议邀请', greetingHtml: '<p>{{contact_name}} 您好，</p><p>诚邀您参加以下会议/活动：</p>' },
-      { id: 'deadline', name: '截止提醒', greetingHtml: '<p>{{contact_name}} 您好，</p><p>温馨提醒：以下事项即将到期，请及时处理：</p>' },
+      { id: 'neutral', name: '平常', greetingHtml: '<p>{{contact_name}}，</p><p>跟你说件事：</p>' },
+      { id: 'urgent', name: '较急', greetingHtml: '<p>{{contact_name}}，</p><p>这件事比较急，麻烦看一下：</p>' },
+      { id: 'meeting', name: '会议', greetingHtml: '<p>{{contact_name}}，</p><p>想邀请你参加：</p>' },
+      { id: 'deadline', name: '截止', greetingHtml: '<p>{{contact_name}}，</p><p>提醒一下，这件事快到期了：</p>' },
     ],
-    bodyHtml: '<ul><li>事项一：（请在此填写具体内容）</li><li>事项二：（请在此填写具体时间/地点）</li></ul><p>如有疑问，请随时回复本邮件。</p>',
-    closingHtml: '<p style="margin-top:16px">感谢您的配合！</p>',
+    bodyHtml: '<p>（在这里写具体内容、时间、地点）</p><p>有问题直接回我就行。</p>',
+    closingHtml: '',
   },
   {
     id: 'reminder',
     name: '温馨提醒',
     emoji: '🔔',
     description: '日程、健康、生活关怀',
-    defaultSubject: '温馨提醒 · TimeMark',
+    defaultSubject: '提醒一下',
     greetingVariants: [
-      { id: 'gentle', name: '温柔关怀', greetingHtml: '<p>亲爱的 {{contact_name}}，</p><p>想轻轻提醒您：</p>' },
-      { id: 'brief', name: '简洁直接', greetingHtml: '<p>{{contact_name}} 您好，</p><p>温馨提示：</p>' },
-      { id: 'schedule', name: '日程提醒', greetingHtml: '<p>{{contact_name}} 您好，</p><p>您有以下日程即将到来：</p>' },
-      { id: 'health', name: '健康关怀', greetingHtml: '<p>{{contact_name}} 您好，</p><p>天气转凉，请注意保暖，照顾好自己：</p>' },
+      { id: 'gentle', name: '温柔', greetingHtml: '<p>{{contact_name}}，</p><p>想提醒你：</p>' },
+      { id: 'brief', name: '简短', greetingHtml: '<p>{{contact_name}}，</p>' },
+      { id: 'schedule', name: '日程', greetingHtml: '<p>{{contact_name}}，</p><p>你这边有个安排：</p>' },
+      { id: 'health', name: '关心', greetingHtml: '<p>{{contact_name}}，</p><p>天冷了，注意身体：</p>' },
     ],
-    bodyHtml: '<p>（请在此填写具体提醒内容，如日期、事项、注意事项等）</p>',
-    closingHtml: '<p style="margin-top:16px">愿您一切安好 🌸</p>',
+    bodyHtml: '<p>（在这里写具体提醒内容）</p>',
+    closingHtml: '',
   },
   {
     id: 'thanks',
     name: '感谢与跟进',
     emoji: '💌',
     description: '感谢信、回访、邀请',
-    defaultSubject: '感谢您的支持',
+    defaultSubject: '谢谢你的支持',
     greetingVariants: [
-      { id: 'thanks', name: '真诚感谢', greetingHtml: '<p>亲爱的 {{contact_name}}，</p><p>衷心感谢您的支持与信任！</p>' },
-      { id: 'followup', name: '跟进回访', greetingHtml: '<p>{{contact_name}} 您好，</p><p>好久不见，特此来信跟进近况：</p>' },
-      { id: 'invite', name: '活动邀请', greetingHtml: '<p>{{contact_name}} 您好，</p><p>诚挚邀请您参加：</p>' },
-      { id: 'feedback', name: '征求意见', greetingHtml: '<p>{{contact_name}} 您好，</p><p>您的意见对我们非常重要，恳请您抽空反馈：</p>' },
+      { id: 'thanks', name: '感谢', greetingHtml: '<p>{{contact_name}}，</p><p>真的很感谢你的帮助。</p>' },
+      { id: 'followup', name: '跟进', greetingHtml: '<p>{{contact_name}}，</p><p>好久不见，来问问近况：</p>' },
+      { id: 'invite', name: '邀请', greetingHtml: '<p>{{contact_name}}，</p><p>想邀请你：</p>' },
+      { id: 'feedback', name: '意见', greetingHtml: '<p>{{contact_name}}，</p><p>想听听你的想法：</p>' },
     ],
-    bodyHtml: '<p>（请在此填写感谢内容、活动详情或问卷链接等）</p>',
-    closingHtml: '<p style="margin-top:16px">期待您的回复！</p>',
+    bodyHtml: '<p>（在这里写具体内容）</p>',
+    closingHtml: '',
   },
   {
     id: 'notice',
-    name: '系统通知',
+    name: '一般通知',
     emoji: '📢',
     description: '通用通知、公告',
-    defaultSubject: '系统通知 · TimeMark',
+    defaultSubject: '跟你说一声',
     greetingVariants: [
-      { id: 'default', name: '通用', greetingHtml: '<p>{{contact_name}} 您好，</p><p>这是一条来自 TimeMark 的通知：</p>' },
-      { id: 'update', name: '更新公告', greetingHtml: '<p>{{contact_name}} 您好，</p><p>我们有一些重要更新与您分享：</p>' },
-      { id: 'account', name: '账户相关', greetingHtml: '<p>{{contact_name}} 您好，</p><p>关于您的账户/订阅，请注意以下信息：</p>' },
+      { id: 'default', name: '通用', greetingHtml: '<p>{{contact_name}}，</p>' },
+      { id: 'update', name: '更新', greetingHtml: '<p>{{contact_name}}，</p><p>有件事更新一下：</p>' },
+      { id: 'account', name: '账户', greetingHtml: '<p>{{contact_name}}，</p><p>关于你的账户，请注意：</p>' },
     ],
-    bodyHtml: '<p>（请在此填写通知正文）</p>',
-    closingHtml: '<p style="margin-top:16px">如有疑问，请联系管理员。</p>',
+    bodyHtml: '<p>（在这里写通知正文）</p>',
+    closingHtml: '',
   },
 ];
 
-/** 替换批量邮件变量 */
 export function renderBroadcastTemplate(
   template: string,
   vars: { contact_name?: string; subject?: string },
 ): string {
-  const contactName = vars.contact_name?.trim() || '您好';
+  const contactName = vars.contact_name?.trim() || '你好';
   const map: Record<string, string> = {
     '{{contact_name}}': contactName,
     '{{name}}': contactName,
@@ -147,16 +141,15 @@ export function buildBroadcastEmail(
   const subject = subjectOverride?.trim() || category.defaultSubject;
   const sampleName = '张三';
   const parts = [
-    `<div style="font-family:sans-serif;line-height:1.7;color:#1e293b">`,
+    `<div style="font-family:sans-serif;line-height:1.7;color:#222;font-size:15px">`,
     renderBroadcastTemplate(variant.greetingHtml, { contact_name: sampleName, subject }),
     renderBroadcastTemplate(category.bodyHtml, { contact_name: sampleName, subject }),
     renderBroadcastTemplate(category.closingHtml, { contact_name: sampleName, subject }),
     `</div>`,
   ];
-  return { subject, html: parts.join('\n') };
+  return { subject, html: parts.filter(Boolean).join('\n') };
 }
 
-/** @deprecated 使用 BROADCAST_TEMPLATE_CATEGORIES */
 export const BROADCAST_PRESET_TEMPLATES = BROADCAST_TEMPLATE_CATEGORIES.map((c) => ({
   id: c.id,
   name: c.name,

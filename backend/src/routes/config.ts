@@ -38,6 +38,7 @@ import { query } from '../db/index.js';
 import { resolveEmailRecipientForTest } from '../utils/notification-recipients.js';
 import { logAudit } from '../services/audit.service.js';
 import { maskNotificationAccountForClient } from '../utils/notification-account-client.js';
+import { maskUserConfigForClient } from '../utils/user-config-client.js';
 
 const config = new Hono<{ Variables: { user: User } }>();
 
@@ -47,7 +48,7 @@ config.use('*', authMiddleware);
 config.get('/', async (c) => {
   const user = c.get('user');
   const data = await getUserConfig(Number(user.id));
-  return c.json({ success: true, data: data || {} });
+  return c.json({ success: true, data: maskUserConfigForClient(data) });
 });
 
 config.post('/', async (c) => {

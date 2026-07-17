@@ -84,77 +84,66 @@ function decryptWithFallback(
   return '';
 }
 
-export async function saveUserConfig(userId: number, config: any): Promise<void> {
-  const e = (v: string | undefined) => v ? encrypt(v, MASTER_KEY()) : null;
+export async function saveUserConfig(userId: number, config: Record<string, unknown>): Promise<void> {
+  const e = (v: unknown) => (typeof v === 'string' && v.trim() ? encrypt(v.trim(), MASTER_KEY()) : null);
+
+  type FieldSpec = { column: string; encrypt?: boolean; json?: boolean };
+  const fields: Record<string, FieldSpec> = {
+    resend_api_key: { column: 'encrypted_resend_key', encrypt: true },
+    github_token: { column: 'encrypted_github_token', encrypt: true },
+    feishu_webhook: { column: 'encrypted_feishu_webhook', encrypt: true },
+    wecom_webhook: { column: 'encrypted_wecom_webhook', encrypt: true },
+    dingtalk_webhook: { column: 'encrypted_dingtalk_webhook', encrypt: true },
+    dingtalk_secret: { column: 'encrypted_dingtalk_secret', encrypt: true },
+    telegram_bot_token: { column: 'encrypted_telegram_bot_token', encrypt: true },
+    discord_webhook: { column: 'encrypted_discord_webhook', encrypt: true },
+    slack_webhook: { column: 'encrypted_slack_webhook', encrypt: true },
+    wxpusher_app_token: { column: 'encrypted_wxpusher_app_token', encrypt: true },
+    wxpusher_uid: { column: 'encrypted_wxpusher_uid', encrypt: true },
+    qmsg_key: { column: 'encrypted_qmsg_key', encrypt: true },
+    qmsg_qq: { column: 'encrypted_qmsg_qq', encrypt: true },
+    channel_webhooks: { column: 'encrypted_channel_webhooks', encrypt: true, json: true },
+    telegram_chat_id: { column: 'telegram_chat_id' },
+    reminder_emails: { column: 'reminder_emails', json: true },
+    alert_channels: { column: 'alert_channels', json: true },
+    timezone: { column: 'timezone' },
+    quiet_hours_start: { column: 'quiet_hours_start' },
+    quiet_hours_end: { column: 'quiet_hours_end' },
+    default_test_email: { column: 'default_test_email' },
+  };
+
+  const updates: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  for (const [key, spec] of Object.entries(fields)) {
+    if (!(key in config)) continue;
+    const raw = config[key];
+    let value: unknown;
+    if (raw === null || raw === '') {
+      value = null;
+    } else if (spec.encrypt) {
+      value = spec.json ? e(JSON.stringify(raw)) : e(raw);
+    } else if (spec.json) {
+      value = JSON.stringify(raw);
+    } else {
+      value = raw;
+    }
+    updates.push(`${spec.column} = $${idx++}`);
+    values.push(value);
+  }
+
+  if (updates.length === 0) return;
+
+  const existing = await query('SELECT user_id FROM user_configs WHERE user_id = $1', [userId]);
+  if (existing.rows.length === 0) {
+    await query('INSERT INTO user_configs (user_id, timezone) VALUES ($1, $2)', [userId, 'Asia/Shanghai']);
+  }
+
+  values.push(userId);
   await query(
-    `INSERT INTO user_configs (
-      user_id,
-      encrypted_resend_key,
-      encrypted_github_token,
-      encrypted_feishu_webhook,
-      encrypted_wecom_webhook,
-      encrypted_dingtalk_webhook,
-      encrypted_dingtalk_secret,
-      encrypted_telegram_bot_token,
-      encrypted_discord_webhook,
-      encrypted_slack_webhook,
-      encrypted_wxpusher_app_token,
-      encrypted_wxpusher_uid,
-      encrypted_qmsg_key,
-      encrypted_qmsg_qq,
-      encrypted_channel_webhooks,
-      telegram_chat_id,
-      reminder_emails,
-      alert_channels,
-      timezone,
-      quiet_hours_start,
-      quiet_hours_end
-    )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-     ON CONFLICT (user_id) DO UPDATE SET
-       encrypted_resend_key = EXCLUDED.encrypted_resend_key,
-       encrypted_github_token = EXCLUDED.encrypted_github_token,
-       encrypted_feishu_webhook = EXCLUDED.encrypted_feishu_webhook,
-       encrypted_wecom_webhook = EXCLUDED.encrypted_wecom_webhook,
-       encrypted_dingtalk_webhook = EXCLUDED.encrypted_dingtalk_webhook,
-       encrypted_dingtalk_secret = EXCLUDED.encrypted_dingtalk_secret,
-       encrypted_telegram_bot_token = EXCLUDED.encrypted_telegram_bot_token,
-       encrypted_discord_webhook = EXCLUDED.encrypted_discord_webhook,
-       encrypted_slack_webhook = EXCLUDED.encrypted_slack_webhook,
-       encrypted_wxpusher_app_token = EXCLUDED.encrypted_wxpusher_app_token,
-       encrypted_wxpusher_uid = EXCLUDED.encrypted_wxpusher_uid,
-       encrypted_qmsg_key = EXCLUDED.encrypted_qmsg_key,
-       encrypted_qmsg_qq = EXCLUDED.encrypted_qmsg_qq,
-       encrypted_channel_webhooks = EXCLUDED.encrypted_channel_webhooks,
-       telegram_chat_id = EXCLUDED.telegram_chat_id,
-       reminder_emails = EXCLUDED.reminder_emails,
-       alert_channels = EXCLUDED.alert_channels,
-       timezone = EXCLUDED.timezone,
-       quiet_hours_start = EXCLUDED.quiet_hours_start,
-       quiet_hours_end = EXCLUDED.quiet_hours_end`,
-    [
-      userId,
-      e(config.resend_api_key),
-      e(config.github_token),
-      e(config.feishu_webhook),
-      e(config.wecom_webhook),
-      e(config.dingtalk_webhook),
-      e(config.dingtalk_secret),
-      e(config.telegram_bot_token),
-      e(config.discord_webhook),
-      e(config.slack_webhook),
-      e(config.wxpusher_app_token),
-      e(config.wxpusher_uid),
-      e(config.qmsg_key),
-      e(config.qmsg_qq),
-      e(config.channel_webhooks ? JSON.stringify(config.channel_webhooks) : undefined),
-      config.telegram_chat_id || null,
-      config.reminder_emails ? JSON.stringify(config.reminder_emails) : null,
-      config.alert_channels ? JSON.stringify(config.alert_channels) : null,
-      config.timezone || 'Asia/Shanghai',
-      config.quiet_hours_start || null,
-      config.quiet_hours_end || null,
-    ]
+    `UPDATE user_configs SET ${updates.join(', ')} WHERE user_id = $${idx}`,
+    values,
   );
 }
 

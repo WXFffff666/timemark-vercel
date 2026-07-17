@@ -7,16 +7,28 @@ const data = new Hono<{ Variables: { user: User } }>();
 
 data.use('*', authMiddleware);
 
-const SENSITIVE_ACCOUNT_FIELDS = ['token', 'secret', 'webhook', 'session_data'] as const;
+const SENSITIVE_ACCOUNT_FIELDS = ['token', 'secret', 'webhook', 'chat_id', 'session_data'] as const;
 const SENSITIVE_CONFIG_FIELDS = [
-  'smtp_password',
-  'resend_api_key',
-  'sendgrid_api_key',
-  'mailgun_api_key',
-  'brevo_api_key',
-  'postmark_api_key',
-  'ses_secret_key',
-  'webhook_secret',
+  'encrypted_resend_key',
+  'encrypted_github_token',
+  'encrypted_feishu_webhook',
+  'encrypted_wecom_webhook',
+  'encrypted_dingtalk_webhook',
+  'encrypted_dingtalk_secret',
+  'encrypted_telegram_bot_token',
+  'encrypted_discord_webhook',
+  'encrypted_slack_webhook',
+  'encrypted_wxpusher_app_token',
+  'encrypted_wxpusher_uid',
+  'encrypted_qmsg_key',
+  'encrypted_qmsg_qq',
+  'encrypted_channel_webhooks',
+  'inbox_receive_secret',
+  'webhook_inbound_secret',
+  'caldav_password_encrypted',
+  'api_key',
+  'api_key_hash',
+  'resend_webhook_secret',
 ] as const;
 
 function redactFields<T extends Record<string, unknown>>(

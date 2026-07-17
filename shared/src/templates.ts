@@ -31,7 +31,7 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
   {
     id: 'birthday',
     name: '生日提醒',
-    content: '🎂 {{person_name}} 的生日还有 {{days_until}} 天！{{blessing}}',
+    content: '{{person_name}}的生日还有{{days_until}}天。{{blessing}}',
     isPreset: true,
     variables: ['person_name', 'days_until', 'blessing'],
     description: '适用于生日提醒，包含被提醒人和祝福语',
@@ -39,7 +39,7 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
   {
     id: 'birthday_simple',
     name: '生日简洁版',
-    content: '🎂 {{event_name}} 还有 {{days_until}} 天',
+    content: '{{event_name}}还有{{days_until}}天',
     isPreset: true,
     variables: ['event_name', 'days_until'],
     description: '简洁的生日提醒',
@@ -251,7 +251,7 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
   {
     id: 'generic',
     name: '通用提醒',
-    content: '📅 {{event_name}} 还有 {{days_until}} 天',
+    content: '提醒一下：{{event_name}}还有{{days_until}}天。',
     isPreset: true,
     variables: ['event_name', 'days_until'],
     description: '适用于所有类型的事件',
@@ -259,7 +259,7 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
   {
     id: 'detailed',
     name: '详细提醒',
-    content: '📅 事件：{{event_name}}\n📆 日期：{{event_date}}\n👤 被提醒人：{{person_name}}\n⏰ 距离：{{days_until}} 天\n🎉 {{blessing}}',
+    content: '{{event_name}}，日期{{event_date}}，还有{{days_until}}天。{{blessing}}',
     isPreset: true,
     variables: ['event_name', 'event_date', 'person_name', 'days_until', 'blessing'],
     description: '显示完整的事件信息',

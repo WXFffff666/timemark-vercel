@@ -696,70 +696,73 @@ export async function sendNotifications(
             throw new Error('未配置收件邮箱：请在事件、通知渠道或设置中填写默认邮箱');
           }
 
-          // B8: 同分钟合并为一封邮件（按用户）
+          const todayKey = new Date().toISOString().slice(0, 10);
           const minuteKey = new Date().toISOString().slice(0, 16);
-          const mergedBody = recipientEmails.map((email) => {
+
+          for (const email of recipientEmails) {
             const emailMappedEvent = {
-              ...event,
+              ...mappedEvent,
               name: applyRelationshipMapping(event.name, mappings, email),
             };
-            return `• ${emailMappedEvent.name} → ${email}`;
-          }).join('\n');
-          const primaryEmail = recipientEmails[0];
-          const todayKey = new Date().toISOString().slice(0, 10);
-          const idempotencyKey = `reminder-${event.id}-${todayKey}-${userId}-${minuteKey}`;
-          const mergedEvent = { ...mappedEvent, customMessage: mergedBody };
-          try {
-            await retryWithBackoff(() => sendEmailNotification(
-              mergedEvent,
-              chConfig.apiKey,
-              fromEmail,
-              primaryEmail,
-              idempotencyKey,
-              {
-                bcc: recipientEmails.length > 1 ? recipientEmails.slice(1) : undefined,
-                markdownTemplate: config?.markdown_email_template,
-              },
-            ));
-            for (const email of recipientEmails) {
+            const idempotencyKey = `reminder-${event.id}-${todayKey}-${userId}-${minuteKey}-${email}`;
+            try {
+              await retryWithBackoff(() => sendEmailNotification(
+                emailMappedEvent,
+                chConfig.apiKey,
+                fromEmail,
+                email,
+                idempotencyKey,
+                { markdownTemplate: config?.markdown_email_template },
+              ));
               await logEmail({
                 userId,
                 eventId: event.id ? Number(event.id) : null,
                 recipient: email,
                 status: 'sent',
-                subject: `TimeMark: ${event.name}`,
+                subject: emailMappedEvent.name,
                 channelType: ch,
               });
-            }
-            channelSendMeta[ch] = { recipients: recipientEmails };
-          } catch (error) {
-            const errMsg = error instanceof Error ? error.message : String(error);
-            for (const email of recipientEmails) {
+            } catch (error) {
+              const errMsg = error instanceof Error ? error.message : String(error);
               await logEmail({
                 userId,
                 eventId: event.id ? Number(event.id) : null,
                 recipient: email,
                 status: 'failed',
-                subject: `TimeMark: ${event.name}`,
+                subject: emailMappedEvent.name,
                 errorMessage: errMsg,
                 channelType: ch,
               });
+              throw error;
             }
-            throw error;
           }
+          channelSendMeta[ch] = { recipients: recipientEmails };
         }
         else if (ch === 'smtp' && chConfig.webhook && chConfig.token && chConfig.chat_id) {
           const smtpHost = chConfig.webhook;
           const smtpPort = parseInt(chConfig.secret || '587', 10);
           const password = chConfig.token;
           const fromEmail = chConfig.chat_id;
-          const smtpRecipients = resolveRecipientEmails(event, { emails: [fromEmail] }, config);
+          const smtpRecipients = resolveRecipientEmails(event, chConfig, config);
           if (smtpRecipients.length === 0) {
-            throw new Error('未配置 SMTP 收件邮箱');
+            throw new Error('未配置 SMTP 收件邮箱：请在事件或设置中填写提醒邮箱');
           }
           for (const recipient of smtpRecipients) {
-            await retryWithBackoff(() => sendSmtpNotification(mappedEvent, smtpHost, smtpPort, password, fromEmail, recipient));
+            const emailMappedEvent = {
+              ...mappedEvent,
+              name: applyRelationshipMapping(event.name, mappings, recipient),
+            };
+            await retryWithBackoff(() => sendSmtpNotification(
+              emailMappedEvent,
+              smtpHost,
+              smtpPort,
+              password,
+              fromEmail,
+              recipient,
+              { markdownTemplate: config?.markdown_email_template },
+            ));
           }
+          channelSendMeta[ch] = { recipients: smtpRecipients };
         }
         else if (genericWebhookChannels.has(ch) && chConfig.webhook)
           await retryWithBackoff(() => sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch));

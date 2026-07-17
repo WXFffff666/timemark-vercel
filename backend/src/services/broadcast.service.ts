@@ -90,15 +90,15 @@ export async function sendBroadcastEmail(userId: number, input: BroadcastEmailIn
       await sendRawEmail(creds, recipient.email, subject, html);
       successCount++;
       await query(
-        `INSERT INTO email_logs (recipient, status, message_id, broadcast_id) VALUES ($1, 'sent', $2, $3)`,
-        [recipient.email, null, campaignId],
+        `INSERT INTO email_logs (user_id, recipient, status, message_id, broadcast_id, subject, channel_type) VALUES ($1, $2, 'sent', $3, $4, $5, $6)`,
+        [userId, recipient.email, null, campaignId, subject, creds.type],
       ).catch(() => {});
     } catch (err) {
       failedCount++;
       errors.push(`${recipient.email}: ${err instanceof Error ? err.message : String(err)}`);
       await query(
-        `INSERT INTO email_logs (recipient, status, broadcast_id) VALUES ($1, 'failed', $2)`,
-        [recipient.email, campaignId],
+        `INSERT INTO email_logs (user_id, recipient, status, broadcast_id, subject, channel_type) VALUES ($1, $2, 'failed', $3, $4, $5)`,
+        [userId, recipient.email, campaignId, subject, creds.type],
       ).catch(() => {});
     }
   }
