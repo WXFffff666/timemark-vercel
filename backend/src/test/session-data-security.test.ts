@@ -4,7 +4,7 @@ import { encrypt, decrypt } from '@timemark/shared/crypto';
 const MASTER_KEY = 'test-master-key-for-session-data-security-32b';
 
 describe('session_data security contract', () => {
-  it('encrypts smtp session metadata for JSONB string storage', () => {
+  it('encrypts smtp session metadata for TEXT column storage', () => {
     const payload = { smtpProvider: '163', smtpEncryption: 'ssl' as const };
     const ciphertext = encrypt(JSON.stringify(payload), MASTER_KEY);
     expect(typeof ciphertext).toBe('string');

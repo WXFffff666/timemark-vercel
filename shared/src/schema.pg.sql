@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS notification_accounts (
   chat_id TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   config_method TEXT DEFAULT 'webhook',
-  session_data JSONB,
+  session_data TEXT,
   plugin_package TEXT,
   connection_status TEXT,
   last_test_result TEXT,

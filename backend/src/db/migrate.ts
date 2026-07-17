@@ -492,6 +492,42 @@ UPDATE fixed_contacts SET contact_methods = jsonb_build_object(
       sql: `ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS relationship TEXT;
 ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'unknown';`,
     },
+    {
+      version: 32,
+      name: 'session_data_text_v32',
+      sql: `ALTER TABLE notification_accounts ADD COLUMN IF NOT EXISTS session_data_text TEXT;`,
+      postMigrate: async () => {
+        const result = await query(
+          `SELECT id, session_data, session_data_text FROM notification_accounts
+           WHERE session_data IS NOT NULL AND session_data_text IS NULL`
+        );
+        for (const row of result.rows as Array<{ id: number; session_data: unknown }>) {
+          const raw = row.session_data;
+          let textValue: string | null = null;
+          if (raw == null) {
+            textValue = null;
+          } else if (typeof raw === 'string') {
+            textValue = raw;
+          } else if (typeof raw === 'object') {
+            // JSONB string primitive or legacy plain object — both become TEXT for AES storage
+            const asAny = raw as { smtpProvider?: string };
+            if (typeof asAny.smtpProvider === 'string' || Object.keys(raw as object).length > 0) {
+              textValue = JSON.stringify(raw);
+            }
+          }
+          if (textValue != null) {
+            await query(
+              'UPDATE notification_accounts SET session_data_text = $1 WHERE id = $2',
+              [textValue, row.id]
+            );
+          }
+        }
+        await query('ALTER TABLE notification_accounts DROP COLUMN IF EXISTS session_data;');
+        await query(
+          'ALTER TABLE notification_accounts RENAME COLUMN session_data_text TO session_data;'
+        );
+      },
+    },
   ];
 
   for (const migration of migrations) {
@@ -547,8 +583,13 @@ export async function migrateEncryptionKey(): Promise<void> {
     let paramIdx = 0;
 
     for (const field of encryptedFields) {
-      const value = row[field];
+      let value = row[field];
       if (!value) continue;
+
+      if (field === 'session_data' && typeof value === 'object' && value !== null) {
+        value = JSON.stringify(value);
+      }
+      if (typeof value !== 'string') continue;
 
       // Try decrypting with current key - if it works, already migrated
       try {

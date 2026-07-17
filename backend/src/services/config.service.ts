@@ -283,7 +283,7 @@ function decryptNotificationField(
   }
 }
 
-/** Encrypt session metadata for JSONB/TEXT column (stored as JSON string primitive in JSONB). */
+/** Encrypt session metadata for TEXT column (same as token/webhook fields). */
 function serializeSessionDataForDb(type: string, sessionData: unknown): string | null {
   if (!sessionData) return null;
   const payload =

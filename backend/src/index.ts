@@ -5,6 +5,7 @@ import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { securityHeaders } from './middleware/security-headers.js';
+import { httpsEnforcement } from './middleware/https-enforcement.js';
 import { csrfProtection } from './middleware/csrf.js';
 import { loginRateLimit, apiRateLimit, rateLimit } from './middleware/rate-limit.js';
 import { getConfiguredOrigins, isAllowedOrigin } from './utils/allowed-origins.js';
@@ -53,6 +54,7 @@ const app = new Hono();
 
 app.use('*', honoLogger());
 app.use('*', securityHeaders);
+app.use('/api/*', httpsEnforcement);
 
 const configuredOrigins = getConfiguredOrigins();
 
