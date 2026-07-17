@@ -3,9 +3,9 @@
  * Set HEALTHCHECK_URL (e.g. Healthchecks.io ping URL) in Vercel env.
  */
 
-/** CRON_SECRET or CRONSECRET (Vercel UI may not allow underscore). */
+/** CRONSECRET (Vercel) or CRON_SECRET — prefer CRONSECRET when both are set. */
 export function getCronSecret(): string | undefined {
-  const secret = process.env.CRON_SECRET?.trim() || process.env.CRONSECRET?.trim();
+  const secret = process.env.CRONSECRET?.trim() || process.env.CRON_SECRET?.trim();
   return secret || undefined;
 }
 
