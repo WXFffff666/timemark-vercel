@@ -58,6 +58,43 @@ import { createInboxMessage } from '../inbox.service.js';
 import { mapWithConcurrency } from '../../utils/concurrency.js';
 import { classifyErrorForRetry } from '../../utils/retry-classifier.js';
 
+function formatEventDateValue(date: unknown): string {
+  if (!date) return '';
+  if (date instanceof Date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }
+  if (typeof date === 'string') return date.split('T')[0];
+  return String(date);
+}
+
+function parseReminderConfigField(raw: unknown): Record<string, unknown> {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as Record<string, unknown>;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw) as Record<string, unknown>; } catch { return {}; }
+  }
+  return {};
+}
+
+/** Normalize raw DB event rows for notification handlers (test-send, cron). */
+export function normalizeEventForNotification(row: Record<string, unknown>): Record<string, unknown> {
+  const reminderConfig = parseReminderConfigField(row.reminder_config ?? row.reminderConfig);
+  const personName = row.person_name ?? row.personName;
+  const reminderRecipientName = row.reminder_recipient_name ?? row.reminderRecipientName;
+  return {
+    ...row,
+    name: String(row.name ?? ''),
+    type: String(row.type ?? 'other'),
+    date: formatEventDateValue(row.date),
+    reminderConfig,
+    reminder_config: reminderConfig,
+    personName,
+    person_name: personName,
+    reminderRecipientName,
+    reminder_recipient_name: reminderRecipientName,
+  };
+}
+
 export function resolveRecipientEmails(event: Record<string, unknown>, chConfig: { emails?: string[] }, userConfig: Record<string, unknown> | null): string[] {
   if (event.reminder_recipient_email) {
     return [String(event.reminder_recipient_email)];
@@ -393,6 +430,7 @@ export async function sendNotifications(
   channels: string[],
   options?: { skipQuietHours?: boolean },
 ): Promise<Record<string, { success: boolean; error?: string; accountId?: number }>> {
+  event = normalizeEventForNotification(event as Record<string, unknown>);
   const config = await getUserConfig(userId);
 
   const userTimezone = config?.timezone || 'Asia/Shanghai';

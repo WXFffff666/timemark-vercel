@@ -21,13 +21,18 @@ export async function sendEmailNotification(
   idempotencyKey?: string,
   options?: { bcc?: string[]; markdownTemplate?: string | null },
 ): Promise<void> {
-  const resend = new Resend(apiKey);
+  const resend = new Resend(String(apiKey));
   
+  const rc = event.reminderConfig || event.reminder_config;
+  const customMessage = typeof rc === 'object' && rc && 'customMessage' in rc
+    ? String((rc as { customMessage?: unknown }).customMessage || '')
+    : undefined;
+
   const blessing = getBlessing(
-    event.type, 
-    event.reminderConfig?.customMessage,
-    event.personName,
-    event.reminderRecipientName
+    String(event.type || 'other'),
+    customMessage,
+    event.personName != null ? String(event.personName) : event.person_name != null ? String(event.person_name) : undefined,
+    event.reminderRecipientName != null ? String(event.reminderRecipientName) : event.reminder_recipient_name != null ? String(event.reminder_recipient_name) : undefined,
   );
 
   const html = options?.markdownTemplate?.trim()
@@ -136,11 +141,11 @@ export async function sendEmailNotification(
       <h1 class="title">事件提醒</h1>
     </div>
     
-    <div class="event-name">${escapeHtml(event.name)}</div>
+    <div class="event-name">${escapeHtml(String(event.name ?? ''))}</div>
     
     <div class="info-row">
       <span class="info-label">📆 日期</span>
-      <span class="info-value">${escapeHtml(event.date)}</span>
+      <span class="info-value">${escapeHtml(String(event.date ?? ''))}</span>
     </div>
     
     <div class="info-row">
@@ -162,8 +167,8 @@ export async function sendEmailNotification(
 </html>`;
 
   const { error } = await resend.emails.send({
-    from: fromEmail,
-    to: toEmail,
+    from: String(fromEmail),
+    to: String(toEmail),
     ...(options?.bcc?.length ? { bcc: options.bcc } : {}),
     subject: `📅 TimeMark 提醒: ${event.name}`,
     html,
