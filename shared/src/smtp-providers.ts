@@ -48,17 +48,19 @@ export const SMTP_PROVIDER_PRESETS: SmtpProviderPreset[] = [
     port: 465,
     altPort: 587,
     servers: {
-      smtp: 'smtp.163.com',
-      pop3: 'pop.163.com',
-      imap: 'imap.163.com',
-      sslNote: 'POP3/SMTP/IMAP 均支持 SSL；发信推荐 SSL 465 或 STARTTLS 587',
+      smtp: 'smtp.163.com（发信，SSL 465 或 STARTTLS 587）',
+      pop3: 'pop.163.com（收信，SSL 995）',
+      imap: 'imap.163.com（收信，SSL 993，推荐）',
+      sslNote: '官方要求开启 SSL/TLS；密码必须用客户端授权码（16 位），不是登录密码',
     },
     passwordLabel: '163 客户端授权码',
-    passwordDescription: '必须使用「客户端授权密码」，不是邮箱登录密码。在 设置 → POP3/SMTP/IMAP 中开启服务后生成',
+    passwordDescription: '设置 → POP3/SMTP/IMAP → 开启 IMAP/SMTP → 短信验证后生成，仅显示一次',
     fromEmailPlaceholder: 'yourname@163.com',
-    setupGuide: 'mail.163.com → 设置 → POP3/SMTP/IMAP → 开启 IMAP/SMTP → 新增授权密码（只显示一次，请保存）',
-    cloudWarning: '163 可能限制云服务器 IP。若网页已开启 SMTP 但此处测试失败，可尝试切换为 STARTTLS(587)，或改用 Resend。',
-    docsUrl: 'https://help.mail.163.com/faqDetail.do?code=d7a5dc8471cd0c0e8b4b8f4f8e8ab0f0de1cd332cae813900ca0dcbfe7f9b4a1eda321afd4b6cbf5',
+    setupGuide:
+      'email.163.com → 设置 → POP3/SMTP/IMAP → 开启 IMAP（推荐）或 POP3 → 短信/扫码验证 → 记录 16 位授权码（只显示一次）',
+    cloudWarning:
+      '163 可能限制云服务器 IP。网页已开启 SMTP 但 TimeMark 测试失败时，可切换 STARTTLS(587) 或改用 Resend。',
+    docsUrl: 'https://help.mail.163.com/faq.do?m=list&categoryID=90',
   },
   {
     id: '126',
