@@ -37,6 +37,7 @@ import { getChannelTemplate } from '../services/notifications/channels.config.js
 import { query } from '../db/index.js';
 import { resolveEmailRecipientForTest } from '../utils/notification-recipients.js';
 import { logAudit } from '../services/audit.service.js';
+import { maskNotificationAccountForClient } from '../utils/secret-mask.js';
 
 const config = new Hono<{ Variables: { user: User } }>();
 
@@ -88,7 +89,10 @@ config.post('/alert-settings', async (c) => {
 config.get('/accounts', async (c) => {
   const user = c.get('user');
   const accounts = await getNotificationAccounts(Number(user.id));
-  return c.json({ success: true, data: accounts });
+  return c.json({
+    success: true,
+    data: accounts.map((a) => maskNotificationAccountForClient(a as unknown as Record<string, unknown>)),
+  });
 });
 
 config.post('/accounts', async (c) => {
@@ -180,7 +184,7 @@ config.put('/accounts/:id', async (c) => {
     isActive: parsed.data.isActive,
     type: account.type,
   });
-  return c.json({ success: true, data: account });
+  return c.json({ success: true, data: maskNotificationAccountForClient(account as unknown as Record<string, unknown>) });
 });
 
 config.delete('/accounts/:id', async (c) => {

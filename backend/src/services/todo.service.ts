@@ -47,3 +47,13 @@ export async function unmarkTodoComplete(
   );
   return result.rows.length > 0;
 }
+
+/** 清理超过保留期的完成记录（默认 365 天，按 occurrence_date） */
+export async function purgeOldTodoCompletions(retentionDays = 365): Promise<number> {
+  const result = await query(
+    `DELETE FROM todo_completions
+     WHERE occurrence_date < CURRENT_DATE - ($1::int * INTERVAL '1 day')`,
+    [retentionDays],
+  );
+  return result.rowCount ?? 0;
+}

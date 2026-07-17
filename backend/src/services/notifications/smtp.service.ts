@@ -10,10 +10,12 @@ export async function sendSmtpNotification(
   fromEmail: string,
   toEmail: string
 ): Promise<void> {
+  const port = smtpPort || 587;
   const transporter = nodemailer.createTransport({
     host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465,
+    port,
+    secure: port === 465,
+    requireTLS: port === 587,
     auth: {
       user: fromEmail,
       pass: password,

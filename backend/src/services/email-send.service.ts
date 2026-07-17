@@ -94,10 +94,12 @@ export async function sendRawEmail(
   }
 
   if (creds.type === 'smtp') {
+    const port = creds.smtpPort ?? 587;
     const transporter = nodemailer.createTransport({
       host: creds.smtpHost,
-      port: creds.smtpPort,
-      secure: creds.smtpPort === 465,
+      port,
+      secure: port === 465,
+      requireTLS: port === 587,
       auth: { user: creds.fromEmail, pass: creds.smtpPassword },
     });
     await transporter.sendMail({ from: creds.fromEmail, to, subject, html: body });

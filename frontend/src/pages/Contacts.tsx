@@ -100,6 +100,7 @@ export default function Contacts() {
   const [open, setOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [sendPickOpen, setSendPickOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [sendingContact, setSendingContact] = useState<FixedContact | null>(null);
   const [form, setForm] = useState<ContactForm>(emptyForm());
@@ -146,6 +147,7 @@ export default function Contacts() {
       setOpen(false);
       setGroupOpen(false);
       setSendOpen(false);
+      setSendPickOpen(false);
     };
   }, []);
 
@@ -256,11 +258,29 @@ export default function Contacts() {
       .find(Boolean);
     setSendingContact(c);
     setSendAvailableEmails(emails);
-    setSendSelectedEmails(emails);
     setSendSubject(`来自 TimeMark 的消息 - ${c.name}`);
     setSendHtml(`<p>您好 ${c.nickname || c.name}，</p><p>这是一条来自 TimeMark 的消息。</p>`);
     setSendAccountId(boundEmail?.id ?? emailAccounts[0]?.id ?? '');
     setError('');
+
+    if (emails.length === 1) {
+      setSendSelectedEmails(emails);
+      setSendPickOpen(false);
+      setSendOpen(true);
+    } else {
+      setSendSelectedEmails([]);
+      setSendPickOpen(true);
+      setSendOpen(false);
+    }
+  };
+
+  const proceedToCompose = () => {
+    if (sendSelectedEmails.length === 0) {
+      setError('请至少选择一个收件邮箱');
+      return;
+    }
+    setError('');
+    setSendPickOpen(false);
     setSendOpen(true);
   };
 
@@ -565,6 +585,34 @@ export default function Contacts() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={sendPickOpen} onOpenChange={setSendPickOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>选择收件邮箱 — {sendingContact?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500">该联系人有多个邮箱，请勾选要发送的地址（默认不全选）</p>
+            <div className="space-y-2">
+              {sendAvailableEmails.map((email) => (
+                <label key={email} className="flex items-center gap-2 text-sm cursor-pointer rounded-lg border p-3">
+                  <input
+                    type="checkbox"
+                    checked={sendSelectedEmails.includes(email)}
+                    onChange={() => toggleSendEmail(email)}
+                    className="rounded"
+                  />
+                  {email}
+                </label>
+              ))}
+            </div>
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            <Button className="w-full min-h-11" disabled={sendSelectedEmails.length === 0} onClick={proceedToCompose}>
+              下一步：编辑邮件
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={sendOpen} onOpenChange={setSendOpen}>
         <DialogContent>
           <DialogHeader>
@@ -572,21 +620,20 @@ export default function Contacts() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <p className="text-sm font-medium mb-2">收件邮箱</p>
-              <div className="space-y-1">
-                {sendAvailableEmails.map((email) => (
-                  <label key={email} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={sendSelectedEmails.includes(email)}
-                      onChange={() => toggleSendEmail(email)}
-                      className="rounded"
-                    />
-                    {email}
-                  </label>
-                ))}
-              </div>
-              <p className="text-xs text-slate-400 mt-1">未勾选任何邮箱时不会发送</p>
+              <p className="text-sm font-medium mb-1">收件邮箱</p>
+              <p className="text-sm text-slate-600">{sendSelectedEmails.join('、')}</p>
+              {sendAvailableEmails.length > 1 && (
+                <button
+                  type="button"
+                  className="text-xs text-indigo-500 mt-1 hover:underline"
+                  onClick={() => {
+                    setSendOpen(false);
+                    setSendPickOpen(true);
+                  }}
+                >
+                  重新选择收件邮箱
+                </button>
+              )}
             </div>
             {emailAccounts.length > 1 && (
               <div>

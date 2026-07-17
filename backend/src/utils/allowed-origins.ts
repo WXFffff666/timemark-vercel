@@ -11,8 +11,7 @@ export function getConfiguredOrigins(): string[] {
   ];
 
   const corsOrigin = process.env.CORS_ORIGIN;
-  if (corsOrigin) {
-    if (corsOrigin === '*') return ['*'];
+  if (corsOrigin && corsOrigin !== '*') {
     origins.push(...corsOrigin.split(',').map((o) => o.trim()).filter(Boolean));
   } else if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
     origins.push(CANONICAL_ORIGIN);

@@ -45,6 +45,9 @@ interface Account extends NotificationAccount {
   is_active?: boolean;
   token?: string;
   chat_id?: string;
+  tokenConfigured?: boolean;
+  secretConfigured?: boolean;
+  sessionConfigured?: boolean;
   last_test_result?: 'success' | 'failed' | null;
   connection_status?: string | null;
 }
@@ -321,6 +324,10 @@ export default function Channels() {
     // Validate required fields
     for (const field of selectedTemplate.fields) {
       if (field.required && !configForm[field.name]?.trim()) {
+        if (selectedAccount) {
+          if (field.name === 'token' && selectedAccount.tokenConfigured) continue;
+          if (field.name === 'secret' && selectedAccount.secretConfigured) continue;
+        }
         alert(`请填写 ${field.label}`);
         return;
       }
@@ -789,7 +796,13 @@ export default function Channels() {
                 ) : (
                   <Input
                     type={field.type}
-                    placeholder={field.placeholder}
+                    placeholder={
+                      selectedAccount && field.name === 'token' && selectedAccount.tokenConfigured
+                        ? '已配置，留空则不修改'
+                        : selectedAccount && field.name === 'secret' && selectedAccount.secretConfigured
+                          ? '已配置，留空则不修改'
+                          : field.placeholder
+                    }
                     value={configForm[field.name] || ''}
                     onChange={(e) => setConfigForm({ ...configForm, [field.name]: e.target.value })}
                     className="h-12"

@@ -9,6 +9,7 @@ import { sendLunarPhaseReminders } from '../services/lunar-reminders.service.js'
 import { aggregateDailyStats } from '../services/stats-daily.service.js';
 import { purgeExpiredEventCache } from '../services/event-cache.service.js';
 import { purgeOldInboxMessages } from '../services/inbox.service.js';
+import { purgeOldTodoCompletions } from '../services/todo.service.js';
 import { query } from '../db/index.js';
 import { pingHeartbeat } from '../utils/heartbeat.js';
 import { testConnection } from '../services/notifications/test-connection.js';
@@ -157,6 +158,7 @@ cronRoutes.get('/daily-maintenance', async (c) => {
     const purgedQueue = await purgeOldQueueEntries();
     const purgedCache = await purgeExpiredEventCache();
     const purgedInbox = await purgeOldInboxMessages();
+    const purgedTodos = await purgeOldTodoCompletions();
     const purgedCronLogs = await query(
       `DELETE FROM cron_execution_logs WHERE executed_at < NOW() - INTERVAL '90 days'`,
     );
@@ -166,7 +168,7 @@ cronRoutes.get('/daily-maintenance', async (c) => {
       'daily-maintenance',
       'success',
       startedAt,
-      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged emails: ${purgedEmails}; purged queue: ${purgedQueue}; purged inbox: ${purgedInbox}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}`,
+      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged emails: ${purgedEmails}; purged queue: ${purgedQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}`,
     );
     await pingHeartbeat('daily-maintenance');
     return c.json({
