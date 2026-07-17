@@ -241,11 +241,19 @@ export interface NotificationAccount {
 }
 
 function decryptNotificationField(
-  value: string | null,
+  value: unknown,
   pendingUpdates?: Record<string, string>,
   column?: string
 ): string | null {
-  if (!value) return null;
+  if (value == null || value === '') return null;
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value !== 'string') return null;
   // Try current key
   try {
     return decrypt(value, MASTER_KEY());
@@ -267,6 +275,26 @@ function decryptNotificationField(
   }
 }
 
+function serializeSessionDataForDb(type: string, sessionData: unknown): unknown {
+  if (!sessionData) return null;
+  if (type === 'smtp') {
+    return sessionData;
+  }
+  return encrypt(JSON.stringify(sessionData), MASTER_KEY());
+}
+
+function parseSessionDataFromDb(raw: unknown, pendingUpdates?: Record<string, string>): unknown {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'object') return raw;
+  const decrypted = decryptNotificationField(raw, pendingUpdates, 'session_data');
+  if (!decrypted) return null;
+  try {
+    return JSON.parse(decrypted);
+  } catch {
+    return decrypted;
+  }
+}
+
 function mapNotificationAccountRow(row: any, pendingUpdates?: Record<string, string>): NotificationAccount {
   return {
     ...row,
@@ -274,15 +302,7 @@ function mapNotificationAccountRow(row: any, pendingUpdates?: Record<string, str
     token: decryptNotificationField(row.token, pendingUpdates, 'token'),
     secret: decryptNotificationField(row.secret, pendingUpdates, 'secret'),
     chat_id: decryptNotificationField(row.chat_id, pendingUpdates, 'chat_id'),
-    session_data: (() => {
-      const raw = decryptNotificationField(row.session_data, pendingUpdates, 'session_data');
-      if (!raw) return null;
-      try {
-        return JSON.parse(raw);
-      } catch {
-        return raw;
-      }
-    })(),
+    session_data: parseSessionDataFromDb(row.session_data, pendingUpdates),
   };
 }
 
@@ -363,7 +383,7 @@ export async function createNotificationAccount(
         return chatId ? encrypt(chatId, MASTER_KEY()) : null;
       })(),
       data.config_method || 'webhook',
-      data.session_data ? encrypt(JSON.stringify(data.session_data), MASTER_KEY()) : null,
+      serializeSessionDataForDb(data.type, data.session_data),
       data.plugin_package || null
     ]
   );
@@ -425,7 +445,9 @@ export async function updateNotificationAccount(
   }
   if (data.session_data !== undefined) {
     updates.push(`session_data = $${paramIndex++}`);
-    values.push(data.session_data ? encrypt(JSON.stringify(data.session_data), MASTER_KEY()) : null);
+    const typeRow = await query('SELECT type FROM notification_accounts WHERE id = $1 AND user_id = $2', [id, userId]);
+    const accountType = String(typeRow.rows[0]?.type ?? '');
+    values.push(serializeSessionDataForDb(accountType, data.session_data));
   }
   if (data.plugin_package !== undefined) {
     updates.push(`plugin_package = $${paramIndex++}`);

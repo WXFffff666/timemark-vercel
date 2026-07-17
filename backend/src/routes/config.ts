@@ -97,6 +97,7 @@ config.get('/accounts', async (c) => {
 
 config.post('/accounts', async (c) => {
   const user = c.get('user');
+  try {
   const body = await c.req.json().catch(() => ({}));
   
   const parsed = createNotificationAccountSchema.safeParse(body);
@@ -125,17 +126,19 @@ config.post('/accounts', async (c) => {
   const tpl = getChannelTemplate(parsed.data.type);
   if (tpl) {
     const userId = Number(user.id);
+    const smtpFromEmail =
+      parsed.data.type === 'smtp' ? parsed.data.chatId || undefined : undefined;
     const testChatId = await resolveEmailRecipientForTest(
       userId,
       parsed.data.type,
-      parsed.data.chatId || undefined,
+      smtpFromEmail ?? (parsed.data.chatId || undefined),
     );
     testConnection({
       type: parsed.data.type,
       configMethod: parsed.data.configMethod || tpl.configMethod,
       webhook: parsed.data.webhook || undefined,
       token: parsed.data.token || undefined,
-      chatId: testChatId,
+      chatId: parsed.data.type === 'smtp' ? (parsed.data.chatId || testChatId) : testChatId,
       secret: parsed.data.secret || undefined,
     }).then((result) => {
       const status = result.success ? 'healthy' : 'unhealthy';
@@ -148,11 +151,17 @@ config.post('/accounts', async (c) => {
   
   await logAudit(Number(user.id), 'create', 'notification_account', account.id, { type: parsed.data.type, name: parsed.data.name });
   return c.json({ success: true, data: maskNotificationAccountForClient(account as unknown as Record<string, unknown>) }, 201);
+  } catch (error: unknown) {
+    console.error('[config] create notification account failed:', error);
+    const message = error instanceof Error ? error.message : '创建通知渠道失败';
+    return c.json({ success: false, error: `保存失败：${message}` }, 500);
+  }
 });
 
 config.put('/accounts/:id', async (c) => {
   const user = c.get('user');
   const id = parseInt(c.req.param('id'));
+  try {
   const body = await c.req.json().catch(() => ({}));
   
   const parsed = updateNotificationAccountSchema.safeParse(body);
@@ -185,6 +194,11 @@ config.put('/accounts/:id', async (c) => {
     type: account.type,
   });
   return c.json({ success: true, data: maskNotificationAccountForClient(account as unknown as Record<string, unknown>) });
+  } catch (error: unknown) {
+    console.error('[config] update notification account failed:', error);
+    const message = error instanceof Error ? error.message : '更新通知渠道失败';
+    return c.json({ success: false, error: `保存失败：${message}` }, 500);
+  }
 });
 
 config.delete('/accounts/:id', async (c) => {
