@@ -37,7 +37,7 @@ import { getChannelTemplate } from '../services/notifications/channels.config.js
 import { query } from '../db/index.js';
 import { resolveEmailRecipientForTest } from '../utils/notification-recipients.js';
 import { logAudit } from '../services/audit.service.js';
-import { maskNotificationAccountForClient } from '../utils/secret-mask.js';
+import { maskNotificationAccountForClient } from '../utils/notification-account-client.js';
 
 const config = new Hono<{ Variables: { user: User } }>();
 
