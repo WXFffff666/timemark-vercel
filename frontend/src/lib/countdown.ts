@@ -1,4 +1,4 @@
-import { differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns';
+import { differenceInMilliseconds } from 'date-fns';
 
 export interface CountdownResult {
   days: number;
@@ -7,18 +7,16 @@ export interface CountdownResult {
   isPast: boolean;
 }
 
-export function calculateCountdown(targetDate: Date): CountdownResult {
-  // Use UTC time for consistent calculation
-  const now = new Date();
-  const nowUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const targetUTC = Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate());
-  
-  const isPast = targetUTC < nowUTC;
-  const diff = Math.abs(targetUTC - nowUTC);
-  
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+/** @deprecated 请使用 calendar-utils 的 getEventCountdownTarget + diffToCountdownParts */
+export function calculateCountdown(targetDate: Date, ref = new Date()): CountdownResult {
+  const diff = differenceInMilliseconds(targetDate, ref);
+  const isPast = diff <= 0;
+  const abs = Math.abs(diff);
 
-  return { days, hours, minutes, isPast };
+  return {
+    days: Math.floor(abs / 86400000),
+    hours: Math.floor((abs % 86400000) / 3600000),
+    minutes: Math.floor((abs % 3600000) / 60000),
+    isPast,
+  };
 }

@@ -4,6 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useEffect, useState } from 'react';
 import type { Event, EventType } from '@timemark/shared';
+import {
+  diffToCountdownParts,
+  getEventCountdownTarget,
+  isEventCountdownPast,
+  resolveNextOccurrenceDate,
+} from '@/lib/calendar-utils';
 
 interface EventCardProps {
   event: Event;
@@ -18,8 +24,8 @@ interface EventCardProps {
 // Helper to safely parse dates (append T00:00:00 to ensure local timezone interpretation)
 const safeParseDate = (dateString: string | undefined): Date | null => {
   if (!dateString) return null;
-  // Append T00:00:00 to force local timezone instead of UTC
-  const date = new Date(dateString + 'T00:00:00');
+  const ymd = dateString.slice(0, 10);
+  const date = new Date(`${ymd}T00:00:00`);
   return isNaN(date.getTime()) ? null : date;
 };
 
@@ -73,78 +79,30 @@ const getEventTypeLabel = (type: EventType): string => {
 export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, selected, onSelectToggle }: EventCardProps) {
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
   const [isPast, setIsPast] = useState(false);
-  const [nextReminder, setNextReminder] = useState<Date | null>(null);
 
-  const targetDate = safeParseDate(event.date);
-  const formattedDate = targetDate ? targetDate.toLocaleString('zh-CN') : '无效日期';
-
-  // 计算下一个提醒时间
-  const getNextReminderTime = (): Date | null => {
-    if (!event.reminderConfig?.enabled || !event.reminderConfig?.reminderTimes?.length) {
-      return null;
-    }
-
-    const now = new Date();
-    const reminderTimes = event.reminderConfig.reminderTimes;
-    
-    // 找到今天或未来7天的下一个提醒时间
-    for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
-      const targetDay = new Date(now);
-      targetDay.setDate(targetDay.getDate() + dayOffset);
-      
-      for (const time of reminderTimes) {
-        const [hours, minutes] = time.split(':').map(Number);
-        const reminderTime = new Date(targetDay);
-        reminderTime.setHours(hours, minutes, 0, 0);
-        
-        if (reminderTime > now) {
-          return reminderTime;
-        }
-      }
-    }
-    
-    return null;
-  };
-
-  // 格式化显示日期 - 始终显示事件的实际日期
+  const nextOccurrenceDate = resolveNextOccurrenceDate(event);
+  const targetDate = safeParseDate(nextOccurrenceDate);
+  const formattedDate = targetDate ? targetDate.toLocaleDateString('zh-CN') : '无效日期';
   const displayDate = formattedDate;
 
   useEffect(() => {
     const calculateTimeLeft = () => {
-      // 优先计算到下一个提醒时间的倒计时
-      const nextReminderTime = getNextReminderTime();
-      setNextReminder(nextReminderTime);
-      
-      if (nextReminderTime) {
-        const difference = nextReminderTime.getTime() - new Date().getTime();
-        if (difference > 0) {
-          setTimeLeft({
-            days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-            hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-            minutes: Math.floor((difference / 1000 / 60) % 60),
-            seconds: Math.floor((difference / 1000) % 60),
-          });
-          setIsPast(false);
-          return;
-        }
-      }
-      
-      // 如果没有提醒时间或提醒时间已过，使用事件日期
-      const safeTarget = safeParseDate(event.date);
-      if (!safeTarget) {
+      const target = getEventCountdownTarget(event);
+      if (!target) {
         setTimeLeft(null);
-        setIsPast(false);
+        setIsPast(true);
         return;
       }
-      
-      const difference = safeTarget.getTime() - new Date().getTime();
-      if (difference > 0) {
-        setTimeLeft({
-          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-          hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-          minutes: Math.floor((difference / 1000 / 60) % 60),
-          seconds: Math.floor((difference / 1000) % 60),
-        });
+
+      if (isEventCountdownPast(event)) {
+        setTimeLeft(null);
+        setIsPast(true);
+        return;
+      }
+
+      const parts = diffToCountdownParts(target);
+      if (parts) {
+        setTimeLeft(parts);
         setIsPast(false);
       } else {
         setTimeLeft(null);
@@ -154,7 +112,7 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
     calculateTimeLeft();
     const timer = setInterval(calculateTimeLeft, 1000);
     return () => clearInterval(timer);
-  }, [event.date, event.reminderConfig]);
+  }, [event.date, event.nextOccurrence, event.type, event.recurringConfig, event.reminderConfig]);
 
   return (
     <div className={`relative group glass-panel rounded-[2.5rem] p-6 overflow-hidden h-full ${selected ? 'ring-2 ring-primary-500 shadow-xl shadow-primary-500/20' : 'ring-1 ring-black/5 dark:ring-white/10'}`} onClick={() => selectable && onSelectToggle && onSelectToggle(event.id, !selected)}>

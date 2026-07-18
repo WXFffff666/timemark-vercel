@@ -1,5 +1,12 @@
 import type { Event } from '@timemark/shared';
 
+export interface CountdownParts {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+}
+
 export function pad(n: number) {
   return String(n).padStart(2, '0');
 }
@@ -8,16 +15,87 @@ export function dateKey(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+export function startOfLocalDay(ref: Date = new Date()): Date {
+  const d = new Date(ref);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export function parseEventDate(dateStr: string): Date {
-  return new Date(dateStr.slice(0, 10) + 'T00:00:00');
+  const ymd = dateStr.slice(0, 10);
+  return new Date(`${ymd}T00:00:00`);
 }
 
 /** 距事件还有多少天（0 = 今天，负数 = 已过期） */
 export function daysUntilEvent(dateStr: string, ref = new Date()): number {
-  const target = parseEventDate(dateStr);
-  const today = new Date(ref);
-  today.setHours(0, 0, 0, 0);
+  const target = startOfLocalDay(parseEventDate(dateStr));
+  const today = startOfLocalDay(ref);
   return Math.round((target.getTime() - today.getTime()) / 86400000);
+}
+
+/** 生日/纪念日等默认按年滚动；优先使用服务端 nextOccurrence */
+export function resolveNextOccurrenceDate(event: Event, ref = new Date()): string {
+  const today = startOfLocalDay(ref);
+
+  if (event.nextOccurrence) {
+    const occ = startOfLocalDay(parseEventDate(event.nextOccurrence));
+    if (occ.getTime() >= today.getTime()) {
+      return event.nextOccurrence.slice(0, 10);
+    }
+  }
+
+  const base = parseEventDate(event.date);
+  const yearlyByDefault =
+    event.type === 'birthday' ||
+    event.type === 'anniversary' ||
+    (event.recurringConfig?.enabled && event.recurringConfig.frequency === 'yearly');
+
+  if (yearlyByDefault) {
+    const next = new Date(base);
+    while (startOfLocalDay(next).getTime() < today.getTime()) {
+      next.setFullYear(next.getFullYear() + 1);
+    }
+    return dateKey(next);
+  }
+
+  const candidate = startOfLocalDay(base);
+  if (candidate.getTime() >= today.getTime()) {
+    return event.date.slice(0, 10);
+  }
+
+  return event.date.slice(0, 10);
+}
+
+/**
+ * 倒计时目标时刻：下次事件日期 + 当天首个提醒时间（默认 00:00）
+ * 注意：不按「提前 N 天的提醒推送时刻」倒计时，避免只剩十几小时。
+ */
+export function getEventCountdownTarget(event: Event, ref = new Date()): Date | null {
+  const dateStr = resolveNextOccurrenceDate(event, ref);
+  const target = parseEventDate(dateStr);
+  const time = event.reminderConfig?.reminderTimes?.[0];
+  if (time && /^\d{1,2}:\d{2}$/.test(time)) {
+    const [h, m] = time.split(':').map(Number);
+    target.setHours(h, m, 0, 0);
+  }
+  return target;
+}
+
+export function diffToCountdownParts(target: Date, ref = new Date()): CountdownParts | null {
+  const diff = target.getTime() - ref.getTime();
+  if (diff <= 0) return null;
+  return {
+    days: Math.floor(diff / 86400000),
+    hours: Math.floor((diff % 86400000) / 3600000),
+    minutes: Math.floor((diff % 3600000) / 60000),
+    seconds: Math.floor((diff % 60000) / 1000),
+  };
+}
+
+export function isEventCountdownPast(event: Event, ref = new Date()): boolean {
+  const target = getEventCountdownTarget(event, ref);
+  if (!target) return true;
+  return target.getTime() <= ref.getTime();
 }
 
 /**
@@ -26,7 +104,7 @@ export function daysUntilEvent(dateStr: string, ref = new Date()): number {
  */
 export function isEventInTodoWindow(event: Event, ref = new Date()): boolean {
   if (event.reminderConfig?.enabled === false) return false;
-  const days = daysUntilEvent(event.date, ref);
+  const days = daysUntilEvent(resolveNextOccurrenceDate(event, ref), ref);
   const list = event.reminderConfig?.daysBeforeList?.length
     ? event.reminderConfig.daysBeforeList
     : [7];
