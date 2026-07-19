@@ -10,7 +10,7 @@ export function csrfProtection() {
       return next();
     }
 
-    if (c.req.path.startsWith('/api/webhook/') || c.req.path.startsWith('/api/inbox/receive/')) {
+    if (c.req.path.startsWith('/api/webhook/') || c.req.path.startsWith('/api/inbox/receive/') || c.req.path === '/api/csp-report') {
       return next();
     }
 

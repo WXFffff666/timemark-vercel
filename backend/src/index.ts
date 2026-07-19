@@ -5,6 +5,7 @@ import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { securityHeaders } from './middleware/security-headers.js';
+import { zeroTrustGuard } from './middleware/zero-trust-guard.js';
 import { httpsEnforcement } from './middleware/https-enforcement.js';
 import { csrfProtection } from './middleware/csrf.js';
 import { loginRateLimit, apiRateLimit, rateLimit } from './middleware/rate-limit.js';
@@ -45,6 +46,7 @@ import cronMonitorRoutes from './routes/cron-monitor.js';
 import resendWebhookRoutes from './routes/resend-webhook.js';
 import conditionalRulesRoutes from './routes/conditional-rules.js';
 import todosRoutes from './routes/todos.js';
+import cspReportRoutes from './routes/csp-report.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -53,6 +55,7 @@ const log = createLogger('bootstrap');
 const app = new Hono();
 
 app.use('*', honoLogger());
+app.use('*', zeroTrustGuard);
 app.use('*', securityHeaders);
 app.use('/api/*', httpsEnforcement);
 
@@ -114,6 +117,7 @@ app.route('/api/cron-monitor', cronMonitorRoutes);
 app.route('/api/webhook/resend', resendWebhookRoutes);
 app.route('/api/conditional-rules', conditionalRulesRoutes);
 app.route('/api/todos', todosRoutes);
+app.route('/api/csp-report', cspReportRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {
