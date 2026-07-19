@@ -1,4 +1,8 @@
 import type { Event } from '@timemark/shared';
+import {
+  diffCalendarDays,
+  resolveNextGregorianOccurrence,
+} from '@timemark/shared/event-schedule';
 
 export interface CountdownParts {
   days: number;
@@ -35,35 +39,12 @@ export function daysUntilEvent(dateStr: string, ref = new Date()): number {
 
 /** 生日/纪念日等默认按年滚动；优先使用服务端 nextOccurrence */
 export function resolveNextOccurrenceDate(event: Event, ref = new Date()): string {
-  const today = startOfLocalDay(ref);
-
-  if (event.nextOccurrence) {
-    const occ = startOfLocalDay(parseEventDate(event.nextOccurrence));
-    if (occ.getTime() >= today.getTime()) {
-      return event.nextOccurrence.slice(0, 10);
-    }
-  }
-
-  const base = parseEventDate(event.date);
-  const yearlyByDefault =
-    event.type === 'birthday' ||
-    event.type === 'anniversary' ||
-    (event.recurringConfig?.enabled && event.recurringConfig.frequency === 'yearly');
-
-  if (yearlyByDefault) {
-    const next = new Date(base);
-    while (startOfLocalDay(next).getTime() < today.getTime()) {
-      next.setFullYear(next.getFullYear() + 1);
-    }
-    return dateKey(next);
-  }
-
-  const candidate = startOfLocalDay(base);
-  if (candidate.getTime() >= today.getTime()) {
-    return event.date.slice(0, 10);
-  }
-
-  return event.date.slice(0, 10);
+  const today = dateKey(startOfLocalDay(ref));
+  return resolveNextGregorianOccurrence(event.date, today, {
+    eventType: event.type,
+    recurringConfig: event.recurringConfig ?? null,
+    nextOccurrence: event.nextOccurrence ?? null,
+  });
 }
 
 /**

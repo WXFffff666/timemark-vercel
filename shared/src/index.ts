@@ -17,4 +17,5 @@ export * from './event-templates.js';
 export * from './smtp-providers.js';
 export * from './smtp-transport.js';
 export * from './email-compose.js';
+export * from './event-schedule.js';
 export * from './utils/zod-errors.js';

@@ -10,7 +10,9 @@
     "./blessings": "./dist/blessings.js",
     "./relationship": "./dist/relationship.js",
     "./templates": "./dist/templates.js",
-    "./notification-presets": "./dist/notification-presets.js"
+    "./notification-presets": "./dist/notification-presets.js",
+    "./event-schedule": "./dist/event-schedule.js",
+    "./email-compose": "./dist/email-compose.js"
   },
   "scripts": {
     "build": "tsc",

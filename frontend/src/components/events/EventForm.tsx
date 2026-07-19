@@ -19,6 +19,7 @@ import {
   type FixedContactForEvent,
 } from '@/lib/contact-event-bridge';
 import { normalizeEmail, suggestTemplateForContact, isFamilyLikeContact } from '@timemark/shared';
+import { resolveNextGregorianOccurrence } from '@timemark/shared/event-schedule';
 import { contactHasAnyEmail, getContactEmailList } from '@/lib/contact-utils';
 import { api, fetchAvailableChannels, type AvailableChannel } from '@/lib/api';
 import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
@@ -184,10 +185,14 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
       ? formData.reminderConfig.reminderTimes
       : ['09:00'];
     const todayStr = new Date().toISOString().slice(0, 10);
+    const nextOccurrence = resolveNextGregorianOccurrence(formData.date, todayStr, {
+      eventType: formData.type,
+      recurringConfig: formData.recurringConfig ?? null,
+    });
     const entries: { date: string; daysBefore: number; time: string }[] = [];
 
     for (const d of [...new Set(allDays)].sort((a, b) => b - a)) {
-      const remind = new Date(formData.date + 'T00:00:00');
+      const remind = new Date(nextOccurrence + 'T00:00:00');
       remind.setDate(remind.getDate() - d);
       const dateStr = `${remind.getFullYear()}-${String(remind.getMonth() + 1).padStart(2, '0')}-${String(remind.getDate()).padStart(2, '0')}`;
       if (dateStr >= todayStr) {
@@ -197,7 +202,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
       }
     }
     return entries.slice(0, 16);
-  }, [formData.date, formData.reminderConfig]);
+  }, [formData.date, formData.type, formData.recurringConfig, formData.reminderConfig]);
 
   const [lunarInputValue, setLunarInputValue] = useState('');
 

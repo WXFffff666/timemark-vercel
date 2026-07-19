@@ -2,13 +2,15 @@ import { query } from '../db/index.js';
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Cache upcoming events per user (7-day window) to reduce cron DB load. */
+/** Cache all reminder-eligible events per user (cron resolves yearly occurrence in code). */
 export async function refreshUserEventCache(userId: number): Promise<void> {
   const result = await query(
     `SELECT * FROM events
      WHERE user_id = $1
-       AND date >= CURRENT_DATE - INTERVAL '1 day'
-       AND date <= CURRENT_DATE + INTERVAL '7 days'`,
+       AND (
+         reminder_config IS NULL
+         OR reminder_config::jsonb->>'enabled' IS DISTINCT FROM 'false'
+       )`,
     [userId],
   );
   const expiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();

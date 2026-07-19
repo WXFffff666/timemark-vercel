@@ -1,14 +1,38 @@
 import { describe, it, expect } from 'vitest';
+import {
+  buildReminderSendKey,
+  diffCalendarDays,
+  resolveNextGregorianOccurrence,
+} from '@timemark/shared/event-schedule';
 
-function diffDaysLocal(dateA: string, dateB: string): number {
-  const a = new Date(dateA + 'T00:00:00Z');
-  const b = new Date(dateB + 'T00:00:00Z');
-  return Math.round((b.getTime() - a.getTime()) / (86400 * 1000));
-}
+describe('reminder scheduling', () => {
+  it('fires 7 days before birthday stored with birth year', () => {
+    const today = '2026-07-21';
+    const next = resolveNextGregorianOccurrence('1990-07-28', today, { eventType: 'birthday' });
+    const daysUntil = diffCalendarDays(today, next);
+    expect(daysUntil).toBe(7);
+    expect([7, 1, 0].includes(daysUntil)).toBe(true);
+  });
 
-describe('reminder-check helpers', () => {
-  it('diffDays calculates day difference', () => {
-    expect(diffDaysLocal('2026-01-01', '2026-01-08')).toBe(7);
-    expect(diffDaysLocal('2026-01-08', '2026-01-01')).toBe(-7);
+  it('fires on the day of event', () => {
+    const today = '2026-07-28';
+    const next = resolveNextGregorianOccurrence('1990-07-28', today, { eventType: 'birthday' });
+    expect(diffCalendarDays(today, next)).toBe(0);
+  });
+
+  it('allows multiple reminder times on same day via distinct send keys', () => {
+    const day = '2026-07-21';
+    const k1 = buildReminderSendKey(day, 7, '09:00');
+    const k2 = buildReminderSendKey(day, 7, '18:00');
+    expect(k1).not.toBe(k2);
+  });
+
+  it('allows separate sends for 7-day, 1-day, and same-day tiers', () => {
+    const keys = [
+      buildReminderSendKey('2026-07-21', 7, '09:00'),
+      buildReminderSendKey('2026-07-27', 1, '09:00'),
+      buildReminderSendKey('2026-07-28', 0, '09:00'),
+    ];
+    expect(new Set(keys).size).toBe(3);
   });
 });
