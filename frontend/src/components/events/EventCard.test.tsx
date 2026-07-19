@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { EventCard } from './EventCard'
 import type { Event } from '@timemark/shared'
 
@@ -20,24 +21,29 @@ describe('EventCard', () => {
     expect(screen.getByText('Test Event')).toBeInTheDocument()
   })
 
-  it('renders event type badge', () => {
+  it('renders calendar type badge', () => {
     render(<EventCard event={mockEvent} onEdit={vi.fn()} onDelete={vi.fn()} />)
-    expect(screen.getByText('birthday')).toBeInTheDocument()
+    expect(screen.getByText('公历')).toBeInTheDocument()
   })
 
-  it('calls onEdit when edit button clicked', () => {
+  it('calls onEdit when edit button clicked', async () => {
     const onEdit = vi.fn()
-    const { container } = render(<EventCard event={mockEvent} onEdit={onEdit} onDelete={vi.fn()} />)
-    const buttons = container.querySelectorAll('button')
-    buttons[0].click()
+    render(<EventCard event={mockEvent} onEdit={onEdit} onDelete={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: /编辑/ }))
     expect(onEdit).toHaveBeenCalledWith(mockEvent)
   })
 
-  it('calls onDelete when delete button clicked', () => {
+  it('calls onDelete when delete button clicked', async () => {
     const onDelete = vi.fn()
-    const { container } = render(<EventCard event={mockEvent} onEdit={vi.fn()} onDelete={onDelete} />)
-    const buttons = container.querySelectorAll('button')
-    buttons[1].click()
+    render(<EventCard event={mockEvent} onEdit={vi.fn()} onDelete={onDelete} />)
+    await userEvent.click(screen.getByRole('button', { name: /删除/ }))
     expect(onDelete).toHaveBeenCalledWith('1')
+  })
+
+  it('calls onTestSend when test button clicked', async () => {
+    const onTestSend = vi.fn()
+    render(<EventCard event={mockEvent} onEdit={vi.fn()} onDelete={vi.fn()} onTestSend={onTestSend} />)
+    await userEvent.click(screen.getByRole('button', { name: /测试/ }))
+    expect(onTestSend).toHaveBeenCalledWith('1')
   })
 })

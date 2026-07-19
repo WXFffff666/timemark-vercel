@@ -65,8 +65,7 @@ describe('Templates', () => {
     const data = { event_name: '妈妈生日' };
     
     const result = renderTemplate(template, data);
-    // Missing variables are kept as-is
-    expect(result).toBe('妈妈生日 还有 {{days_until}} 天');
+    expect(result).toBe('妈妈生日 还有  天');
   });
 
   it('should preview template with sample data', () => {

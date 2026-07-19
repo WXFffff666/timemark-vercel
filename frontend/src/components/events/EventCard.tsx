@@ -15,7 +15,7 @@ interface EventCardProps {
   event: Event;
   onEdit: (e: Event) => void;
   onDelete: (id: string) => void;
-  onTestSend: (id: string) => void;
+  onTestSend?: (id: string) => void;
   selectable?: boolean;
   selected?: boolean;
   onSelectToggle?: (id: string, c: boolean) => void;
@@ -192,7 +192,9 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
 
       {!selectable && (
         <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-200/60 dark:border-slate-700/50 relative z-10">
-          <Button variant="ghost" size="sm" className="h-9 px-3 hover:bg-primary-50 dark:hover:bg-primary-900/30 text-slate-600 hover:text-primary-600 dark:text-slate-300 rounded-xl" onClick={(e) => { e.stopPropagation(); onTestSend(event.id); }}><Send size={14} className="mr-1.5" /> 测试</Button>
+          {onTestSend && (
+            <Button variant="ghost" size="sm" className="h-9 px-3 hover:bg-primary-50 dark:hover:bg-primary-900/30 text-slate-600 hover:text-primary-600 dark:text-slate-300 rounded-xl" onClick={(e) => { e.stopPropagation(); onTestSend(event.id); }}><Send size={14} className="mr-1.5" /> 测试</Button>
+          )}
           <Button variant="ghost" size="sm" className="h-9 px-3 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-slate-600 hover:text-blue-600 dark:text-slate-300 rounded-xl" onClick={(e) => { e.stopPropagation(); onEdit(event); }}><Edit2 size={14} className="mr-1.5" /> 编辑</Button>
           <Button variant="ghost" size="sm" className="h-9 px-3 hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-600 hover:text-red-600 dark:text-slate-300 rounded-xl" onClick={(e) => { e.stopPropagation(); onDelete(event.id); }}><Trash2 size={14} className="mr-1.5" /> 删除</Button>
         </div>

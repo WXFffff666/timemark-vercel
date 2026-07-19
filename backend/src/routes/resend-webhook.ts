@@ -37,6 +37,11 @@ resendWebhook.post('/delivery', async (c) => {
     return c.json({ error: 'Invalid JSON' }, 400);
   }
 
+  const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+  if (isProduction && users.rows.length > 0 && verifiedUserId === null) {
+    return c.json({ error: 'Invalid signature' }, 401);
+  }
+
   if (verifiedUserId) {
     const status = String(payload.type || payload.event || 'unknown');
     await query(

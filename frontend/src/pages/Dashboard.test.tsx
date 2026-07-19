@@ -24,11 +24,11 @@ vi.mock('@/stores/event.store', () => ({
 describe('Dashboard', () => {
   it('renders dashboard header', () => {
     render(<BrowserRouter><Dashboard /></BrowserRouter>)
-    expect(screen.getByText('倒计时提醒系统')).toBeInTheDocument()
+    expect(screen.getByText('我的倒计时')).toBeInTheDocument()
   })
 
   it('shows empty state when no events', () => {
     render(<BrowserRouter><Dashboard /></BrowserRouter>)
-    expect(screen.getByText(/暂无事件/)).toBeInTheDocument()
+    expect(screen.getByText(/暂无倒计时事件/)).toBeInTheDocument()
   })
 })

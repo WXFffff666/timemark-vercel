@@ -17,9 +17,17 @@ cronMonitor.get('/', async (c) => {
     `SELECT DISTINCT ON (job_name) job_name, status, executed_at, result_summary
      FROM cron_execution_logs ORDER BY job_name, executed_at DESC`,
   );
+  const sanitize = (row: Record<string, unknown>) => ({
+    ...row,
+    error_message: row.error_message ? '[redacted]' : null,
+    result_summary: row.result_summary ?? null,
+  });
   return c.json({
     success: true,
-    data: { recent: result.rows, lastByJob: lastByJob.rows },
+    data: {
+      recent: result.rows.map(sanitize),
+      lastByJob: lastByJob.rows.map(sanitize),
+    },
   });
 });
 

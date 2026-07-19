@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { timingSafeEqual } from 'crypto';
 import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions } from '../jobs/tasks.js';
 import { processNotificationRetries, purgeOldQueueEntries } from '../services/notification-retry.service.js';
 import { purgeOldEmailLogs } from '../services/email-log.service.js';
@@ -47,9 +48,17 @@ cronRoutes.use('*', async (c, next) => {
   if (!cronSecret) {
     return c.json({ error: 'CRON_SECRET / CRONSECRET not configured' }, 500);
   }
-  const isVercelCron = !!c.req.header('x-vercel-cron-auth-token');
-  const authHeader = c.req.header('Authorization');
-  const bearerOk = authHeader === `Bearer ${cronSecret}`;
+  const isVercelCron = !!process.env.VERCEL && !!c.req.header('x-vercel-cron-auth-token');
+  const authHeader = c.req.header('Authorization') || '';
+  const expected = `Bearer ${cronSecret}`;
+  let bearerOk = false;
+  try {
+    const a = Buffer.from(authHeader);
+    const b = Buffer.from(expected);
+    bearerOk = a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    bearerOk = false;
+  }
   if (!isVercelCron && !bearerOk) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
