@@ -131,9 +131,33 @@ Vercel will:
 Once deployed, check:
 
 - `https://<your-project>.vercel.app/api/health` returns `{ "status": "ok", "checks": { "database": true } }`
+- 中国大陆用户：确认 `checks.functionRegion` 为 `hkg1` 或 `sin1`，且 `functionRegionOptimalForCn` 为 `true`（见下文 **4.4.1 区域与延迟**）
 - Log in → **Settings → Deploy Wizard** → system self-check shows schema **v30**
 - Frontend loads without JavaScript errors
 - Configure external cron jobs (see Section 6)
+
+### 4.4.1. 区域与延迟（中国大陆用户）
+
+**原则：** API 函数区域应与 PostgreSQL 尽量同区或相邻，静态资源走全球 CDN 边缘节点。
+
+| 组件 | 推荐区域 | 本项目配置 |
+|------|----------|------------|
+| Vercel Serverless Functions | `hkg1`（香港，首选）或 `sin1`（新加坡） | `vercel.json` → `"regions": ["hkg1"]` |
+| Vercel Postgres / Neon | `ap-east-1`（香港）或 `ap-southeast-1`（新加坡） | 在 Vercel **Storage → Postgres** 创建时选择，**创建后不可改区，只能迁库** |
+
+**如何自检：**
+
+1. 部署后访问 `GET /api/health`，查看：
+   - `functionRegion`：应为 `hkg1` / `sin1` 等亚太区，**不应长期为 `iad1`（美东）**
+   - `functionRegionOptimalForCn`：应为 `true`
+2. 设置环境变量 `HEALTH_DETAIL_TOKEN` 后，带请求头 `x-health-token` 访问  
+   `GET /api/health?detailed=1`，查看 `databaseRegionHint` 是否与函数区域匹配。
+
+**当前线上曾观测到：** 响应头 `X-Vercel-Id` 形如 `sin1::iad1::...` 表示边缘在新加坡、**函数仍在美东**，延迟偏高。更新 `regions` 并重新部署后，中间段应变为 `hkg1` 或 `sin1`。
+
+**Vercel 控制台（可选二次确认）：** Project → **Settings** → **Functions** → **Serverless Function Region** 选 Hong Kong 或 Singapore，保存后 **Redeploy**。
+
+**注意：** 内置 Cron（`vercel.json` 的 `daily-maintenance`）由 Vercel 调度，部分任务仍可能从美东触发；分钟级提醒请继续用外部 Cron 调 `/api/cron/reminder-check`（请求会打到你所设函数区域）。
 
 ### 4.5. Manual UI End-to-End Test (Cloud Platform)
 

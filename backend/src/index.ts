@@ -18,6 +18,7 @@ import { hashPassword } from './utils/password.js';
 import { initSecretKeys } from './utils/secrets.js';
 import { isTurnstileEnabled } from './utils/turnstile.js';
 import { getCronSecret } from './utils/heartbeat.js';
+import { inferDatabaseRegionHint, isPreferredCnVercelRegion } from './utils/infra-region.js';
 import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
 import configRoutes from './routes/config.js';
@@ -128,12 +129,18 @@ app.get('/api/health', async (c) => {
     database: false,
     turnstile: isTurnstileEnabled(),
   };
+  if (process.env.VERCEL) {
+    const fnRegion = process.env.VERCEL_REGION || 'unknown';
+    checks.functionRegion = fnRegion;
+    checks.functionRegionOptimalForCn = isPreferredCnVercelRegion(fnRegion);
+  }
   if (detailed && process.env.HEALTH_DETAIL_TOKEN) {
     checks.commit = process.env.VERCEL_GIT_COMMIT_SHA || 'local';
     checks.databaseUrl = !!process.env.DATABASE_URL;
     checks.jwtSecret = !!process.env.JWT_SECRET;
     checks.masterKey = !!process.env.MASTER_KEY;
     checks.cronSecret = !!getCronSecret();
+    checks.databaseRegionHint = inferDatabaseRegionHint(process.env.DATABASE_URL);
   }
   if (!process.env.DATABASE_URL) {
     checks.database = false;
