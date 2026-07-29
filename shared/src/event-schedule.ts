@@ -2,6 +2,20 @@
  * 事件下次发生日期（公历）—— 与前端倒计时、Cron 提醒共用
  */
 
+/** 将 DB/API 的日期值规范为 YYYY-MM-DD（兼容 pg DATE → Date 对象） */
+export function toYmdString(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
+    const y = value.getUTCFullYear();
+    const m = String(value.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(value.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(value);
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+}
+
 export function parseYmd(dateStr: string): { y: number; m: number; d: number } | null {
   const ymd = dateStr.slice(0, 10);
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
@@ -38,16 +52,17 @@ export function resolveNextGregorianOccurrence(
   options?: {
     eventType?: string;
     recurringConfig?: { enabled?: boolean; frequency?: string } | null;
-    nextOccurrence?: string | null;
+    nextOccurrence?: string | Date | null;
   },
 ): string {
-  if (options?.nextOccurrence) {
-    const occ = options.nextOccurrence.slice(0, 10);
-    if (diffCalendarDays(todayYmd, occ) >= 0) return occ;
+  const nextOcc = toYmdString(options?.nextOccurrence);
+  if (nextOcc) {
+    if (diffCalendarDays(todayYmd, nextOcc) >= 0) return nextOcc;
   }
 
-  const parts = parseYmd(eventDate);
-  if (!parts) return eventDate.slice(0, 10);
+  const normalizedEventDate = toYmdString(eventDate);
+  const parts = normalizedEventDate ? parseYmd(normalizedEventDate) : null;
+  if (!parts) return (normalizedEventDate ?? String(eventDate)).slice(0, 10);
 
   const yearly = isYearlyOccurrenceEvent(options?.eventType, options?.recurringConfig);
   if (!yearly) {

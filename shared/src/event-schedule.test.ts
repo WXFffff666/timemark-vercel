@@ -28,6 +28,20 @@ describe('event-schedule', () => {
     ).toBe('2026-08-01');
   });
 
+  it('accepts pg DATE values as JavaScript Date', () => {
+    expect(
+      resolveNextGregorianOccurrence('1990-07-28', '2026-07-01', {
+        eventType: 'birthday',
+        nextOccurrence: new Date('2026-08-01T00:00:00.000Z'),
+      }),
+    ).toBe('2026-08-01');
+    expect(
+      resolveNextGregorianOccurrence(new Date('1990-07-28T00:00:00.000Z'), '2026-07-18', {
+        eventType: 'birthday',
+      }),
+    ).toBe('2026-07-28');
+  });
+
   it('detects yearly events', () => {
     expect(isYearlyOccurrenceEvent('birthday')).toBe(true);
     expect(isYearlyOccurrenceEvent('meeting', { enabled: true, frequency: 'yearly' })).toBe(true);
