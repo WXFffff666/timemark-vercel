@@ -47,5 +47,12 @@ async function ensureAdminUser(): Promise<void> {
     'INSERT INTO users (username, password_hash) VALUES ($1, $2) ON CONFLICT (username) DO NOTHING',
     [username, passwordHash],
   );
+  const adminRow = await query('SELECT id FROM users WHERE username = $1', [username]);
+  if (adminRow.rows[0]?.id) {
+    await query(
+      `INSERT INTO user_configs (user_id, timezone) VALUES ($1, 'Asia/Shanghai') ON CONFLICT (user_id) DO NOTHING`,
+      [adminRow.rows[0].id],
+    );
+  }
   log.info({ username }, 'Default admin user created');
 }

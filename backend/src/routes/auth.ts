@@ -151,6 +151,10 @@ auth.post('/login', loginRateLimit, async (c) => {
 
     await createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', true);
     await clearAccountLock(username);
+    await query(
+      `INSERT INTO user_configs (user_id, timezone) VALUES ($1, 'Asia/Shanghai') ON CONFLICT (user_id) DO NOTHING`,
+      [user.id],
+    );
     await logSecurityEvent({
       userId: parseInt(user.id, 10),
       username: user.username,

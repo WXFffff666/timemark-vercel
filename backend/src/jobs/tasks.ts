@@ -121,6 +121,18 @@ export async function sendReminders() {
     userReminderSettingsCache.set(userId, Array.isArray(daysList) ? daysList : [1, 3, 7]);
   }
 
+  // Users with events but no user_configs row were previously skipped entirely by cron.
+  const eventOwnerRows = await query(`SELECT DISTINCT user_id FROM events`);
+  for (const row of eventOwnerRows.rows) {
+    const userId = row.user_id as number;
+    if (userConfigMap.has(userId)) continue;
+    const defaults = { timezone: 'Asia/Shanghai', reminders_enabled: true, days_before_list: [1, 3, 7] };
+    userConfigMap.set(userId, defaults);
+    userTimezoneCache.set(userId, defaults.timezone);
+    userEnabledCache.set(userId, true);
+    userReminderSettingsCache.set(userId, defaults.days_before_list);
+  }
+
   function getUserTimezone(userId: number): string {
     if (userTimezoneCache.has(userId)) return userTimezoneCache.get(userId)!;
     // User not in user_configs table - use defaults
