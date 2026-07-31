@@ -1,22 +1,8 @@
 import { query } from '../db/index.js';
-import { hashPassword, verifyPassword } from '../utils/password.js';
+import { verifyPassword } from '../utils/password.js';
 import { randomUUID } from 'crypto';
 import { authenticator } from 'otplib';
 import type { User } from '@timemark/shared';
-import { assertCanCreateUser } from '../utils/single-user.js';
-
-export async function createUser(username: string, password: string): Promise<User> {
-  await assertCanCreateUser();
-  const existing = await query('SELECT id FROM users WHERE username = $1', [username]);
-  if (existing.rows.length > 0) throw new Error('Username already exists');
-
-  const passwordHash = await hashPassword(password);
-  await query('INSERT INTO users (username, password_hash) VALUES ($1, $2)', [username, passwordHash]);
-
-  const result = await query('SELECT id, username, created_at FROM users WHERE username = $1', [username]);
-  const row = result.rows[0] as any;
-  return { id: row.id.toString(), username: row.username, createdAt: row.created_at };
-}
 
 export async function getUserByUsername(username: string): Promise<User | null> {
   const result = await query('SELECT id, username, avatar_url, created_at FROM users WHERE username = $1', [username]);

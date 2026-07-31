@@ -165,7 +165,7 @@ export default function Security() {
               <p>数据库结构: v{deployInfo.schemaVersion ?? '?'} / v{deployInfo.expectedSchemaVersion ?? '?'}{deployInfo.schemaUpToDate ? ' ✓' : '（待迁移）'}</p>
               <p>Turnstile: {deployInfo.turnstileConfigured ? '已配置' : '未配置（可选）'}</p>
               <p>Cron Secret: {deployInfo.cronSecretConfigured ? '已配置' : '未配置'}</p>
-              <p>单用户模式: {deployInfo.singleUserMode ? '已启用' : '未启用'}</p>
+              <p>部署模式: 单用户（个人版）</p>
               <p className="text-xs text-slate-500 pt-1">
                 登录会话令牌由系统自动轮换（约 15 分钟续期 access、30 天 refresh），无需手动操作。
                 Vercel 环境变量（JWT_SECRET、MASTER_KEY、CRON_SECRET）配置一次即可，无需定期更换。
@@ -281,7 +281,7 @@ export default function Security() {
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><Key className="w-4 h-4" />密钥与令牌说明</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-            <p>本系统为<strong>单用户</strong>个人部署，仅允许一个账户登录使用。</p>
+            <p>本系统为<strong>单用户</strong>个人部署，仅有一个账户，不支持多用户。</p>
             <p>登录后 access / refresh 令牌由后台自动续期与轮换，你<strong>不需要</strong>去 Vercel 改 JWT_SECRET 或 CRON_SECRET。</p>
             <p>环境变量中的 JWT_SECRET、MASTER_KEY、CRON_SECRET 在首次部署时配置好即可，除非密钥泄露，否则无需更换。</p>
           </CardContent>

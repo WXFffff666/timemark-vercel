@@ -1,11 +1,7 @@
 import { query } from '../db/index.js';
 
-/** Personal deployment: one account only. Set SINGLE_USER_MODE=false to allow multiple users. */
-export function isSingleUserMode(): boolean {
-  const env = process.env.SINGLE_USER_MODE;
-  if (env === 'false' || env === '0') return false;
-  return true;
-}
+/** TimeMark is a single-user personal app — only one account may exist. */
+export const DEPLOYMENT_MODE = 'single-user' as const;
 
 export async function getUserCount(): Promise<number> {
   const result = await query('SELECT COUNT(*)::int AS count FROM users');
@@ -13,9 +9,14 @@ export async function getUserCount(): Promise<number> {
 }
 
 export async function assertCanCreateUser(): Promise<void> {
-  if (!isSingleUserMode()) return;
   const count = await getUserCount();
   if (count >= 1) {
-    throw new Error('单用户模式已启用，无法创建更多账户');
+    throw new Error('本系统仅支持单用户，无法创建更多账户');
   }
+}
+
+export async function getOwnerUserId(): Promise<number | null> {
+  const result = await query('SELECT id FROM users ORDER BY id ASC LIMIT 1');
+  const id = result.rows[0]?.id;
+  return id != null ? Number(id) : null;
 }
