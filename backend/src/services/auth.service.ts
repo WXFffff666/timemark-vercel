@@ -4,6 +4,14 @@ import { randomUUID } from 'crypto';
 import { authenticator } from 'otplib';
 import type { User } from '@timemark/shared';
 
+export type LoginUser = User & {
+  totpSecret?: string | null;
+  totpEnabled?: boolean;
+  ipWhitelist?: string[];
+  ipWhitelistEnabled?: boolean;
+  passwordChangedAt?: string | null;
+};
+
 export async function getUserByUsername(username: string): Promise<User | null> {
   const result = await query('SELECT id, username, avatar_url, created_at FROM users WHERE username = $1', [username]);
   if (result.rows.length === 0) return null;
@@ -21,12 +29,47 @@ export async function getUserById(id: string): Promise<User | null> {
 }
 
 export async function verifyUserPassword(username: string, password: string): Promise<User | null> {
-  const result = await query('SELECT id, username, password_hash, avatar_url, created_at FROM users WHERE username = $1', [username]);
+  const login = await verifyUserForLogin(username, password);
+  return login;
+}
+
+/** 单次查询：密码 + TOTP + IP 白名单 + 密码修改时间 */
+export async function verifyUserForLogin(username: string, password: string): Promise<LoginUser | null> {
+  const result = await query(
+    `SELECT u.id, u.username, u.password_hash, u.avatar_url, u.created_at,
+            u.totp_secret, u.totp_enabled,
+            c.ip_whitelist, c.ip_whitelist_enabled, c.password_changed_at
+     FROM users u
+     LEFT JOIN user_configs c ON c.user_id = u.id
+     WHERE u.username = $1`,
+    [username],
+  );
   if (result.rows.length === 0) return null;
-  const row = result.rows[0] as any;
+  const row = result.rows[0] as {
+    id: number;
+    username: string;
+    password_hash: string;
+    avatar_url?: string;
+    created_at: string;
+    totp_secret?: string;
+    totp_enabled?: boolean;
+    ip_whitelist?: string[];
+    ip_whitelist_enabled?: boolean;
+    password_changed_at?: string | null;
+  };
   const valid = await verifyPassword(password, row.password_hash);
   if (!valid) return null;
-  return { id: row.id.toString(), username: row.username, avatarUrl: row.avatar_url, createdAt: row.created_at };
+  return {
+    id: row.id.toString(),
+    username: row.username,
+    avatarUrl: row.avatar_url,
+    createdAt: row.created_at,
+    totpSecret: row.totp_secret ?? null,
+    totpEnabled: !!row.totp_enabled,
+    ipWhitelist: Array.isArray(row.ip_whitelist) ? row.ip_whitelist : [],
+    ipWhitelistEnabled: !!row.ip_whitelist_enabled,
+    passwordChangedAt: row.password_changed_at ?? null,
+  };
 }
 
 // ============ 登录日志 ============
@@ -38,6 +81,7 @@ export async function createLoginLog(
   fingerprint: string,
   success: boolean,
   reason?: string,
+  knownUser?: { userId: number; username: string },
 ): Promise<void> {
   try {
     const id = randomUUID();
@@ -45,12 +89,17 @@ export async function createLoginLog(
     let username: string | null = null;
 
     if (success) {
-      const numericId = parseInt(userIdOrUsername, 10);
-      if (!isNaN(numericId)) {
-        const userResult = await query('SELECT id, username FROM users WHERE id = $1', [numericId]);
-        if (userResult.rows.length > 0) {
-          userId = userResult.rows[0].id;
-          username = userResult.rows[0].username;
+      if (knownUser) {
+        userId = knownUser.userId;
+        username = knownUser.username;
+      } else {
+        const numericId = parseInt(userIdOrUsername, 10);
+        if (!isNaN(numericId)) {
+          const userResult = await query('SELECT id, username FROM users WHERE id = $1', [numericId]);
+          if (userResult.rows.length > 0) {
+            userId = userResult.rows[0].id;
+            username = userResult.rows[0].username;
+          }
         }
       }
     } else {
@@ -137,6 +186,24 @@ export async function getAccountLockStatus(params: { username: string; ip: strin
         lockMinutes: Math.max(1, Math.ceil(remainingSeconds / 60)),
       };
     }
+    const failedCount = row.failed_count ?? 0;
+    if (failedCount === 0) {
+      return {
+        isLocked: false,
+        failureCount: 0,
+        lockTriggerCount: 0,
+        remainingSeconds: 0,
+        lockMinutes: 0,
+      };
+    }
+  } else {
+    return {
+      isLocked: false,
+      failureCount: 0,
+      lockTriggerCount: 0,
+      remainingSeconds: 0,
+      lockMinutes: 0,
+    };
   }
 
   const failureCount = await countPasswordFailuresSinceLastSuccess(params.username);
@@ -238,6 +305,17 @@ export async function evaluateIpBlock(ip: string): Promise<void> {
 }
 
 // ============ IP 白名单 ============
+
+export function checkIpWhitelistFromUser(
+  user: Pick<LoginUser, 'ipWhitelist' | 'ipWhitelistEnabled'>,
+  ip: string,
+): { allowed: boolean; reason?: string } {
+  if (!user.ipWhitelistEnabled) return { allowed: true };
+  const list = user.ipWhitelist ?? [];
+  if (!list.length) return { allowed: true };
+  if (list.includes(ip)) return { allowed: true };
+  return { allowed: false, reason: `IP ${ip} 未在白名单中` };
+}
 
 export async function checkIpWhitelist(
   userId: string,

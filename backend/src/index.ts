@@ -18,7 +18,7 @@ import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
 import { hashPassword } from './utils/password.js';
 import { initSecretKeys } from './utils/secrets.js';
 import { isTurnstileEnabled } from './utils/turnstile.js';
-import { getClockOffsetMs, getLastTimeSyncResult, syncTime } from './utils/ntp.js';
+import { getClockOffsetMs, getLastTimeSyncResult, scheduleTimeSync, DEFAULT_SYNC_TIMEZONE } from './utils/ntp.js';
 import { getCronSecret } from './utils/heartbeat.js';
 import { inferDatabaseRegionHint, isPreferredCnVercelRegion } from './utils/infra-region.js';
 import authRoutes from './routes/auth.js';
@@ -50,6 +50,7 @@ import resendWebhookRoutes from './routes/resend-webhook.js';
 import conditionalRulesRoutes from './routes/conditional-rules.js';
 import todosRoutes from './routes/todos.js';
 import cspReportRoutes from './routes/csp-report.js';
+import timeRoutes from './routes/time.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -90,7 +91,12 @@ if (process.env.VERCEL) {
 // Rate limiting: targeted limits before general (login limit is on auth route itself)
 const notifyRateLimit = rateLimit(10, 60 * 1000);
 app.use('/api/channels/test', notifyRateLimit);
-app.use('/api/*', apiRateLimit);
+app.use('/api/*', async (c, next) => {
+  if (c.req.method === 'POST' && c.req.path === '/api/auth/login') {
+    return next();
+  }
+  return apiRateLimit(c, next);
+});
 
 app.route('/api/auth', authRoutes);
 app.route('/api/auth/webauthn', webauthnRoutes);
@@ -121,6 +127,7 @@ app.route('/api/webhook/resend', resendWebhookRoutes);
 app.route('/api/conditional-rules', conditionalRulesRoutes);
 app.route('/api/todos', todosRoutes);
 app.route('/api/csp-report', cspReportRoutes);
+app.route('/api/time', timeRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {
@@ -153,10 +160,11 @@ app.get('/api/health', async (c) => {
     await query('SELECT 1');
     checks.database = true;
 
-    const timeSync = await syncTime().catch(() => null);
-    checks.timeDriftMs = timeSync?.drift ?? getLastTimeSyncResult()?.drift ?? 0;
-    checks.clockOffsetMs = getClockOffsetMs();
-    checks.timeSource = timeSync?.source ?? getLastTimeSyncResult()?.source ?? 'system';
+    const cachedTime = getLastTimeSyncResult(DEFAULT_SYNC_TIMEZONE);
+    checks.timeDriftMs = String(cachedTime?.drift ?? 0);
+    checks.clockOffsetMs = String(getClockOffsetMs(DEFAULT_SYNC_TIMEZONE));
+    checks.timeSource = cachedTime?.source ?? 'system';
+    scheduleTimeSync(DEFAULT_SYNC_TIMEZONE);
 
     const lastCron = await query(
       `SELECT job_name, status, executed_at FROM cron_execution_logs ORDER BY executed_at DESC LIMIT 1`,

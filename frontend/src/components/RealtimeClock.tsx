@@ -1,6 +1,7 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTimezoneStore } from '@/stores/timezone.store';
+import { getSyncedClientNow } from '@/lib/time-sync';
 
 export function TimezoneProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -26,7 +27,7 @@ export function RealtimeClock() {
   const { timezone } = useTimezone();
 
   useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
+    const timer = setInterval(() => setTime(getSyncedClientNow()), 1000);
     return () => clearInterval(timer);
   }, []);
 

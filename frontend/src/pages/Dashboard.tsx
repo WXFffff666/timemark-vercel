@@ -41,15 +41,13 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchEvents();
-  }, [fetchEvents]);
-
-  useEffect(() => {
     api.getRaw<unknown[]>('/inbox?limit=1')
       .then((res) => setInboxUnread((res.pagination?.unreadCount as number) || 0))
       .catch(() => setInboxUnread(0));
-  }, []);
+  }, [fetchEvents]);
 
   useEffect(() => {
+    if (!events.length) return;
     api.get<{ date: string; count: number; names: string[] }[]>('/features/conflicts')
       .then((data) => setConflicts(Array.isArray(data) ? data : []))
       .catch(() => setConflicts([]));

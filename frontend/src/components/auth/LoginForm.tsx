@@ -173,6 +173,16 @@ export function LoginForm() {
   }, []);
 
   useEffect(() => {
+    const preconnect = document.createElement('link');
+    preconnect.rel = 'preconnect';
+    preconnect.href = 'https://challenges.cloudflare.com';
+    document.head.appendChild(preconnect);
+    return () => {
+      document.head.removeChild(preconnect);
+    };
+  }, []);
+
+  useEffect(() => {
     api.get<{ siteKey: string | null; enabled: boolean }>('/auth/turnstile-config')
       .then((cfg) => {
         if (cfg.enabled && cfg.siteKey) setTurnstileSiteKey(cfg.siteKey);

@@ -10,7 +10,7 @@ import { sendNotifications } from '../services/notifications/index.js';
 import { refreshUserEventCache } from '../services/event-cache.service.js';
 import { createLogger } from '../utils/logger.js';
 import { recordEventTrigger } from '../services/trigger-log.service.js';
-import { getSyncedNow, syncTime } from '../utils/ntp.js';
+import { getSyncedNow, scheduleTimeSync, DEFAULT_SYNC_TIMEZONE } from '../utils/ntp.js';
 
 const log = createLogger('tasks');
 // Batch query replaces per-user getReminderSettings/getUserConfig calls
@@ -98,8 +98,8 @@ function parseReminderDays(raw: any): number[] | null {
 export async function sendReminders() {
   log.info('Checking reminders...');
 
-  await syncTime().catch((e) => log.warn({ err: e }, 'NTP sync skipped'));
-  const now = getSyncedNow();
+  scheduleTimeSync(DEFAULT_SYNC_TIMEZONE);
+  const now = getSyncedNow(DEFAULT_SYNC_TIMEZONE);
 
   // Batch load ALL user configs upfront to avoid N+1 queries
   const allUserConfigs = await query(

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { verifyUserPassword, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock, getIpBlockStatus, evaluateIpBlock, checkIpWhitelist, verifyTotpCode } from '../services/auth.service.js';
+import { verifyUserForLogin, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock, getIpBlockStatus, evaluateIpBlock, checkIpWhitelistFromUser, verifyTotpCode } from '../services/auth.service.js';
 import { getClientIp, getClientIpInfo } from '../utils/client-ip.js';
 import { getTurnstileSiteKey, isTurnstileEnabled, verifyTurnstileToken } from '../utils/turnstile.js';
 import { isSafePublicUrl } from '../utils/url-safety.js';
@@ -37,19 +37,14 @@ auth.post('/login', loginRateLimit, async (c) => {
 
     const { username, password, deviceFingerprint, rememberMe = false, turnstileToken, totpCode } = parsed.data;
 
-    const turnstile = await verifyTurnstileToken(
-      turnstileToken,
-      trusted ? ip : undefined,
-    );
+    const [turnstile, ipBlock, lockStatus] = await Promise.all([
+      verifyTurnstileToken(turnstileToken, trusted ? ip : undefined),
+      getIpBlockStatus(ip),
+      getAccountLockStatus({ username, ip }),
+    ]);
+
     if (!turnstile.ok) {
-      await createLoginLog(
-        username,
-        ip,
-        userAgent,
-        deviceFingerprint || '',
-        false,
-        'turnstile_failed',
-      );
+      void createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'turnstile_failed');
       return c.json({
         success: false,
         error: turnstile.error || '人机验证失败',
@@ -57,9 +52,8 @@ auth.post('/login', loginRateLimit, async (c) => {
       }, 400);
     }
 
-    const ipBlock = await getIpBlockStatus(ip);
     if (ipBlock.isBlocked) {
-      await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'locked_attempt');
+      void createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'locked_attempt');
       return c.json({
         success: false,
         error: `该 IP 已被临时封禁，剩余 ${ipBlock.remainingSeconds} 秒`,
@@ -69,9 +63,8 @@ auth.post('/login', loginRateLimit, async (c) => {
       }, 429);
     }
 
-    const lockStatus = await getAccountLockStatus({ username, ip });
     if (lockStatus.isLocked) {
-      await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'locked_attempt');
+      void createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, 'locked_attempt');
       return c.json({
         success: false,
         error: `账户已锁定，剩余 ${lockStatus.remainingSeconds} 秒后可重试`,
@@ -82,7 +75,7 @@ auth.post('/login', loginRateLimit, async (c) => {
       }, 429);
     }
 
-    const user = await verifyUserPassword(username, password);
+    const user = await verifyUserForLogin(username, password);
 
     if (!user) {
       await createLoginLog(username, ip, userAgent, deviceFingerprint || '', false, '凭据无效');
@@ -126,20 +119,15 @@ auth.post('/login', loginRateLimit, async (c) => {
       }, 401);
     }
 
-    const whitelist = await checkIpWhitelist(user.id, ip);
+    const whitelist = checkIpWhitelistFromUser(user, ip);
     if (!whitelist.allowed) {
       return c.json({ success: false, error: whitelist.reason || '当前 IP 不在白名单' }, 403);
     }
 
-    const totpRequired = await query(
-      'SELECT totp_secret, totp_enabled FROM users WHERE id = $1',
-      [user.id],
-    );
-    const totpRow = totpRequired.rows[0] as { totp_secret?: string; totp_enabled?: boolean } | undefined;
-    if (totpRow?.totp_enabled && totpRow?.totp_secret) {
-      const totpOk = verifyTotpCode(totpRow.totp_secret, totpCode || '');
+    if (user.totpEnabled && user.totpSecret) {
+      const totpOk = verifyTotpCode(user.totpSecret, totpCode || '');
       if (!totpOk) {
-        await createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', false, 'totp_invalid');
+        void createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', false, 'totp_invalid');
         return c.json({
           success: false,
           error: '需要双因素验证码',
@@ -149,35 +137,46 @@ auth.post('/login', loginRateLimit, async (c) => {
       }
     }
 
-    await createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', true);
-    await clearAccountLock(username);
-    await query(
-      `INSERT INTO user_configs (user_id, timezone) VALUES ($1, 'Asia/Shanghai') ON CONFLICT (user_id) DO NOTHING`,
-      [user.id],
-    );
-    await logSecurityEvent({
-      userId: parseInt(user.id, 10),
-      username: user.username,
-      eventType: 'login_success',
-      ip,
-      userAgent,
-    });
+    const numericUserId = parseInt(user.id, 10);
     const { session, accessToken, refreshToken } = await createSession(user.id, deviceFingerprint || '', false, rememberMe);
-
     setAuthCookies(c, accessToken, refreshToken, rememberMe);
 
-    const pwdCheck = await query(
-      'SELECT password_changed_at FROM user_configs WHERE user_id = $1',
-      [user.id],
-    );
-    const mustChangePassword = !pwdCheck.rows[0]?.password_changed_at;
+    void Promise.all([
+      createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', true, undefined, {
+        userId: numericUserId,
+        username: user.username,
+      }),
+      clearAccountLock(username),
+      query(
+        `INSERT INTO user_configs (user_id, timezone) VALUES ($1, 'Asia/Shanghai') ON CONFLICT (user_id) DO NOTHING`,
+        [numericUserId],
+      ),
+      logSecurityEvent({
+        userId: numericUserId,
+        username: user.username,
+        eventType: 'login_success',
+        ip,
+        userAgent,
+      }),
+    ]).catch((err) => console.error('[Login post-success]', err));
 
-    // Auto-sync lunar holidays in background (non-blocking)
-    ensureLunarHolidayEvents(Number(user.id)).catch(() => {});
+    const mustChangePassword = !user.passwordChangedAt;
+
+    ensureLunarHolidayEvents(numericUserId).catch(() => {});
 
     return c.json({
       success: true,
-      data: { sessionId: session.id, user, mustChangePassword, authMode: 'cookie' },
+      data: {
+        sessionId: session.id,
+        user: {
+          id: user.id,
+          username: user.username,
+          avatarUrl: user.avatarUrl,
+          createdAt: user.createdAt,
+        },
+        mustChangePassword,
+        authMode: 'cookie',
+      },
     });
   } catch (error: any) {
     console.error('[Login Error]', error);

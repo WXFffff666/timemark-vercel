@@ -12,6 +12,7 @@
     "./templates": "./dist/templates.js",
     "./notification-presets": "./dist/notification-presets.js",
     "./event-schedule": "./dist/event-schedule.js",
+    "./lunar-calendar": "./dist/lunar-calendar.js",
     "./email-compose": "./dist/email-compose.js"
   },
   "scripts": {

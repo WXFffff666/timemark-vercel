@@ -1,28 +1,76 @@
+/**
+ * 网络时间校准：按 IANA 时区拉取权威时间，Cron 提醒与双历校验共用。
+ * 默认 Asia/Shanghai；用户切换时区后，后续校准跟随该时区。
+ */
+
+export const DEFAULT_SYNC_TIMEZONE = 'Asia/Shanghai';
+
 const MAX_TIME_DRIFT = 5 * 60 * 1000;
 const SYNC_TTL_MS = 5 * 60 * 1000;
 
-let cachedOffsetMs = 0;
-let lastSyncAt = 0;
-let lastSyncResult: TimeSyncResult | null = null;
+interface TimezoneCacheEntry {
+  offsetMs: number;
+  lastSyncAt: number;
+  result: TimeSyncResult;
+}
+
+const cacheByTimezone = new Map<string, TimezoneCacheEntry>();
 
 export interface TimeSyncResult {
   success: boolean;
+  timeZone: string;
   currentTime: Date;
   serverTime?: Date;
+  todayYmd?: string;
+  localTimeHHmm?: string;
   drift?: number;
   source: string;
   message: string;
 }
 
-function getCurrentTimestamp(): number {
-  return Date.now();
+function normalizeTimeZone(timeZone?: string): string {
+  const tz = (timeZone || DEFAULT_SYNC_TIMEZONE).trim();
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return tz;
+  } catch {
+    return DEFAULT_SYNC_TIMEZONE;
+  }
 }
 
-async function fetchUtcMillisFromWorldTimeApi(): Promise<number | null> {
+export function formatTodayYmd(now: Date, timeZone: string): string {
+  return getTodayYmd(now, timeZone);
+}
+
+export function formatLocalHHmm(now: Date, timeZone: string): string {
+  return getLocalHHmm(now, timeZone);
+}
+
+function getTodayYmd(now: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+function getLocalHHmm(now: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const hour = parts.find((p) => p.type === 'hour')?.value || '00';
+  const minute = parts.find((p) => p.type === 'minute')?.value || '00';
+  return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+}
+
+async function fetchMillisFromWorldTimeApi(timeZone: string): Promise<number | null> {
   try {
-    const response = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC', {
-      signal: AbortSignal.timeout(5000),
-    });
+    const url = `https://worldtimeapi.org/api/timezone/${encodeURIComponent(timeZone)}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
     if (!response.ok) return null;
     const data = await response.json() as { unixtime?: number; datetime?: string };
     if (typeof data.unixtime === 'number') return data.unixtime * 1000;
@@ -33,11 +81,10 @@ async function fetchUtcMillisFromWorldTimeApi(): Promise<number | null> {
   }
 }
 
-async function fetchUtcMillisFromTimeApiIo(): Promise<number | null> {
+async function fetchMillisFromTimeApiIo(timeZone: string): Promise<number | null> {
   try {
-    const response = await fetch('https://timeapi.io/api/Time/current/zone?timeZone=UTC', {
-      signal: AbortSignal.timeout(5000),
-    });
+    const url = `https://timeapi.io/api/Time/current/zone?timeZone=${encodeURIComponent(timeZone)}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
     if (!response.ok) return null;
     const data = await response.json() as { dateTime?: string };
     return data.dateTime ? new Date(data.dateTime).getTime() : null;
@@ -46,69 +93,94 @@ async function fetchUtcMillisFromTimeApiIo(): Promise<number | null> {
   }
 }
 
-async function queryAuthoritativeTime(): Promise<{ ts: number; source: string } | null> {
+async function queryAuthoritativeTime(timeZone: string): Promise<{ ts: number; source: string } | null> {
   const fetchers: Array<{ fn: () => Promise<number | null>; source: string }> = [
-    { fn: fetchUtcMillisFromWorldTimeApi, source: 'worldtimeapi.org' },
-    { fn: fetchUtcMillisFromTimeApiIo, source: 'timeapi.io' },
+    { fn: () => fetchMillisFromWorldTimeApi(timeZone), source: 'worldtimeapi.org' },
+    { fn: () => fetchMillisFromTimeApiIo(timeZone), source: 'timeapi.io' },
   ];
 
   const samples: Array<{ ts: number; source: string }> = [];
-  for (const { fn, source } of fetchers) {
-    const ts = await fn();
-    if (ts) samples.push({ ts, source });
-  }
+  await Promise.all(
+    fetchers.map(async ({ fn, source }) => {
+      const ts = await fn();
+      if (ts) samples.push({ ts, source });
+    }),
+  );
 
   if (samples.length === 0) return null;
-
   samples.sort((a, b) => a.ts - b.ts);
-  const median = samples[Math.floor(samples.length / 2)];
-  return median;
+  return samples[Math.floor(samples.length / 2)];
 }
 
-export function getClockOffsetMs(): number {
-  return cachedOffsetMs;
+function getCache(timeZone: string): TimezoneCacheEntry | null {
+  const entry = cacheByTimezone.get(timeZone);
+  if (!entry) return null;
+  if (Date.now() - entry.lastSyncAt > SYNC_TTL_MS) return null;
+  return entry;
 }
 
-export function getSyncedNow(): Date {
-  return new Date(Date.now() + cachedOffsetMs);
+export function getClockOffsetMs(timeZone?: string): number {
+  const tz = normalizeTimeZone(timeZone);
+  return getCache(tz)?.offsetMs ?? cacheByTimezone.get(tz)?.offsetMs ?? 0;
 }
 
-export async function getSyncedTimestamp(): Promise<number> {
-  if (Date.now() - lastSyncAt > SYNC_TTL_MS) {
-    await syncTime().catch(() => {});
+export function getSyncedNow(timeZone?: string): Date {
+  const offset = getClockOffsetMs(timeZone);
+  return new Date(Date.now() + offset);
+}
+
+export function getLastTimeSyncResult(timeZone?: string): TimeSyncResult | null {
+  const tz = normalizeTimeZone(timeZone);
+  return getCache(tz)?.result ?? cacheByTimezone.get(tz)?.result ?? null;
+}
+
+/** 后台刷新，不阻塞请求 */
+export function scheduleTimeSync(timeZone?: string): void {
+  void syncTime(timeZone).catch(() => {});
+}
+
+export async function syncTime(timeZone?: string, options?: { force?: boolean }): Promise<TimeSyncResult> {
+  const tz = normalizeTimeZone(timeZone);
+  if (!options?.force) {
+    const cached = getCache(tz);
+    if (cached) return cached.result;
   }
-  return getSyncedNow().getTime();
-}
 
-export function getLastTimeSyncResult(): TimeSyncResult | null {
-  return lastSyncResult;
-}
-
-export async function syncTime(): Promise<TimeSyncResult> {
   const currentTime = new Date();
-  const currentTimestamp = getCurrentTimestamp();
+  const currentTimestamp = Date.now();
+  const authoritative = await queryAuthoritativeTime(tz);
 
-  const authoritative = await queryAuthoritativeTime();
   if (!authoritative) {
+    const synced = new Date(currentTimestamp + getClockOffsetMs(tz));
     const result: TimeSyncResult = {
       success: true,
+      timeZone: tz,
       currentTime,
+      serverTime: synced,
+      todayYmd: getTodayYmd(synced, tz),
+      localTimeHHmm: getLocalHHmm(synced, tz),
       source: 'system',
-      message: 'Using system time (network time sources unavailable)',
+      message: 'Using cached/system time (network time sources unavailable)',
     };
-    lastSyncResult = result;
-    lastSyncAt = Date.now();
+    const entry = cacheByTimezone.get(tz);
+    if (entry) {
+      entry.lastSyncAt = Date.now();
+      entry.result = result;
+    } else {
+      cacheByTimezone.set(tz, { offsetMs: 0, lastSyncAt: Date.now(), result });
+    }
     return result;
   }
 
   const drift = authoritative.ts - currentTimestamp;
-  cachedOffsetMs = drift;
-  lastSyncAt = Date.now();
-
+  const synced = new Date(authoritative.ts);
   const result: TimeSyncResult = {
     success: true,
+    timeZone: tz,
     currentTime,
-    serverTime: new Date(authoritative.ts),
+    serverTime: synced,
+    todayYmd: getTodayYmd(synced, tz),
+    localTimeHHmm: getLocalHHmm(synced, tz),
     drift: Math.abs(drift),
     source: authoritative.source,
     message: Math.abs(drift) > MAX_TIME_DRIFT
@@ -117,32 +189,36 @@ export async function syncTime(): Promise<TimeSyncResult> {
   };
 
   if (Math.abs(drift) > MAX_TIME_DRIFT) {
-    console.warn(`[NTP] Time drift detected: ${drift}ms from ${authoritative.source}`);
+    console.warn(`[NTP] Time drift ${drift}ms (${tz}) from ${authoritative.source}`);
   }
 
-  lastSyncResult = result;
+  cacheByTimezone.set(tz, { offsetMs: drift, lastSyncAt: Date.now(), result });
   return result;
 }
 
-export async function checkTimeSync(): Promise<void> {
-  const result = await syncTime();
-  console.log(`[NTP] Time sync result:`, result.message);
-  if (result.drift && result.drift > MAX_TIME_DRIFT) {
-    console.error(`[NTP] Significant time drift: ${result.drift}ms from ${result.source}`);
+export async function getSyncedTimestamp(timeZone?: string): Promise<number> {
+  const tz = normalizeTimeZone(timeZone);
+  if (!getCache(tz)) {
+    await syncTime(tz).catch(() => {});
   }
+  return getSyncedNow(tz).getTime();
 }
 
-export async function scheduledTimeSync(): Promise<void> {
+export async function checkTimeSync(timeZone?: string): Promise<void> {
+  const result = await syncTime(timeZone, { force: true });
+  console.log(`[NTP] ${result.timeZone}: ${result.message}`);
+}
+
+export async function scheduledTimeSync(timeZone?: string): Promise<void> {
   try {
-    await checkTimeSync();
+    await checkTimeSync(timeZone);
   } catch (error) {
     console.error('[NTP] Scheduled sync failed:', error);
   }
 }
 
-/** 记录显著时间漂移（仅日志，不阻断提醒） */
-export async function logTimeDriftIfNeeded(): Promise<void> {
-  const result = lastSyncResult ?? await syncTime();
+export async function logTimeDriftIfNeeded(timeZone?: string): Promise<void> {
+  const result = getLastTimeSyncResult(timeZone) ?? await syncTime(timeZone);
   if (!result.drift || result.drift <= MAX_TIME_DRIFT) return;
-  console.warn(`[NTP] Significant drift ${result.drift}ms from ${result.source}`);
+  console.warn(`[NTP] Significant drift ${result.drift}ms (${result.timeZone}) from ${result.source}`);
 }
