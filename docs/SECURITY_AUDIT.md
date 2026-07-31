@@ -32,6 +32,13 @@
 | `JWT_SECRET` / `MASTER_KEY` / `CRON_SECRET` | **否** — 首次部署配置一次即可，除非泄露 |
 | MASTER_KEY 手动轮换 UI | 已移除 — 避免误导用户去改环境变量 |
 
+| Broadcast 手动收件人开放中继 | `recipientEmails` 限制为联系人邮箱白名单 |
+| 预览 HTML XSS | `sanitizeHtmlPreview` 增强并前后端共用 |
+| Legacy refresh 无 session 绑定 | 拒绝无 `sessionToken` 的 refresh |
+| zero-trust 全局 Cron token 绕过 | 移除非 `/api/cron/` 路径的 bypass |
+| Cookie 模式当前会话识别 | 安全中心从 Cookie 读取 access token |
+| 「不记住我」仍 24h refresh | 未勾选时 refresh 为会话 cookie |
+
 ## 已通过项
 
 | 项目 | 结果 |

@@ -14,7 +14,7 @@ import { ensureLunarHolidayEvents } from '../services/lunar-holidays.js';
 import { hashPassword } from '../utils/password.js';
 import { query } from '../db/index.js';
 import { setAuthCookies, clearAuthCookies, getRefreshTokenFromCookie, getAccessTokenFromCookie, setAccessCookie, setRefreshCookie } from '../utils/auth-cookies.js';
-import { loginRateLimit } from '../middleware/rate-limit.js';
+import { loginRateLimit, authMutationRateLimit } from '../middleware/rate-limit.js';
 
 const auth = new Hono();
 
@@ -195,7 +195,8 @@ auth.post('/verify-device', authMiddleware, async (c) => {
   }
 
   const bearer = c.req.header('Authorization')?.replace('Bearer ', '');
-  const payload = bearer ? await verifyToken(bearer) : null;
+  const accessToken = bearer || getAccessTokenFromCookie(c);
+  const payload = accessToken ? await verifyToken(accessToken) : null;
   if (!payload?.sessionToken) {
     return c.json({ success: true, data: { trusted: false } });
   }
@@ -244,7 +245,7 @@ auth.post('/logout', authMiddleware, async (c) => {
   return c.json({ success: true });
 });
 
-auth.post('/change-password', authMiddleware, async (c) => {
+auth.post('/change-password', authMiddleware, authMutationRateLimit, async (c) => {
   try {
     const user = c.get('user');
     const body = await c.req.json();
@@ -314,41 +315,29 @@ auth.post('/refresh', async (c) => {
       return c.json({ success: false, error: 'Invalid or expired refresh token' }, 401);
     }
 
-    if (payload.sessionToken) {
-      const session = await getSessionByToken(payload.sessionToken);
-      if (!session) {
-        return c.json({ success: false, error: 'Session expired or revoked' }, 401);
-      }
-
-      const { getUserById } = await import('../services/auth.service.js');
-      const user = await getUserById(payload.userId);
-      if (!user) {
-        return c.json({ success: false, error: 'User not found' }, 401);
-      }
-
-      const sessionMs = new Date(session.expiresAt).getTime() - Date.now();
-      const rememberMe = sessionMs > 24 * 60 * 60 * 1000;
-
-      const accessToken = await generateAccessToken(user.id, payload.sessionToken, rememberMe);
-      const newRefreshToken = await generateRefreshToken(user.id, payload.sessionToken);
-
-      setAccessCookie(c, accessToken, rememberMe);
-      setRefreshCookie(c, newRefreshToken, rememberMe);
-
-      return c.json({ success: true, data: { user, authMode: 'cookie' } });
+    if (!payload.sessionToken) {
+      return c.json({ success: false, error: 'Invalid or expired refresh token' }, 401);
     }
 
-    // Legacy refresh without session binding
+    const session = await getSessionByToken(payload.sessionToken);
+    if (!session) {
+      return c.json({ success: false, error: 'Session expired or revoked' }, 401);
+    }
+
     const { getUserById } = await import('../services/auth.service.js');
     const user = await getUserById(payload.userId);
-    
     if (!user) {
       return c.json({ success: false, error: 'User not found' }, 401);
     }
 
-    const accessToken = await generateAccessToken(user.id, payload.sessionToken, false);
+    const sessionMs = new Date(session.expiresAt).getTime() - Date.now();
+    const rememberMe = sessionMs > 24 * 60 * 60 * 1000;
 
-    setAccessCookie(c, accessToken, true);
+    const accessToken = await generateAccessToken(user.id, payload.sessionToken, rememberMe);
+    const newRefreshToken = await generateRefreshToken(user.id, payload.sessionToken);
+
+    setAccessCookie(c, accessToken, rememberMe);
+    setRefreshCookie(c, newRefreshToken, rememberMe);
 
     return c.json({ success: true, data: { user, authMode: 'cookie' } });
   } catch (error: any) {

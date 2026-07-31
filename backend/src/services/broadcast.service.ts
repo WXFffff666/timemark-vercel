@@ -2,12 +2,28 @@ import { query } from '../db/index.js';
 import { getContactsByIds, listFixedContacts, getContactAllEmails } from './contact.service.js';
 import { resolveEmailAccount, sendRawEmail } from './email-send.service.js';
 import { escapeHtml } from '../utils/html.js';
-import { renderBroadcastTemplate, resolveContactGreetingName } from '@timemark/shared';
+import { renderBroadcastTemplate, resolveContactGreetingName, sanitizeHtmlPreview } from '@timemark/shared';
 import type { BroadcastEmailInput } from '@timemark/shared';
 
 interface BroadcastRecipient {
   email: string;
   name?: string;
+}
+
+async function getAllowedContactEmails(userId: number): Promise<Set<string>> {
+  const allowed = new Set<string>();
+  const all = await listFixedContacts(userId);
+  for (const c of all) {
+    for (const email of getContactAllEmails(c)) {
+      const normalized = String(email || '').trim().toLowerCase();
+      if (normalized) allowed.add(normalized);
+    }
+    if (c.email) {
+      const normalized = String(c.email).trim().toLowerCase();
+      if (normalized) allowed.add(normalized);
+    }
+  }
+  return allowed;
 }
 
 async function resolveRecipients(userId: number, input: BroadcastEmailInput): Promise<BroadcastRecipient[]> {
@@ -24,8 +40,15 @@ async function resolveRecipients(userId: number, input: BroadcastEmailInput): Pr
     }
   };
 
-  if (input.recipientEmails) {
-    for (const e of input.recipientEmails) add(e);
+  if (input.recipientEmails?.length) {
+    const allowed = await getAllowedContactEmails(userId);
+    for (const e of input.recipientEmails) {
+      const normalized = String(e || '').trim().toLowerCase();
+      if (!allowed.has(normalized)) {
+        throw new Error(`收件人 ${e} 不在联系人列表中，无法发送`);
+      }
+      add(e);
+    }
   }
   if (input.contactIds?.length) {
     const contacts = await getContactsByIds(userId, input.contactIds);
@@ -133,6 +156,6 @@ export async function listBroadcastCampaigns(userId: number) {
 export function renderBroadcastPreview(subject: string, html: string) {
   return {
     subject: escapeHtml(subject),
-    htmlPreview: html.slice(0, 2000),
+    htmlPreview: sanitizeHtmlPreview(html.slice(0, 2000)),
   };
 }

@@ -10,6 +10,7 @@ import { lookupGeoLabel } from '../utils/geoip.js';
 import type { User } from '@timemark/shared';
 import { isTurnstileEnabled } from '../utils/turnstile.js';
 import { getCronSecret } from '../utils/heartbeat.js';
+import { getAccessTokenFromCookie } from '../utils/auth-cookies.js';
 
 const security = new Hono<{ Variables: { user: User } }>();
 security.use('*', authMiddleware);
@@ -19,8 +20,9 @@ security.use('*', authMiddleware);
 security.get('/sessions', async (c) => {
   const user = c.get('user');
   const bearer = c.req.header('Authorization')?.replace('Bearer ', '');
+  const accessToken = bearer || getAccessTokenFromCookie(c);
   const { verifyToken } = await import('../utils/jwt.js');
-  const current = bearer ? await verifyToken(bearer) : null;
+  const current = accessToken ? await verifyToken(accessToken) : null;
 
   const result = await query(
     `SELECT id, device_fingerprint, is_trusted, expires_at, created_at

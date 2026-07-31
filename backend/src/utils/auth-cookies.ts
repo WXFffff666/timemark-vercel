@@ -23,7 +23,7 @@ export function setAuthCookies(
   });
   setCookie(c, REFRESH_COOKIE, refreshToken, {
     ...baseOpts,
-    maxAge: rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60,
+    ...(rememberMe ? { maxAge: 30 * 24 * 60 * 60 } : {}),
   });
 }
 
@@ -50,6 +50,6 @@ export function setAccessCookie(c: Context, accessToken: string, rememberMe = fa
 export function setRefreshCookie(c: Context, refreshToken: string, rememberMe = false) {
   setCookie(c, REFRESH_COOKIE, refreshToken, {
     ...baseOpts,
-    maxAge: rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60,
+    ...(rememberMe ? { maxAge: 30 * 24 * 60 * 60 } : {}),
   });
 }

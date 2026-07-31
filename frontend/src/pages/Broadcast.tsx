@@ -11,7 +11,7 @@ import {
   type BroadcastTemplateCategory,
 } from '@timemark/shared';
 import { contactHasAnyEmail, getContactEmailList } from '@/lib/contact-utils';
-import { sanitizeHtmlPreview } from '@/lib/sanitize-html';
+import { sanitizeHtmlPreview } from '@timemark/shared';
 import type { ContactLabeledEntry } from '@timemark/shared';
 
 interface Contact {

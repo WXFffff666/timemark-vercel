@@ -123,7 +123,6 @@ export function shouldBypassZeroTrust(input: {
   if (matchesBypassPrefix(input.path)) return true;
   if (input.apiKey) return true;
   if (hasCronBearer(input.authorization)) return true;
-  if (process.env.VERCEL && input.vercelCronToken) return true;
   return false;
 }
 
