@@ -254,7 +254,7 @@ security.get('/deploy-info', async (c) => {
   return c.json({
     success: true,
     data: {
-      version: process.env.npm_package_version || '2.14.0',
+      version: process.env.npm_package_version || '2.16.0',
       platform: process.env.VERCEL ? 'vercel' : 'local',
       vercelUrl: process.env.VERCEL_URL || null,
       turnstileConfigured,

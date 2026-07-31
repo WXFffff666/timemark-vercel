@@ -10,7 +10,7 @@
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-2.15.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
+[![Version](https://img.shields.io/badge/Version-2.16.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
 [![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-vercel?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-vercel/stargazers)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat&logo=vercel)](https://vercel.com/new)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
@@ -60,8 +60,8 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 
 | 🗓️ 精准农历 | 📢 多渠道通知 | 👨‍👩‍👧‍👦 智能关系映射 | 🔒 安全防护 | 🌍 全球时区 |
 |:----------:|:----------:|:---------------:|:----------:|:--------:|
-| 闰月自动转换 | 30+ 通知渠道 | 40+ 称呼映射 | 登录锁定 + 告警 | NTP 自动同步 |
-| 公历/农历双历 | 同渠道多账户 | 家庭关系映射 | AES-256 凭证加密 | 自定义时区 |
+| 闰月自动转换 | 30+ 通知渠道 | 40+ 称呼映射 | 登录锁定 + 告警 | NTP 按用户时区校准 |
+| 公历/农历/双历 | 同渠道多账户 | 家庭关系映射 | Turnstile + Passkey | 默认北京时间 |
 
 | 📝 通知模板 | 🔄 重复事件 | 📧 多邮箱支持 | 📅 日历导出 | 🎯 11 种事件类型 |
 |:----------:|:----------:|:------------:|:----------:|:---------------:|
@@ -260,8 +260,22 @@ Vercel 远程构建已在 `vercel.json` 的 `installCommand` 中配置相同参�
 | 模式 | 说明 |
 |:----:|------|
 | **公历** | 标准公历日期 |
-| **农历** | 精准农历转换，含闰月自动处理 |
-| **双历** | 同时显示公历 + 农历对应日期 |
+| **农历** | 农历文本输入，自动转换为公历存储；含闰月处理 |
+| **双历** | 公历与农历双向同步；保存时写入 `lunarDate` 供 Cron 农历提醒 |
+
+创建双历事件时，修改公历会自动推算农历，修改农历也会反算公历。系统对公历→农历→公历做往返自检（见 `/api/time/status` 的 `calendarVerify`）。
+
+### 时区与 NTP
+
+| 功能 | 说明 |
+|------|------|
+| **默认时区** | `Asia/Shanghai`（东八区 / 北京时间） |
+| **全局联动** | 首页快捷时区与设置页同步；改时区后倒计时、待办、今日事件均按新时区计算 |
+| **NTP 校准** | 后台从 WorldTimeAPI / timeapi.io 获取权威时间，校正服务器时钟漂移 |
+| **跟随时区** | 用户切换时区后，NTP 与「今天」按该 IANA 时区校准 |
+| **公开接口** | `GET /api/time/status?timezone=Asia/Shanghai`（可选 `&refresh=1` 强制同步） |
+
+Cron 每分钟提醒任务使用校正后的时间，在配置的提醒时刻 ±2 分钟内触发。
 
 ### 提醒配置
 
@@ -435,6 +449,10 @@ TimeMark v2.0 内置多层安全防护：
 | **发信白名单** | 联系人快捷发信 `recipientEmails` 必须属于该联系人邮箱列表，禁止任意中继 |
 | **CSRF 防护** | 非 GET 请求校验 Origin/Referer；无 Origin 时需 Bearer + `X-Requested-With` |
 | **SMTP TLS** | 587 端口强制 `requireTLS`，465 使用 `secure: true` |
+| **单用户模式** | 固定个人单账户，禁止创建第二用户 |
+| **零信任网关** | 拦截扫描路径与恶意 UA；Cron/Webhook 独立鉴权 |
+| **Passkey + Turnstile** | 密码与 Passkey 登录均要求人机验证（启用 Turnstile 时） |
+| **SSRF 防护** | 外部日历 URL 拉取前校验公网安全地址 |
 
 安全评估详见 [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md)。
 
@@ -504,6 +522,7 @@ npx pnpm build --config.blockExoticSubdeps=false
 
 | 版本 | 日期 | 内容 |
 |:----:|:----:|------|
+| **v2.16.0** | 2026-07 | 双历/农历修复、NTP 按时区校准、登录加速、单用户模式、提醒 Cron 修复、安全加固（零信任/Passkey Turnstile/SSRF/Webhook） |
 | **v2.15.0** | 2026-07 | 联系人多邮箱/手机、待办打勾与完成历史、日历年/月/日视图、安全加固（发信白名单/HSTS/密钥脱敏/SMTP TLS） |
 | **v2.14.x** | 2026-07 | Turnstile 修复、深浅色切换、Google OAuth 文档、收件箱全链路、Phase B/C 优化项 |
 | **v2.13.0** | 2026-07 | 通知收件人修复、邮件记录与重试队列、Webhook/日历集成、部署向导中文自检 |

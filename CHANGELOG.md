@@ -1,5 +1,55 @@
 # Changelog
 
+## v2.16.0 (2026-07-31)
+
+### 双历与农历
+
+- **事件表单**：公历/农历/双历模式正确同步 `lunarDate`；纯农历使用农历文本输入；保存时往返校验
+- **倒计时与待办**：前端 `resolveNextOccurrenceDate` 支持农历/双历，与 Cron 提醒逻辑对齐
+- **日历页**：事件标签显示「公历 / 农历 / 双历」
+- **自检**：`runLunarCalendarSelfTest` 公历→农历→公历往返校验（`shared/lunar-calendar`）
+
+### 时区与 NTP 时间校准
+
+- **默认时区**：`Asia/Shanghai`（北京时间）；首页快捷切换与设置页全局联动
+- **NTP 校准**：Cron 提醒、`/api/time/status` 使用 WorldTimeAPI / timeapi.io 校正时钟漂移
+- **按用户时区**：切换时区后 NTP 与「今天」计算跟随该 IANA 时区
+- **首页时钟**：接入 NTP 偏移后的校正时间
+- **健康检查**：`/api/health` 不再阻塞等待 NTP；Cron 详情仅 `detailed=1` + token 可见
+
+### 登录性能
+
+- Turnstile、IP 封禁、账户锁定 **并行检查**
+- 登录查询 **合并为一次**（密码 + TOTP + IP 白名单 + 改密状态）
+- 无失败记录时跳过 `countPasswordFailuresSinceLastSuccess`
+- 成功路径：先返回 Session，审计日志 **后台异步**
+- `/api/auth/login` 不再重复走全局 `apiRateLimit`
+- Turnstile **preconnect** 预连接 Cloudflare
+
+### 安全加固
+
+- **零信任**：移除未验证的 `X-API-Key` bypass
+- **Passkey 登录**：与密码登录一致，强制 Turnstile 人机验证
+- **外部日历 SSRF**：拉取 ICS 前 `isSafePublicUrl()` 校验
+- **Resend Webhook**：生产环境一律要求有效签名
+- **Google OAuth**：回调重定向限制在白名单域名（`CORS_ORIGIN` / canonical）
+- **API Key**：移除 `api_key` 明文回退，仅 `api_key_hash`
+
+### 单用户模式
+
+- 固定个人单账户，禁止创建第二用户
+- 会话令牌后台自动续期；安全中心移除需手动改 Vercel env 的 MASTER_KEY 轮换 UI
+
+### 提醒修复
+
+- Cron 纳入无 `user_configs` 但有事件的用户；登录/bootstrap 自动补配置
+- 修复 `nextOccurrence.slice is not a function`（pg DATE 兼容）
+- 提醒时刻 ±2 分钟窗口抽取为 `matchesReminderTimeWindow` 共享函数
+
+### 文档
+
+- 更新 README、CHANGELOG、SECURITY_AUDIT、OPTIMIZATION_PLAN、TURNSTILE_SETUP、INTEGRATIONS、NOTIFICATIONS
+
 ## v2.15.0 (2026-07-17)
 
 ### 固定联系人

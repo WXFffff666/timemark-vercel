@@ -79,6 +79,16 @@ Authorization: Bearer <CRON_SECRET>
 
 建议每 15 分钟调用一次。同步逻辑见 `backend/src/services/calendar-sync.service.ts`。
 
+### SSRF 防护（v2.16.0）
+
+拉取外部 ICS 前，服务端会校验 URL：
+
+- 仅允许 `http` / `https`
+- 禁止内网、回环、链路本地、元数据地址（如 `127.0.0.1`、`169.254.169.254`）
+- 禁止非标准端口上的私有目标
+
+不合规 URL 会被拒绝并记录日志，不会由服务器代为请求。
+
 ---
 
 ## 5. 智能冲突提示

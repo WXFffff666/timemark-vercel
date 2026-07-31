@@ -1,7 +1,41 @@
 # 安全评估报告
 
 **目标**：`https://timemark.the37777777.top`  
-**最新版本**：v2.14.0（2026-07-31）
+**最新版本**：v2.16.0（2026-07-31）
+
+## v2.16.0 安全加固（2026-07-31）
+
+### 零信任与认证
+
+| 问题 | 修复 |
+|------|------|
+| 任意 `X-API-Key` 可绕过零信任 | `zero-trust-guard.ts` 移除未验证 bypass |
+| Passkey 登录绕过人机验证 | `webauthn.ts` 与密码登录一致，强制 Turnstile |
+| API Key 明文回退 | `api-key.ts` 仅接受 `api_key_hash`，移除明文列回退 |
+
+### 外部集成
+
+| 问题 | 修复 |
+|------|------|
+| 外部 ICS URL SSRF | `calendar-sync.service.ts` 拉取前 `isSafePublicUrl()` |
+| Resend Webhook 生产可无签名 | `resend-webhook.ts` 生产一律验签 |
+| Google OAuth Host 注入 | `google-calendar.ts` 使用 `resolveSafeAppOrigin()` 限制回调域名 |
+
+### 信息泄露
+
+| 问题 | 修复 |
+|------|------|
+| `/api/health` 公开 Cron 详情 | 仅 `?detailed=1` + `X-Health-Token` 返回 Cron/NTP 详情 |
+
+### 线上复测（2026-07-31）
+
+| 端点 | 无认证结果 |
+|------|------------|
+| `/api/events` | 401 |
+| `/api/contacts` | 401 |
+| `/api/cron/*` | 401 |
+| `/api/security/deploy-info` | 401 |
+| `/api/health` | 200（基础状态，无密钥字段） |
 
 ## v2.14.0 安全加固（2026-07-31）
 

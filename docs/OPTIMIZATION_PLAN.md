@@ -1,5 +1,24 @@
 # TimeMark 优化计划与实施记录
 
+## 已完成（v2.16.0）
+
+### 双历、时区与 NTP
+- **双历表单**：公历/农历/双历 `lunarDate` 同步；纯农历文本输入；保存往返校验
+- **全局时区**：默认 `Asia/Shanghai`；首页与设置页联动
+- **NTP 校准**：Cron 与 `GET /api/time/status` 使用 WorldTimeAPI / timeapi.io 校正漂移
+- **提醒修复**：纳入无 `user_configs` 用户；`matchesReminderTimeWindow` ±2 分钟窗口
+
+### 登录性能
+- Turnstile + IP 封禁 + 账户锁定 **并行**；用户查询 **合并为一次**
+- 成功路径审计 **后台异步**；登录专用 rate limit；Turnstile preconnect
+
+### 安全
+- 零信任移除未验证 API Key bypass；Passkey 登录强制 Turnstile
+- 外部 ICS SSRF 防护；Resend Webhook 生产验签；Google OAuth 安全回调域
+- 详见 `docs/SECURITY_AUDIT.md`
+
+---
+
 ## 已完成（v2.15.0）
 
 ### 固定联系人与待办
@@ -30,7 +49,7 @@
 ### 登录安全
 - **默认仅用户名 + 密码**登录，不强制二步验证
 - TOTP 为可选：仅在安全中心主动启用后才要求验证码
-- Passkey 仅用于安全中心注册/管理，**不参与登录**
+- **Passkey 登录**：登录页支持 Passkey；与密码登录一样，启用 Turnstile 时须先完成人机验证
 - Turnstile 人机验证已支持（见 `docs/TURNSTILE_SETUP.md`）
 - 浏览器渗透评估见 `docs/SECURITY_AUDIT.md`
 

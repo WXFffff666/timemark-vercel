@@ -159,6 +159,8 @@ Once deployed, check:
 
 **注意：** 内置 Cron（`vercel.json` 的 `daily-maintenance`）由 Vercel 调度，部分任务仍可能从美东触发；分钟级提醒请继续用外部 Cron 调 `/api/cron/reminder-check`（请求会打到你所设函数区域）。
 
+**Time sync (v2.16.0):** Reminder cron uses NTP-corrected time. Public endpoint `GET /api/time/status?timezone=Asia/Shanghai` returns `timeDriftMs` and lunar calendar self-check (`calendarVerify`). Use `&refresh=1` to force re-sync. Detailed NTP/Cron stats require `GET /api/health?detailed=1` with `X-Health-Token`.
+
 ### 4.5. Manual UI End-to-End Test (Cloud Platform)
 
 After deployment, perform these manual click-through tests **as a real user**—not via API calls:

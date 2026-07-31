@@ -117,6 +117,8 @@ Vercel Hobby 内置 Cron 仅 **每天 1 次**（`daily-maintenance`）。以下�
 | 测试按钮报「未配置收件邮箱」 | 同上 | 设置 → 通知默认邮箱，或 Resend 渠道填收件人 |
 | 事件测试发送失败 | 渠道未激活、测试未通过、收件人为空 | 通知渠道页重新测试并确认绿色状态 |
 | 定时提醒从不触发 | 未配置外部 `reminder-check` Cron | 部署向导中复制 URL 到 cron-job.org |
+| 提醒时间偏差 | 服务器时钟漂移 | 查看 `/api/time/status` 的 `timeDriftMs`；Cron 已用 NTP 校正 |
+| 农历/双历提醒不准 | 事件未保存 `lunarDate` | 重新编辑保存；v2.16.0 起表单自动同步 |
 | 渠道凭证解密失败 | 更换过 `MASTER_KEY` | 重新保存各通知渠道配置 |
 | 自检某行红色 | 见部署向导中文说明 | Turnstile 为可选项；Resend 不在自检范围内 |
 

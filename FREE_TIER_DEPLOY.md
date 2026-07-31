@@ -106,13 +106,25 @@ Authorization: Bearer 你的CRON_SECRET
 3. 查看 **提醒日志**、**设置 → 邮件记录**  
 4. 等待 1–2 分钟验证定时 Cron（事件时间设在当前 ±2 分钟内）
 
+### 8. 时区与 NTP（v2.16.0）
+
+- 默认时区为 **北京时间**（`Asia/Shanghai`），可在首页或设置页切换
+- Cron 提醒使用 NTP 校正后的时间，减少服务器时钟漂移
+- 公开接口（无需登录）：
+
+```
+GET https://你的域名/api/time/status?timezone=Asia/Shanghai
+```
+
+返回 `timeDriftMs`（时钟漂移毫秒）、`calendarVerify`（双历往返自检）等。加 `&refresh=1` 可强制重新同步 NTP。
+
 ---
 
 ## 系统自检
 
 **设置 → 部署向导 → 系统自检** 检查：
 
-- 数据库连接、结构版本（v22）
+- 数据库连接、结构版本（**v30**）
 - `JWT_SECRET`、`MASTER_KEY`、`CRON_SECRET`
 - Turnstile（可选）
 
