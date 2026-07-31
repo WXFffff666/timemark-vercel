@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, User, Fingerprint } from 'lucide-react';
 import { LockIcon } from '@/components/icons';
 import { api } from '@/lib/api';
@@ -62,6 +62,7 @@ export function LoginForm() {
   const login = useAuthStore((state) => state.login);
   const loginPasskey = useAuthStore((state) => state.loginPasskey);
   const navigate = useNavigate();
+  const location = useLocation();
   const passkeySupported = isPasskeySupported();
 
   const isLocked = lockoutSeconds > 0;
@@ -116,6 +117,9 @@ export function LoginForm() {
       });
       if (mustChangePassword) {
         navigate('/settings?changePassword=1', { replace: true });
+      } else {
+        const from = (location.state as { from?: { pathname?: string } })?.from?.pathname;
+        navigate(from && from !== '/login' ? from : '/dashboard', { replace: true });
       }
     } catch (err: unknown) {
       const e = err as Error & {
@@ -151,7 +155,7 @@ export function LoginForm() {
       setLoading(false);
       pendingSubmitRef.current = false;
     }
-  }, [login, navigate, resetTurnstile, turnstileSiteKey, turnstileToken]);
+  }, [login, navigate, location.state, resetTurnstile, turnstileSiteKey, turnstileToken]);
 
   const submitLoginRef = useRef(submitLogin);
   submitLoginRef.current = submitLogin;

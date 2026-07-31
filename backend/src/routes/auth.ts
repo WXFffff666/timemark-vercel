@@ -5,7 +5,7 @@ import { getTurnstileSiteKey, isTurnstileEnabled, verifyTurnstileToken } from '.
 import { isSafePublicUrl } from '../utils/url-safety.js';
 import { lookupGeoLabel } from '../utils/geoip.js';
 import { logSecurityEvent } from '../services/security-event.service.js';
-import { createSession, deleteSession, deleteSessionById, deleteAllUserSessions } from '../services/session.service.js';
+import { createSession, deleteSession, deleteAllUserSessions, getSessionByToken } from '../services/session.service.js';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../utils/jwt.js';
 import { loginSchema, changePasswordSchema } from '@timemark/shared';
 import { authMiddleware } from '../middleware/auth.middleware.js';
@@ -13,7 +13,7 @@ import { sendSecurityAlert } from '../services/alert.service.js';
 import { ensureLunarHolidayEvents } from '../services/lunar-holidays.js';
 import { hashPassword } from '../utils/password.js';
 import { query } from '../db/index.js';
-import { setAuthCookies, clearAuthCookies, getRefreshTokenFromCookie, setAccessCookie } from '../utils/auth-cookies.js';
+import { setAuthCookies, clearAuthCookies, getRefreshTokenFromCookie, getAccessTokenFromCookie, setAccessCookie } from '../utils/auth-cookies.js';
 import { loginRateLimit } from '../middleware/rate-limit.js';
 
 const auth = new Hono();
@@ -177,7 +177,7 @@ auth.post('/login', loginRateLimit, async (c) => {
 
     return c.json({
       success: true,
-      data: { accessToken, refreshToken, sessionId: session.id, user, mustChangePassword, authMode: 'cookie' },
+      data: { sessionId: session.id, user, mustChangePassword, authMode: 'cookie' },
     });
   } catch (error: any) {
     console.error('[Login Error]', error);
@@ -208,16 +208,36 @@ auth.post('/verify-device', authMiddleware, async (c) => {
 });
 
 auth.post('/logout', authMiddleware, async (c) => {
-  const bearer = c.req.header('Authorization')?.replace('Bearer ', '');
+  const user = c.get('user');
+  const numericUserId = parseInt(user.id, 10);
   const body = await c.req.json().catch(() => ({}));
   const sessionId = body?.sessionId as string | undefined;
 
   if (sessionId) {
-    await deleteSessionById(sessionId);
-  } else if (bearer) {
-    const payload = await verifyToken(bearer);
-    if (payload?.sessionToken) {
-      await deleteSession(payload.sessionToken);
+    await query('DELETE FROM sessions WHERE id = $1 AND user_id = $2', [sessionId, numericUserId]);
+  } else {
+    let sessionToken: string | undefined;
+    const bearer = c.req.header('Authorization')?.replace('Bearer ', '');
+    if (bearer) {
+      const payload = await verifyToken(bearer);
+      sessionToken = payload?.sessionToken;
+    }
+    if (!sessionToken) {
+      const accessToken = getAccessTokenFromCookie(c);
+      if (accessToken) {
+        const payload = await verifyToken(accessToken);
+        sessionToken = payload?.sessionToken;
+      }
+    }
+    if (!sessionToken) {
+      const refreshToken = getRefreshTokenFromCookie(c);
+      if (refreshToken) {
+        const payload = await verifyToken(refreshToken);
+        sessionToken = payload?.sessionToken;
+      }
+    }
+    if (sessionToken) {
+      await deleteSession(sessionToken);
     }
   }
   clearAuthCookies(c);
@@ -294,6 +314,13 @@ auth.post('/refresh', async (c) => {
       return c.json({ success: false, error: 'Invalid or expired refresh token' }, 401);
     }
 
+    if (payload.sessionToken) {
+      const session = await getSessionByToken(payload.sessionToken);
+      if (!session) {
+        return c.json({ success: false, error: 'Session expired or revoked' }, 401);
+      }
+    }
+
     // Get user and create new access token
     const { getUserById } = await import('../services/auth.service.js');
     const user = await getUserById(payload.userId);
@@ -307,7 +334,7 @@ auth.post('/refresh', async (c) => {
 
     setAccessCookie(c, accessToken, true);
 
-    return c.json({ success: true, data: { accessToken, user, authMode: 'cookie' } });
+    return c.json({ success: true, data: { user, authMode: 'cookie' } });
   } catch (error: any) {
     console.error('[Refresh Token Error]', error);
     return c.json({ success: false, error: error.message || 'Failed to refresh token' }, 500);

@@ -39,9 +39,16 @@ async function ensureAdminUser(): Promise<void> {
   const userResult = await query('SELECT id FROM users LIMIT 1');
   if (userResult.rows.length > 0) return;
 
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
   const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
-  const password = process.env.DEFAULT_ADMIN_PASSWORD || 'TimeMark@2026';
-  const passwordHash = await hashPassword(password);
+  const password = process.env.DEFAULT_ADMIN_PASSWORD;
+
+  if (isProd && !password) {
+    log.warn('DEFAULT_ADMIN_PASSWORD not set — skipping auto admin creation in production');
+    return;
+  }
+
+  const passwordHash = await hashPassword(password || 'TimeMark@2026');
 
   await query(
     'INSERT INTO users (username, password_hash) VALUES ($1, $2) ON CONFLICT (username) DO NOTHING',

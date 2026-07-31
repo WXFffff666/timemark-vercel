@@ -178,8 +178,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.removeItem('refreshToken');
       localStorage.removeItem(SESSION_ID_KEY);
       localStorage.removeItem('timemark_persistent_login');
+      localStorage.removeItem('cachedUser');
       sessionStorage.removeItem('accessToken');
       sessionStorage.removeItem('refreshToken');
+      sessionStorage.removeItem('cachedUser');
       sessionStorage.removeItem('lastPath');
       sessionStorage.removeItem('mustChangePassword');
       set({ user: null, isAuthenticated: false, isLoading: false, mustChangePassword: false });
@@ -217,25 +219,9 @@ export const useAuthStore = create<AuthState>((set) => ({
           api.get<User>('/auth/session'),
           timeoutPromise
         ]);
-        // Cache user for offline/fallback
-        localStorage.setItem('cachedUser', JSON.stringify(user));
-        sessionStorage.setItem('cachedUser', JSON.stringify(user));
         set({ user, isAuthenticated: true, isLoading: false });
         return;
       } catch (error: any) {
-        // 检查是否是超时
-        const isTimeout = error.message?.includes('timeout');
-        
-        // 如果是超时，尝试使用缓存用户
-        if (isTimeout) {
-          const storedUser = localStorage.getItem('cachedUser') || sessionStorage.getItem('cachedUser');
-          if (storedUser) {
-            try {
-              set({ user: JSON.parse(storedUser), isAuthenticated: true, isLoading: false });
-              return;
-            } catch {}
-          }
-        }
         // Only clear tokens on specific auth errors, not network errors
         const errorMsg = error.message || '';
         const isAuthError = errorMsg.includes('401') || 
@@ -248,16 +234,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         // Token expired or invalid, try to refresh
         if (refreshToken && isAuthError) {
           try {
-            const refreshResponse = await api.post<any>('/auth/refresh', { refreshToken });
-            
-            // Store new access token in the same storage as before
-            if (sessionId || isPersistentLogin) {
-              localStorage.setItem('accessToken', refreshResponse.accessToken);
-            } else {
-              sessionStorage.setItem('accessToken', refreshResponse.accessToken);
-            }
-            
-            // Re-verify with new token
+            await api.post('/auth/refresh', { refreshToken });
             const user = await api.get<User>('/auth/session');
             set({ user, isAuthenticated: true, isLoading: false });
             return;
@@ -273,19 +250,6 @@ export const useAuthStore = create<AuthState>((set) => ({
           }
         }
         
-        // For non-auth errors (network issues, server errors), don't clear tokens
-        // Just mark as not authenticated temporarily
-        if (!isAuthError) {
-          // Network error or server error - keep the user logged in
-          // The tokens are still valid, just the request failed
-          const storedUser = localStorage.getItem('cachedUser') || sessionStorage.getItem('cachedUser');
-          if (storedUser) {
-            try {
-              set({ user: JSON.parse(storedUser), isAuthenticated: true, isLoading: false });
-              return;
-            } catch {}
-          }
-        }
       }
     } else {
       // HttpOnly cookie session (no token in storage)
@@ -294,8 +258,6 @@ export const useAuthStore = create<AuthState>((set) => ({
           api.get<User>('/auth/session'),
           timeoutPromise,
         ]);
-        localStorage.setItem('cachedUser', JSON.stringify(user));
-        sessionStorage.setItem('cachedUser', JSON.stringify(user));
         set({ user, isAuthenticated: true, isLoading: false });
         return;
       } catch (error: any) {

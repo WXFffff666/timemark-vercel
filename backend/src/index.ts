@@ -210,17 +210,21 @@ async function bootstrap() {
   // 3. 初始化管理员用户
   const userResult = await query('SELECT id FROM users LIMIT 1');
   if (userResult.rows.length === 0) {
+    const isProd = process.env.NODE_ENV === 'production';
     const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
-    const password = process.env.DEFAULT_ADMIN_PASSWORD || 'TimeMark@2026';
-    const passwordHash = await hashPassword(password);
+    const password = process.env.DEFAULT_ADMIN_PASSWORD;
+    if (isProd && !password) {
+      log.warn('DEFAULT_ADMIN_PASSWORD not set — skipping auto admin creation');
+    } else {
+      const passwordHash = await hashPassword(password || 'TimeMark@2026');
 
-    await query(
-      'INSERT INTO users (username, password_hash) VALUES ($1, $2)',
-      [username, passwordHash]
-    );
+      await query(
+        'INSERT INTO users (username, password_hash) VALUES ($1, $2)',
+        [username, passwordHash]
+      );
 
-    log.info({ username }, 'Default admin user created — change password on first login');
-
+      log.info({ username }, 'Default admin user created — change password on first login');
+    }
   } else {
     log.info('数据库已初始化，已存在用户');
   }

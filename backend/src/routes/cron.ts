@@ -48,7 +48,6 @@ cronRoutes.use('*', async (c, next) => {
   if (!cronSecret) {
     return c.json({ error: 'CRON_SECRET / CRONSECRET not configured' }, 500);
   }
-  const isVercelCron = !!process.env.VERCEL && !!c.req.header('x-vercel-cron-auth-token');
   const authHeader = c.req.header('Authorization') || '';
   const expected = `Bearer ${cronSecret}`;
   let bearerOk = false;
@@ -59,7 +58,8 @@ cronRoutes.use('*', async (c, next) => {
   } catch {
     bearerOk = false;
   }
-  if (!isVercelCron && !bearerOk) {
+  // Always require CRON_SECRET Bearer — x-vercel-cron-auth-token alone is not sufficient
+  if (!bearerOk) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
   const allowedIps = (process.env.CRON_ALLOWED_IPS || '').split(',').map((s) => s.trim()).filter(Boolean);

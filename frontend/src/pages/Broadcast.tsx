@@ -11,6 +11,7 @@ import {
   type BroadcastTemplateCategory,
 } from '@timemark/shared';
 import { contactHasAnyEmail, getContactEmailList } from '@/lib/contact-utils';
+import { sanitizeHtmlPreview } from '@/lib/sanitize-html';
 import type { ContactLabeledEntry } from '@timemark/shared';
 
 interface Contact {
@@ -241,7 +242,7 @@ export default function Broadcast() {
           {showPreview ? (
             <div
               className="w-full min-h-[160px] rounded-md border p-4 text-sm bg-white dark:bg-slate-950 prose prose-sm dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: html || '<p class="text-slate-400">暂无内容</p>' }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtmlPreview(html) || '<p class="text-slate-400">暂无内容</p>' }}
             />
           ) : (
             <textarea
