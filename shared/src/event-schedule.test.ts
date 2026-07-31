@@ -3,6 +3,8 @@ import {
   buildReminderSendKey,
   diffCalendarDays,
   isYearlyOccurrenceEvent,
+  matchesReminderTimeWindow,
+  pickSoonestOccurrenceOnOrAfter,
   resolveNextGregorianOccurrence,
 } from './event-schedule.js';
 
@@ -58,5 +60,20 @@ describe('event-schedule', () => {
     expect(buildReminderSendKey('2026-07-21', 7, '18:00')).not.toBe(
       buildReminderSendKey('2026-07-21', 7, '09:00'),
     );
+  });
+
+  it('matchesReminderTimeWindow within ±2 minutes', () => {
+    expect(matchesReminderTimeWindow('09:00', '09:00')).toBe(true);
+    expect(matchesReminderTimeWindow('09:01', '09:00')).toBe(true);
+    expect(matchesReminderTimeWindow('08:58', '09:00')).toBe(true);
+    expect(matchesReminderTimeWindow('08:57', '09:00')).toBe(false);
+    expect(matchesReminderTimeWindow('09:02', '09:00')).toBe(true);
+    expect(matchesReminderTimeWindow('09:03', '09:00')).toBe(false);
+  });
+
+  it('pickSoonestOccurrenceOnOrAfter chooses nearest future date', () => {
+    expect(pickSoonestOccurrenceOnOrAfter('2026-07-18', ['2026-07-28', '2026-08-01'])).toBe('2026-07-28');
+    expect(pickSoonestOccurrenceOnOrAfter('2026-07-28', ['2026-07-20', '2026-07-28'])).toBe('2026-07-28');
+    expect(pickSoonestOccurrenceOnOrAfter('2026-07-29', ['2026-07-20', '2026-07-28'])).toBeNull();
   });
 });

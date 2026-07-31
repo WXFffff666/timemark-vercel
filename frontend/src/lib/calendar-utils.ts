@@ -1,6 +1,8 @@
-import type { Event } from '@timemark/shared';
+import type { Event, LunarDate } from '@timemark/shared';
+import { Lunar } from 'lunar-javascript';
 import {
   diffCalendarDays,
+  pickSoonestOccurrenceOnOrAfter,
   resolveNextGregorianOccurrence,
 } from '@timemark/shared/event-schedule';
 import { DEFAULT_TIMEZONE, getTodayDateKey, zonedYmdTimeToDate } from './timezone-utils';
@@ -43,18 +45,56 @@ export function daysUntilEvent(
   return diffCalendarDays(today, target);
 }
 
-/** 生日/纪念日等默认按年滚动；优先使用服务端 nextOccurrence */
+/** 将农历月日滚动到不早于 today 的下次公历发生日 */
+function resolveNextLunarOccurrence(
+  lunarDate: LunarDate,
+  todayYmd: string,
+  refYear = new Date().getFullYear(),
+): string | null {
+  const month = lunarDate.isLeap ? -lunarDate.month : lunarDate.month;
+  const candidates: string[] = [];
+  for (const year of [refYear, refYear + 1]) {
+    try {
+      const solar = Lunar.fromYmd(year, month, lunarDate.day).getSolar();
+      candidates.push(
+        `${solar.getYear()}-${String(solar.getMonth()).padStart(2, '0')}-${String(solar.getDay()).padStart(2, '0')}`,
+      );
+    } catch {
+      // invalid lunar date for this year
+    }
+  }
+  return pickSoonestOccurrenceOnOrAfter(todayYmd, candidates);
+}
+
+/** 生日/纪念日等默认按年滚动；农历/双历取最近候选日 */
 export function resolveNextOccurrenceDate(
   event: Event,
   ref = new Date(),
   timeZone: string = DEFAULT_TIMEZONE,
 ): string {
   const today = getTodayDateKey(timeZone, ref);
-  return resolveNextGregorianOccurrence(event.date, today, {
+  const gregorian = resolveNextGregorianOccurrence(event.date, today, {
     eventType: event.type,
     recurringConfig: event.recurringConfig ?? null,
     nextOccurrence: event.nextOccurrence ?? null,
   });
+
+  if (event.calendarType === 'gregorian' || !event.lunarDate) {
+    return gregorian;
+  }
+
+  const refYear = Number.parseInt(today.slice(0, 4), 10);
+  const lunarNext = resolveNextLunarOccurrence(event.lunarDate, today, refYear);
+
+  if (event.calendarType === 'lunar') {
+    return lunarNext ?? gregorian;
+  }
+
+  if (lunarNext) {
+    return pickSoonestOccurrenceOnOrAfter(today, [gregorian, lunarNext]) ?? gregorian;
+  }
+
+  return gregorian;
 }
 
 /**

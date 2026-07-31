@@ -118,6 +118,21 @@ const convertToGregorian = (lunarDate: { year: number; month: number; day: numbe
   }
 };
 
+const formatLunarInput = (lunar: LunarDate) =>
+  `${lunar.year}-${String(lunar.month).padStart(2, '0')}-${String(lunar.day).padStart(2, '0')}`;
+
+const parseLunarInput = (input: string): LunarDate | null => {
+  const lunarMatch = input.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!lunarMatch) return null;
+  const [, year, month, day] = lunarMatch;
+  return {
+    year: parseInt(year, 10),
+    month: parseInt(month, 10),
+    day: parseInt(day, 10),
+    isLeap: false,
+  };
+};
+
 const notificationChannels = [
   // Email channels
   { value: 'email', label: '邮件', icon: '📧' },
@@ -423,10 +438,12 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         reminderRecipientEmail: event.reminderRecipientEmail,
       });
       
-      // Set lunar input value for "both" calendar type
-      if (event.calendarType === 'both' && event.lunarDate) {
-        const lunar = event.lunarDate as any;
-        setLunarInputValue(`${lunar.year}-${String(lunar.month).padStart(2, '0')}-${String(lunar.day).padStart(2, '0')}`);
+      // Set lunar input value for lunar/both calendar types
+      if ((event.calendarType === 'both' || event.calendarType === 'lunar') && event.lunarDate) {
+        setLunarInputValue(formatLunarInput(event.lunarDate));
+      } else if (event.calendarType === 'lunar' && safeDate) {
+        const lunar = convertToLunar(safeDate);
+        setLunarInputValue(lunar ? formatLunarInput(lunar) : '');
       } else {
         setLunarInputValue('');
       }
@@ -466,21 +483,33 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
       return;
     }
     
-    if (!formData.date) {
+    if (!formData.date && formData.calendarType !== 'lunar') {
       alert('请选择日期');
+      return;
+    }
+
+    if (formData.calendarType === 'lunar' && !lunarInputValue.trim()) {
+      alert('请填写农历日期');
       return;
     }
     
     // Validate date - handle both YYYY-MM-DD and YYYY-MM-DDTHH:mm formats
-    let dateToValidate = formData.date;
-    if (formData.date.includes('T')) {
-      dateToValidate = formData.date.split('T')[0];
-    }
-    // Append T00:00:00 to force local timezone instead of UTC
-    const targetDate = new Date(dateToValidate + 'T00:00:00');
-    if (isNaN(targetDate.getTime())) {
-      alert('无效的日期格式');
-      return;
+    if (formData.date) {
+      let dateToValidate = formData.date;
+      if (formData.date.includes('T')) {
+        dateToValidate = formData.date.split('T')[0];
+      }
+      const targetDate = new Date(dateToValidate + 'T00:00:00');
+      if (isNaN(targetDate.getTime())) {
+        alert('无效的日期格式');
+        return;
+      }
+    } else if (formData.calendarType === 'lunar') {
+      const lunarDate = parseLunarInput(lunarInputValue);
+      if (!lunarDate || !convertToGregorian(lunarDate)) {
+        alert('请填写有效的农历日期');
+        return;
+      }
     }
 
     setLoading(true);
@@ -488,7 +517,11 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
       // Convert date to YYYY-MM-DD string for PostgreSQL (use local time, not UTC)
       // Handle both YYYY-MM-DD and YYYY-MM-DDTHH:mm formats
       let dateStr = formData.date;
-      if (formData.date.includes('T')) {
+      if (!dateStr && formData.calendarType === 'lunar') {
+        const lunarDate = parseLunarInput(lunarInputValue);
+        dateStr = lunarDate ? (convertToGregorian(lunarDate) ?? '') : '';
+      }
+      if (dateStr.includes('T')) {
         const datePart = formData.date.split('T')[0];
         dateStr = datePart;
       }
@@ -526,6 +559,24 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         },
         reminderRecipientEmail: emailRecipients[0] || null,
       };
+
+      if (submissionData.calendarType === 'lunar' || submissionData.calendarType === 'both') {
+        const lunarFromInput = parseLunarInput(lunarInputValue);
+        const lunarFromDate = convertToLunar(dateStr);
+        submissionData.lunarDate = lunarFromInput ?? formData.lunarDate ?? lunarFromDate ?? undefined;
+        if (!submissionData.lunarDate) {
+          alert('请填写有效的农历日期');
+          return;
+        }
+        if (!submissionData.date) {
+          const gregorian = convertToGregorian(submissionData.lunarDate);
+          if (!gregorian) {
+            alert('农历日期无效，无法转换为公历');
+            return;
+          }
+          submissionData.date = gregorian;
+        }
+      }
       
       await onSubmit(submissionData);
       onClose();
@@ -588,7 +639,20 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   };
 
   const handleCalendarTypeChange = (calendarType: CalendarType) => {
-    setFormData({ ...formData, calendarType });
+    setFormData((prev) => {
+      const next = { ...prev, calendarType };
+      if ((calendarType === 'both' || calendarType === 'lunar') && prev.date) {
+        const lunar = convertToLunar(prev.date);
+        if (lunar) {
+          next.lunarDate = lunar;
+          setLunarInputValue(formatLunarInput(lunar));
+        }
+      }
+      if (calendarType === 'gregorian') {
+        setLunarInputValue('');
+      }
+      return next;
+    });
   };
 
   const channelToAccountType: Record<string, string> = {
@@ -851,27 +915,50 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
               {formData.calendarType === 'both' && '公历日期'}
               {formData.calendarType === 'both' && <span className="text-xs text-slate-400 ml-2">(农历将在下方自动计算)</span>}
             </label>
-            <Input
-              required
-              type="date"
-              value={formData.date}
-              aria-label="事件日期"
-              onChange={(e) => {
-                const newDate = e.target.value;
-                setFormData({ ...formData, date: newDate });
-                // Auto-convert to lunar if needed
-                if (formData.calendarType === 'both') {
-                  const lunar = convertToLunar(newDate);
-                  if (lunar) {
-                    setFormData(prev => ({ ...prev, lunarDate: lunar }));
-                    // 更新农历输入框显示
-                    const lunarStr = `${lunar.year}-${String(lunar.month).padStart(2, '0')}-${String(lunar.day).padStart(2, '0')}`;
-                    setLunarInputValue(lunarStr);
-                  }
-                }
-              }}
-              className="h-12"
-            />
+            {formData.calendarType !== 'lunar' ? (
+              <Input
+                required
+                type="date"
+                value={formData.date}
+                aria-label="事件日期"
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setFormData((prev) => {
+                    const next = { ...prev, date: newDate };
+                    if (prev.calendarType === 'both') {
+                      const lunar = convertToLunar(newDate);
+                      if (lunar) {
+                        next.lunarDate = lunar;
+                        setLunarInputValue(formatLunarInput(lunar));
+                      }
+                    }
+                    return next;
+                  });
+                }}
+                className="h-12"
+              />
+            ) : (
+              <Input
+                required
+                type="text"
+                value={lunarInputValue}
+                placeholder="农历日期，格式：YYYY-MM-DD 例如 2007-06-15"
+                aria-label="农历日期"
+                onChange={(e) => {
+                  const input = e.target.value;
+                  setLunarInputValue(input);
+                  const lunarDate = parseLunarInput(input);
+                  if (!lunarDate) return;
+                  const gregorian = convertToGregorian(lunarDate);
+                  setFormData((prev) => ({
+                    ...prev,
+                    lunarDate,
+                    ...(gregorian ? { date: gregorian } : {}),
+                  }));
+                }}
+                className="h-12"
+              />
+            )}
           </motion.div>
 
           {/* Second date for "both" calendar type */}
@@ -889,21 +976,14 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                 onChange={(e) => {
                   const input = e.target.value;
                   setLunarInputValue(input);
-                  // 尝试解析为农历日期并转换为公历
-                  const lunarMatch = input.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-                  if (lunarMatch) {
-                    const [, year, month, day] = lunarMatch;
-                    const lunarDate = {
-                      year: parseInt(year),
-                      month: parseInt(month),
-                      day: parseInt(day),
-                      isLeap: false
-                    };
-                    const gregorian = convertToGregorian(lunarDate);
-                    if (gregorian) {
-                      setFormData(prev => ({ ...prev, date: gregorian }));
-                    }
-                  }
+                  const lunarDate = parseLunarInput(input);
+                  if (!lunarDate) return;
+                  const gregorian = convertToGregorian(lunarDate);
+                  setFormData((prev) => ({
+                    ...prev,
+                    lunarDate,
+                    ...(gregorian ? { date: gregorian } : {}),
+                  }));
                 }}
                 className="h-12"
               />

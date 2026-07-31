@@ -3,12 +3,14 @@ import { Lunar, Solar } from 'lunar-javascript';
 import {
   buildReminderSendKey,
   diffCalendarDays,
+  matchesReminderTimeWindow,
   resolveNextGregorianOccurrence,
 } from '@timemark/shared/event-schedule';
 import { sendNotifications } from '../services/notifications/index.js';
 import { refreshUserEventCache } from '../services/event-cache.service.js';
 import { createLogger } from '../utils/logger.js';
 import { recordEventTrigger } from '../services/trigger-log.service.js';
+import { getSyncedNow, syncTime } from '../utils/ntp.js';
 
 const log = createLogger('tasks');
 // Batch query replaces per-user getReminderSettings/getUserConfig calls
@@ -95,8 +97,9 @@ function parseReminderDays(raw: any): number[] | null {
 
 export async function sendReminders() {
   log.info('Checking reminders...');
-  
-  const now = new Date();
+
+  await syncTime().catch((e) => log.warn({ err: e }, 'NTP sync skipped'));
+  const now = getSyncedNow();
 
   // Batch load ALL user configs upfront to avoid N+1 queries
   const allUserConfigs = await query(
@@ -356,19 +359,11 @@ export async function sendReminders() {
         currentTime,
       }, 'Event check');
       
-      // Check if current time matches any reminder time (within 2-minute window)
       let matchedReminderTime: string | null = null;
       const shouldRemind = reminderTimes.some((time) => {
-        const [targetHour, targetMinute] = time.split(':').map(Number);
-        const targetTotalMinutes = targetHour * 60 + targetMinute;
-        const currentTotalMinutes = parseInt(currentHour) * 60 + parseInt(currentMinute);
-        const diff = Math.abs(currentTotalMinutes - targetTotalMinutes);
-        log.debug({ time, targetTotalMinutes, currentTotalMinutes, diff, match: diff < 2 }, 'Checking time');
-        if (diff < 2) {
-          matchedReminderTime = time;
-          return true;
-        }
-        return false;
+        const match = matchesReminderTimeWindow(currentTime, time, 2);
+        if (match) matchedReminderTime = time;
+        return match;
       });
       
       if (!shouldRemind || !matchedReminderTime) {

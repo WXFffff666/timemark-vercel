@@ -45,4 +45,27 @@ describe('event countdown', () => {
     const event = { ...birthdayEvent('1990-07-28'), nextOccurrence: '2026-07-28' };
     expect(resolveNextOccurrenceDate(event, ref)).toBe('2026-07-28');
   });
+
+  it('resolves lunar birthday to next gregorian occurrence', () => {
+    const ref = new Date('2026-01-01T12:00:00');
+    const event: Event = {
+      ...birthdayEvent('1990-01-01'),
+      calendarType: 'lunar',
+      lunarDate: { year: 1990, month: 1, day: 1, isLeap: false },
+    };
+    const next = resolveNextOccurrenceDate(event, ref);
+    expect(next).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(daysUntilEvent(next, ref)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('picks sooner date for both calendar type', () => {
+    const ref = new Date('2026-07-01T12:00:00');
+    const event: Event = {
+      ...birthdayEvent('1990-07-28'),
+      calendarType: 'both',
+      lunarDate: { year: 1990, month: 6, day: 15, isLeap: false },
+    };
+    const next = resolveNextOccurrenceDate(event, ref);
+    expect(next).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
 });

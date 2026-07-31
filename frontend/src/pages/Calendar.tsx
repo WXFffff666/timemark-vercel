@@ -391,7 +391,9 @@ function EventListCompact({ events, showDate }: { events: Event[]; showDate?: bo
               {eventTypeLabel(e.type)}
             </p>
           </div>
-          <span className="text-xs text-slate-400 shrink-0">{e.calendarType === 'lunar' ? '农历' : '公历'}</span>
+          <span className="text-xs text-slate-400 shrink-0">
+            {e.calendarType === 'lunar' ? '农历' : e.calendarType === 'both' ? '双历' : '公历'}
+          </span>
         </div>
       ))}
     </div>

@@ -18,6 +18,7 @@ import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
 import { hashPassword } from './utils/password.js';
 import { initSecretKeys } from './utils/secrets.js';
 import { isTurnstileEnabled } from './utils/turnstile.js';
+import { getClockOffsetMs, getLastTimeSyncResult, syncTime } from './utils/ntp.js';
 import { getCronSecret } from './utils/heartbeat.js';
 import { inferDatabaseRegionHint, isPreferredCnVercelRegion } from './utils/infra-region.js';
 import authRoutes from './routes/auth.js';
@@ -151,6 +152,11 @@ app.get('/api/health', async (c) => {
   try {
     await query('SELECT 1');
     checks.database = true;
+
+    const timeSync = await syncTime().catch(() => null);
+    checks.timeDriftMs = timeSync?.drift ?? getLastTimeSyncResult()?.drift ?? 0;
+    checks.clockOffsetMs = getClockOffsetMs();
+    checks.timeSource = timeSync?.source ?? getLastTimeSyncResult()?.source ?? 'system';
 
     const lastCron = await query(
       `SELECT job_name, status, executed_at FROM cron_execution_logs ORDER BY executed_at DESC LIMIT 1`,

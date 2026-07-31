@@ -84,3 +84,31 @@ export function resolveNextGregorianOccurrence(
 export function buildReminderSendKey(todayYmd: string, daysUntil: number, reminderTime: string): string {
   return `${todayYmd}#d${daysUntil}#t${reminderTime}`;
 }
+
+/** Cron 每分钟执行：当前时刻是否在提醒时刻 ±windowMinutes 内 */
+export function matchesReminderTimeWindow(
+  currentHHmm: string,
+  targetHHmm: string,
+  windowMinutes = 2,
+): boolean {
+  const [ch, cm] = currentHHmm.split(':').map(Number);
+  const [th, tm] = targetHHmm.split(':').map(Number);
+  if ([ch, cm, th, tm].some((n) => Number.isNaN(n))) return false;
+  const diff = Math.abs(ch * 60 + cm - (th * 60 + tm));
+  return diff <= windowMinutes;
+}
+
+/** 在多个候选公历日中取「不早于 today」且最近的一天 */
+export function pickSoonestOccurrenceOnOrAfter(todayYmd: string, candidates: string[]): string | null {
+  let best: string | null = null;
+  let bestDiff = Number.POSITIVE_INFINITY;
+  for (const c of candidates) {
+    const ymd = c.slice(0, 10);
+    const diff = diffCalendarDays(todayYmd, ymd);
+    if (diff >= 0 && diff < bestDiff) {
+      best = ymd;
+      bestDiff = diff;
+    }
+  }
+  return best;
+}

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildReminderSendKey,
   diffCalendarDays,
+  matchesReminderTimeWindow,
   resolveNextGregorianOccurrence,
 } from '@timemark/shared/event-schedule';
 
@@ -34,5 +35,14 @@ describe('reminder scheduling', () => {
       buildReminderSendKey('2026-07-28', 0, '09:00'),
     ];
     expect(new Set(keys).size).toBe(3);
+  });
+
+  it('cron time window matches within 2 minutes of configured reminder time', () => {
+    expect(matchesReminderTimeWindow('09:00', '09:00', 2)).toBe(true);
+    expect(matchesReminderTimeWindow('09:01', '09:00', 2)).toBe(true);
+    expect(matchesReminderTimeWindow('08:58', '09:00', 2)).toBe(true);
+    expect(matchesReminderTimeWindow('08:57', '09:00', 2)).toBe(false);
+    expect(matchesReminderTimeWindow('09:02', '09:00', 2)).toBe(true);
+    expect(matchesReminderTimeWindow('09:03', '09:00', 2)).toBe(false);
   });
 });
