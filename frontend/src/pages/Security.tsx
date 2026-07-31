@@ -40,9 +40,6 @@ export default function Security() {
   const [passkeyName, setPasskeyName] = useState('');
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const passkeySupported = isPasskeySupported();
-  const [newMasterKey, setNewMasterKey] = useState('');
-  const [deployToken, setDeployToken] = useState('');
-  const [rotatingKey, setRotatingKey] = useState(false);
 
   const [loadError, setLoadError] = useState('');
 
@@ -136,41 +133,6 @@ export default function Security() {
     }
   };
 
-  const rotateMasterKey = async () => {
-    if (!newMasterKey || newMasterKey.length < 32) {
-      alert('新 MASTER_KEY 至少 32 字符');
-      return;
-    }
-    if (!deployToken.trim()) {
-      alert('请填写 DEPLOY_TOKEN');
-      return;
-    }
-    if (!confirm('将使用新密钥重加密当前账户的通知渠道凭证，确认继续？')) return;
-    setRotatingKey(true);
-    try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      const res = await fetch('/api/security/rotate-master-key', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-deploy-token': deployToken.trim(),
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ newMasterKey }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || '轮换失败');
-      alert(`已重加密 ${data.data?.accountsMigrated ?? 0} 个账户。${data.data?.note || ''}`);
-      setNewMasterKey('');
-      setDeployToken('');
-    } catch (e) {
-      alert(e instanceof Error ? e.message : '轮换失败');
-    } finally {
-      setRotatingKey(false);
-    }
-  };
-
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-b-2 border-blue-500 rounded-full" /></div>;
   }
@@ -203,6 +165,11 @@ export default function Security() {
               <p>数据库结构: v{deployInfo.schemaVersion ?? '?'} / v{deployInfo.expectedSchemaVersion ?? '?'}{deployInfo.schemaUpToDate ? ' ✓' : '（待迁移）'}</p>
               <p>Turnstile: {deployInfo.turnstileConfigured ? '已配置' : '未配置（可选）'}</p>
               <p>Cron Secret: {deployInfo.cronSecretConfigured ? '已配置' : '未配置'}</p>
+              <p>单用户模式: {deployInfo.singleUserMode ? '已启用' : '未启用'}</p>
+              <p className="text-xs text-slate-500 pt-1">
+                登录会话令牌由系统自动轮换（约 15 分钟续期 access、30 天 refresh），无需手动操作。
+                Vercel 环境变量（JWT_SECRET、MASTER_KEY、CRON_SECRET）配置一次即可，无需定期更换。
+              </p>
             </CardContent>
           </Card>
         )}
@@ -312,28 +279,11 @@ export default function Security() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Key className="w-4 h-4" />MASTER_KEY 轮换</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              轮换加密密钥前，请先在 Vercel 生成新 MASTER_KEY。本操作仅重加密当前用户的通知账户凭证，需同时提供 DEPLOY_TOKEN。
-            </p>
-            <Input
-              type="password"
-              placeholder="新 MASTER_KEY（至少 32 字符）"
-              value={newMasterKey}
-              onChange={(e) => setNewMasterKey(e.target.value)}
-              aria-label="新 MASTER_KEY"
-            />
-            <Input
-              type="password"
-              placeholder="DEPLOY_TOKEN"
-              value={deployToken}
-              onChange={(e) => setDeployToken(e.target.value)}
-              aria-label="DEPLOY_TOKEN"
-            />
-            <Button size="sm" onClick={rotateMasterKey} disabled={rotatingKey}>
-              {rotatingKey ? '处理中...' : '执行重加密'}
-            </Button>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Key className="w-4 h-4" />密钥与令牌说明</CardTitle></CardHeader>
+          <CardContent className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+            <p>本系统为<strong>单用户</strong>个人部署，仅允许一个账户登录使用。</p>
+            <p>登录后 access / refresh 令牌由后台自动续期与轮换，你<strong>不需要</strong>去 Vercel 改 JWT_SECRET 或 CRON_SECRET。</p>
+            <p>环境变量中的 JWT_SECRET、MASTER_KEY、CRON_SECRET 在首次部署时配置好即可，除非密钥泄露，否则无需更换。</p>
           </CardContent>
         </Card>
 

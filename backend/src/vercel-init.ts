@@ -3,6 +3,7 @@ import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
 import { initSecretKeys } from './utils/secrets.js';
 import { hashPassword } from './utils/password.js';
 import { createLogger } from './utils/logger.js';
+import { assertCanCreateUser } from './utils/single-user.js';
 
 const log = createLogger('vercel-init');
 
@@ -48,6 +49,7 @@ async function ensureAdminUser(): Promise<void> {
     return;
   }
 
+  await assertCanCreateUser();
   const passwordHash = await hashPassword(password || 'TimeMark@2026');
 
   await query(

@@ -1,7 +1,36 @@
 # 安全评估报告
 
 **目标**：`https://timemark.the37777777.top`  
-**最新版本**：v2.15.0（2026-07-17）
+**最新版本**：v2.14.0（2026-07-31）
+
+## v2.14.0 安全加固（2026-07-31）
+
+### 认证与会话
+
+| 问题 | 修复 |
+|------|------|
+| `cachedUser` 网络失败时伪登录 | 移除缓存伪登录；登出清除 `cachedUser` |
+| logout session IDOR | 删除会话时校验 `user_id` |
+| refresh 不校验 DB session | refresh 前 `getSessionByToken` |
+| Cookie 模式响应泄露 JWT | login/refresh 不再在 JSON 中返回 token |
+| refresh 不轮换 refresh cookie | refresh 时同步签发新 refresh token（HttpOnly Cookie） |
+
+### Cron / 初始化 / XSS
+
+| 问题 | 修复 |
+|------|------|
+| Cron 仅凭 `x-vercel-cron-auth-token` 可绕过 | 始终要求 `CRON_SECRET` Bearer |
+| 生产硬编码默认管理员密码 | 生产无 `DEFAULT_ADMIN_PASSWORD` 时跳过自动创建 |
+| Broadcast 预览 XSS | `sanitizeHtmlPreview()` 过滤 script/iframe/on* |
+| 多用户注册风险 | 默认 `SINGLE_USER_MODE=true`，禁止创建第二账户 |
+
+### 令牌说明（用户无需手动轮换）
+
+| 类型 | 是否需改 Vercel 环境变量 |
+|------|--------------------------|
+| 登录 access / refresh 令牌 | **否** — 后台自动续期（约 15 分钟 / 30 天） |
+| `JWT_SECRET` / `MASTER_KEY` / `CRON_SECRET` | **否** — 首次部署配置一次即可，除非泄露 |
+| MASTER_KEY 手动轮换 UI | 已移除 — 避免误导用户去改环境变量 |
 
 ## 已通过项
 

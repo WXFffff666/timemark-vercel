@@ -12,6 +12,7 @@ import { loginRateLimit, apiRateLimit, rateLimit } from './middleware/rate-limit
 import { getConfiguredOrigins, isAllowedOrigin } from './utils/allowed-origins.js';
 import 'dotenv/config';
 import { createLogger } from './utils/logger.js';
+import { assertCanCreateUser } from './utils/single-user.js';
 import { waitForDb, query } from './db/index.js';
 import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
 import { hashPassword } from './utils/password.js';
@@ -216,6 +217,7 @@ async function bootstrap() {
     if (isProd && !password) {
       log.warn('DEFAULT_ADMIN_PASSWORD not set — skipping auto admin creation');
     } else {
+      await assertCanCreateUser();
       const passwordHash = await hashPassword(password || 'TimeMark@2026');
 
       await query(

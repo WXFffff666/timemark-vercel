@@ -3,8 +3,10 @@ import { hashPassword, verifyPassword } from '../utils/password.js';
 import { randomUUID } from 'crypto';
 import { authenticator } from 'otplib';
 import type { User } from '@timemark/shared';
+import { assertCanCreateUser } from '../utils/single-user.js';
 
 export async function createUser(username: string, password: string): Promise<User> {
+  await assertCanCreateUser();
   const existing = await query('SELECT id FROM users WHERE username = $1', [username]);
   if (existing.rows.length > 0) throw new Error('Username already exists');
 

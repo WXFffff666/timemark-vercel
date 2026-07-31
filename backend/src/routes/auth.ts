@@ -13,7 +13,7 @@ import { sendSecurityAlert } from '../services/alert.service.js';
 import { ensureLunarHolidayEvents } from '../services/lunar-holidays.js';
 import { hashPassword } from '../utils/password.js';
 import { query } from '../db/index.js';
-import { setAuthCookies, clearAuthCookies, getRefreshTokenFromCookie, getAccessTokenFromCookie, setAccessCookie } from '../utils/auth-cookies.js';
+import { setAuthCookies, clearAuthCookies, getRefreshTokenFromCookie, getAccessTokenFromCookie, setAccessCookie, setRefreshCookie } from '../utils/auth-cookies.js';
 import { loginRateLimit } from '../middleware/rate-limit.js';
 
 const auth = new Hono();
@@ -319,9 +319,26 @@ auth.post('/refresh', async (c) => {
       if (!session) {
         return c.json({ success: false, error: 'Session expired or revoked' }, 401);
       }
+
+      const { getUserById } = await import('../services/auth.service.js');
+      const user = await getUserById(payload.userId);
+      if (!user) {
+        return c.json({ success: false, error: 'User not found' }, 401);
+      }
+
+      const sessionMs = new Date(session.expiresAt).getTime() - Date.now();
+      const rememberMe = sessionMs > 24 * 60 * 60 * 1000;
+
+      const accessToken = await generateAccessToken(user.id, payload.sessionToken, rememberMe);
+      const newRefreshToken = await generateRefreshToken(user.id, payload.sessionToken);
+
+      setAccessCookie(c, accessToken, rememberMe);
+      setRefreshCookie(c, newRefreshToken, rememberMe);
+
+      return c.json({ success: true, data: { user, authMode: 'cookie' } });
     }
 
-    // Get user and create new access token
+    // Legacy refresh without session binding
     const { getUserById } = await import('../services/auth.service.js');
     const user = await getUserById(payload.userId);
     
@@ -329,7 +346,6 @@ auth.post('/refresh', async (c) => {
       return c.json({ success: false, error: 'User not found' }, 401);
     }
 
-    // Generate new access token
     const accessToken = await generateAccessToken(user.id, payload.sessionToken, false);
 
     setAccessCookie(c, accessToken, true);
