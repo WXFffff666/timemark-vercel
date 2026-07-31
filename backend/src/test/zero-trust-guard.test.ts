@@ -37,12 +37,11 @@ describe('zero-trust-guard', () => {
     expect(matchesBypassPrefix('/api/calendar/feed/secret.ics')).toBe(true);
   });
 
-  it('bypasses when API key present', () => {
+  it('does not bypass on arbitrary API key header', () => {
     expect(
       shouldBypassZeroTrust({
         path: '/api/events',
-        apiKey: 'x'.repeat(32),
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });

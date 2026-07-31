@@ -169,7 +169,7 @@ app.get('/api/health', async (c) => {
     const lastCron = await query(
       `SELECT job_name, status, executed_at FROM cron_execution_logs ORDER BY executed_at DESC LIMIT 1`,
     ).catch(() => ({ rows: [] }));
-    if (lastCron.rows[0]) {
+    if (detailed && process.env.HEALTH_DETAIL_TOKEN && lastCron.rows[0]) {
       checks.lastCronJob = lastCron.rows[0].job_name;
       checks.lastCronStatus = lastCron.rows[0].status;
       checks.lastCronAt = lastCron.rows[0].executed_at;

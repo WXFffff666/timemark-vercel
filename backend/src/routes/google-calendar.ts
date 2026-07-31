@@ -12,6 +12,7 @@ import {
   encryptRefreshToken,
 } from '../services/google-oauth.service.js';
 import { syncGoogleCalendarForUser } from '../services/google-calendar-sync.service.js';
+import { resolveSafeAppOrigin } from '../utils/allowed-origins.js';
 
 const googleCalendar = new Hono<{ Variables: { user: User } }>();
 
@@ -44,9 +45,7 @@ googleCalendar.get('/google-oauth/start', authMiddleware, async (c) => {
     return c.json({ success: false, error: 'Google OAuth 未配置（需 GOOGLE_OAUTH_CLIENT_ID/SECRET）' }, 503);
   }
   const user = c.get('user');
-  const protocol = c.req.header('X-Forwarded-Proto') || 'https';
-  const host = c.req.header('Host') || 'localhost';
-  const origin = `${protocol}://${host}`;
+  const origin = resolveSafeAppOrigin(c.req.header('X-Forwarded-Proto'), c.req.header('Host'));
   const redirectUri = getGoogleRedirectUri(origin);
   const state = await buildOAuthState(Number(user.id));
   const authUrl = buildGoogleAuthUrl(state, redirectUri);
@@ -57,9 +56,8 @@ googleCalendar.get('/google-oauth/callback', async (c) => {
   const code = c.req.query('code');
   const state = c.req.query('state');
   const oauthError = c.req.query('error');
-  const protocol = c.req.header('X-Forwarded-Proto') || 'https';
-  const host = c.req.header('Host') || 'localhost';
-  const settingsUrl = `${protocol}://${host}/settings`;
+  const origin = resolveSafeAppOrigin(c.req.header('X-Forwarded-Proto'), c.req.header('Host'));
+  const settingsUrl = `${origin}/settings`;
 
   if (oauthError) {
     return c.redirect(`${settingsUrl}?google=error&reason=${encodeURIComponent(oauthError)}`);
@@ -74,7 +72,6 @@ googleCalendar.get('/google-oauth/callback', async (c) => {
   }
 
   try {
-    const origin = `${protocol}://${host}`;
     const redirectUri = getGoogleRedirectUri(origin);
     const tokens = await exchangeCodeForTokens(code, redirectUri);
     if (!tokens.refresh_token) {

@@ -1,8 +1,8 @@
 import { query } from '../db/index.js';
 import { createEvent } from './event.service.js';
 import { parseIcsEvents } from '../utils/ics-parser.js';
+import { isSafePublicUrl } from '../utils/url-safety.js';
 import { createLogger } from '../utils/logger.js';
-
 const log = createLogger('calendar-sync');
 
 async function fetchIcsText(url: string): Promise<string> {
@@ -47,6 +47,11 @@ export async function syncExternalCalendarsForUser(userId: number): Promise<{ im
 
   for (const url of urls.slice(0, 5)) {
     try {
+      const safe = await isSafePublicUrl(url.replace(/^webcal:\/\//i, 'https://'));
+      if (!safe.safe) {
+        errors.push(`${url}: ${safe.reason || 'URL not allowed'}`);
+        continue;
+      }
       const ics = await fetchIcsText(url);
       const parsed = parseIcsEvents(ics);
       for (const ev of parsed.slice(0, 100)) {

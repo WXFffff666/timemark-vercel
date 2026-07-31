@@ -117,11 +117,9 @@ function hasCronBearer(authHeader: string | undefined): boolean {
 export function shouldBypassZeroTrust(input: {
   path: string;
   authorization?: string;
-  apiKey?: string;
   vercelCronToken?: string;
 }): boolean {
   if (matchesBypassPrefix(input.path)) return true;
-  if (input.apiKey) return true;
   if (hasCronBearer(input.authorization)) return true;
   return false;
 }
@@ -156,7 +154,6 @@ export async function zeroTrustGuard(c: Context, next: Next) {
     shouldBypassZeroTrust({
       path,
       authorization,
-      apiKey,
       vercelCronToken,
     })
   ) {

@@ -62,6 +62,21 @@ export function isAllowedOrigin(
   });
 }
 
+export function resolveSafeAppOrigin(
+  protocol: string | undefined,
+  host: string | undefined,
+): string {
+  const proto = protocol === 'http' ? 'http' : 'https';
+  const h = host?.trim();
+  if (h) {
+    const candidate = `${proto}://${h}`;
+    if (isAllowedOrigin(candidate, h, getConfiguredOrigins())) {
+      return candidate;
+    }
+  }
+  return CANONICAL_ORIGIN;
+}
+
 export function resolveCorsOrigin(origin: string | undefined, host: string | undefined): string {
   const allowed = getConfiguredOrigins();
   if (!origin) return allowed[0] ?? 'http://localhost:5173';

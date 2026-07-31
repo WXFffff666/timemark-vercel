@@ -38,7 +38,7 @@ resendWebhook.post('/delivery', async (c) => {
   }
 
   const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
-  if (isProduction && users.rows.length > 0 && verifiedUserId === null) {
+  if (isProduction && verifiedUserId === null) {
     return c.json({ error: 'Invalid signature' }, 401);
   }
 

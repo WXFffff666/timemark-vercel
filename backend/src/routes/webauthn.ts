@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { getClientIp } from '../utils/client-ip.js';
+import { getClientIp, getClientIpInfo } from '../utils/client-ip.js';
 import { logSecurityEvent } from '../services/security-event.service.js';
 import { getWebAuthnConfig } from '../utils/webauthn-config.js';
 import { checkIpWhitelist, verifyTotpCode, createLoginLog } from '../services/auth.service.js';
 import { loginRateLimit } from '../middleware/rate-limit.js';
+import { verifyTurnstileToken } from '../utils/turnstile.js';
 import {
   listUserPasskeys,
   createRegistrationOptions,
@@ -115,18 +116,36 @@ webauthn.get('/supported', (c) => {
 });
 
 // C40: Passkey 登录（无需已登录会话）
-const loginOptionsSchema = z.object({ username: z.string().min(1) });
+const loginOptionsSchema = z.object({
+  username: z.string().min(1),
+  turnstileToken: z.string().optional(),
+});
 const loginVerifySchema = z.object({
   username: z.string().min(1),
   response: z.record(z.unknown()),
   rememberMe: z.boolean().optional(),
   totpCode: z.string().optional(),
+  turnstileToken: z.string().optional(),
 });
+
+async function verifyPasskeyTurnstile(c: { req: { header: (name: string) => string | undefined } }, token?: string) {
+  const { ip, trusted } = getClientIpInfo(c as Parameters<typeof getClientIpInfo>[0]);
+  return verifyTurnstileToken(token, trusted ? ip : undefined);
+}
 
 webauthn.post('/login/options', loginRateLimit, async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = loginOptionsSchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: '用户名必填' }, 400);
+
+  const turnstile = await verifyPasskeyTurnstile(c, parsed.data.turnstileToken);
+  if (!turnstile.ok) {
+    return c.json({
+      success: false,
+      error: turnstile.error || '人机验证失败',
+      code: turnstile.code || 'turnstile_failed',
+    }, 400);
+  }
 
   const userRow = await query('SELECT id FROM users WHERE username = $1', [parsed.data.username]);
   if (!userRow.rows.length) {
@@ -147,6 +166,15 @@ webauthn.post('/login/verify', loginRateLimit, async (c) => {
   const body = await c.req.json();
   const parsed = loginVerifySchema.safeParse(body);
   if (!parsed.success) return c.json({ success: false, error: 'Invalid input' }, 400);
+
+  const turnstile = await verifyPasskeyTurnstile(c, parsed.data.turnstileToken);
+  if (!turnstile.ok) {
+    return c.json({
+      success: false,
+      error: turnstile.error || '人机验证失败',
+      code: turnstile.code || 'turnstile_failed',
+    }, 400);
+  }
 
   const ip = getClientIp(c);
   const userAgent = c.req.header('user-agent') || 'unknown';

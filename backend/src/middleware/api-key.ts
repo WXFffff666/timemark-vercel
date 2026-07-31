@@ -28,13 +28,6 @@ export async function apiKeyMiddleware(c: Context<{ Variables: { user: User; api
   );
 
   if (result.rows.length === 0) {
-    result = await query(
-      'SELECT user_id, api_scopes FROM user_configs WHERE api_key = $1',
-      [apiKey],
-    );
-  }
-
-  if (result.rows.length === 0) {
     return c.json({ success: false, error: 'Invalid API key' }, 401);
   }
 
