@@ -22,7 +22,7 @@
 | Cron 仅凭 `x-vercel-cron-auth-token` 可绕过 | 始终要求 `CRON_SECRET` Bearer |
 | 生产硬编码默认管理员密码 | 生产无 `DEFAULT_ADMIN_PASSWORD` 时跳过自动创建 |
 | Broadcast 预览 XSS | `sanitizeHtmlPreview()` 过滤 script/iframe/on* |
-| 多用户 | 已移除 — 系统固定为单用户个人部署，无法创建第二账户 |
+| 多用户 | 已移除 — 系统固定为个人单账户，禁止创建第二用户 |
 
 ### 令牌说明（用户无需手动轮换）
 

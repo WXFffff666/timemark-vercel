@@ -10,7 +10,6 @@ import { lookupGeoLabel } from '../utils/geoip.js';
 import type { User } from '@timemark/shared';
 import { isTurnstileEnabled } from '../utils/turnstile.js';
 import { getCronSecret } from '../utils/heartbeat.js';
-import { DEPLOYMENT_MODE } from '../utils/single-user.js';
 
 const security = new Hono<{ Variables: { user: User } }>();
 security.use('*', authMiddleware);
@@ -266,7 +265,7 @@ security.get('/deploy-info', async (c) => {
       expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
       schemaUpToDate: schemaVersion >= EXPECTED_SCHEMA_VERSION,
       jwtSecretRotatedAt: jwtAge,
-      deploymentMode: DEPLOYMENT_MODE,
+      personalSingleAccount: true,
       sessionTokensAutoRotate: true,
       envSecretsRequireManualRotation: false,
       buildTime: process.env.VERCEL_GIT_COMMIT_SHA || null,
