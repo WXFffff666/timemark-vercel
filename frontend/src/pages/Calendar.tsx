@@ -12,6 +12,8 @@ import {
   eventTypeLabel,
   daysUntilEvent,
 } from '@/lib/calendar-utils';
+import { getTodayDateKey } from '@/lib/timezone-utils';
+import { useTimezone } from '@/components/RealtimeClock';
 
 type ViewMode = 'year' | 'month' | 'day';
 type ListScope = 'month' | 'year';
@@ -19,6 +21,7 @@ type ListScope = 'month' | 'year';
 export default function Calendar() {
   const navigate = useNavigate();
   const { events, fetchEvents } = useEventStore();
+  const { timezone } = useTimezone();
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [listScope, setListScope] = useState<ListScope>('month');
   const [cursor, setCursor] = useState(() => {
@@ -32,7 +35,7 @@ export default function Calendar() {
   }, [events.length, fetchEvents]);
 
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
-  const todayKey = dateKey(new Date());
+  const todayKey = getTodayDateKey(timezone);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -164,6 +167,7 @@ export default function Calendar() {
             dateKey={selectedKey}
             events={selectedEvents}
             todayKey={todayKey}
+            timeZone={timezone}
           />
         )}
 
@@ -343,15 +347,17 @@ function DayPanel({
   dateKey: key,
   events,
   todayKey,
+  timeZone,
 }: {
   dateKey: string;
   events: Event[];
   todayKey: string;
+  timeZone: string;
 }) {
   const d = parseSelectedDate(key);
   const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
   const isToday = key === todayKey;
-  const diff = daysUntilEvent(key);
+  const diff = daysUntilEvent(key, new Date(), timeZone);
 
   return (
     <div className="glass-panel rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10 text-center">

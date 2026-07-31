@@ -26,10 +26,12 @@ import {
 
   isEventInTodoWindow,
 
+  resolveNextOccurrenceDate,
+
   todoCompletionKey,
 
 } from '@/lib/calendar-utils';
-
+import { useTimezone } from '@/components/RealtimeClock';
 import type { Event } from '@timemark/shared';
 
 
@@ -57,6 +59,7 @@ export default function Todos() {
   const [tab, setTab] = useState<'active' | 'history'>('active');
 
   const { events, fetchEvents } = useEventStore();
+  const { timezone } = useTimezone();
 
   const { completions, completedKeys, isCompleted, toggleComplete } = useTodoCompletions();
 
@@ -75,16 +78,14 @@ export default function Todos() {
 
 
   const allInWindow = useMemo(
-
-    () => events.filter((e) => isEventInTodoWindow(e)),
-
-    [events],
-
+    () => events.filter((e) => isEventInTodoWindow(e, new Date(), timezone)),
+    [events, timezone],
   );
 
-
-
-  const pending = useMemo(() => getTodoEvents(events, new Date(), completedKeys), [events, completedKeys]);
+  const pending = useMemo(
+    () => getTodoEvents(events, new Date(), completedKeys, timezone),
+    [events, completedKeys, timezone],
+  );
 
   const completed = useMemo(
 
@@ -110,9 +111,12 @@ export default function Todos() {
 
         const occurrenceDate = c.occurrenceDate.slice(0, 10);
 
-        const inWindow = event ? isEventInTodoWindow(event, today) : false;
+        const inWindow = event ? isEventInTodoWindow(event, today, timezone) : false;
 
-        const days = event ? daysUntilEvent(event.date, today) : daysUntilEvent(occurrenceDate, today);
+        const nextDate = event
+          ? resolveNextOccurrenceDate(event, today, timezone)
+          : occurrenceDate;
+        const days = daysUntilEvent(nextDate, today, timezone);
 
         return {
 
@@ -134,25 +138,17 @@ export default function Todos() {
 
       .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
 
-  }, [completions, eventById]);
+  }, [completions, eventById, timezone]);
 
 
 
-  const today = useMemo(() => {
-
-    const t = new Date();
-
-    t.setHours(0, 0, 0, 0);
-
-    return t;
-
-  }, []);
+  const today = useMemo(() => new Date(), []);
 
 
 
   const dayLabel = (dateStr: string) => {
 
-    const d = daysUntilEvent(dateStr, today);
+    const d = daysUntilEvent(dateStr, today, timezone);
 
     if (d === 0) return '今天';
 
@@ -274,7 +270,7 @@ export default function Todos() {
 
                         event={e}
 
-                        dayLabel={dayLabel(e.date)}
+                        dayLabel={dayLabel(resolveNextOccurrenceDate(e, new Date(), timezone))}
 
                         completed={false}
 
@@ -306,7 +302,7 @@ export default function Todos() {
 
                         event={e}
 
-                        dayLabel={dayLabel(e.date)}
+                        dayLabel={dayLabel(resolveNextOccurrenceDate(e, new Date(), timezone))}
 
                         completed
 
@@ -516,7 +512,7 @@ function TodoRow({
 
         </div>
 
-        <Badge variant={completed ? 'outline' : daysUntilEvent(event.date) === 0 ? 'default' : 'secondary'}>
+        <Badge variant={completed ? 'outline' : dayLabel === '今天' ? 'default' : 'secondary'}>
 
           {completed ? '已完成' : dayLabel}
 

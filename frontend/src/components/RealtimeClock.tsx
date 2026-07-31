@@ -1,14 +1,25 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-
-interface TimezoneContextType { timezone: string; setTimezone: (tz: string) => void; }
-const TimezoneContext = createContext<TimezoneContextType>({ timezone: 'Asia/Shanghai', setTimezone: () => {} });
+import { useState, useEffect, type ReactNode } from 'react';
+import { useAuthStore } from '@/stores/auth.store';
+import { useTimezoneStore } from '@/stores/timezone.store';
 
 export function TimezoneProvider({ children }: { children: ReactNode }) {
-  const [timezone, setTimezone] = useState('Asia/Shanghai');
-  return <TimezoneContext.Provider value={{ timezone, setTimezone }}>{children}</TimezoneContext.Provider>;
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const load = useTimezoneStore((s) => s.load);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      void load();
+    }
+  }, [isAuthenticated, load]);
+
+  return <>{children}</>;
 }
 
-export const useTimezone = () => useContext(TimezoneContext);
+export function useTimezone() {
+  const timezone = useTimezoneStore((s) => s.timezone);
+  const setTimezone = useTimezoneStore((s) => s.setTimezone);
+  return { timezone, setTimezone };
+}
 
 export function RealtimeClock() {
   const [time, setTime] = useState(new Date());
@@ -17,9 +28,15 @@ export function RealtimeClock() {
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
-  },[]);
+  }, []);
 
-  const formattedTime = new Intl.DateTimeFormat('zh-CN', { timeZone: timezone, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(time);
+  const formattedTime = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: timezone,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(time);
 
   return (
     <div className="flex items-center justify-center px-3 py-1 bg-white/40 dark:bg-black/30 rounded-xl border border-white/20 dark:border-white/5 shadow-inner backdrop-blur-md">

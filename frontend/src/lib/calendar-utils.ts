@@ -3,6 +3,7 @@ import {
   diffCalendarDays,
   resolveNextGregorianOccurrence,
 } from '@timemark/shared/event-schedule';
+import { DEFAULT_TIMEZONE, getTodayDateKey, zonedYmdTimeToDate } from './timezone-utils';
 
 export interface CountdownParts {
   days: number;
@@ -19,6 +20,7 @@ export function dateKey(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** @deprecated Prefer getTodayDateKey(timeZone) for user-configured timezone */
 export function startOfLocalDay(ref: Date = new Date()): Date {
   const d = new Date(ref);
   d.setHours(0, 0, 0, 0);
@@ -30,16 +32,24 @@ export function parseEventDate(dateStr: string): Date {
   return new Date(`${ymd}T00:00:00`);
 }
 
-/** 距事件还有多少天（0 = 今天，负数 = 已过期） */
-export function daysUntilEvent(dateStr: string, ref = new Date()): number {
-  const target = startOfLocalDay(parseEventDate(dateStr));
-  const today = startOfLocalDay(ref);
-  return Math.round((target.getTime() - today.getTime()) / 86400000);
+/** 距事件还有多少天（0 = 今天，负数 = 已过期），基于用户时区日历日 */
+export function daysUntilEvent(
+  dateStr: string,
+  ref = new Date(),
+  timeZone: string = DEFAULT_TIMEZONE,
+): number {
+  const today = getTodayDateKey(timeZone, ref);
+  const target = dateStr.slice(0, 10);
+  return diffCalendarDays(today, target);
 }
 
 /** 生日/纪念日等默认按年滚动；优先使用服务端 nextOccurrence */
-export function resolveNextOccurrenceDate(event: Event, ref = new Date()): string {
-  const today = dateKey(startOfLocalDay(ref));
+export function resolveNextOccurrenceDate(
+  event: Event,
+  ref = new Date(),
+  timeZone: string = DEFAULT_TIMEZONE,
+): string {
+  const today = getTodayDateKey(timeZone, ref);
   return resolveNextGregorianOccurrence(event.date, today, {
     eventType: event.type,
     recurringConfig: event.recurringConfig ?? null,
@@ -48,18 +58,20 @@ export function resolveNextOccurrenceDate(event: Event, ref = new Date()): strin
 }
 
 /**
- * 倒计时目标时刻：下次事件日期 + 当天首个提醒时间（默认 00:00）
- * 注意：不按「提前 N 天的提醒推送时刻」倒计时，避免只剩十几小时。
+ * 倒计时目标时刻：下次事件日期 + 当天首个提醒时间（默认 00:00，按用户时区）
  */
-export function getEventCountdownTarget(event: Event, ref = new Date()): Date | null {
-  const dateStr = resolveNextOccurrenceDate(event, ref);
-  const target = parseEventDate(dateStr);
+export function getEventCountdownTarget(
+  event: Event,
+  ref = new Date(),
+  timeZone: string = DEFAULT_TIMEZONE,
+): Date | null {
+  const dateStr = resolveNextOccurrenceDate(event, ref, timeZone);
   const time = event.reminderConfig?.reminderTimes?.[0];
   if (time && /^\d{1,2}:\d{2}$/.test(time)) {
     const [h, m] = time.split(':').map(Number);
-    target.setHours(h, m, 0, 0);
+    return zonedYmdTimeToDate(dateStr, h, m, timeZone);
   }
-  return target;
+  return zonedYmdTimeToDate(dateStr, 0, 0, timeZone);
 }
 
 export function diffToCountdownParts(target: Date, ref = new Date()): CountdownParts | null {
@@ -73,8 +85,12 @@ export function diffToCountdownParts(target: Date, ref = new Date()): CountdownP
   };
 }
 
-export function isEventCountdownPast(event: Event, ref = new Date()): boolean {
-  const target = getEventCountdownTarget(event, ref);
+export function isEventCountdownPast(
+  event: Event,
+  ref = new Date(),
+  timeZone: string = DEFAULT_TIMEZONE,
+): boolean {
+  const target = getEventCountdownTarget(event, ref, timeZone);
   if (!target) return true;
   return target.getTime() <= ref.getTime();
 }
@@ -83,9 +99,13 @@ export function isEventCountdownPast(event: Event, ref = new Date()): boolean {
  * 事件是否进入「待办」窗口：
  * 当距离事件日期 ≤ 提醒配置里最大的「提前 N 天」时显示（默认 7 天内）
  */
-export function isEventInTodoWindow(event: Event, ref = new Date()): boolean {
+export function isEventInTodoWindow(
+  event: Event,
+  ref = new Date(),
+  timeZone: string = DEFAULT_TIMEZONE,
+): boolean {
   if (event.reminderConfig?.enabled === false) return false;
-  const days = daysUntilEvent(resolveNextOccurrenceDate(event, ref), ref);
+  const days = daysUntilEvent(resolveNextOccurrenceDate(event, ref, timeZone), ref, timeZone);
   const list = event.reminderConfig?.daysBeforeList?.length
     ? event.reminderConfig.daysBeforeList
     : [7];
@@ -107,9 +127,10 @@ export function getTodoEvents(
   events: Event[],
   ref = new Date(),
   completedKeys?: Set<string>,
+  timeZone: string = DEFAULT_TIMEZONE,
 ): Event[] {
   return events
-    .filter((e) => isEventInTodoWindow(e, ref))
+    .filter((e) => isEventInTodoWindow(e, ref, timeZone))
     .filter((e) => !completedKeys?.has(todoCompletionKey(e.id, e.date)))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -141,4 +162,15 @@ const TYPE_LABELS: Record<string, string> = {
 
 export function eventTypeLabel(type: string) {
   return TYPE_LABELS[type] || type;
+}
+
+/** 事件是否落在用户时区的「今天」 */
+export function isEventToday(
+  event: Event,
+  ref = new Date(),
+  timeZone: string = DEFAULT_TIMEZONE,
+): boolean {
+  const today = getTodayDateKey(timeZone, ref);
+  const next = resolveNextOccurrenceDate(event, ref, timeZone);
+  return next === today;
 }

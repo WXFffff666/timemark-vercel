@@ -7,14 +7,14 @@ import { EventCard } from '@/components/events/EventCard';
 import { EventForm } from '@/components/events/EventForm';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { RealtimeClock } from '@/components/RealtimeClock';
+import { RealtimeClock, useTimezone } from '@/components/RealtimeClock';
 import { TimezoneSelector } from '@/components/TimezoneSelector';
 import type { Event, CreateEventRequest } from '@timemark/shared';
 import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail, Inbox } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { api } from '@/lib/api';
 import { prefetchRoute } from '@/lib/prefetch-routes';
-import { getTodoEvents } from '@/lib/calendar-utils';
+import { getTodoEvents, isEventToday } from '@/lib/calendar-utils';
 import { useTodoCompletions } from '@/hooks/useTodoCompletions';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
@@ -56,12 +56,9 @@ export function Dashboard() {
   }, [events.length]);
 
   const { completedKeys } = useTodoCompletions();
-  const todoCount = getTodoEvents(events, new Date(), completedKeys).length;
-  const todayCount = events.filter((e) => {
-    const d = new Date(e.date);
-    const t = new Date();
-    return d.toDateString() === t.toDateString();
-  }).length;
+  const { timezone } = useTimezone();
+  const todoCount = getTodoEvents(events, new Date(), completedKeys, timezone).length;
+  const todayCount = events.filter((e) => isEventToday(e, new Date(), timezone)).length;
 
   const handleImportIcs = async (file: File) => {
     const text = await file.text();

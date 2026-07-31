@@ -10,6 +10,7 @@ import {
   isEventCountdownPast,
   resolveNextOccurrenceDate,
 } from '@/lib/calendar-utils';
+import { useTimezone } from '@/components/RealtimeClock';
 
 interface EventCardProps {
   event: Event;
@@ -79,28 +80,30 @@ const getEventTypeLabel = (type: EventType): string => {
 export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, selected, onSelectToggle }: EventCardProps) {
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
   const [isPast, setIsPast] = useState(false);
+  const { timezone } = useTimezone();
 
-  const nextOccurrenceDate = resolveNextOccurrenceDate(event);
+  const nextOccurrenceDate = resolveNextOccurrenceDate(event, new Date(), timezone);
   const targetDate = safeParseDate(nextOccurrenceDate);
   const formattedDate = targetDate ? targetDate.toLocaleDateString('zh-CN') : '无效日期';
   const displayDate = formattedDate;
 
   useEffect(() => {
     const calculateTimeLeft = () => {
-      const target = getEventCountdownTarget(event);
+      const ref = new Date();
+      const target = getEventCountdownTarget(event, ref, timezone);
       if (!target) {
         setTimeLeft(null);
         setIsPast(true);
         return;
       }
 
-      if (isEventCountdownPast(event)) {
+      if (isEventCountdownPast(event, ref, timezone)) {
         setTimeLeft(null);
         setIsPast(true);
         return;
       }
 
-      const parts = diffToCountdownParts(target);
+      const parts = diffToCountdownParts(target, ref);
       if (parts) {
         setTimeLeft(parts);
         setIsPast(false);
@@ -112,7 +115,7 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
     calculateTimeLeft();
     const timer = setInterval(calculateTimeLeft, 1000);
     return () => clearInterval(timer);
-  }, [event.date, event.nextOccurrence, event.type, event.recurringConfig, event.reminderConfig]);
+  }, [event.date, event.nextOccurrence, event.type, event.recurringConfig, event.reminderConfig, timezone]);
 
   return (
     <div className={`relative group glass-panel rounded-[2.5rem] p-6 overflow-hidden h-full ${selected ? 'ring-2 ring-primary-500 shadow-xl shadow-primary-500/20' : 'ring-1 ring-black/5 dark:ring-white/10'}`} onClick={() => selectable && onSelectToggle && onSelectToggle(event.id, !selected)}>

@@ -10,21 +10,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/lib/api';
 import { getLang, setLang } from '@/i18n';
-
-const TIMEZONES = [
-  { value: 'Asia/Shanghai', label: '中国标准时间 (UTC+8)' },
-  { value: 'Asia/Tokyo', label: '日本标准时间 (UTC+9)' },
-  { value: 'Asia/Singapore', label: '新加坡时间 (UTC+8)' },
-  { value: 'Asia/Kolkata', label: '印度标准时间 (UTC+5:30)' },
-  { value: 'Europe/London', label: '格林威治时间 (UTC+0)' },
-  { value: 'Europe/Paris', label: '中欧时间 (UTC+1)' },
-  { value: 'Europe/Moscow', label: '莫斯科时间 (UTC+3)' },
-  { value: 'America/New_York', label: '美国东部时间 (UTC-5)' },
-  { value: 'America/Chicago', label: '美国中部时间 (UTC-6)' },
-  { value: 'America/Los_Angeles', label: '美国太平洋时间 (UTC-8)' },
-  { value: 'Australia/Sydney', label: '澳大利亚东部时间 (UTC+10)' },
-  { value: 'Pacific/Auckland', label: '新西兰时间 (UTC+12)' },
-];
+import { TIMEZONE_OPTIONS } from '@/lib/timezone-utils';
+import { useTimezone } from '@/components/RealtimeClock';
 
 function parseAlertChannels(raw: unknown): string[] {
   if (!raw) return [];
@@ -78,8 +65,8 @@ export default function Settings() {
   const [alertEmails, setAlertEmails] = useState('');
   const [alertSaving, setAlertSaving] = useState(false);
 
-  // Timezone setting
-  const [timezone, setTimezone] = useState('Asia/Shanghai');
+  // Timezone setting (global store — synced with dashboard quick selector)
+  const { timezone, setTimezone } = useTimezone();
   const [quietHoursStart, setQuietHoursStart] = useState('');
   const [quietHoursEnd, setQuietHoursEnd] = useState('');
   const [quietHoursSaving, setQuietHoursSaving] = useState(false);
@@ -138,7 +125,6 @@ export default function Settings() {
     ])
       .then(([config, accounts, logs, integrations, advanced, googleStatus]) => {
         if (cancelled) return;
-        if (config?.timezone) setTimezone(config.timezone);
         if (config?.quiet_hours_start) setQuietHoursStart(config.quiet_hours_start);
         if (config?.quiet_hours_end) setQuietHoursEnd(config.quiet_hours_end);
         if (config?.default_test_email) setDefaultTestEmail(config.default_test_email);
@@ -379,9 +365,8 @@ export default function Settings() {
   };
 
   const handleTimezoneChange = async (value: string) => {
-    setTimezone(value);
     try {
-      await api.post('/config', { timezone: value });
+      await setTimezone(value);
     } catch (error) {
       console.error('Failed to save timezone:', error);
     }
@@ -915,7 +900,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">系统时区</h3>
-                    <p className="text-xs text-slate-500">用于事件提醒的时间计算</p>
+                    <p className="text-xs text-slate-500">用于提醒、倒计时与免打扰；与首页时钟旁时区选择同步</p>
                   </div>
                 </div>
                 <select
@@ -923,7 +908,7 @@ export default function Settings() {
                   onChange={(e) => handleTimezoneChange(e.target.value)}
                   className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  {TIMEZONES.map((tz) => (
+                  {TIMEZONE_OPTIONS.map((tz) => (
                     <option key={tz.value} value={tz.value}>{tz.label}</option>
                   ))}
                 </select>
