@@ -47,7 +47,7 @@ export function isYearlyOccurrenceEvent(
  * 生日存 1990-07-28 时，在 2026 年应解析为 2026-07-28。
  */
 export function resolveNextGregorianOccurrence(
-  eventDate: string,
+  eventDate: string | Date,
   todayYmd: string,
   options?: {
     eventType?: string;
