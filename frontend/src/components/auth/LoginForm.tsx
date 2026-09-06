@@ -207,12 +207,23 @@ export function LoginForm() {
           void submitLoginRef.current(token);
         }
       },
-      'expired-callback': () => setTurnstileToken(''),
+      'expired-callback': () => {
+        setTurnstileToken('');
+        // 过期后立即重置组件自动开新挑战，免去用户手动再点
+        if (widgetIdRef.current && window.turnstile) {
+          try { window.turnstile.reset(widgetIdRef.current); } catch { /* ignore */ }
+        }
+      },
       'error-callback': () => {
         setTurnstileToken('');
         setError('人机验证加载失败，请刷新页面重试');
       },
-      'timeout-callback': () => setTurnstileToken(''),
+      'timeout-callback': () => {
+        setTurnstileToken('');
+        if (widgetIdRef.current && window.turnstile) {
+          try { window.turnstile.reset(widgetIdRef.current); } catch { /* ignore */ }
+        }
+      },
     });
     setTurnstileReady(true);
     return true;

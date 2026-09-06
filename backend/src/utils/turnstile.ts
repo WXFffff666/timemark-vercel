@@ -39,7 +39,8 @@ type TurnstileVerifyOptions = {
 
 export async function verifyTurnstileToken(
   token: string | undefined,
-  trustedRemoteIp?: string,
+  /** 兼容旧签名：siteverify 统一不带 remoteip（见上），该参数仅保留不再使用 */
+  _trustedRemoteIp?: string,
 ): Promise<{ ok: boolean; skipped: boolean; error?: string; code?: string }> {
   const secret = getTurnstileSecretKey();
   if (!secret) return { ok: true, skipped: true };
@@ -63,15 +64,10 @@ export async function verifyTurnstileToken(
   };
 
   try {
-    // Trusted IP (cf-connecting-ip / x-vercel-forwarded-for): verify with remoteip first.
-    // Fallback without remoteip for proxy edge cases — still validates the token+secret pair.
-    let data = trustedRemoteIp
-      ? await verify(true)
-      : await verify(false);
-
-    if (!data.success && trustedRemoteIp) {
-      data = await verify(false);
-    }
+    // Cloudflare 规定每个 token 只能提交 siteverify 一次：第一次提交（无论成败）即消费。
+    // 因此绝不带 remoteip 失败后重试——第二次必然 timeout-or-duplicate，用户永远过不了验证。
+    // remoteip 只是可选加固，token+secret 校验本身已足够安全，统一不带。
+    const data = await verify(false);
 
     if (!data.success) {
       const codes = data['error-codes'] ?? [];
