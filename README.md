@@ -43,7 +43,7 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 | 密钥管理 | data/.env 文件 | **Vercel Environment Variables** |
 | 静态资源 | Docker 镜像内 | **Vercel Edge Network (CDN)** |
 | 免费额度 | 需自备服务器 | **Vercel Hobby 免费套餐可用** |
-| 通知渠道 | 43+ 渠道 | **30+ HTTP 渠道（Webhook/Token，云端可用）** |
+| 通知渠道 | 38 个渠道 | **30+ HTTP 渠道（Webhook/Token，云端可用）** |
 
 ### 架构优势
 
@@ -53,6 +53,21 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 - **自动扩缩**：Serverless 架构自动处理流量高峰
 - **持续部署**：连接 GitHub 仓库，推送代码自动部署
 - **PostgreSQL**：Vercel Postgres（Neon）提供 0.5GB 免费存储
+
+### 🐳 姊妹项目推荐：Docker 单容器版
+
+想要数据完全自持、跑在自己的 NAS 或内网里？同一个 TimeMark 也有自托管版 **[timemark-docker](https://github.com/WXFffff666/timemark-docker)** —— Docker 单容器部署、SQLite 内置存储、零外部依赖、闲置内存约 256MB，`docker compose up -d` 一条命令即可启动，**38 个通知渠道全部可用**（含微信个人号、QQ Bot、Signal 等云端不可用的插件类渠道）。
+
+| 对比项 | 🐳 [Docker 版](https://github.com/WXFffff666/timemark-docker) | ☁️ Vercel 版（本仓库） |
+|:------:|:----------------------------------------------------------:|:---------------------:|
+| 部署平台 | Docker / NAS（群晖 · 威联通 · 铁威马 · 飞牛OS） | Vercel Serverless |
+| 数据库 | SQLite (sql.js，内置) | PostgreSQL (Vercel Postgres / Neon) |
+| 定时任务 | Croner（进程内每分钟检查） | Vercel Cron + cron-job.org |
+| 通知渠道 | **38 个全部可用** | 30+ 云端可用 HTTP 渠道 |
+| 运维成本 | 需自备服务器 | 零运维，Hobby 免费套餐可用 |
+| 适合场景 | 数据完全自持 / 内网 / NAS | 公网访问 / 免服务器 / 快速上线 |
+
+> 两版共享同一套功能内核（通知模板、农历双历、待办、Inbox、Integrations、零信任安全加固等），按运行环境自由选择。
 
 ---
 
@@ -65,7 +80,7 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 
 | 📝 通知模板 | 🔄 重复事件 | 📧 多邮箱支持 | 📅 日历导出 | 🎯 11 种事件类型 |
 |:----------:|:----------:|:------------:|:----------:|:---------------:|
-| 13 种预设模板 | 每天/每周/每月/每年 | 多收件人邮箱 | ICS 文件导出 | 生日/纪念日/节日等 |
+| 18 种预设模板 | 每天/每周/每月/每年 | 多收件人邮箱 | ICS 文件导出 | 生日/纪念日/节日等 |
 | 按事件类型分组 | 自动创建下次事件 | 联系人多邮箱/手机 | 年/月/日视图 | 会议/旅行/婚礼等 |
 | 批量邮件 6 类模板 | 近期待办打勾完成 | 快捷发信可选收件人 | 待办完成历史 | 固定联系人分组 |
 
@@ -285,7 +300,7 @@ Cron 每分钟提醒任务使用校正后的时间，在配置的提醒时刻 ±
 | 提前天数 | 1天 / 3天 / 7天 / 14天 / 30天 (可多选) |
 | 通知渠道 | 30+ HTTP 渠道任意组合 (可多选) |
 | 重复事件 | 每天 / 每周 / 每月 / 每年 |
-| 通知模板 | 6 种预设模板 + 自定义模板 |
+| 通知模板 | 18 种预设模板 + 自定义模板 |
 | 收件人邮箱 | 支持多个收件人邮箱 |
 
 ### 通知模板
