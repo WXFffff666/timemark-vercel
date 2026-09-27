@@ -32,6 +32,7 @@ const ExpiryPage = lazy(() => import('./pages/Expiry'));
 const InventoryPage = lazy(() => import('./pages/Inventory'));
 const MaintenancePage = lazy(() => import('./pages/Maintenance'));
 const DocumentsPage = lazy(() => import('./pages/Documents'));
+const HabitsPage = lazy(() => import('./pages/Habits'));
 
 function PageLoader() {
   return (
@@ -113,6 +114,7 @@ function AnimatedRoutes() {
           <Route path="/inventory" element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} />
           <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
           <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
+          <Route path="/habits" element={<ProtectedRoute><HabitsPage /></ProtectedRoute>} />
           <Route path="/integrations-docs" element={<ProtectedRoute><IntegrationsDocs /></ProtectedRoute>} />
           <Route path="/cron-monitor" element={<ProtectedRoute><CronMonitor /></ProtectedRoute>} />
           <Route path="/docker-migration" element={<ProtectedRoute><DockerMigration /></ProtectedRoute>} />

@@ -30,6 +30,15 @@ import {
   documentEventType,
   documentLeadDays,
 } from '@timemark/shared/document-schedule';
+import { buildCadenceSendKey, isCadenceDue } from '@timemark/shared/contact-cadence';
+import {
+  buildHabitReminderSendKey,
+  buildHabitRiskSendKey,
+  DEFAULT_HABIT_STREAK_NUDGE_HOUR,
+  isHabitScheduledOn,
+  normalizeReminderTimes,
+  normalizeScheduleDays,
+} from '@timemark/shared/habit-schedule';
 import { sendNotifications } from '../services/notifications/index.js';
 import { createInboxMessage } from '../services/inbox.service.js';
 import { refreshUserEventCache } from '../services/event-cache.service.js';
@@ -145,8 +154,13 @@ function getCurrentHHmm(now: Date, timeZone: string): string {
  * 绝不新建第二个调度器：所有来源都由 sendReminders 在同一个分钟级 cron 里调用。
  *
  * 发送事件不携带 event.id（email_logs / notification_queue 的 event_id 外键指向
- * events 表），因此这些提醒不写事件触发日志，去重完全由 claim 承担；发送失败会
- * 释放 claim，让下个时间窗口重试。
+ * events 表），因此这些提醒不写事件触发日志，去重完全由 claim 承担。
+ *
+ * 发送失败的处理：sendNotifications() 不会在渠道失败时抛错，而是返回逐渠道结果
+ * map（{channel: {success:false,error}}）。因此不能只看有没有抛异常——只有结果里
+ * 至少一个渠道明确 success:true 才算送达，保留 claim；全部渠道失败（或空 map /
+ * 缺键 / null 条目，即什么都没送出去）时释放 claim，让下个 ±2 分钟窗口重试
+ * （send key 含日期 + 提前天数 + 时刻，不含分钟，不释放就会在同一窗口内被去重）。
  */
 interface DatedReminderConfig {
   enabled?: boolean;
@@ -244,6 +258,23 @@ const DOCUMENT_SOURCE: DatedReminderSource = {
   buildExpiredSendKey: buildDocumentExpiredKey,
   toEventType: documentEventType,
 };
+
+/**
+ * 本次派发是否至少有一个渠道明确成功。
+ *
+ * sendNotifications 的返回形状是 Record<channel, {success, error?}>；运行时可能
+ * 出现空 map、null 条目、缺键等畸形结果（被 mock / 渠道短路）。这些一律按
+ * 「未送达」处理——宁可下个窗口重试，也不能把失败的提醒当作已发送而永久丢失。
+ * 只检查本次请求的渠道键；内部标记键（_quiet_hours / _skipped）不参与判定。
+ */
+function deliveredToAnyChannel(results: unknown, channels: readonly string[]): boolean {
+  if (!results || typeof results !== 'object') return false;
+  const map = results as Record<string, unknown>;
+  return channels.some((channel) => {
+    const entry = map[channel];
+    return typeof entry === 'object' && entry !== null && (entry as { success?: unknown }).success === true;
+  });
+}
 
 async function runDatedReminderIterator(
   source: DatedReminderSource,
@@ -349,6 +380,16 @@ async function runDatedReminderIterator(
         ...(isExpired ? { customMessage: `⚠️ ${title} 已过期（到期日 ${due}），请尽快处理。` } : {}),
       };
       const results = await sendNotifications(notificationEvent, userId, channels);
+      if (!deliveredToAnyChannel(results, channels)) {
+        // 所有渠道都失败：释放 claim，让下个 ±2 分钟窗口重试
+        await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [raw.id, sendKey]);
+        skipped += 1;
+        log.warn(
+          { source: source.label, itemId: raw.id, kind, daysUntil, isExpired, matchedReminderTime, channels, results },
+          'Dated reminder delivered to no channel; claim released for retry',
+        );
+        continue;
+      }
       sent += 1;
       log.info(
         { source: source.label, itemId: raw.id, kind, daysUntil, isExpired, matchedReminderTime, channels, results },
@@ -407,6 +448,353 @@ export async function sendDocumentReminders(now: Date = getSyncedNow(DEFAULT_SYN
   skipped: number;
 }> {
   return runDatedReminderIterator(DOCUMENT_SOURCE, now);
+}
+
+export interface CadenceReminderStats {
+  candidates: number;
+  sent: number;
+  inbox: number;
+  skipped: number;
+}
+
+/**
+ * 联系节奏提醒（D4，checkbox 62）：与到期项/证件同一个分钟级调度、同一张
+ * reminder_send_claims，不新建第二个调度器。
+ *
+ * 去重键 = 联系人 id + 周期起点（最后一次有效联系日的用户时区日历日）：
+ * - 同一周期内每分钟跑 → claim 冲突 → 至多一条提醒（绝不每日唠叨）；
+ * - 用户今天记录互动 → 周期起点前移 → 新键 → 下个完整周期后可再提醒一次。
+ *
+ * 从未联系（有效最后联系为 NULL）没有周期起点 → 明确跳过；UI 的到期列表
+ * 仍会展示它（GET /api/contacts/due 的语义），但这里绝不发「上次联系：从未」。
+ * 同时写一条 Inbox 消息（source='inbound'，带「已记录联系」快捷动作约定：
+ * markdown 链接 `/contacts?contactId=<id>&log=1`），失败不影响已发出的提醒。
+ */
+export async function sendCadenceReminders(
+  now: Date = getSyncedNow(DEFAULT_SYNC_TIMEZONE),
+): Promise<CadenceReminderStats> {
+  const result = await query(
+    `SELECT fc.id, fc.user_id, fc.name, fc.nickname, fc.relationship,
+            fc.cadence_days, fc.last_contact_at,
+            latest.occurred_at AS effective_last_contact_at,
+            latest.summary AS last_interaction_summary,
+            uc.timezone, uc.reminders_enabled
+     FROM fixed_contacts fc
+     LEFT JOIN user_configs uc ON uc.user_id = fc.user_id
+     LEFT JOIN LATERAL (
+       SELECT i.occurred_at, i.summary
+       FROM interactions i
+       WHERE i.user_id = fc.user_id AND i.contact_id = fc.id
+       ORDER BY i.occurred_at DESC
+       LIMIT 1
+     ) latest ON TRUE
+     WHERE COALESCE(fc.cadence_enabled, FALSE) = TRUE
+       AND fc.cadence_days IS NOT NULL
+       AND COALESCE(latest.occurred_at, fc.last_contact_at) IS NOT NULL
+       AND COALESCE(latest.occurred_at, fc.last_contact_at)
+           + make_interval(days => fc.cadence_days) <= $1`,
+    [now],
+  );
+
+  const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
+  let sent = 0;
+  let inbox = 0;
+  let skipped = 0;
+
+  for (const raw of result.rows as Array<Record<string, unknown>>) {
+    if (raw.reminders_enabled === false) {
+      skipped += 1;
+      continue;
+    }
+
+    const userId = Number(raw.user_id);
+    const timeZone = typeof raw.timezone === 'string' ? raw.timezone : 'Asia/Shanghai';
+    const today = getTodayString(now, timeZone);
+
+    // 从未联系（有效最后联系为 NULL）没有周期起点：跳过，不发「上次联系：从未」。
+    const effectiveRaw = raw.effective_last_contact_at ?? raw.last_contact_at;
+    if (effectiveRaw == null || effectiveRaw === '') {
+      skipped += 1;
+      continue;
+    }
+    const effectiveDate = effectiveRaw instanceof Date ? effectiveRaw : new Date(String(effectiveRaw));
+    if (Number.isNaN(effectiveDate.getTime())) {
+      skipped += 1;
+      continue;
+    }
+
+    const periodStart = getTodayString(effectiveDate, timeZone);
+    const cadenceDays = Number(raw.cadence_days);
+    if (!isCadenceDue(today, periodStart, cadenceDays)) {
+      skipped += 1;
+      continue;
+    }
+
+    const contactId = Number(raw.id);
+    const sendKey = buildCadenceSendKey(contactId, periodStart);
+    const claim = await query(
+      `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING RETURNING event_id`,
+      [contactId, sendKey],
+    );
+    if (claim.rows.length === 0) {
+      // 本周期已提醒过（或并行 cron 正在发）→ 不再唠叨
+      skipped += 1;
+      continue;
+    }
+
+    const channels = await resolveReminderChannels(userId, [], 0);
+    if (channels.length === 0) {
+      await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [contactId, sendKey]);
+      skipped += 1;
+      continue;
+    }
+
+    try {
+      const name = String(raw.name ?? '');
+      const nickname = typeof raw.nickname === 'string' && raw.nickname.trim() ? raw.nickname.trim() : '';
+      const displayName = nickname || name;
+      const tag = typeof raw.relationship === 'string' && raw.relationship.trim() ? raw.relationship.trim() : '';
+      const summary =
+        typeof raw.last_interaction_summary === 'string' && raw.last_interaction_summary.trim()
+          ? raw.last_interaction_summary.trim()
+          : '';
+      const customMessage = [
+        `🤝 关系维系提醒：${displayName}${tag ? `（${tag}）` : ''}`,
+        summary ? `上次互动：${summary}` : `上次联系：${periodStart}`,
+        `已超过 ${cadenceDays} 天没联系了，记得问候一下。`,
+      ].join('\n');
+
+      const results = await sendNotifications(
+        {
+          // 故意不带 id：email_logs / notification_queue 的 event_id 外键指向 events
+          id: null,
+          user_id: userId,
+          name: displayName,
+          type: 'contact_cadence',
+          date: today,
+          calendar_type: 'gregorian',
+          reminder_time: getCurrentHHmm(now, timeZone),
+          reminder_config: null,
+          reminderConfig: null,
+          customMessage,
+        },
+        userId,
+        channels,
+      );
+      if (!deliveredToAnyChannel(results, channels)) {
+        // 所有渠道都失败：释放 claim，下个分钟窗口可重试
+        await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [contactId, sendKey]);
+        skipped += 1;
+        log.warn({ contactId, sendKey, channels, results }, 'Cadence reminder delivered to no channel; claim released');
+        continue;
+      }
+      sent += 1;
+
+      // Inbox 提醒 +「已记录联系」快捷动作（source='inbound' 才会出现在收件箱列表）
+      try {
+        await createInboxMessage({
+          userId,
+          title: `关系维系提醒：${displayName}`,
+          body: `${customMessage}\n[已记录联系](/contacts?contactId=${contactId}&log=1)`,
+          source: 'inbound',
+          senderLabel: '联系节奏',
+        });
+        inbox += 1;
+      } catch (error) {
+        // 收件箱写入失败不影响已送达的外部提醒
+        log.warn({ contactId, err: error }, 'Cadence inbox message failed');
+      }
+
+      log.info({ contactId, periodStart, cadenceDays, channels, results }, 'Cadence reminder dispatched');
+    } catch (error) {
+      await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [contactId, sendKey]);
+      skipped += 1;
+      log.error({ contactId, err: error }, 'Failed to send cadence reminder');
+    }
+  }
+
+  log.info({ candidates: result.rows.length, sent, inbox, skipped }, 'Cadence reminders checked');
+  return { candidates: result.rows.length, sent, inbox, skipped };
+}
+
+export interface HabitReminderStats {
+  candidates: number;
+  reminded: number;
+  riskNudged: number;
+  skipped: number;
+}
+
+/**
+ * 习惯提醒（D6，checkbox 65）：与事件/到期/证件同一个分钟级调度、同一张
+ * reminder_send_claims，不新建第二个调度器。
+ *
+ * - 定时提醒：habit.reminder_times 里与当前时刻 ±2 分钟匹配的时刻；键
+ *   `habit#h<id>#d<today>#t<HH:mm>`，同一天同时刻至多一条。
+ * - 连胜告急：user_configs.habit_streak_nudge_hour（默认 20:00）时，如果
+ *   当前周期目标未达标（count 之和 < target_per_period），发一条并写 claim
+ *   `habit:risk#h<id>#d<today>`（每天至多一条）。
+ * - schedule_days（0=周日..6=周六）之外的日子一律不提醒；未配置计划 = 每天。
+ * - 已过去的 reminder_times 不会回溯触发（只匹配当前时刻窗口）。
+ */
+export async function sendHabitReminders(
+  now: Date = getSyncedNow(DEFAULT_SYNC_TIMEZONE),
+): Promise<HabitReminderStats> {
+  const result = await query(
+    `SELECT h.id, h.user_id, h.name, h.icon, h.target_per_period, h.period,
+            h.schedule_days, h.reminder_times,
+            uc.timezone, uc.reminders_enabled,
+            COALESCE(uc.habit_streak_nudge_hour, $1) AS habit_streak_nudge_hour
+     FROM habits h
+     LEFT JOIN user_configs uc ON uc.user_id = h.user_id
+     WHERE h.is_active = TRUE`,
+    [DEFAULT_HABIT_STREAK_NUDGE_HOUR],
+  );
+
+  const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
+  let reminded = 0;
+  let riskNudged = 0;
+  let skipped = 0;
+
+  for (const raw of result.rows as Array<Record<string, unknown>>) {
+    if (raw.reminders_enabled === false) {
+      skipped += 1;
+      continue;
+    }
+
+    const habitId = Number(raw.id);
+    const userId = Number(raw.user_id);
+    const timeZone = typeof raw.timezone === 'string' ? raw.timezone : 'Asia/Shanghai';
+    const today = getTodayString(now, timeZone);
+    const scheduleDays = normalizeScheduleDays(raw.schedule_days ?? null);
+    // 未排期的日子绝不提醒
+    if (!isHabitScheduledOn(today, scheduleDays)) {
+      skipped += 1;
+      continue;
+    }
+
+    const currentTime = getCurrentHHmm(now, timeZone);
+    const target = Math.max(1, Math.trunc(Number(raw.target_per_period) || 1));
+    const name = String(raw.name ?? '');
+    const periodLabel = raw.period === 'week' ? '周' : '天';
+
+    const countResult = await query(
+      `SELECT COALESCE(SUM(count), 0)::int AS count
+       FROM habit_logs WHERE habit_id = $1 AND user_id = $2 AND logged_on = $3::date`,
+      [habitId, userId, today],
+    );
+    const todayCount = Number(countResult.rows[0]?.count ?? 0);
+
+    // 1) 定时提醒（reminder_times）
+    const matchedTime = normalizeReminderTimes(raw.reminder_times ?? null).find((time) =>
+      matchesReminderTimeWindow(currentTime, time, 2),
+    );
+    if (matchedTime) {
+      const sendKey = buildHabitReminderSendKey(habitId, today, matchedTime);
+      const claim = await query(
+        `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING RETURNING event_id`,
+        [habitId, sendKey],
+      );
+      if (claim.rows.length === 0) {
+        skipped += 1;
+      } else {
+        const channels = await resolveReminderChannels(userId, [], 0);
+        if (channels.length === 0) {
+          await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [habitId, sendKey]);
+          skipped += 1;
+        } else {
+          try {
+            const results = await sendNotifications(
+              {
+                id: null,
+                user_id: userId,
+                name,
+                type: 'habit_reminder',
+                date: today,
+                calendar_type: 'gregorian',
+                reminder_time: matchedTime,
+                reminder_config: null,
+                reminderConfig: null,
+                customMessage: `⏰ 习惯打卡：${name}（目标 ${target} 次/${periodLabel}）`,
+              },
+              userId,
+              channels,
+            );
+            if (!deliveredToAnyChannel(results, channels)) {
+              await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [habitId, sendKey]);
+              skipped += 1;
+              log.warn({ habitId, sendKey, channels, results }, 'Habit reminder delivered to no channel; claim released');
+            } else {
+              reminded += 1;
+              log.info({ habitId, matchedTime, channels }, 'Habit reminder dispatched');
+            }
+          } catch (error) {
+            await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [habitId, sendKey]);
+            skipped += 1;
+            log.error({ habitId, err: error }, 'Failed to send habit reminder');
+          }
+        }
+      }
+    }
+
+    // 2) 连胜告急（默认 20:00，仅当当前周期未达标；每天至多一条）
+    const rawNudgeHour = typeof raw.habit_streak_nudge_hour === 'string' ? raw.habit_streak_nudge_hour : '';
+    const nudgeHour = /^([01]\d|2[0-3]):[0-5]\d$/.test(rawNudgeHour)
+      ? rawNudgeHour
+      : DEFAULT_HABIT_STREAK_NUDGE_HOUR;
+    if (todayCount < target && matchesReminderTimeWindow(currentTime, nudgeHour, 2)) {
+      const riskKey = buildHabitRiskSendKey(habitId, today);
+      const claim = await query(
+        `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING RETURNING event_id`,
+        [habitId, riskKey],
+      );
+      if (claim.rows.length === 0) {
+        skipped += 1;
+      } else {
+        const channels = await resolveReminderChannels(userId, [], 0);
+        if (channels.length === 0) {
+          await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [habitId, riskKey]);
+          skipped += 1;
+        } else {
+          try {
+            const results = await sendNotifications(
+              {
+                id: null,
+                user_id: userId,
+                name,
+                type: 'habit_streak_risk',
+                date: today,
+                calendar_type: 'gregorian',
+                reminder_time: nudgeHour,
+                reminder_config: null,
+                reminderConfig: null,
+                customMessage: `🔥 习惯打卡：「${name}」今天还差 ${target - todayCount} 次达标（目标 ${target} 次/${periodLabel}），连续记录将中断。`,
+              },
+              userId,
+              channels,
+            );
+            if (!deliveredToAnyChannel(results, channels)) {
+              await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [habitId, riskKey]);
+              skipped += 1;
+              log.warn({ habitId, riskKey, channels, results }, 'Habit streak-risk nudge delivered to no channel; claim released');
+            } else {
+              riskNudged += 1;
+              log.info({ habitId, nudgeHour, todayCount, target, channels }, 'Habit streak-risk nudge dispatched');
+            }
+          } catch (error) {
+            await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [habitId, riskKey]);
+            skipped += 1;
+            log.error({ habitId, err: error }, 'Failed to send habit streak-risk nudge');
+          }
+        }
+      }
+    }
+  }
+
+  log.info({ candidates: result.rows.length, reminded, riskNudged, skipped }, 'Habit reminders checked');
+  return { candidates: result.rows.length, reminded, riskNudged, skipped };
 }
 
 function toFiniteNumberOrNull(value: unknown): number | null {
@@ -875,6 +1263,20 @@ export async function sendReminders() {
     await sendDocumentReminders(now);
   } catch (error) {
     log.error({ err: error }, 'Document reminder evaluation failed');
+  }
+
+  // 个人 CRM 联系节奏（D4，checkbox 62）：每周期至多一条；从未联系的人跳过
+  try {
+    await sendCadenceReminders(now);
+  } catch (error) {
+    log.error({ err: error }, 'Cadence reminder evaluation failed');
+  }
+
+  // 习惯打卡（D6，checkbox 64/65）：reminder_times + schedule_days + 连胜告急
+  try {
+    await sendHabitReminders(now);
+  } catch (error) {
+    log.error({ err: error }, 'Habit reminder evaluation failed');
   }
 }
 

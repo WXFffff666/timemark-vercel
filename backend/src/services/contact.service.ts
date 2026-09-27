@@ -37,6 +37,10 @@ export interface FixedContactRow {
   relationship?: string | null;
   gender?: string | null;
   notes?: string | null;
+  /** D4 联系节奏（v39） */
+  cadence_days?: number | null;
+  last_contact_at?: string | null;
+  cadence_enabled?: boolean;
   validation_status?: string | null;
   last_validated_at?: string | null;
   created_at?: string;
@@ -143,6 +147,7 @@ export async function listFixedContacts(userId: number): Promise<FixedContactRow
   const result = await query(
     `SELECT id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid,
             contact_methods, preferred_channels, relationship, gender, notes,
+            cadence_days, last_contact_at, cadence_enabled,
             validation_status, last_validated_at, created_at, updated_at
      FROM fixed_contacts WHERE user_id = $1 ORDER BY name ASC`,
     [userId],
@@ -159,8 +164,8 @@ export async function createFixedContact(userId: number, input: CreateFixedConta
 
   const result = await query(
     `INSERT INTO fixed_contacts
-     (user_id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid, contact_methods, preferred_channels, relationship, gender, notes, validation_status, last_validated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'valid',CURRENT_TIMESTAMP)
+     (user_id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid, contact_methods, preferred_channels, relationship, gender, notes, cadence_days, cadence_enabled, validation_status, last_validated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'valid',CURRENT_TIMESTAMP)
      RETURNING *`,
     [
       userId,
@@ -176,6 +181,8 @@ export async function createFixedContact(userId: number, input: CreateFixedConta
       input.relationship?.trim() || null,
       input.gender || 'unknown',
       input.notes || null,
+      input.cadenceDays ?? null,
+      input.cadenceEnabled ?? false,
     ],
   );
   return mapContactRow(result.rows[0]);
@@ -233,6 +240,16 @@ export async function updateFixedContact(userId: number, id: number, input: Upda
     fields.push(`gender = $${i}`);
     values.push(input.gender || 'unknown');
   }
+  if (input.cadenceDays !== undefined) {
+    i++;
+    fields.push(`cadence_days = $${i}`);
+    values.push(input.cadenceDays);
+  }
+  if (input.cadenceEnabled !== undefined) {
+    i++;
+    fields.push(`cadence_enabled = $${i}`);
+    values.push(input.cadenceEnabled);
+  }
 
   const contactFieldsTouched =
     input.emails !== undefined
@@ -274,10 +291,11 @@ export async function updateFixedContact(userId: number, id: number, input: Upda
   i++;
   fields.push(`validation_status = $${i}`);
   values.push('valid');
-  i++;
+  // These two are literals - they must NOT consume a parameter index, otherwise
+  // the WHERE placeholders below would point past the supplied values.
   fields.push(`last_validated_at = CURRENT_TIMESTAMP`);
-  i++;
   fields.push(`updated_at = CURRENT_TIMESTAMP`);
+  i++;
   values.push(id, userId);
 
   const result = await query(

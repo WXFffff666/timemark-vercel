@@ -6,6 +6,10 @@ import {
   createFixedContactSchema,
   updateFixedContactSchema,
   contactSendEmailSchema,
+  createInteractionSchema,
+  createContactPromiseSchema,
+  createGiftRecordSchema,
+  formatZodError,
 } from '@timemark/shared';
 import {
   listFixedContacts,
@@ -14,12 +18,39 @@ import {
   deleteFixedContact,
   validateContactMethods,
 } from '../services/contact.service.js';
+import {
+  createContactPromise,
+  createGiftRecord,
+  createInteraction,
+  listContactTimeline,
+  listDueContacts,
+} from '../services/contact-crm.service.js';
 import { mergeContactMethodsInput } from '@timemark/shared';
 import { sendContactEmail } from '../services/contact-send.service.js';
 import { query } from '../db/index.js';
 
 const contacts = new Hono<{ Variables: { user: User } }>();
 contacts.use('*', authMiddleware);
+
+/** 分页参数与 /api/expiry 相同：page >= 1，limit 默认 50、上限 200 */
+function parsePage(raw: string | undefined): number {
+  const n = parseInt(raw ?? '', 10);
+  return Number.isFinite(n) && n >= 1 ? n : 1;
+}
+
+function parseLimit(raw: string | undefined): number {
+  const n = parseInt(raw ?? '', 10);
+  if (!Number.isFinite(n) || n < 1) return 50;
+  return Math.min(n, 200);
+}
+
+function parseContactId(raw: string): number | null {
+  const id = parseInt(raw, 10);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+/** 互动时间允许 5 分钟时钟偏差，更晚的一律 400 */
+const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 
 contacts.get('/', async (c) => {
   const user = c.get('user');
@@ -161,6 +192,105 @@ contacts.post('/:id/send-email', async (c) => {
   } catch (e) {
     return c.json({ success: false, error: e instanceof Error ? e.message : '发送失败' }, 400);
   }
+});
+
+// ---------------------------------------------------------------------------
+// D4 个人 CRM：联系节奏 + 互动时间线（todo 61）
+// 分页形状与 /api/expiry 一致；他人的联系人一律 404（不区分不存在，防存在性泄露）。
+// ---------------------------------------------------------------------------
+
+contacts.get('/due', async (c) => {
+  const userId = Number(c.get('user').id);
+  const data = await listDueContacts(userId);
+  return c.json({ success: true, data });
+});
+
+contacts.get('/:id/timeline', async (c) => {
+  const userId = Number(c.get('user').id);
+  const id = parseContactId(c.req.param('id'));
+  if (id === null) return c.json({ success: false, error: '无效的联系人 ID' }, 400);
+
+  const page = parsePage(c.req.query('page'));
+  const limit = parseLimit(c.req.query('limit'));
+  const result = await listContactTimeline(userId, id, page, limit);
+  if (!result) return c.json({ success: false, error: '联系人不存在' }, 404);
+
+  return c.json({
+    success: true,
+    data: result.items,
+    pagination: {
+      page,
+      limit,
+      total: result.total,
+      totalPages: Math.ceil(result.total / limit),
+    },
+  });
+});
+
+contacts.post('/:id/interactions', async (c) => {
+  const userId = Number(c.get('user').id);
+  const id = parseContactId(c.req.param('id'));
+  if (id === null) return c.json({ success: false, error: '无效的联系人 ID' }, 400);
+
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = createInteractionSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({
+      success: false,
+      error: formatZodError(parsed.error),
+      details: z.flattenError(parsed.error),
+    }, 400);
+  }
+  if (parsed.data.occurredAt) {
+    const at = Date.parse(parsed.data.occurredAt);
+    if (Number.isFinite(at) && at > Date.now() + FUTURE_TOLERANCE_MS) {
+      return c.json({ success: false, error: '互动时间不能晚于当前时间' }, 400);
+    }
+  }
+
+  const row = await createInteraction(userId, id, parsed.data);
+  if (!row) return c.json({ success: false, error: '联系人不存在' }, 404);
+  return c.json({ success: true, data: row }, 201);
+});
+
+contacts.post('/:id/promises', async (c) => {
+  const userId = Number(c.get('user').id);
+  const id = parseContactId(c.req.param('id'));
+  if (id === null) return c.json({ success: false, error: '无效的联系人 ID' }, 400);
+
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = createContactPromiseSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({
+      success: false,
+      error: formatZodError(parsed.error),
+      details: z.flattenError(parsed.error),
+    }, 400);
+  }
+
+  const row = await createContactPromise(userId, id, parsed.data);
+  if (!row) return c.json({ success: false, error: '联系人不存在' }, 404);
+  return c.json({ success: true, data: row }, 201);
+});
+
+contacts.post('/:id/gifts', async (c) => {
+  const userId = Number(c.get('user').id);
+  const id = parseContactId(c.req.param('id'));
+  if (id === null) return c.json({ success: false, error: '无效的联系人 ID' }, 400);
+
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = createGiftRecordSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({
+      success: false,
+      error: formatZodError(parsed.error),
+      details: z.flattenError(parsed.error),
+    }, 400);
+  }
+
+  const row = await createGiftRecord(userId, id, parsed.data);
+  if (!row) return c.json({ success: false, error: '联系人不存在' }, 404);
+  return c.json({ success: true, data: row }, 201);
 });
 
 export default contacts;

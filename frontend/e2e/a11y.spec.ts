@@ -30,6 +30,10 @@ const PAGES = [
   { path: '/inventory', heading: '库存', anonymous: false },
   { path: '/maintenance', heading: '保养', anonymous: false },
   { path: '/documents', heading: '证件保险箱', anonymous: false },
+  { path: '/habits', heading: '习惯打卡', anonymous: false },
+  // todo 63: the contacts page hosts the CRM detail drawer (its open-state scan lives in
+  // contacts-detail.spec.ts, which also runs Axe at both viewports for the drawer itself).
+  { path: '/contacts', heading: '固定联系人', anonymous: false },
   { path: '/login', heading: /TimeMark/i, anonymous: true },
 ] as const;
 

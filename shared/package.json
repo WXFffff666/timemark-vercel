@@ -14,6 +14,8 @@
     "./event-schedule": "./dist/event-schedule.js",
     "./expiry-schedule": "./dist/expiry-schedule.js",
     "./document-schedule": "./dist/document-schedule.js",
+    "./contact-cadence": "./dist/contact-cadence.js",
+    "./habit-schedule": "./dist/habit-schedule.js",
     "./inventory-schedule": "./dist/inventory-schedule.js",
     "./maintenance-schedule": "./dist/maintenance-schedule.js",
     "./lunar-calendar": "./dist/lunar-calendar.js",

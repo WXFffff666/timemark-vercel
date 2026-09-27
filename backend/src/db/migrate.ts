@@ -789,6 +789,120 @@ BEGIN
   END IF;
 END $$;`,
     },
+    {
+      // v39 (todo 60): personal-CRM interaction log + cadence (D4). The plan text said
+      // "version: 37", but 37 (attachments) and 38 (documents) were already taken when
+      // this landed, so the next free number is 39. Additive and idempotent: every
+      // statement is IF NOT EXISTS-guarded; the only UPDATE is the guarded one-time
+      // `last_contact_at` backfill in postMigrate (rows with the column already set are
+      // untouched). `fixed_contacts.contact_methods` (v30 JSONB) stays the single source
+      // of truth for addresses - no contact-method columns are duplicated here.
+      //
+      // `interactions.user_id` is denormalized from `fixed_contacts.user_id` on purpose:
+      // it makes the (user_id, contact_id, occurred_at DESC) timeline index a covering
+      // access path and keeps every read user-scoped even if the join is forgotten.
+      version: 39,
+      name: 'crm_interactions_cadence_v39',
+      sql: `ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS cadence_days INT NULL;
+ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS last_contact_at TIMESTAMPTZ NULL;
+ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS cadence_enabled BOOLEAN DEFAULT FALSE;
+-- Interaction log: one row per real touchpoint (call/message/meeting/...).
+CREATE TABLE IF NOT EXISTS interactions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  contact_id INTEGER NOT NULL REFERENCES fixed_contacts(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('call', 'message', 'meeting', 'meal', 'visit', 'gift', 'other')),
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  summary TEXT,
+  mood TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_interactions_user_contact_occurred ON interactions(user_id, contact_id, occurred_at DESC);
+-- Promises made to (or by) a contact; due_at NULL = "someday".
+CREATE TABLE IF NOT EXISTS contact_promises (
+  id SERIAL PRIMARY KEY,
+  contact_id INTEGER NOT NULL REFERENCES fixed_contacts(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  due_at DATE,
+  done_at TIMESTAMPTZ,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_contact_promises_contact ON contact_promises(contact_id, created_at DESC);
+-- Gift ledger: what was given to / received from a contact.
+CREATE TABLE IF NOT EXISTS gift_records (
+  id SERIAL PRIMARY KEY,
+  contact_id INTEGER NOT NULL REFERENCES fixed_contacts(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('given', 'received')),
+  occasion TEXT,
+  amount_cents BIGINT CHECK (amount_cents IS NULL OR amount_cents >= 0),
+  occurred_at DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_gift_records_contact ON gift_records(contact_id, occurred_at DESC);`,
+      postMigrate: async () => {
+        // One-time backfill: when the stored anchor is missing, take the newest
+        // interaction. Contacts that already have a value (or no interactions) are
+        // left untouched, so re-running this is a no-op.
+        const backfilled = await query(
+          `UPDATE fixed_contacts fc
+           SET last_contact_at = latest.max_occurred
+           FROM (
+             SELECT contact_id, MAX(occurred_at) AS max_occurred
+             FROM interactions
+             GROUP BY contact_id
+           ) latest
+           WHERE fc.id = latest.contact_id
+             AND fc.last_contact_at IS NULL`,
+        );
+        if (backfilled.rowCount > 0) {
+          console.log(`[DB] Backfilled last_contact_at for ${backfilled.rowCount} contact(s)`);
+        }
+      },
+    },
+    {
+      // v40 (todo 64): habit tracking (D6) - habits + habit_logs with per-period targets,
+      // schedule days and reminder times, plus the per-user hour for the nightly
+      // "streak at risk" nudge. The plan text said "version: 38", but 38 (documents) and
+      // 39 (CRM interactions/cadence) were already taken when this landed, so the next
+      // free number is 40. Additive and idempotent: every statement is IF NOT EXISTS-
+      // guarded; the only ALTER is an additive ADD COLUMN IF NOT EXISTS on user_configs.
+      // `UNIQUE (habit_id, logged_on)` makes same-day logging an UPSERT (count += n),
+      // never a second row. This is NOT todo_completions (v29) - habits are their own
+      // concept (day/week periods, targets, schedule/reminder configuration).
+      version: 40,
+      name: 'habits_v40',
+      sql: `CREATE TABLE IF NOT EXISTS habits (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER,
+  name TEXT NOT NULL,
+  icon TEXT,
+  target_per_period INTEGER NOT NULL DEFAULT 1 CHECK (target_per_period >= 1),
+  period TEXT NOT NULL DEFAULT 'day' CHECK (period IN ('day', 'week')),
+  schedule_days INTEGER[],
+  reminder_times TEXT[],
+  color TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id);
+CREATE INDEX IF NOT EXISTS idx_habits_user_active ON habits(user_id) WHERE is_active = TRUE;
+CREATE TABLE IF NOT EXISTS habit_logs (
+  id SERIAL PRIMARY KEY,
+  habit_id INTEGER NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  logged_on DATE NOT NULL,
+  count INTEGER NOT NULL DEFAULT 1 CHECK (count >= 1),
+  note TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (habit_id, logged_on)
+);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_date ON habit_logs(habit_id, logged_on DESC);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_user_date ON habit_logs(user_id, logged_on DESC);
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS habit_streak_nudge_hour TEXT DEFAULT '20:00';`,
+    },
   ];
 
   for (const migration of migrations) {

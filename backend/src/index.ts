@@ -56,6 +56,7 @@ import inventoryRoutes from './routes/inventory.js';
 import maintenanceRoutes from './routes/maintenance.js';
 import attachmentsRoutes from './routes/attachments.js';
 import documentsRoutes from './routes/documents.js';
+import habitsRoutes from './routes/habits.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -139,6 +140,7 @@ app.route('/api/inventory', inventoryRoutes);
 app.route('/api/maintenance', maintenanceRoutes);
 app.route('/api/attachments', attachmentsRoutes);
 app.route('/api/documents', documentsRoutes);
+app.route('/api/habits', habitsRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {

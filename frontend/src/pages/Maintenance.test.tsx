@@ -132,4 +132,47 @@ describe('Maintenance page', () => {
 
     expect(await screen.findByText('暂无保养计划')).toBeInTheDocument();
   });
+
+  it('sends nextDueUsage from the create dialog so the usage nudge is reachable from the UI', async () => {
+    installApi([plan({ id: 1 })]);
+    postMock.mockResolvedValue(plan({ id: 99, next_due_usage: 43500 }) as never);
+
+    render(
+      <BrowserRouter>
+        <Maintenance />
+      </BrowserRouter>,
+    );
+
+    await userEvent.click(await screen.findByLabelText('新建保养计划'));
+
+    await userEvent.type(screen.getByLabelText('资产名称'), '保养测试车');
+    await userEvent.type(screen.getByLabelText('按日期间隔（天）'), '90');
+    await userEvent.type(screen.getByLabelText('当前用量'), '43000');
+    await userEvent.type(screen.getByLabelText('下次保养用量'), '43500');
+    await userEvent.click(screen.getByLabelText('保存保养计划'));
+
+    expect(postMock).toHaveBeenCalledWith(
+      '/maintenance',
+      expect.objectContaining({
+        assetName: '保养测试车',
+        intervalDays: 90,
+        currentUsage: 43000,
+        nextDueUsage: 43500,
+      }),
+    );
+  });
+
+  it('prefills 下次保养用量 from the plan when editing', async () => {
+    installApi([plan({ id: 21, next_due_usage: 50000 })]);
+
+    render(
+      <BrowserRouter>
+        <Maintenance />
+      </BrowserRouter>,
+    );
+
+    await userEvent.click(await screen.findByLabelText('编辑 家用轿车'));
+
+    expect(screen.getByLabelText('下次保养用量')).toHaveValue(50000);
+  });
 });

@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users, Upload, Mail, Pencil, Send } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users, Upload, Mail, Pencil, Send, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { LabeledFieldsEditor, normalizeEntriesForSave } from '@/components/contacts/LabeledFieldsEditor';
+import { ContactDetailDrawer } from '@/components/contacts/ContactDetailDrawer';
 import { api } from '@/lib/api';
 import {
   EMAIL_CHANNEL_TYPES,
@@ -19,6 +20,7 @@ import {
   resolveContactDearSalutation,
   formatContactListLabel,
   type ContactLabeledEntry,
+  type DueContactRow,
 } from '@timemark/shared';
 import {
   ensureLabeledEntries,
@@ -45,6 +47,10 @@ interface FixedContact {
   gender?: string | null;
   validation_status?: string;
   channel_account_ids?: number[];
+  /** D4 联系节奏（v39） */
+  cadence_days?: number | null;
+  last_contact_at?: string | null;
+  cadence_enabled?: boolean;
 }
 
 interface NotificationAccount {
@@ -126,10 +132,22 @@ export default function Contacts() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [importing, setImporting] = useState(false);
+  const [dueIds, setDueIds] = useState<Set<number>>(new Set());
+  const [detailContact, setDetailContact] = useState<FixedContact | null>(null);
 
   const loadContacts = async () => {
     const data = await api.get<FixedContact[]>('/contacts');
     setContacts(data || []);
+  };
+
+  const loadDue = async () => {
+    try {
+      const data = await api.get<DueContactRow[]>('/contacts/due');
+      setDueIds(new Set((data || []).map((row) => row.id)));
+    } catch {
+      // 到期列表失败不能让联系人页崩掉：清空徽章即可。
+      setDueIds(new Set());
+    }
   };
 
   const loadAccounts = async () => {
@@ -146,7 +164,7 @@ export default function Contacts() {
   const load = async () => {
     setLoading(true);
     try {
-      await Promise.all([loadContacts(), loadGroups(), loadAccounts()]);
+      await Promise.all([loadContacts(), loadGroups(), loadAccounts(), loadDue()]);
     } finally {
       setLoading(false);
     }
@@ -160,6 +178,7 @@ export default function Contacts() {
       setGroupOpen(false);
       setSendOpen(false);
       setSendPickOpen(false);
+      setDetailContact(null);
     };
   }, []);
 
@@ -437,15 +456,18 @@ export default function Contacts() {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'contacts' | 'groups')} className="mb-6">
         <TabsList>
-          <TabsTrigger value="contacts">联系人</TabsTrigger>
-          <TabsTrigger value="groups">分组</TabsTrigger>
+          <TabsTrigger value="contacts" className="text-slate-600 dark:text-slate-300">联系人</TabsTrigger>
+          <TabsTrigger value="groups" className="text-slate-600 dark:text-slate-300">分组</TabsTrigger>
         </TabsList>
-      </Tabs>
 
-      {loading ? (
-        <p className="text-slate-500">加载中…</p>
-      ) : tab === 'contacts' ? (
-        contacts.length === 0 ? (
+        {loading && <p className="text-slate-500 mt-4">加载中…</p>}
+
+        {/*
+          forceMount keeps both TabsContent nodes in the DOM so the Radix trigger's
+          aria-controls idref always resolves; the inactive panel is hidden with CSS.
+        */}
+        <TabsContent value="contacts" forceMount className={tab === 'contacts' ? 'mt-4' : 'hidden'}>
+          {loading ? null : contacts.length === 0 ? (
           <div className="text-center py-16 text-slate-500">
             <UserPlus className="w-12 h-12 mx-auto mb-3 opacity-40" />
             <p>暂无联系人，点击右上角添加</p>
@@ -455,7 +477,7 @@ export default function Contacts() {
               </p>
             )}
           </div>
-        ) : (
+          ) : (
           <div className="space-y-3">
             {contacts.map((c) => (
               <div key={c.id} className="rounded-xl border bg-white/70 dark:bg-slate-900/70 p-4 flex gap-3 items-start">
@@ -469,6 +491,15 @@ export default function Contacts() {
                       <Badge variant="outline" className="text-xs">
                         称呼：{resolveContactGreetingName(c)}
                       </Badge>
+                    )}
+                    {dueIds.has(c.id) && (
+                      <span
+                        data-testid={`contact-due-badge-${c.id}`}
+                        data-token="destructive"
+                        className="inline-flex items-center rounded-full border border-destructive/40 bg-destructive/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-destructive"
+                      >
+                        该联系了
+                      </span>
                     )}
                     {c.validation_status === 'valid' ? (
                       <Badge className="bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3 mr-1" />已验证</Badge>
@@ -492,6 +523,9 @@ export default function Contacts() {
                   )}
                 </div>
                 <div className="flex gap-1 shrink-0">
+                  <Button variant="ghost" size="icon" onClick={() => setDetailContact(c)} aria-label={`查看 ${formatContactListLabel(c)} 详情`} className="min-h-11 min-w-11" title="详情">
+                    <Eye className="w-4 h-4 text-indigo-500" />
+                  </Button>
                   {canQuickSend(c) && (
                     <Button variant="ghost" size="icon" onClick={() => openQuickSend(c)} aria-label="快捷发信" className="min-h-11 min-w-11" title="快捷发信">
                       <Mail className="w-4 h-4 text-indigo-500" />
@@ -507,13 +541,16 @@ export default function Contacts() {
               </div>
             ))}
           </div>
-        )
-      ) : groups.length === 0 ? (
+          )}
+        </TabsContent>
+
+        <TabsContent value="groups" forceMount className={tab === 'groups' ? 'mt-4' : 'hidden'}>
+          {loading ? null : groups.length === 0 ? (
         <div className="text-center py-16 text-slate-500">
           <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
           <p>暂无分组，用于批量邮件收件人</p>
         </div>
-      ) : (
+          ) : (
         <div className="space-y-3">
           {groups.map((g) => (
             <div key={g.id} className="rounded-xl border bg-white/70 dark:bg-slate-900/70 p-4">
@@ -529,7 +566,9 @@ export default function Contacts() {
             </div>
           ))}
         </div>
-      )}
+          )}
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
@@ -761,6 +800,19 @@ export default function Contacts() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ContactDetailDrawer
+        contact={detailContact}
+        open={detailContact !== null}
+        due={detailContact ? dueIds.has(detailContact.id) : false}
+        onOpenChange={(next) => {
+          if (!next) setDetailContact(null);
+        }}
+        onChanged={() => {
+          void loadContacts();
+          void loadDue();
+        }}
+      />
     </div>
   );
 }

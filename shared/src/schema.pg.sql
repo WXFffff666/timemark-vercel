@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS user_configs (
   timezone TEXT DEFAULT 'Asia/Shanghai',
   quiet_hours_start TEXT,
   quiet_hours_end TEXT,
+  habit_streak_nudge_hour TEXT DEFAULT '20:00',
   password_changed_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -451,6 +452,117 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS idx_documents_user_expires ON documents(user_id, expires_at);
 CREATE INDEX IF NOT EXISTS idx_documents_user_kind ON documents(user_id, kind);
 CREATE INDEX IF NOT EXISTS idx_documents_active_expires ON documents(user_id, expires_at) WHERE is_active = TRUE;
+
+-- ============================================================
+-- fixed_contacts — base definition. On existing deployments this table is created by
+-- migration v18 and extended by v30 (contact_methods), v31 (relationship/gender) and
+-- v39 (cadence anchor/shape). It is defined here because this file runs BEFORE the
+-- incremental migrations: the D4 CRM tables below carry FKs to fixed_contacts, and a
+-- fresh `scripts/migrate-db.ts` run must resolve them. The column set is exactly
+-- v18 + v30 + v31 + v39; every one of those migrations is IF NOT EXISTS/guarded, so
+-- they become no-ops once this definition exists.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS fixed_contacts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  nickname TEXT,
+  email TEXT,
+  phone TEXT,
+  telegram_chat_id TEXT,
+  qq TEXT,
+  wxpusher_uid TEXT,
+  preferred_channels JSONB DEFAULT '[]',
+  contact_methods JSONB DEFAULT '{}',
+  relationship TEXT,
+  gender TEXT DEFAULT 'unknown',
+  notes TEXT,
+  validation_status TEXT DEFAULT 'pending',
+  last_validated_at TIMESTAMP,
+  cadence_days INT,
+  last_contact_at TIMESTAMPTZ,
+  cadence_enabled BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_user ON fixed_contacts(user_id);
+
+-- ============================================================
+-- interactions / contact_promises / gift_records — D4 personal-CRM interaction
+-- log, promises and gift ledger. Mirrors backend/src/db/migrate.ts v39.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS interactions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  contact_id INTEGER NOT NULL REFERENCES fixed_contacts(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('call', 'message', 'meeting', 'meal', 'visit', 'gift', 'other')),
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  summary TEXT,
+  mood TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_interactions_user_contact_occurred ON interactions(user_id, contact_id, occurred_at DESC);
+
+CREATE TABLE IF NOT EXISTS contact_promises (
+  id SERIAL PRIMARY KEY,
+  contact_id INTEGER NOT NULL REFERENCES fixed_contacts(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  due_at DATE,
+  done_at TIMESTAMPTZ,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_contact_promises_contact ON contact_promises(contact_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS gift_records (
+  id SERIAL PRIMARY KEY,
+  contact_id INTEGER NOT NULL REFERENCES fixed_contacts(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('given', 'received')),
+  occasion TEXT,
+  amount_cents BIGINT CHECK (amount_cents IS NULL OR amount_cents >= 0),
+  occurred_at DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_gift_records_contact ON gift_records(contact_id, occurred_at DESC);
+
+-- ============================================================
+-- habits / habit_logs — D6 habit tracking with per-period targets and streaks.
+-- Mirrors backend/src/db/migrate.ts v40. Distinct from todo_completions (v29):
+-- habits are their own concept (day/week periods, targets, schedule days).
+-- `UNIQUE (habit_id, logged_on)` makes same-day logging an UPSERT (count += n),
+-- never a second row. `user_configs.habit_streak_nudge_hour` (v40 ALTER) stores
+-- the per-user hour for the nightly "streak at risk" nudge (default 20:00).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS habits (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER,
+  name TEXT NOT NULL,
+  icon TEXT,
+  target_per_period INTEGER NOT NULL DEFAULT 1 CHECK (target_per_period >= 1),
+  period TEXT NOT NULL DEFAULT 'day' CHECK (period IN ('day', 'week')),
+  schedule_days INTEGER[],
+  reminder_times TEXT[],
+  color TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id);
+CREATE INDEX IF NOT EXISTS idx_habits_user_active ON habits(user_id) WHERE is_active = TRUE;
+
+CREATE TABLE IF NOT EXISTS habit_logs (
+  id SERIAL PRIMARY KEY,
+  habit_id INTEGER NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  logged_on DATE NOT NULL,
+  count INTEGER NOT NULL DEFAULT 1 CHECK (count >= 1),
+  note TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (habit_id, logged_on)
+);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_date ON habit_logs(habit_id, logged_on DESC);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_user_date ON habit_logs(user_id, logged_on DESC);
 
 -- ============================================================
 -- Initial schema version (v15 = all incremental migrations merged)

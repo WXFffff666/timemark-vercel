@@ -44,6 +44,7 @@ interface PlanForm {
   intervalUsage: string;
   usageUnit: '' | UsageUnit;
   currentUsage: string;
+  nextDueUsage: string;
   lastDoneAt: string;
   nextDueAt: string;
   notes: string;
@@ -57,6 +58,7 @@ const emptyForm = (): PlanForm => ({
   intervalUsage: '',
   usageUnit: 'km',
   currentUsage: '',
+  nextDueUsage: '',
   lastDoneAt: '',
   nextDueAt: '',
   notes: '',
@@ -77,6 +79,7 @@ function toForm(plan: MaintenancePlan): PlanForm {
     intervalUsage: plan.interval_usage == null ? '' : String(plan.interval_usage),
     usageUnit,
     currentUsage: plan.current_usage == null ? '' : String(plan.current_usage),
+    nextDueUsage: plan.next_due_usage == null ? '' : String(plan.next_due_usage),
     lastDoneAt: plan.last_done_at ?? '',
     nextDueAt: plan.next_due_at ?? '',
     notes: plan.notes ?? '',
@@ -99,6 +102,7 @@ function buildPayload(form: PlanForm): CreateMaintenancePlanInput {
     intervalUsage: parseNumber(form.intervalUsage),
     usageUnit: form.usageUnit || null,
     currentUsage: parseNumber(form.currentUsage),
+    nextDueUsage: parseNumber(form.nextDueUsage),
     lastDoneAt: form.lastDoneAt || null,
     nextDueAt: form.nextDueAt || null,
     notes: form.notes.trim() || null,
@@ -607,7 +611,7 @@ export default function Maintenance() {
               )}
             </fieldset>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="text-sm font-medium mb-1 block" htmlFor="maintenance-usage-unit">用量单位</label>
                 <Select
@@ -633,7 +637,23 @@ export default function Maintenance() {
                   onChange={(e) => setForm((prev) => ({ ...prev, currentUsage: e.target.value }))}
                 />
               </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block" htmlFor="maintenance-next-due-usage">下次保养用量</label>
+                <Input
+                  id="maintenance-next-due-usage"
+                  aria-label="下次保养用量"
+                  type="number"
+                  min={0}
+                  value={form.nextDueUsage}
+                  onChange={(e) => setForm((prev) => ({ ...prev, nextDueUsage: e.target.value }))}
+                />
+              </div>
             </div>
+            {form.intervalUsage && !form.nextDueUsage && (
+              <p className="text-xs text-hint">
+                填写下次保养用量后，剩余用量进入间隔的 10% 时会写入收件箱提醒
+              </p>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

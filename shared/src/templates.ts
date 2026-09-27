@@ -452,6 +452,32 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
     variables: ['event_name', 'event_date'],
     description: '证件过期后的最终提醒（每本证件只发一次）',
   },
+  // 个人 CRM（D4，checkbox 62）：联系节奏提醒（每周期至多一条）
+  {
+    id: 'contact_cadence',
+    name: '关系维系提醒',
+    content: '🤝 该联系 {{event_name}} 了（已超过设定的联系间隔），记得问候一下。',
+    isPreset: true,
+    variables: ['event_name', 'event_date'],
+    description: '到期联系人提醒：每个联系周期至多一条，记录互动后重新计时',
+  },
+  // 习惯打卡（D6，checkbox 64/65）
+  {
+    id: 'habit_reminder',
+    name: '习惯打卡提醒',
+    content: '⏰ 习惯打卡：{{event_name}}，别忘了今天的目标。',
+    isPreset: true,
+    variables: ['event_name', 'event_date'],
+    description: '按习惯的提醒时刻与计划星期发送',
+  },
+  {
+    id: 'habit_streak_risk',
+    name: '习惯连胜告急',
+    content: '🔥 {{event_name}} 今天还没达标，连续记录即将中断。',
+    isPreset: true,
+    variables: ['event_name', 'event_date'],
+    description: '每晚（默认 20:00）目标未达成时的一条连胜保护提醒',
+  },
 ];
 
 /** 批量邮件预设 — 见 broadcast-templates.ts */
@@ -498,6 +524,11 @@ export const EVENT_TYPE_TEMPLATES: Record<string, string[]> = {
   document_contract: ['document_contract', 'generic', 'detailed'],
   document_other: ['document_other', 'generic', 'detailed'],
   document_expired: ['document_expired', 'generic', 'detailed'],
+  // 个人 CRM（D4）：联系节奏提醒
+  contact_cadence: ['contact_cadence', 'generic', 'detailed'],
+  // 习惯打卡（D6）：定时打卡 / 连胜告急
+  habit_reminder: ['habit_reminder', 'generic', 'detailed'],
+  habit_streak_risk: ['habit_streak_risk', 'generic', 'detailed'],
 };
 
 /**
@@ -582,6 +613,10 @@ export function getEventTypeLabel(type: string): string {
     document_contract: '合同',
     document_other: '证件',
     document_expired: '证件已过期',
+    // 个人 CRM / 习惯（wave 8）
+    contact_cadence: '关系维系',
+    habit_reminder: '习惯打卡',
+    habit_streak_risk: '习惯连胜',
   };
   return labels[type] || type;
 }

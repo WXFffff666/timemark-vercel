@@ -66,9 +66,10 @@ function itemRow(overrides: Record<string, unknown> = {}): Record<string, unknow
   };
 }
 
-function installDb(rows: Record<string, unknown>[]): void {
+function installDb(rows: Record<string, unknown>[], options: { accountTypes?: string[] } = {}): void {
   captured = [];
   claimedKeys = new Set();
+  const accountTypes = options.accountTypes ?? [];
   dbQuery.mockReset();
   dbQuery.mockImplementation(async (sql: string, params: unknown[] = []) => {
     captured.push({ sql, params });
@@ -86,6 +87,11 @@ function installDb(rows: Record<string, unknown>[]): void {
     if (s.startsWith('DELETE FROM reminder_send_claims')) {
       claimedKeys.delete(`${String(params[0])}#${String(params[1])}`);
       return { rows: [], rowCount: 1 };
+    }
+    if (s.includes('FROM notification_accounts')) {
+      // resolveReminderChannels 的兜底：用户已启用账户类型
+      const accountRows = accountTypes.map((type) => ({ type }));
+      return { rows: accountRows, rowCount: accountRows.length };
     }
     // reminder-channel-resolver: no conditional rules, no preset
     return { rows: [], rowCount: 0 };
@@ -198,5 +204,122 @@ describe('sendExpiryReminders', () => {
     expect(result.sent).toBe(0);
     expect(result.claimed).toBe(0);
     expect(sendNotifications).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 渠道失败的真实形状：sendNotifications() 不抛错，而是返回 {channel:{success:false,error}}。
+ * 迭代器必须读这个结果 map——只有至少一个渠道明确成功才算送达、保留 claim；全部失败时
+ * 释放 claim，让同一个 ±2 分钟窗口的下一次运行可以重试（send key 含日期不含分钟，不释放
+ * 就会在窗口内被去重，当天的提醒永久丢失）。
+ */
+describe('sendExpiryReminders - dispatch result map decides claim retention', () => {
+  it('(a) releases the claim when every channel fails, so the next run in the same window re-dispatches', async () => {
+    sendNotifications.mockResolvedValue({
+      email: { success: false, error: 'boom' },
+      feishu: { success: false, error: 'boom' },
+    });
+
+    const first = await sendExpiryReminders(NOW);
+    expect(first.sent).toBe(0);
+    expect(first.claimed).toBe(1);
+    // released: nothing delivered -> the claim must not survive
+    expect(claimedKeys.size).toBe(0);
+    const releases = captured.filter((q) => q.sql.includes('DELETE FROM reminder_send_claims'));
+    expect(releases).toHaveLength(1);
+    expect(releases[0].params[1]).toBe('expiry:2026-06-01#d7#t09:00');
+
+    // Same window (09:00:30 again, well inside ±2 min) -> re-dispatch, not dedup.
+    const second = await sendExpiryReminders(NOW);
+    expect(second).toMatchObject({ candidates: 1, sent: 0, claimed: 1, skipped: 1 });
+    expect(sendNotifications).toHaveBeenCalledTimes(2);
+  });
+
+  it('(b) keeps the claim when every channel succeeds, so the next run in the same window dedupes', async () => {
+    sendNotifications.mockResolvedValue({
+      email: { success: true },
+      feishu: { success: true },
+    });
+
+    const first = await sendExpiryReminders(NOW);
+    expect(first).toMatchObject({ sent: 1, claimed: 1, skipped: 0 });
+    expect(claimedKeys.size).toBe(1);
+
+    const second = await sendExpiryReminders(NOW);
+    expect(second).toMatchObject({ sent: 0, claimed: 0, skipped: 1 });
+    expect(sendNotifications).toHaveBeenCalledTimes(1);
+  });
+
+  it('(c) keeps the claim and counts as sent when at least one channel succeeds (mixed)', async () => {
+    sendNotifications.mockResolvedValue({
+      email: { success: true },
+      feishu: { success: false, error: 'boom' },
+    });
+
+    const first = await sendExpiryReminders(NOW);
+    expect(first).toMatchObject({ sent: 1, claimed: 1, skipped: 0 });
+    expect(claimedKeys.size).toBe(1);
+
+    const second = await sendExpiryReminders(NOW);
+    expect(second).toMatchObject({ sent: 0, claimed: 0, skipped: 1 });
+    expect(sendNotifications).toHaveBeenCalledTimes(1);
+  });
+
+  const malformedMaps: Array<[string, Record<string, unknown>]> = [
+    ['empty map', {}],
+    ['null channel entry', { email: null, feishu: { success: false, error: 'boom' } }],
+    ['missing requested keys', { some_other_channel: { success: true } }],
+  ];
+
+  it.each(malformedMaps)('treats a malformed result map (%s) as nothing delivered and releases the claim', async (_label, results) => {
+    sendNotifications.mockResolvedValue(results);
+
+    const first = await sendExpiryReminders(NOW);
+    expect(first.sent).toBe(0);
+    expect(first.claimed).toBe(1);
+    expect(claimedKeys.size).toBe(0);
+
+    // The released claim makes the item eligible again in the same window.
+    const second = await sendExpiryReminders(NOW);
+    expect(second.claimed).toBe(1);
+    expect(sendNotifications).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * UI 创建的到期项 payload 不带 reminderConfig（服务层落库 reminder_config = null）。
+ * 真实引擎必须在没有任何手动配置时通过用户「已启用渠道」完成派发，而不是因 channels
+ * 为空被静默跳过——这正是 wave7d-59 issue 2 的验收场景。
+ */
+describe('sendExpiryReminders - UI-created item without reminder_config', () => {
+  it('dispatches through the user active channels instead of being skipped for lack of channels', async () => {
+    installDb([itemRow({ id: 61, reminder_config: null })], { accountTypes: ['generic_webhook'] });
+
+    const result = await sendExpiryReminders(NOW);
+
+    expect(result).toMatchObject({ candidates: 1, sent: 1, claimed: 1, skipped: 0 });
+    expect(sendNotifications).toHaveBeenCalledTimes(1);
+    const [event, userId, channels] = sendNotifications.mock.calls[0] as [
+      Record<string, unknown>,
+      number,
+      string[],
+    ];
+    expect(userId).toBe(1);
+    expect(channels).toEqual(['generic_webhook']);
+    // 默认提前天数 [30,7,3,1,0] + 默认提醒时刻 09:00 仍然生效。
+    expect(event.type).toBe('expiry_subscription');
+    expect(event.date).toBe('2026-06-08');
+    const claimInsert = captured.find((q) => q.sql.includes('INSERT INTO reminder_send_claims'));
+    expect(claimInsert?.params[1]).toBe('expiry:2026-06-01#d7#t09:00');
+  });
+
+  it('still skips the item when the user has no active channel account at all (nothing can be delivered)', async () => {
+    installDb([itemRow({ id: 62, reminder_config: null })], { accountTypes: [] });
+
+    const result = await sendExpiryReminders(NOW);
+
+    expect(result).toMatchObject({ candidates: 1, sent: 0, claimed: 0, skipped: 1 });
+    expect(sendNotifications).not.toHaveBeenCalled();
+    expect(claimedKeys.size).toBe(0);
   });
 });

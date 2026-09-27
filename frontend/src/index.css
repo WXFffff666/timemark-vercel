@@ -207,6 +207,11 @@ html[data-theme-transition='to-light']::view-transition-new(root) {
   ::view-transition-new(*) {
     animation-duration: 0.01ms !important;
   }
+  /* 习惯打卡页（plan 66）：在「减少动态」偏好下，交互动效立即完成，不做过渡。 */
+  .alive-interactive {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
 
 /* Cloudflare Turnstile锛氶伩鍏嶈姣涚幓鐠?overflow 瑁佸壀锛屼繚璇?iframe 瀹屾暣鏄剧ず */

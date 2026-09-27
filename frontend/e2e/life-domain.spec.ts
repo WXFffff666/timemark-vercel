@@ -9,7 +9,8 @@ import { expect, test, type Page, type Route } from '@playwright/test';
  * Verification-only spec（本 todo 不添加任何产品代码）。真实 UI（Vite dev build）打在
  * 有状态 API mock 上；mock 忠实复刻 backend 路由契约与提醒引擎（runDatedReminderIterator /
  * sendMaintenanceUsageNudges 的语义：到期日、提前天数、±2 分钟窗口、reminder_send_claims 去重、
- * 过去日期不提醒、用量提醒写 source='inbound' 收件箱消息）。
+ * 过去日期不提醒、用量提醒写 source='inbound' 收件箱消息）。wave7d-59 修复后，
+ * 无 reminder_config 的条目在解析渠道时回退到用户已启用渠道（默认兜底），mock 同步模拟。
  *
  * - happy: 干净状态 → UI 创建 到期项(临期+已逾期) / 证件(护照+在职证明，护照带号码+PDF 附件) /
  *   库存(牛奶低库存+临期、纸巾无保质期) / 保养计划(日期+用量)；经 UI 与 API 断言
@@ -204,6 +205,8 @@ interface MockState {
   dispatches: DispatchedReminder[];
   requests: string[];
   nextInboxId: number;
+  /** 用户已启用的通知账户类型（resolveReminderChannels 的默认兜底渠道）。 */
+  defaultChannels: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -276,9 +279,12 @@ function runDatedMirror(state: MockState, source: DatedMirrorSource, now: Date):
       skipped += 1;
       continue;
     }
-    const channels = Array.isArray(config?.channels) ? config.channels : [];
+    const explicitChannels = Array.isArray(config?.channels) ? config.channels : [];
+    // resolveReminderChannels 的兜底：条目无显式渠道时走用户已启用渠道，
+    // 因此 UI 创建的「无 reminder_config」条目也会派发（wave7d-59 issue 2）。
+    const channels = explicitChannels.length > 0 ? explicitChannels : state.defaultChannels;
     if (channels.length === 0) {
-      // resolveReminderChannels 在无任何可解析渠道时返回 []，迭代器跳过
+      // 用户连一个启用渠道都没有（notification_accounts 全空）：无处可送，跳过
       skipped += 1;
       continue;
     }
@@ -444,6 +450,8 @@ async function setup(page: Page): Promise<MockState> {
     dispatches: [],
     requests: [],
     nextInboxId: 1,
+    // 用户在「通知渠道」页配置了一个启用的通用 Webhook 账户
+    defaultChannels: ['generic_webhook'],
   };
   let nextExpiryId = 1;
   let nextDocId = 1;
@@ -1044,24 +1052,19 @@ test('life-domain smoke: clean state -> expiry/document+attachment/inventory/mai
   await page.getByLabel('按用量间隔', { exact: true }).fill('10000');
   await page.getByLabel('用量单位', { exact: true }).selectOption('km');
   await page.getByLabel('当前用量', { exact: true }).fill('43000');
+  // next_due_usage 现在是 UI 字段（wave7d-59 issue 2：用量提醒条件必须可达）：
+  // next_due_usage - current_usage (500) <= interval_usage * 0.1 (1000)。
+  await page.getByLabel('下次保养用量', { exact: true }).fill('43500');
   await page.getByLabel('上次保养日期', { exact: true }).fill(today);
   await page.getByLabel('下次保养日期', { exact: true }).fill(maintenanceDue);
   await saveAndClose(page, '保存保养计划');
 
   const car = state.plans.find((row) => row.asset_name === '家用轿车');
   expect(car, 'maintenance plan created through the UI').toBeTruthy();
+  expect(car?.next_due_usage, 'next_due_usage is reachable through the UI form').toBe(43500);
   await expect(page.getByTestId(`maintenance-card-${car!.id}`)).toBeVisible();
   await expect(page.getByTestId(`maintenance-next-due-${car!.id}`)).toHaveText(maintenanceDue);
   await expect(page.locator('body')).not.toContainText('NaN');
-
-  // UI 无 next_due_usage 字段；真实 API 接受它（create/update schema），补一次 API 级 PATCH
-  // 让「用量临近」提醒条件可达：next_due_usage - current_usage (500) <= interval_usage * 0.1 (1000)。
-  const usagePatch = await apiFetch(page, `/api/maintenance/${car!.id}`, {
-    method: 'PATCH',
-    body: { nextDueUsage: 43500 },
-  });
-  expect(usagePatch.status).toBe(200);
-  expect((usagePatch.body.data as { next_due_usage: number }).next_due_usage).toBe(43500);
 
   await page.screenshot({ path: path.join(EVIDENCE_DIR, `task-59-maintenance${EVIDENCE_SUFFIX}.png`), fullPage: true });
 
@@ -1174,4 +1177,59 @@ test('reminder absence: a deleted expiry item never fires while its surviving tw
   });
 
   await page.screenshot({ path: path.join(EVIDENCE_DIR, `task-59-reminder-after-delete${EVIDENCE_SUFFIX}.png`), fullPage: true });
+});
+
+/**
+ * wave7d-59 issue 2：UI 创建路径不写 reminder_config。修复前 reminder-channel-resolver
+ * 在无条目渠道 / 无条件规则 / 无套餐时返回 []，迭代器把条目当作「无渠道」跳过 —— 用户在
+ * 全新安装上完全收不到提醒。修复后回退到用户已启用渠道（notification_accounts）。
+ *
+ * 本用例只走 UI + 同一 mock 引擎：创建 → 断言 reminder_config 确实为 null → 在窗口内
+ * 触发提醒检查 → 断言派发发生且写入 claim（不是被跳过）。
+ */
+test('no-config dispatch: a UI-created item with no reminder_config fires through the default active channels', async ({ page }) => {
+  test.setTimeout(120_000);
+  const state = await setup(page);
+  const today = shanghaiYmd(new Date());
+  const due = addDaysYmd(today, 7);
+  const checkNow = new Date(`${today}T09:00:30+08:00`);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+
+  await page.goto('/expiry');
+  await expect(page.getByRole('heading', { name: '到期中心' })).toBeVisible();
+
+  await openCreate(page, '新建到期项');
+  await page.getByLabel('名称', { exact: true }).fill('无配置订阅');
+  await page.getByLabel('类型', { exact: true }).selectOption('subscription');
+  await page.getByLabel('续费周期', { exact: true }).selectOption('monthly');
+  await page.getByLabel('下次到期日', { exact: true }).fill(due);
+  await saveAndClose(page, '保存到期项');
+
+  const item = state.expiry.find((row) => row.title === '无配置订阅');
+  expect(item, 'item created through the UI').toBeTruthy();
+  // 前置条件（修复的靶点）：UI 路径没有写 reminder_config。
+  expect(item!.reminder_config).toBeNull();
+  // 用户已经配置了至少一个启用渠道（否则提醒本来就无处可送）。
+  expect(state.defaultChannels.length).toBeGreaterThan(0);
+
+  const check = await runCheck(page, checkNow);
+  const expiryStats = check.dated.expiry;
+
+  expect(expiryStats.dispatched.map((entry) => entry.title)).toEqual(['无配置订阅']);
+  expect(expiryStats.sent).toBe(1);
+  expect(expiryStats.claimed).toBe(1);
+  // claim 写入 = 真的走完了「解析渠道 → 派发」路径，而不是被跳过。
+  expect([...state.claims]).toContain(`${item!.id}#expiry:${today}#d7#t09:00`);
+
+  writeEvidence('task-59-fix-no-config-dispatch.json', {
+    at: check.at,
+    reminderConfig: item!.reminder_config,
+    defaultChannels: state.defaultChannels,
+    expiry: expiryStats,
+    claims: [...state.claims].sort(),
+  });
+
+  await page.screenshot({ path: path.join(EVIDENCE_DIR, `task-59-fix-no-config${EVIDENCE_SUFFIX}.png`), fullPage: true });
 });

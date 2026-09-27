@@ -66,7 +66,8 @@ describe('migration v38 registration (todo 54)', () => {
 
     const inserts = versionInserts();
     expect(inserts.indexOf(37)).toBeGreaterThanOrEqual(0);
-    expect(inserts[inserts.length - 1]).toBe(38);
+    // Later lanes append beyond 38 (v39 CRM); tolerance mirrors the v35-v36 precedent.
+    expect(inserts[inserts.length - 1]).toBeGreaterThanOrEqual(38);
     expect(inserts.filter((v) => v === 38)).toHaveLength(1);
   });
 
@@ -75,7 +76,12 @@ describe('migration v38 registration (todo 54)', () => {
 
     expect(callsMatching('CREATE TABLE IF NOT EXISTS attachments')).toHaveLength(0);
     expect(callsMatching('CREATE TABLE IF NOT EXISTS documents')).toHaveLength(1);
-    expect(versionInserts()).toEqual([38]);
+    // This test owns v38 only: it must be recorded exactly once, and v37 must not be
+    // re-applied. Later migrations (v39+) may also run - tolerated per the v35-v36 precedent.
+    const inserts = versionInserts();
+    expect(inserts).toContain(38);
+    expect(inserts.filter((v) => v === 38)).toHaveLength(1);
+    expect(inserts).not.toContain(37);
   });
 
   it('stale_state: a recorded v38 row makes the runner skip v38 (no re-apply, no skip)', async () => {
@@ -124,7 +130,9 @@ describe('migration v38 registration (todo 54)', () => {
     expect(versions).toContain(38);
     expect(versions.filter((v) => v === 38)).toHaveLength(1);
     expect(versions[versions.indexOf(37) + 1]).toBe(38);
-    expect(versions[versions.length - 1]).toBe(38);
+    // Later lanes append beyond 38 (v39 CRM); tolerance mirrors the v35-v36 precedent.
+    expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(38);
+    expect(Math.max(...versions)).toBeGreaterThanOrEqual(38);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
