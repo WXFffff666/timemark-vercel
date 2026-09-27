@@ -1198,6 +1198,36 @@ ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_recipients JSONB DEFAUL
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_sections JSONB;
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_channel_account_id INTEGER;`,
     },
+    {
+      // v47 (checkbox 86): opt-in CalDAV write-back. Adds the per-user toggle
+      // (default OFF, so nothing changes until a user explicitly enables it), the
+      // target collection URL (kept separate from `caldav_url`, the read-only import
+      // URL, so the write target is never the calendar we import from), and the
+      // remote-object bookkeeping table that stores the stable UID / last ETag /
+      // content hash needed for create-with-If-None-Match, update-with-If-Match and
+      // delete-with-If-Match on later cron runs.
+      //
+      // Purely additive and idempotent: every statement is IF NOT EXISTS-guarded, no
+      // existing column is altered or dropped, nothing is backfilled, and the new
+      // table starts empty (no writes happen while the toggle is off).
+      version: 47,
+      name: 'caldav_writeback_v47',
+      sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS caldav_writeback_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS caldav_writeback_url TEXT;
+CREATE TABLE IF NOT EXISTS caldav_writeback_objects (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('event', 'expiry_item')),
+  entity_id INTEGER NOT NULL,
+  uid TEXT NOT NULL,
+  collection_url TEXT NOT NULL,
+  etag TEXT,
+  content_hash TEXT,
+  last_pushed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (user_id, entity_type, entity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_caldav_writeback_objects_user ON caldav_writeback_objects(user_id);`,
+    },
   ];
 
   for (const migration of migrations) {

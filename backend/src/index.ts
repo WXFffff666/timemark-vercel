@@ -62,6 +62,7 @@ import medicationsRoutes from './routes/medications.js';
 import dosesRoutes from './routes/doses.js';
 import goalsRoutes from './routes/goals.js';
 import digestRoutes from './routes/digest.js';
+import ogRoutes from './routes/og.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -151,6 +152,12 @@ app.route('/api/medications', medicationsRoutes);
 app.route('/api/doses', dosesRoutes);
 app.route('/api/goals', goalsRoutes);
 app.route('/api/digest', digestRoutes);
+app.route('/api/og', ogRoutes);
+// todo 88: also expose the canonical `/share/:token` server-rendered meta document at the app
+// root so it resolves locally and in tests. On Vercel this path is owned by the SPA rewrite in
+// vercel.json (`/((?!api/|.*\\..*).*)` -> /index.html), so the OG image (`/api/og/image/:token`)
+// is the production-reachable dynamic asset — the tags themselves are client-injected there.
+app.route('/', ogRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {

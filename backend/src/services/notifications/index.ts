@@ -42,6 +42,13 @@ import { sendZulipNotification } from './zulip.service.js';
 import { sendRocketChatNotification } from './rocketchat.service.js';
 import { sendFcmNotification } from './fcm.service.js';
 import { sendTwilioWhatsAppNotification } from './twilio-whatsapp.service.js';
+// Browser Web Push (checkbox 84): VAPID channel backed by push_subscriptions rows.
+import {
+  buildWebPushPayload,
+  deliverWebPush,
+  getVapidConfig,
+  type StoredPushSubscription,
+} from './webpush.service.js';
 import { filterSupportedChannels } from './supported-channels.js';
 import { resolveProfileRoutedAccountIds } from '../reminder-channel-resolver.service.js';
 
@@ -325,6 +332,8 @@ export const DISPATCHABLE_CHANNELS = new Set<string>([
   'zulip',
   'fcm',
   'twilio_whatsapp',
+  // Browser Web Push (checkbox 84) — VAPID, per-user subscriptions
+  'web_push',
   // Legacy aliases（旧事件里可能仍存有这些渠道 ID）
   'wechat',
   'qq',
@@ -380,6 +389,8 @@ export const FALLBACK_DISPATCHABLE_CHANNELS = new Set<string>([
   'zulip',
   'fcm',
   'twilio_whatsapp',
+  // Browser Web Push (checkbox 84) — VAPID, per-user subscriptions
+  'web_push',
   // Legacy aliases（旧事件里可能仍存有这些渠道 ID）
   'wechat',
   'qq',
@@ -654,6 +665,23 @@ export async function sendNotifications(
     return skippedResults;
   }
 
+  // checkbox 84: browser Web Push subscriptions live in `push_subscriptions`
+  // (per user), not in notification_accounts. Load them only when the channel is
+  // requested AND VAPID is configured; a missing VAPID key must skip the channel
+  // (no_configuration) instead of throwing out of the dispatcher.
+  let pushSubscriptions: StoredPushSubscription[] = [];
+  if (channels.includes('web_push') && getVapidConfig()) {
+    try {
+      const pushRows = await query(
+        'SELECT endpoint, keys_p256dh, keys_auth FROM push_subscriptions WHERE user_id = $1',
+        [userId],
+      );
+      pushSubscriptions = pushRows.rows as StoredPushSubscription[];
+    } catch (e) {
+      log.warn({ event: 'webpush.subscriptions_load_failed', err: e }, 'Failed to load push subscriptions');
+    }
+  }
+
   const channelWebhooks = config?.channel_webhooks || {};
   
   // 获取关系映射
@@ -825,6 +853,10 @@ export async function sendNotifications(
               globalConfig.emails = config.reminder_emails;
             }
           }
+          break;
+        case 'web_push':
+          // checkbox 84: per-user browser subscriptions, resolved above (not account-backed).
+          if (pushSubscriptions.length > 0) globalConfig.subscriptions = pushSubscriptions;
           break;
         default:
           if (genericWebhookChannels.has(ch) && channelWebhooks[ch]) {
@@ -1053,6 +1085,15 @@ export async function sendNotifications(
           await retryWithBackoff(() => sendTwilioWhatsAppNotification(
             mappedEvent, chConfig.token, chConfig.secret, chConfig.webhook, chConfig.chat_id,
           ));
+        // Browser Web Push (checkbox 84): VAPID, per-user subscriptions.
+        else if (ch === 'web_push' && chConfig.subscriptions) {
+          const delivery = await deliverWebPush(chConfig.subscriptions, buildWebPushPayload(mappedEvent), userId);
+          // 404/410 endpoints were already deleted inside deliverWebPush and are NOT failures —
+          // only transient errors throw, so the retry queue never loops on a dead subscription.
+          if (delivery.failed.length > 0) {
+            throw new Error(`Web Push 发送失败：${delivery.failed[0]?.error ?? 'unknown error'}`);
+          }
+        }
         else {
           throw new Error(`渠道 ${ch} 配置不完整，无法发送`);
         }

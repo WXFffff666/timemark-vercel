@@ -119,7 +119,54 @@ Cron 扫描使用 PostgreSQL 表 `event_reminder_cache`（7 天窗口），减�
 
 ---
 
-## 7. 未实现（刻意不做）
+## 7. CalDAV 回写（可选，默认关闭）
+
+把 TimeMark 的提醒 **写回你自己的 CalDAV 日历**（Radicale / Nextcloud / iCloud / 群晖等）。需要先在
+**设置 → 集成 → CalDAV 订阅** 配置只读地址与用户名/密码（Basic Auth 凭据会被复用）。
+
+**开启方式**（迁移 v47 新增，默认 `FALSE`）：
+
+```
+GET  /api/calendar/caldav-writeback            # 读取当前状态
+POST /api/calendar/caldav-writeback            # { "enabled": true, "url": "https://dav.example.com/calendars/user/timemark/" }
+```
+
+| 字段 | 说明 |
+|------|------|
+| `enabled` | 每用户开关，**默认关闭**；关闭时不产生任何 HTTP 请求（cron 仅一次廉价 SELECT） |
+| `url` | 目标日历**集合** URL（须为公网地址，经 SSRF 校验）。与只读导入地址分开配置 |
+
+**同步内容与契约**
+
+- 每个实体一个远端对象：`PUT {url}/{uid}.ics`，`uid` 由实体稳定派生
+  （`timemark-event-<id>@timemark.app` / `timemark-expiry-<id>@timemark.app`），重复运行**只更新不重复创建**。
+- 创建：`If-None-Match: *`；更新/删除：`If-Match: <上次返回的 ETag>`。
+- 内容未变化（SHA-256 内容哈希一致）时**跳过**，不产生 PUT。
+- 收到 `412 Precondition Failed` 时先 `GET` 重新取 ETag 并**重试一次**；仍失败则记录可操作的错误，
+  **本地状态（映射表 ETag/哈希）保持不变**，下次 cron 自动重试。远端 404 视为对象已消失（重建或视为已删除）。
+- 推送实体：提醒开启的事件 + 活跃的到期项（`expiry_items.is_active = TRUE`），VALARM 按 `daysBeforeList` 生成。
+
+**循环守卫（必读）**
+
+1. **实体级**：`reminder_config.importSource` 非空的实体（外部 ICS / Google / CalDAV 只读导入，以及本功能
+   在只读同步时写入的 `caldav` 标记）**永不回写、也永不被远端删除**。
+2. **用户级**：回写 URL 与任一只读导入 URL（`caldav_url` 或 `external_calendar_urls`）相同时，整个用户跳过。
+   推荐把回写目标与导入日历配置为**不同的集合**。
+
+**免费额度纪律**
+
+无独立定时任务：回写挂在既有 `/api/cron/caldav-sync` 调用上；关闭时零请求；每次调用每用户最多
+100 次写操作（`CALDAV_WRITE_BACK_MAX_OPERATIONS_PER_USER`），实体表每张最多读取 200 行
+（`CALDAV_WRITE_BACK_MAX_ENTITY_ROWS`）。
+
+**已知限制**
+
+- 不做 CalDAV discovery / PROPFIND：必须直接给出集合 URL。
+- 切换回写 URL 后，旧集合中的历史对象不会被自动清理（映射会在新集合重新创建；远端重复对象需手动删除）。
+
+---
+
+## 8. 未实现（刻意不做）
 
 | 功能 | 说明 |
 |------|------|

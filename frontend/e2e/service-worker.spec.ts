@@ -4,17 +4,22 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Todo 37: the service worker must be version-aware and must never be able to
- * serve a stale HTML shell / stale asset bundle.
+ * Todo 37 + checkbox 85: the service worker must be version-aware and must
+ * never be able to serve a stale HTML shell / stale asset bundle.
  *
  * Happy path: the app registers `/sw.js`, the worker claims the page, the
  * running worker's `CACHE_VERSION` matches the served script, and a reload
  * still renders the current bundle.
  *
- * Failure scenario: a stale `/index.html` is seeded into both a legacy cache
- * (`v1`) and a cache named after the *current* `CACHE_VERSION` *before* the new
- * worker activates. After activation every cache must be gone and the reload
- * must show the real app — never `<html>stale</html>`.
+ * Failure scenario: a stale `/index.html` is seeded into a legacy cache
+ * (`v1`) and into a cache named after the current `CACHE_VERSION` *before* the
+ * new worker activates. After activation those caches must be gone and the
+ * reload must show the real app — never `<html>stale</html>`. The versioned
+ * static cache introduced by checkbox 85 may only keep the offline fallback.
+ *
+ * Stale-version scenario (checkbox 85): an older versioned cache
+ * (`timemark-static-v3`) is deleted on activation; only the current
+ * `STATIC_CACHE` survives and it already holds `/offline.html`.
  */
 
 const USER = { id: 1, username: 'e2e-sw-user', role: 'admin', mustChangePassword: false };
@@ -55,10 +60,14 @@ function readSwSource(): string {
   throw new Error(`sw.js not found; tried: ${candidates.join(', ')}`);
 }
 
-function extractCacheVersion(source: string): string {
-  const match = source.match(/CACHE_VERSION\s*=\s*['"]([^'"]+)['"]/);
-  if (!match) throw new Error('CACHE_VERSION constant not found in sw.js');
+function extractConstant(source: string, name: string): string {
+  const match = source.match(new RegExp(`${name}\\s*=\\s*['"]([^'"]+)['"]`));
+  if (!match) throw new Error(`${name} constant not found in sw.js`);
   return match[1];
+}
+
+function extractCacheVersion(source: string): string {
+  return extractConstant(source, 'CACHE_VERSION');
 }
 
 async function waitForController(page: Page): Promise<void> {
@@ -113,13 +122,16 @@ test('service worker takes control, is version-aware and serves the current bund
 
 test('seeded stale HTML caches are wiped on activation and can never be served', async ({ page }) => {
   const expectedVersion = extractCacheVersion(readSwSource());
+  const staticCache = extractConstant(readSwSource(), 'STATIC_CACHE');
   await mockApi(page);
 
   // Static page that does not boot the app, so nothing registers the worker yet.
   await page.goto('/offline.html');
 
   const seeded = await page.evaluate(async (currentCache) => {
-    const names = ['v1', currentCache];
+    // Legacy cache ('v1') + a cache that misleadingly uses the current
+    // CACHE_VERSION name. Neither is the live STATIC_CACHE.
+    const names = ['v1', currentCache, `${currentCache}-evil`];
     for (const name of names) {
       const cache = await caches.open(name);
       await cache.put(
@@ -129,17 +141,55 @@ test('seeded stale HTML caches are wiped on activation and can never be served',
     }
     return await caches.keys();
   }, expectedVersion);
-  expect(seeded.sort()).toEqual(['v1', expectedVersion].sort());
+  expect(seeded.sort()).toEqual(['v1', expectedVersion, `${expectedVersion}-evil`].sort());
 
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: '我的倒计时' })).toBeVisible();
   await waitForController(page);
 
-  // activate() deletes every cache; this worker never reads or writes one.
-  await expect.poll(() => page.evaluate(() => caches.keys()), { timeout: 15_000 }).toEqual([]);
+  // activate() deletes every cache that is not the live versioned static cache.
+  await expect
+    .poll(() => page.evaluate(() => caches.keys()), { timeout: 15_000 })
+    .toEqual([staticCache]);
+
+  // No HTML may be cached anywhere — the seeded stale shell is never served.
+  const cachedHtml = await page.evaluate(() => caches.match('/index.html').then((hit) => !!hit));
+  expect(cachedHtml).toBe(false);
 
   await page.reload();
   await expect(page.getByRole('heading', { name: '我的倒计时' })).toBeVisible();
   await expect(page.locator('body')).not.toContainText('stale');
+  expect(await runningWorkerVersion(page)).toBe(expectedVersion);
+});
+
+test('an older versioned cache is deleted on activation; the current static cache holds offline.html', async ({ page }) => {
+  const expectedVersion = extractCacheVersion(readSwSource());
+  const staticCache = extractConstant(readSwSource(), 'STATIC_CACHE');
+  await mockApi(page);
+
+  await page.goto('/offline.html');
+  const seeded = await page.evaluate(async () => {
+    const cache = await caches.open('timemark-static-v3');
+    await cache.put('/index.html', new Response('<html><body>old version</body></html>'));
+    await cache.put('/offline.html', new Response('<html><body>old offline</body></html>'));
+    return await caches.keys();
+  });
+  expect(seeded).toContain('timemark-static-v3');
+
+  await page.goto('/dashboard');
+  await expect(page.getByRole('heading', { name: '我的倒计时' })).toBeVisible();
+  await waitForController(page);
+
+  await expect
+    .poll(() => page.evaluate(() => caches.keys()), { timeout: 15_000 })
+    .toEqual([staticCache]);
+
+  // The live cache contains the real offline fallback, not the stale one.
+  const offlineText = await page.evaluate(async (cacheName) => {
+    const cache = await caches.open(cacheName);
+    const hit = await cache.match('/offline.html');
+    return hit ? await hit.text() : null;
+  }, staticCache);
+  expect(offlineText).toContain('当前处于离线状态');
   expect(await runningWorkerVersion(page)).toBe(expectedVersion);
 });

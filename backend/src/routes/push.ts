@@ -1,204 +1,187 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
+import { z } from 'zod';
+import { formatZodError } from '@timemark/shared';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
-import webPush from 'web-push';
+import {
+  buildWebPushPayload,
+  deliverWebPush,
+  getVapidConfig,
+  listUserPushSubscriptions,
+} from '../services/notifications/webpush.service.js';
 
 const push = new Hono<{ Variables: { user: User } }>();
 
 push.use('*', authMiddleware);
 
-// 生成 VAPID 密钥（首次启动时生成并保存）
-let vapidKeys: { publicKey: string; privateKey: string } | null = null;
+/**
+ * Checkbox 84: browser Web Push (VAPID, not FCM).
+ *
+ * Env naming: PUSH_VAPID_PUBLIC_KEY / PUSH_VAPID_PRIVATE_KEY are canonical;
+ * VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY are honored as a legacy fallback.
+ */
 
-function getVapidKeys(): { publicKey: string; privateKey: string } {
-  if (!vapidKeys) {
-    // 从环境变量或生成新密钥
-    const publicKey = process.env.VAPID_PUBLIC_KEY;
-    const privateKey = process.env.VAPID_PRIVATE_KEY;
-    
-    if (publicKey && privateKey) {
-      vapidKeys = { publicKey, privateKey };
-    } else {
-      // 生成新密钥
-      vapidKeys = webPush.generateVAPIDKeys();
-      console.warn('[Push] Generated ephemeral VAPID keys — set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY env vars to persist');
-    }
-    
-    // 设置 web-push 配置
-    webPush.setVapidDetails(
-      'mailto:admin@timemark.app',
-      vapidKeys.publicKey,
-      vapidKeys.privateKey
-    );
+/** Reject oversized/invalid endpoints early (10 KB endpoint strings never reach the DB). */
+const endpointSchema = z.url().max(2048);
+
+const subscribeSchema = z.object({
+  endpoint: endpointSchema,
+  keys: z
+    .object({
+      p256dh: z.string().min(1).max(512),
+      auth: z.string().min(1).max(512),
+    })
+    .optional(),
+});
+
+const unsubscribeSchema = z.object({
+  endpoint: endpointSchema,
+});
+
+async function readJson(c: Context): Promise<{ ok: true; value: unknown } | { ok: false }> {
+  try {
+    return { ok: true, value: await c.req.json() };
+  } catch {
+    return { ok: false };
   }
-  
-  return vapidKeys;
 }
 
 /**
- * 获取 VAPID 公钥
+ * VAPID public key for the browser.
  * GET /api/push/vapid-key
  */
 push.get('/vapid-key', (c) => {
-  const keys = getVapidKeys();
-  return c.json({ success: true, data: { publicKey: keys.publicKey } });
+  const config = getVapidConfig();
+  if (!config) {
+    return c.json(
+      { success: false, error: 'Web Push 未配置：请设置 PUSH_VAPID_PUBLIC_KEY / PUSH_VAPID_PRIVATE_KEY' },
+      501,
+    );
+  }
+  return c.json({ success: true, data: { publicKey: config.publicKey } });
 });
 
 /**
- * 订阅推送通知
+ * Save (upsert) a browser push subscription.
  * POST /api/push/subscribe
  */
 push.post('/subscribe', async (c) => {
   const user = c.get('user');
-  const subscription = await c.req.json();
-  
-  if (!subscription || !subscription.endpoint) {
-    return c.json({ success: false, error: 'Invalid subscription' }, 400);
+  const raw = await readJson(c);
+  if (!raw.ok) return c.json({ success: false, error: '请求体必须是 JSON' }, 400);
+
+  const parsed = subscribeSchema.safeParse(raw.value);
+  if (!parsed.success) {
+    return c.json({ success: false, error: formatZodError(parsed.error) }, 400);
   }
-  
+
+  const { endpoint, keys } = parsed.data;
   try {
-    // 保存订阅到数据库
     await query(
-       `INSERT INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth, created_at)
-        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING`,
-      [user.id, subscription.endpoint, subscription.keys?.p256dh || '', subscription.keys?.auth || '']
+      `INSERT INTO push_subscriptions (user_id, endpoint, keys_p256dh, keys_auth, created_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, endpoint)
+       DO UPDATE SET keys_p256dh = EXCLUDED.keys_p256dh, keys_auth = EXCLUDED.keys_auth`,
+      [user.id, endpoint, keys?.p256dh ?? '', keys?.auth ?? ''],
     );
-    
     return c.json({ success: true, message: 'Subscription saved' });
-  } catch (error: any) {
-    console.error('[Push] Failed to save subscription:', error);
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to save subscription';
+    return c.json({ success: false, error: message }, 500);
   }
 });
 
 /**
- * 取消订阅
- * POST /api/push/unsubscribe
+ * Remove a browser push subscription. Idempotent: a subscription that never
+ * existed still returns success (the client's local unsubscribe already ran).
+ *
+ * DELETE /api/push/unsubscribe (canonical) — POST kept as a legacy alias.
  */
-push.post('/unsubscribe', async (c) => {
+const unsubscribeHandler = async (c: Context<{ Variables: { user: User } }>) => {
   const user = c.get('user');
-  const subscription = await c.req.json();
-  
-  try {
-    await query(
-      'DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2',
-      [user.id, subscription.endpoint]
-    );
-    
-    return c.json({ success: true, message: 'Subscription removed' });
-  } catch (error: any) {
-    console.error('[Push] Failed to remove subscription:', error);
-    return c.json({ success: false, error: error.message }, 500);
+  const raw = await readJson(c);
+  if (!raw.ok) return c.json({ success: false, error: '请求体必须是 JSON' }, 400);
+
+  const parsed = unsubscribeSchema.safeParse(raw.value);
+  if (!parsed.success) {
+    return c.json({ success: false, error: formatZodError(parsed.error) }, 400);
   }
-});
+
+  try {
+    await query('DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2', [
+      user.id,
+      parsed.data.endpoint,
+    ]);
+    return c.json({ success: true, message: 'Subscription removed' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to remove subscription';
+    return c.json({ success: false, error: message }, 500);
+  }
+};
+
+push.delete('/unsubscribe', unsubscribeHandler);
+push.post('/unsubscribe', unsubscribeHandler);
 
 /**
- * 发送测试推送通知
+ * Send a test push to every stored subscription of the current user.
  * POST /api/push/test
+ *
+ * 410/404 endpoints are deleted by `deliverWebPush` and reported as `removed`;
+ * they are never retried.
  */
 push.post('/test', async (c) => {
   const user = c.get('user');
-  
+  const userId = Number(user.id);
+  if (!getVapidConfig()) {
+    return c.json(
+      { success: false, error: 'Web Push 未配置：请设置 PUSH_VAPID_PUBLIC_KEY / PUSH_VAPID_PRIVATE_KEY' },
+      501,
+    );
+  }
+
+  let subscriptions;
   try {
-    // 确保 VAPID 配置已初始化（webPush.setVapidDetails 首次调用时执行）
-    getVapidKeys();
-    
-    // 获取用户的订阅
-    const subscriptions = await query(
-      'SELECT * FROM push_subscriptions WHERE user_id = $1',
-      [user.id]
-    );
-    
-    if (subscriptions.rows.length === 0) {
-      return c.json({ success: false, error: 'No push subscriptions found' }, 400);
+    subscriptions = await listUserPushSubscriptions(userId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load subscriptions';
+    return c.json({ success: false, error: message }, 500);
+  }
+
+  if (subscriptions.length === 0) {
+    return c.json({ success: false, error: '没有已保存的推送订阅，请先开启浏览器推送' }, 400);
+  }
+
+  const payload = buildWebPushPayload({
+    id: 0,
+    name: 'TimeMark 测试通知',
+    type: 'other',
+    date: new Date().toISOString().slice(0, 10),
+    customMessage: '这是一条测试推送通知',
+  });
+
+  try {
+    const delivery = await deliverWebPush(subscriptions, payload, userId);
+    const data = {
+      sent: delivery.sent,
+      removed: delivery.removed.length,
+      failed: delivery.failed.length,
+    };
+    if (delivery.failed.length > 0 && delivery.sent === 0) {
+      return c.json(
+        { success: false, error: delivery.failed[0]?.error || '推送发送失败', data },
+        502,
+      );
     }
-    
-    const payload = JSON.stringify({
-      title: 'TimeMark 测试通知',
-      body: '这是一条测试推送通知',
-      icon: '/icon-192x192.png',
-      badge: '/badge-72x72.png',
-    });
-    
-    const results = await Promise.allSettled(
-      subscriptions.rows.map(async (sub: any) => {
-        const subscription = {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.keys_p256dh,
-            auth: sub.keys_auth,
-          },
-        };
-        
-        return webPush.sendNotification(subscription, payload);
-      })
-    );
-    
-    const successful = results.filter(r => r.status === 'fulfilled').length;
-    const failed = results.filter(r => r.status === 'rejected').length;
-    
     return c.json({
       success: true,
-      message: `Push sent: ${successful} successful, ${failed} failed`,
+      data,
+      message: `Push sent: ${data.sent} successful, ${data.removed} removed, ${data.failed} failed`,
     });
-  } catch (error: any) {
-    console.error('[Push] Failed to send test push:', error);
-    return c.json({ success: false, error: error.message }, 500);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to send test push';
+    return c.json({ success: false, error: message }, 500);
   }
 });
-
-/**
- * 发送推送通知到指定用户（内部使用）
- */
-export async function sendPushNotification(userId: number, title: string, body: string): Promise<void> {
-  try {
-    // 确保 VAPID 配置已初始化（webPush.setVapidDetails 首次调用时执行）
-    getVapidKeys();
-    
-    const subscriptions = await query(
-      'SELECT * FROM push_subscriptions WHERE user_id = $1',
-      [userId]
-    );
-    
-    if (subscriptions.rows.length === 0) {
-      return;
-    }
-    
-    const payload = JSON.stringify({
-      title,
-      body,
-      icon: '/icon-192x192.png',
-      badge: '/badge-72x72.png',
-    });
-    
-    await Promise.allSettled(
-      subscriptions.rows.map(async (sub: any) => {
-        const subscription = {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.keys_p256dh,
-            auth: sub.keys_auth,
-          },
-        };
-        
-        try {
-          await webPush.sendNotification(subscription, payload);
-        } catch (error: any) {
-          // 如果订阅失效，删除它
-          if (error.statusCode === 410) {
-            await query(
-              'DELETE FROM push_subscriptions WHERE endpoint = $1',
-              [sub.endpoint]
-            );
-          }
-          throw error;
-        }
-      })
-    );
-  } catch (error) {
-    console.error('[Push] Failed to send push notification:', error);
-  }
-}
 
 export default push;

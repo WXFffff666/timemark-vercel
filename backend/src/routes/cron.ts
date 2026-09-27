@@ -4,7 +4,7 @@ import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions } fro
 import { processNotificationRetries } from '../services/notification-retry.service.js';
 import { purgeExpiredLogs } from '../services/retention.service.js';
 import { syncAllExternalCalendars } from '../services/calendar-sync.service.js';
-import { syncAllCalDavSubscriptions } from '../services/caldav-sync.service.js';
+import { syncAllCalDavSubscriptions, syncCalDavWriteBack, type CalDavWriteBackStats } from '../services/caldav-sync.service.js';
 import { syncAllGoogleCalendars } from '../services/google-calendar-sync.service.js';
 import { sendLunarPhaseReminders } from '../services/lunar-reminders.service.js';
 import { aggregateDailyStats } from '../services/stats-daily.service.js';
@@ -441,13 +441,27 @@ cronRoutes.get('/channel-health', async (c) => {
   }
 });
 
-// C1 CalDAV 只读订阅
+// C1 CalDAV 只读订阅 + 可选回写（checkbox 86，默认关闭）
 cronRoutes.get('/caldav-sync', async (c) => {
   const startedAt = Date.now();
   try {
     const stats = await syncAllCalDavSubscriptions();
-    await logCronRun('caldav-sync', 'success', startedAt, `synced ${stats.synced}`);
-    return c.json({ success: true, job: 'caldav-sync', ...stats });
+    // Opt-in write-back rides along with the existing invocation: no extra cron
+    // job, no standing compute, and a single cheap SELECT when no user enabled it.
+    let writeBack: CalDavWriteBackStats | { error: string };
+    try {
+      writeBack = await syncCalDavWriteBack();
+    } catch (writeBackError: unknown) {
+      const message = writeBackError instanceof Error ? writeBackError.message : String(writeBackError);
+      log.warn({ err: writeBackError }, 'CalDAV write-back failed; read-only sync result is still reported');
+      writeBack = { error: message };
+    }
+    const writeBackSummary =
+      'error' in writeBack
+        ? `writeback=error`
+        : `writeback created=${writeBack.created} updated=${writeBack.updated} deleted=${writeBack.deleted} skipped=${writeBack.skipped} failed=${writeBack.failed}`;
+    await logCronRun('caldav-sync', 'success', startedAt, `synced ${stats.synced} ${writeBackSummary}`);
+    return c.json({ success: true, job: 'caldav-sync', ...stats, writeBack });
   } catch (error: any) {
     await logCronRun('caldav-sync', 'failed', startedAt, undefined, error.message);
     return c.json({ success: false, error: error.message }, 500);

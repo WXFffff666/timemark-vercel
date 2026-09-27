@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { getEventsByUserId } from '../services/event.service.js';
+import { query } from '../db/index.js';
+import { isSafePublicUrl } from '../utils/url-safety.js';
 import type { User } from '@timemark/shared';
 
 const calendar = new Hono<{ Variables: { user: User } }>();
@@ -77,6 +79,82 @@ calendar.get('/apple', async (c) => {
       directUrl: icsUrl,
     },
   });
+});
+
+/**
+ * CalDAV 回写开关（checkbox 86）
+ * GET  /api/calendar/caldav-writeback  读取当前状态（默认关闭）
+ * POST /api/calendar/caldav-writeback  更新开关 / 目标集合 URL
+ *
+ * 回写只写入用户显式配置的 CalDAV 集合，复用既有的 Basic Auth 凭据；
+ * 实体来源为外部同步（importSource）或目标集合与导入 URL 相同时会被
+ * caldav-sync 的循环守卫跳过。
+ */
+calendar.get('/caldav-writeback', async (c) => {
+  const user = c.get('user');
+  const res = await query(
+    `SELECT caldav_writeback_enabled, caldav_writeback_url, caldav_username, caldav_password_encrypted
+       FROM user_configs WHERE user_id = $1`,
+    [Number(user.id)],
+  );
+  const row = (res.rows[0] as Record<string, unknown> | undefined) ?? {};
+  return c.json({
+    success: true,
+    data: {
+      enabled: row.caldav_writeback_enabled === true,
+      url: typeof row.caldav_writeback_url === 'string' ? row.caldav_writeback_url : null,
+      hasCredentials: Boolean(row.caldav_username) || Boolean(row.caldav_password_encrypted),
+    },
+  });
+});
+
+calendar.post('/caldav-writeback', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json<Record<string, unknown>>().catch((): Record<string, unknown> => ({}));
+  const userId = Number(user.id);
+
+  const current = await query(
+    `SELECT caldav_writeback_enabled, caldav_writeback_url FROM user_configs WHERE user_id = $1`,
+    [userId],
+  );
+  const currentRow = (current.rows[0] as Record<string, unknown> | undefined) ?? {};
+
+  let enabled = currentRow.caldav_writeback_enabled === true;
+  if ('enabled' in body) {
+    if (typeof body.enabled !== 'boolean') {
+      return c.json({ success: false, error: 'enabled 必须是布尔值' }, 400);
+    }
+    enabled = body.enabled;
+  }
+
+  let url = typeof currentRow.caldav_writeback_url === 'string' ? currentRow.caldav_writeback_url : '';
+  if ('url' in body) {
+    if (body.url !== null && typeof body.url !== 'string') {
+      return c.json({ success: false, error: 'url 必须是字符串' }, 400);
+    }
+    url = typeof body.url === 'string' ? body.url.trim() : '';
+    if (url) {
+      const safe = await isSafePublicUrl(url);
+      if (!safe.safe) {
+        return c.json({ success: false, error: safe.reason || 'URL 不安全' }, 400);
+      }
+    }
+  }
+
+  if (enabled && !url) {
+    return c.json({ success: false, error: '启用回写前请先配置 CalDAV 日历集合 URL' }, 400);
+  }
+
+  await query(
+    `INSERT INTO user_configs (user_id, caldav_writeback_enabled, caldav_writeback_url)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (user_id) DO UPDATE SET
+       caldav_writeback_enabled = EXCLUDED.caldav_writeback_enabled,
+       caldav_writeback_url = EXCLUDED.caldav_writeback_url`,
+    [userId, enabled, url || null],
+  );
+
+  return c.json({ success: true, data: { enabled, url: url || null } });
 });
 
 /**

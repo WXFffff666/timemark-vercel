@@ -4,18 +4,28 @@
     <meta charset="UTF-8" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#6366f1" />
+    <meta name="theme-color" content="#2463eb" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="robots" content="noindex, nofollow, noarchive" />
     <meta name="googlebot" content="noindex, nofollow" />
     <meta name="bingbot" content="noindex, nofollow" />
+    <!-- Generic crawler-safe OG/Twitter fallback. The SPA shell is what social crawlers receive for
+         /share/:token (vercel.json rewrites non-API paths to index.html); the per-event values are
+         injected client-side and the dynamic image is served at /api/og/image/:token. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TimeMark" />
+    <meta property="og:title" content="TimeMark" />
+    <meta property="og:description" content="智能事件提醒：生日、纪念日与重要日子。" />
+    <meta name="twitter:card" content="summary" />
     <title>TimeMark</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- PWA install affordance (checkbox 85): listens for beforeinstallprompt and shows a banner -->
+    <script defer src="/install-prompt.js"></script>
   </body>
 </html>
