@@ -13,6 +13,7 @@ import { getLang, setLang } from '@/i18n';
 import { TIMEZONE_OPTIONS } from '@/lib/timezone-utils';
 import { useTimezone } from '@/components/RealtimeClock';
 import { ProfileSettings } from '@/components/ProfileSettings';
+import { DigestSettings } from '@/components/digest/DigestSettings';
 
 function parseAlertChannels(raw: unknown): string[] {
   if (!raw) return [];
@@ -1110,6 +1111,9 @@ export default function Settings() {
               </div>
             </div>
           </section>
+
+          {/* 周期摘要（checkbox 80） */}
+          <DigestSettings />
 
           {/* 安全与数据 */}
           <section>

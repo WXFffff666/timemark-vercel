@@ -142,9 +142,10 @@ describe('migration v42 registration (todo 71)', () => {
     expect(versions.indexOf(43)).toBe(versions.indexOf(42) + 1);
     expect(versions.filter((v) => v === 44)).toHaveLength(1);
     expect(versions.indexOf(44)).toBe(versions.indexOf(43) + 1);
-    // v45 (todo 78, holiday/jieqi reminder settings) is now the tail.
+    // v45 (todo 78) and v46 (checkbox 80, digest preferences) continue the chain.
     expect(versions.indexOf(45)).toBe(versions.indexOf(44) + 1);
-    expect(versions[versions.length - 1]).toBe(45);
+    expect(versions.indexOf(46)).toBe(versions.indexOf(45) + 1);
+    expect(versions[versions.length - 1]).toBe(46);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

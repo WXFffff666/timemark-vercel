@@ -11,6 +11,12 @@ import { createInboxMessage } from './inbox.service.js';
 import { getNotificationAccounts, getUserConfig } from './config.service.js';
 import { resolveEmailAccount, sendRawEmail } from './email-send.service.js';
 import { resolveRecipientEmails } from './notifications/index.js';
+import {
+  DIGEST_SECTION_KEYS,
+  normalizeDigestSections,
+  sanitizeDigestRecipients,
+  type DigestSectionKey,
+} from './digest-sections.js';
 
 /**
  * 周期性图文摘要（checkbox 79）。
@@ -74,6 +80,8 @@ export interface DigestData {
   medications: DigestMedicationSummary;
   maintenance: DigestMaintenanceRow[];
   goals: DigestGoalRow[];
+  /** 生效区块；缺省 = 全部（渲染时按此跳过被排除的区块）。 */
+  sections?: DigestSectionKey[];
   /** 所有区块都为空 → 渲染「本期无记录」。 */
   isEmpty: boolean;
 }
@@ -299,6 +307,77 @@ export async function buildDigestData(
 }
 
 /* ------------------------------------------------------------------ */
+/* 偏好与区块过滤（checkbox 80）                                        */
+/* ------------------------------------------------------------------ */
+
+export interface DigestPreferences {
+  enabled: boolean;
+  period: DigestPeriod;
+  /** 收件人覆盖；空数组 = 回退到 resolveRecipientEmails。 */
+  recipients: string[];
+  /** null = 全部区块。 */
+  sections: DigestSectionKey[] | null;
+  /** null = 自动选择第一个可用邮件渠道。 */
+  channelAccountId: number | null;
+}
+
+/**
+ * 从既有 `getUserConfig()` 结果读取摘要偏好。
+ *
+ * 刻意复用已经取到的 `userConfig`（而不是再引一个 config.service 的新函数）：
+ * digest-send 的既有测试只 mock 了 `getUserConfig`/`getNotificationAccounts`，
+ * 这样不会破坏它们的 mock 契约；缺字段时回退到「启用 + 全部区块 + 无覆盖」，
+ * 与 v79 的行为一致。
+ */
+function readDigestPreferences(userConfig: Record<string, unknown> | null | undefined): DigestPreferences {
+  return {
+    enabled: userConfig?.digest_enabled !== false,
+    period: userConfig?.digest_period === 'yearly' ? 'yearly' : 'monthly',
+    recipients: sanitizeDigestRecipients(userConfig?.digest_recipients),
+    sections: normalizeDigestSections(userConfig?.digest_sections),
+    channelAccountId:
+      typeof userConfig?.digest_channel_account_id === 'number' ? userConfig.digest_channel_account_id : null,
+  };
+}
+
+/**
+ * 按用户选择裁剪区块。`null` / 空数组 → 原样返回全部区块，
+ * 因此「一个区块都不选」永远不会渲染出一份空摘要。
+ * 被排除的区块清空为「无记录」，并重算 `isEmpty`。
+ */
+export function selectDigestSections(
+  data: DigestData,
+  sections: readonly DigestSectionKey[] | null | undefined,
+): DigestData {
+  if (!sections || sections.length === 0) return data;
+  const want = new Set<DigestSectionKey>(sections);
+
+  const upcoming = want.has('upcoming') ? data.upcoming : [];
+  const overdue = want.has('overdue') ? data.overdue : [];
+  const spend: DigestSpend = want.has('spend')
+    ? data.spend
+    : { ...data.spend, byCurrency: {}, onceByCurrency: {}, onceCount: 0, byKind: [] };
+  const habits = want.has('habits') ? data.habits : [];
+  const medications: DigestMedicationSummary = want.has('medications')
+    ? data.medications
+    : { taken: 0, skipped: 0, missed: 0, total: 0, percentage: 0, perMedication: [] };
+  const maintenance = want.has('maintenance') ? data.maintenance : [];
+  const goals = want.has('goals') ? data.goals : [];
+
+  const isEmpty =
+    upcoming.length === 0 &&
+    overdue.length === 0 &&
+    Object.keys(spend.byCurrency).length === 0 &&
+    spend.onceCount === 0 &&
+    habits.every((habit) => habit.logged === 0) &&
+    medications.total === 0 &&
+    maintenance.length === 0 &&
+    goals.length === 0;
+
+  return { ...data, upcoming, overdue, spend, habits, medications, maintenance, goals, sections: [...want], isEmpty };
+}
+
+/* ------------------------------------------------------------------ */
 /* HTML                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -327,6 +406,11 @@ table{width:100%;border-collapse:collapse}th,td{padding:7px 9px;border-bottom:1p
 
 function htmlSection(title: string, body: string): string {
   return `<section class="card"><h2>${escapeHtml(title)}</h2>${body}</section>`;
+}
+
+/** 区块是否渲染：未指定 sections = 全部；指定则只渲染命中的。 */
+function sectionIncluded(data: DigestData, key: DigestSectionKey): boolean {
+  return !data.sections || data.sections.includes(key);
 }
 
 function htmlRows(headers: string[], rows: Array<Array<string | number>>, emptyLabel = '无记录'): string {
@@ -358,14 +442,13 @@ export function renderDigestHtml(data: DigestData): string {
 <p class="meta">统计区间：<strong>${escapeHtml(data.from)}</strong> 至 <strong>${escapeHtml(data.to)}</strong></p>
 <p class="meta">生成日期：${escapeHtml(data.today)} · 本摘要由 TimeMark 确定性生成，不含 AI 叙述。</p></section>
 ${banner}
-${htmlSection('未来 30 天', htmlRows(['事项', '类型', '日期'], data.upcoming.map((e) => [e.name, e.type, e.date])))}
-${htmlSection('逾期事项', htmlRows(['类型', '事项', '到期', '逾期天数'], data.overdue.map((o) => [o.kind, o.title, o.due, o.daysOverdue])))}
-${htmlSection('订阅与到期支出', htmlRows(['项目', '金额'], spendRows))}
-${htmlSection('习惯完成率', htmlRows(['习惯', '已完成', '目标', '完成率'], data.habits.map((h) => [h.name, h.logged, h.target, `${h.rate}%`])))}
-${htmlSection('用药依从性', htmlRows(['药品', '已服', '跳过', '漏服', '合计', '依从率'], data.medications.perMedication.map((m) => [m.name, m.taken, m.skipped, m.missed, m.total, `${m.percentage}%`])))}
-${htmlSection('保养到期', htmlRows(['资产', '到期', '状态'], data.maintenance.map((m) => [m.assetName, m.due, m.overdue ? '已逾期' : '临近'])))}
-${htmlSection('目标进度', htmlRows(['目标', '状态', '进度', '里程碑'], data.goals.map((g) => [g.title, g.status, g.progress == null ? '—' : `${g.progress}%`, `${g.milestonesDone}/${g.milestonesTotal}`])))}
-<footer class="card" style="text-align:center;color:var(--muted);font-size:12px">本摘要由 TimeMark 生成，仅作记录。</footer>
+${sectionIncluded(data, 'upcoming') ? htmlSection('未来 30 天', htmlRows(['事项', '类型', '日期'], data.upcoming.map((e) => [e.name, e.type, e.date]))) : ''}
+${sectionIncluded(data, 'overdue') ? htmlSection('逾期事项', htmlRows(['类型', '事项', '到期', '逾期天数'], data.overdue.map((o) => [o.kind, o.title, o.due, o.daysOverdue]))) : ''}
+${sectionIncluded(data, 'spend') ? htmlSection('订阅与到期支出', htmlRows(['项目', '金额'], spendRows)) : ''}
+${sectionIncluded(data, 'habits') ? htmlSection('习惯完成率', htmlRows(['习惯', '已完成', '目标', '完成率'], data.habits.map((h) => [h.name, h.logged, h.target, `${h.rate}%`]))) : ''}
+${sectionIncluded(data, 'medications') ? htmlSection('用药依从性', htmlRows(['药品', '已服', '跳过', '漏服', '合计', '依从率'], data.medications.perMedication.map((m) => [m.name, m.taken, m.skipped, m.missed, m.total, `${m.percentage}%`]))) : ''}
+${sectionIncluded(data, 'maintenance') ? htmlSection('保养到期', htmlRows(['资产', '到期', '状态'], data.maintenance.map((m) => [m.assetName, m.due, m.overdue ? '已逾期' : '临近']))) : ''}
+${sectionIncluded(data, 'goals') ? htmlSection('目标进度', htmlRows(['目标', '状态', '进度', '里程碑'], data.goals.map((g) => [g.title, g.status, g.progress == null ? '—' : `${g.progress}%`, `${g.milestonesDone}/${g.milestonesTotal}`]))) : ''}
 </main></body></html>
 `;
 }
@@ -450,15 +533,15 @@ export async function renderDigestPdf(data: DigestData): Promise<Uint8Array> {
   writeLine(writer, '本摘要由 TimeMark 确定性生成，不含 AI 叙述。', { size: 9, color: SLATE_500, gap: 14 });
   if (data.isEmpty) writeLine(writer, '本期无记录', { size: 12, gap: 14, color: SLATE_500 });
 
-  pdfSection(writer, '未来 30 天', ['事项', '类型', '日期'], data.upcoming.map((e) => [e.name, e.type, e.date]), [220, 130, 137]);
-  pdfSection(writer, '逾期事项', ['类型', '事项', '到期', '逾期'], data.overdue.map((o) => [o.kind, o.title, o.due, `${o.daysOverdue} 天`]), [90, 230, 100, 67]);
+  if (sectionIncluded(data, 'upcoming')) pdfSection(writer, '未来 30 天', ['事项', '类型', '日期'], data.upcoming.map((e) => [e.name, e.type, e.date]), [220, 130, 137]);
+  if (sectionIncluded(data, 'overdue')) pdfSection(writer, '逾期事项', ['类型', '事项', '到期', '逾期'], data.overdue.map((o) => [o.kind, o.title, o.due, `${o.daysOverdue} 天`]), [90, 230, 100, 67]);
   const spendRows: string[][] = Object.entries(data.spend.byCurrency).sort(([a], [b]) => a.localeCompare(b)).map(([c, cents]) => [`周期折算 (${c})`, money(cents, c)]);
   for (const [c, cents] of Object.entries(data.spend.onceByCurrency).sort(([a], [b]) => a.localeCompare(b))) spendRows.push([`一次性 (${c})`, money(cents, c)]);
-  pdfSection(writer, '订阅与到期支出', ['项目', '金额'], spendRows, [340, 147]);
-  pdfSection(writer, '习惯完成率', ['习惯', '已完成', '目标', '完成率'], data.habits.map((h) => [h.name, String(h.logged), String(h.target), `${h.rate}%`]), [270, 90, 90, 37]);
-  pdfSection(writer, '用药依从性', ['药品', '已服', '跳过', '漏服', '依从率'], data.medications.perMedication.map((m) => [m.name, String(m.taken), String(m.skipped), String(m.missed), `${m.percentage}%`]), [250, 77, 77, 77, 6]);
-  pdfSection(writer, '保养到期', ['资产', '到期', '状态'], data.maintenance.map((m) => [m.assetName, m.due, m.overdue ? '已逾期' : '临近']), [280, 120, 87]);
-  pdfSection(writer, '目标进度', ['目标', '状态', '进度', '里程碑'], data.goals.map((g) => [g.title, g.status, g.progress == null ? '—' : `${g.progress}%`, `${g.milestonesDone}/${g.milestonesTotal}`]), [260, 90, 70, 67]);
+  if (sectionIncluded(data, 'spend')) pdfSection(writer, '订阅与到期支出', ['项目', '金额'], spendRows, [340, 147]);
+  if (sectionIncluded(data, 'habits')) pdfSection(writer, '习惯完成率', ['习惯', '已完成', '目标', '完成率'], data.habits.map((h) => [h.name, String(h.logged), String(h.target), `${h.rate}%`]), [270, 90, 90, 37]);
+  if (sectionIncluded(data, 'medications')) pdfSection(writer, '用药依从性', ['药品', '已服', '跳过', '漏服', '依从率'], data.medications.perMedication.map((m) => [m.name, String(m.taken), String(m.skipped), String(m.missed), `${m.percentage}%`]), [250, 77, 77, 77, 6]);
+  if (sectionIncluded(data, 'maintenance')) pdfSection(writer, '保养到期', ['资产', '到期', '状态'], data.maintenance.map((m) => [m.assetName, m.due, m.overdue ? '已逾期' : '临近']), [280, 120, 87]);
+  if (sectionIncluded(data, 'goals')) pdfSection(writer, '目标进度', ['目标', '状态', '进度', '里程碑'], data.goals.map((g) => [g.title, g.status, g.progress == null ? '—' : `${g.progress}%`, `${g.milestonesDone}/${g.milestonesTotal}`]), [260, 90, 70, 67]);
 
   writeLine(writer, '本摘要由 TimeMark 生成，仅作记录。', { size: 9, color: SLATE_500 });
   return doc.save();
@@ -476,7 +559,17 @@ export interface DigestSendResult {
   emailed: boolean;
   recipients: string[];
   inbox: boolean;
+  /** cron 路径下因用户关闭摘要而跳过。 */
+  skipped?: boolean;
   reason?: 'no_email_recipient' | 'no_email_channel';
+}
+
+export interface DigestSendOptions {
+  /**
+   * cron 路径传 true：用户关闭摘要时直接跳过（不建数据、不发信）。
+   * 手动 `POST /api/digest/send`（默认 false）是用户的显式动作，即使定时任务关闭也照发。
+   */
+  respectEnabled?: boolean;
 }
 
 function plainSummary(data: DigestData): string {
@@ -494,13 +587,25 @@ function plainSummary(data: DigestData): string {
 /**
  * 为一个用户生成并投递摘要：写一条 Inbox 消息，并按解析出的收件人发一封带 PDF 附件的邮件。
  * 每次调用最多发 **一封** 邮件（收件人用逗号合并）；无邮件渠道/收件人时仍写 Inbox 并优雅返回。
+ *
+ * 尊重 v46 偏好：排除的区块不出现在正文/PDF/Inbox 里；收件人覆盖优先于
+ * `resolveRecipientEmails`；`digest_channel_account_id` 指定投递渠道。
  */
 export async function sendDigestForUser(
   userId: number,
   period: DigestPeriod,
   now: Date = new Date(),
+  options: DigestSendOptions = {},
 ): Promise<DigestSendResult> {
-  const data = await buildDigestData(userId, period, now);
+  const userConfig = await getUserConfig(userId);
+  const prefs = readDigestPreferences(userConfig);
+
+  if (options.respectEnabled && !prefs.enabled) {
+    return { userId, period, from: '', to: '', emailed: false, recipients: [], inbox: false, skipped: true };
+  }
+
+  const fullData = await buildDigestData(userId, period, now);
+  const data = selectDigestSections(fullData, prefs.sections);
   const html = renderDigestHtml(data);
   const pdf = await renderDigestPdf(data);
 
@@ -527,13 +632,13 @@ export async function sendDigestForUser(
       .map((account) => account.chat_id)
       .filter((email): email is string => typeof email === 'string' && email.includes('@')),
   };
-  const userConfig = await getUserConfig(userId);
-  const recipients = resolveRecipientEmails({}, chConfig, userConfig);
+  const resolved = resolveRecipientEmails({}, chConfig, userConfig);
+  const recipients = prefs.recipients.length > 0 ? prefs.recipients : resolved;
   if (recipients.length === 0) {
     return { ...base, inbox, reason: 'no_email_recipient' };
   }
 
-  const creds = await resolveEmailAccount(userId).catch(() => null);
+  const creds = await resolveEmailAccount(userId, prefs.channelAccountId ?? undefined).catch(() => null);
   if (!creds) {
     return { ...base, recipients, inbox, reason: 'no_email_channel' };
   }
@@ -557,7 +662,10 @@ export interface DigestBatchResult {
   results: DigestSendResult[];
 }
 
-/** cron 用：为每个用户生成并投递一份摘要（逐用户隔离失败）。 */
+/**
+ * cron 用：为每个用户生成并投递一份摘要（逐用户隔离失败）。
+ * 关闭摘要的用户被计为 skipped 且不投递 —— 这就是「设置行被 cron 尊重」的落点。
+ */
 export async function sendDigestsForAllUsers(
   period: DigestPeriod,
   now: Date = new Date(),
@@ -570,7 +678,7 @@ export async function sendDigestsForAllUsers(
   for (const row of usersResult.rows) {
     const userId = asNumber(row.id);
     try {
-      const result = await sendDigestForUser(userId, period, now);
+      const result = await sendDigestForUser(userId, period, now, { respectEnabled: true });
       results.push(result);
       if (result.emailed) sent += 1;
       else skipped += 1;
@@ -582,6 +690,97 @@ export async function sendDigestsForAllUsers(
 
   log.info({ period, users: usersResult.rows.length, sent, skipped }, 'Digest run finished');
   return { period, users: usersResult.rows.length, sent, skipped, results };
+}
+
+/* ------------------------------------------------------------------ */
+/* 预览（checkbox 80）：只渲染、不发送                                */
+/* ------------------------------------------------------------------ */
+
+export interface DigestChannelStatus {
+  id: number | null;
+  name: string | null;
+  type: string | null;
+  configured: boolean;
+}
+
+export interface DigestPreview {
+  userId: number;
+  period: DigestPeriod;
+  from: string;
+  to: string;
+  today: string;
+  enabled: boolean;
+  /** 生效的区块 key（空选择 → 全部）。 */
+  sections: DigestSectionKey[];
+  isEmpty: boolean;
+  recipients: string[];
+  recipientSource: 'override' | 'resolved' | 'none';
+  channel: DigestChannelStatus;
+  reason?: 'no_email_recipient' | 'no_email_channel';
+  data: DigestData;
+}
+
+export interface DigestPreviewOverrides {
+  sections?: DigestSectionKey[] | null;
+  recipients?: unknown;
+}
+
+/**
+ * 渲染一份摘要预览（真实数据，绝不发送/写 Inbox）。
+ * 传入 overrides 时用「当前表单」而非已保存值，便于用户边改边看。
+ * 无邮件渠道也照常返回 `data`（modal 仍能渲染），并用 `reason` 说明缺哪一环。
+ */
+export async function buildDigestPreview(
+  userId: number,
+  period: DigestPeriod,
+  now: Date = new Date(),
+  overrides: DigestPreviewOverrides = {},
+): Promise<DigestPreview> {
+  const userConfig = await getUserConfig(userId);
+  const prefs = readDigestPreferences(userConfig);
+
+  const sections = overrides.sections === undefined ? prefs.sections : normalizeDigestSections(overrides.sections);
+  const recipientOverride =
+    overrides.recipients === undefined ? prefs.recipients : sanitizeDigestRecipients(overrides.recipients);
+
+  const fullData = await buildDigestData(userId, period, now);
+  const data = selectDigestSections(fullData, sections);
+
+  const accounts = await getNotificationAccounts(userId);
+  const emailAccounts = accounts.filter((account) => account.is_active !== false && EMAIL_CHANNEL_TYPES.has(account.type));
+  const chConfig = {
+    emails: emailAccounts
+      .map((account) => account.chat_id)
+      .filter((email): email is string => typeof email === 'string' && email.includes('@')),
+  };
+  const resolved = resolveRecipientEmails({}, chConfig, userConfig);
+  const recipients = recipientOverride.length > 0 ? recipientOverride : resolved;
+  const recipientSource: DigestPreview['recipientSource'] =
+    recipientOverride.length > 0 ? 'override' : resolved.length > 0 ? 'resolved' : 'none';
+
+  const creds = await resolveEmailAccount(userId, prefs.channelAccountId ?? undefined).catch(() => null);
+  const channel: DigestChannelStatus = creds
+    ? { id: creds.id, name: creds.name, type: creds.type, configured: true }
+    : { id: prefs.channelAccountId ?? null, name: null, type: null, configured: false };
+
+  const reason: DigestPreview['reason'] =
+    recipients.length === 0 ? 'no_email_recipient' : channel.configured ? undefined : 'no_email_channel';
+
+  return {
+    userId,
+    period,
+    from: data.from,
+    to: data.to,
+    today: data.today,
+    enabled: prefs.enabled,
+    sections: sections && sections.length > 0 ? [...sections] : [...DIGEST_SECTION_KEYS],
+    isEmpty: data.isEmpty,
+    recipients,
+    recipientSource,
+    channel,
+    ...(reason ? { reason } : {}),
+    data,
+  };
 }
 
 /** 供校验/测试：把 digest 的纯文本正文（邮件 text/plain 版本）。 */

@@ -20,6 +20,8 @@ import {
   saveEventTemplate,
   deleteEventTemplate,
   saveAlertSettings,
+  getDigestPreferences,
+  saveDigestPreferences,
 } from '../services/config.service.js';
 import {
   createNotificationAccountSchema,
@@ -410,6 +412,29 @@ config.post('/notification-defaults', async (c) => {
     reminder_emails: reminderEmails,
   });
   return c.json({ success: true });
+});
+
+// ============ 周期摘要偏好（checkbox 80）============
+
+config.get('/digest', async (c) => {
+  const user = c.get('user');
+  const prefs = await getDigestPreferences(Number(user.id));
+  return c.json({ success: true, data: prefs });
+});
+
+config.post('/digest', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const b = body as Record<string, unknown>;
+  const saved = await saveDigestPreferences(Number(user.id), {
+    enabled: b.enabled !== false,
+    period: b.period === 'yearly' ? 'yearly' : 'monthly',
+    recipients: b.recipients,
+    sections: b.sections,
+    channelAccountId: typeof b.channelAccountId === 'number' ? b.channelAccountId : null,
+  });
+  await logAudit(Number(user.id), 'update', 'digest_settings', user.id, {});
+  return c.json({ success: true, data: saved });
 });
 
 // ============ 事件模板管理 ============

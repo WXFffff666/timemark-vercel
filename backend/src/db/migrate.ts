@@ -1176,6 +1176,28 @@ CREATE INDEX IF NOT EXISTS idx_milestones_event ON milestones(event_id) WHERE ev
       sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS holiday_reminder_mode TEXT DEFAULT 'keep';
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS jieqi_reminder_list JSONB DEFAULT '[]'::jsonb;`,
     },
+    {
+      // v46 (checkbox 80): digest preferences - enabled / period / recipient override /
+      // which sections to include / which configured email channel to deliver through.
+      //
+      // Purely additive user_configs columns with defaults that preserve the pre-v46
+      // behaviour: the checkbox-79 cron sent a monthly digest to every account, so
+      // `digest_enabled` defaults to TRUE (a user has to explicitly opt out);
+      // `digest_sections` NULL means "all sections"; `digest_recipients` defaults to
+      // an empty list (= fall back to resolveRecipientEmails).
+      //
+      // Every statement is ADD COLUMN IF NOT EXISTS-guarded: idempotent, purely
+      // additive, no ALTER of existing columns, no data backfill, no constraint on
+      // existing rows. `digest_channel_account_id` is intentionally an unconstrained
+      // integer (ownership / email-capability are validated in the API layer).
+      version: 46,
+      name: 'digest_preferences_v46',
+      sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_period TEXT NOT NULL DEFAULT 'monthly';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_recipients JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_sections JSONB;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_channel_account_id INTEGER;`,
+    },
   ];
 
   for (const migration of migrations) {

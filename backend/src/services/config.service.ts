@@ -2,6 +2,7 @@ import { randomBytes, createHash } from 'crypto';
 import { query } from '../db/index.js';
 import { encrypt, decrypt } from '@timemark/shared/crypto';
 import { normalizeNotificationChatId } from '@timemark/shared';
+import { normalizeDigestSections, sanitizeDigestRecipients, type DigestSectionKey } from './digest-sections.js';
 
 // The old hardcoded default key used before auto-generation was implemented.
 // Existing Docker users who never set MASTER_KEY have data encrypted with this.
@@ -198,6 +199,12 @@ export async function getUserConfig(userId: number): Promise<any> {
     // checkbox 78 (v45 columns)
     holiday_reminder_mode: r.holiday_reminder_mode || 'keep',
     jieqi_reminder_list: parseStringArrayColumn(r.jieqi_reminder_list),
+    // checkbox 80 (v46 columns): digest preferences
+    digest_enabled: r.digest_enabled !== false,
+    digest_period: r.digest_period === 'yearly' ? 'yearly' : 'monthly',
+    digest_recipients: sanitizeDigestRecipients(r.digest_recipients),
+    digest_sections: normalizeDigestSections(r.digest_sections),
+    digest_channel_account_id: r.digest_channel_account_id == null ? null : Number(r.digest_channel_account_id),
   };
 
   // Persist re-encrypted values if any fields were migrated
@@ -346,6 +353,79 @@ export async function saveNotificationDefaults(
       data.reminder_emails !== undefined ? JSON.stringify(data.reminder_emails) : null,
     ],
   );
+}
+
+// ============ 周期摘要偏好（checkbox 80，v46 列）============
+
+export interface DigestPreferences {
+  enabled: boolean;
+  period: 'monthly' | 'yearly';
+  /** 收件人覆盖；空数组 = 回退到 resolveRecipientEmails。 */
+  recipients: string[];
+  /** null = 全部区块；空选择会被归一化为 null。 */
+  sections: DigestSectionKey[] | null;
+  /** null = 自动选择第一个可用邮件渠道。 */
+  channelAccountId: number | null;
+}
+
+export async function getDigestPreferences(userId: number): Promise<DigestPreferences> {
+  const result = await query(
+    `SELECT digest_enabled, digest_period, digest_recipients, digest_sections, digest_channel_account_id
+     FROM user_configs WHERE user_id = $1`,
+    [userId],
+  );
+  const row = result.rows[0];
+  return {
+    enabled: row?.digest_enabled !== false,
+    period: row?.digest_period === 'yearly' ? 'yearly' : 'monthly',
+    recipients: sanitizeDigestRecipients(row?.digest_recipients),
+    sections: normalizeDigestSections(row?.digest_sections),
+    channelAccountId:
+      row?.digest_channel_account_id == null ? null : Number(row.digest_channel_account_id),
+  };
+}
+
+export async function saveDigestPreferences(
+  userId: number,
+  prefs: {
+    enabled: boolean;
+    period: 'monthly' | 'yearly';
+    recipients?: unknown;
+    sections?: unknown;
+    channelAccountId?: number | null;
+  },
+): Promise<DigestPreferences> {
+  const normalized: DigestPreferences = {
+    enabled: prefs.enabled !== false,
+    period: prefs.period === 'yearly' ? 'yearly' : 'monthly',
+    recipients: sanitizeDigestRecipients(prefs.recipients),
+    sections: normalizeDigestSections(prefs.sections),
+    channelAccountId:
+      typeof prefs.channelAccountId === 'number' && Number.isInteger(prefs.channelAccountId) && prefs.channelAccountId > 0
+        ? prefs.channelAccountId
+        : null,
+  };
+
+  await query(
+    `INSERT INTO user_configs (user_id, digest_enabled, digest_period, digest_recipients, digest_sections, digest_channel_account_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (user_id) DO UPDATE SET
+       digest_enabled = EXCLUDED.digest_enabled,
+       digest_period = EXCLUDED.digest_period,
+       digest_recipients = EXCLUDED.digest_recipients,
+       digest_sections = EXCLUDED.digest_sections,
+       digest_channel_account_id = EXCLUDED.digest_channel_account_id`,
+    [
+      userId,
+      normalized.enabled,
+      normalized.period,
+      JSON.stringify(normalized.recipients),
+      normalized.sections ? JSON.stringify(normalized.sections) : null,
+      normalized.channelAccountId,
+    ],
+  );
+
+  return normalized;
 }
 
 export async function getNotificationAccounts(userId: number): Promise<NotificationAccount[]> {
