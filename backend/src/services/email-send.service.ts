@@ -69,23 +69,39 @@ export async function resolveEmailAccount(
   return accounts[0];
 }
 
+export interface EmailAttachment {
+  filename: string;
+  content: Uint8Array | Buffer;
+  contentType?: string;
+}
+
 export async function sendRawEmail(
   creds: EmailAccountCreds,
-  to: string,
+  to: string | string[],
   subject: string,
   html: string,
+  attachments?: EmailAttachment[],
 ): Promise<void> {
   const body = html;
   const text = htmlToPlainText(html);
+  const recipients = (Array.isArray(to) ? to : [to])
+    .map((email) => String(email).trim())
+    .filter((email) => email.length > 0);
+  if (recipients.length === 0) {
+    throw new Error('没有可用的收件人邮箱');
+  }
 
   if (creds.type === 'resend' || creds.type === 'email') {
     const resend = new Resend(creds.apiKey!);
     const { error } = await resend.emails.send({
       from: creds.fromEmail,
-      to: [to],
+      to: recipients,
       subject,
       html: body,
       text,
+      ...(attachments && attachments.length > 0
+        ? { attachments: attachments.map((file) => ({ filename: file.filename, content: Buffer.from(file.content) })) }
+        : {}),
     });    if (error) {
       throw new Error(String((error as { message?: string }).message || error));
     }
@@ -100,7 +116,16 @@ export async function sendRawEmail(
       creds.fromEmail,
       creds.smtpPassword!,
     );
-    await transporter.sendMail({ from: creds.fromEmail, to, subject, html: body, text });
+    await transporter.sendMail({
+      from: creds.fromEmail,
+      to: recipients.join(', '),
+      subject,
+      html: body,
+      text,
+      ...(attachments && attachments.length > 0
+        ? { attachments: attachments.map((file) => ({ filename: file.filename, content: Buffer.from(file.content), contentType: file.contentType })) }
+        : {}),
+    });
     return;
   }
 

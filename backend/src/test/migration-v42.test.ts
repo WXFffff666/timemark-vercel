@@ -142,7 +142,9 @@ describe('migration v42 registration (todo 71)', () => {
     expect(versions.indexOf(43)).toBe(versions.indexOf(42) + 1);
     expect(versions.filter((v) => v === 44)).toHaveLength(1);
     expect(versions.indexOf(44)).toBe(versions.indexOf(43) + 1);
-    expect(versions[versions.length - 1]).toBe(44);
+    // v45 (todo 78, holiday/jieqi reminder settings) is now the tail.
+    expect(versions.indexOf(45)).toBe(versions.indexOf(44) + 1);
+    expect(versions[versions.length - 1]).toBe(45);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

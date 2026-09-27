@@ -34,6 +34,7 @@ const MaintenancePage = lazy(() => import('./pages/Maintenance'));
 const DocumentsPage = lazy(() => import('./pages/Documents'));
 const HabitsPage = lazy(() => import('./pages/Habits'));
 const MedicationsPage = lazy(() => import('./pages/Medications'));
+const GoalsPage = lazy(() => import('./pages/Goals'));
 
 function PageLoader() {
   return (
@@ -117,6 +118,7 @@ function AnimatedRoutes() {
           <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
           <Route path="/habits" element={<ProtectedRoute><HabitsPage /></ProtectedRoute>} />
           <Route path="/medications" element={<ProtectedRoute><MedicationsPage /></ProtectedRoute>} />
+          <Route path="/goals" element={<ProtectedRoute><GoalsPage /></ProtectedRoute>} />
           <Route path="/integrations-docs" element={<ProtectedRoute><IntegrationsDocs /></ProtectedRoute>} />
           <Route path="/cron-monitor" element={<ProtectedRoute><CronMonitor /></ProtectedRoute>} />
           <Route path="/docker-migration" element={<ProtectedRoute><DockerMigration /></ProtectedRoute>} />

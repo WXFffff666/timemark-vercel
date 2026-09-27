@@ -1166,6 +1166,16 @@ CREATE TABLE IF NOT EXISTS milestones (
 CREATE INDEX IF NOT EXISTS idx_milestones_goal ON milestones(goal_id, sort_order, id);
 CREATE INDEX IF NOT EXISTS idx_milestones_event ON milestones(event_id) WHERE event_id IS NOT NULL;`,
     },
+    {
+      // v45 (checkbox 78): holiday-aware reminders + optional 节气 reminders.
+      // Two additive user_configs columns; both default to the pre-v45 behaviour
+      // (`keep` + empty list), so every existing row is unchanged until the user
+      // opts in from Settings. No data backfill, no constraint on existing rows.
+      version: 45,
+      name: 'holiday_jieqi_reminders_v45',
+      sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS holiday_reminder_mode TEXT DEFAULT 'keep';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS jieqi_reminder_list JSONB DEFAULT '[]'::jsonb;`,
+    },
   ];
 
   for (const migration of migrations) {

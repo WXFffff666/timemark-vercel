@@ -72,6 +72,7 @@ Authorization: Bearer 你的CRON_SECRET
 | `/api/cron/reminder-check` | `* * * * *` | **必须** — 每分钟检查提醒 |
 | `/api/cron/retry-notifications` | `*/10 * * * *` | 建议 — 重试失败通知 |
 | `/api/cron/calendar-sync` | `*/15 * * * *` | 可选 — 外部 ICS + Google OAuth（已连接时）同步 |
+| `/api/cron/digest?period=monthly` | `0 9 1 * *` | 可选 — 每月 1 日 09:00 发送上月摘要（Inbox + 邮件 PDF 附件）；年度摘要可另建一条 `?period=yearly` |
 | `/api/cron/warmup` | `* * * * *` | 可选 — 减少冷启动延迟 |
 
 完整 URL 示例：`https://你的域名/api/cron/reminder-check`

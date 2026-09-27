@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail, Settings as SettingsIcon, Link2, Copy, RefreshCw, Plus, Trash2, GitBranch, Languages } from 'lucide-react';
+import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail, Settings as SettingsIcon, Link2, Copy, RefreshCw, Plus, Trash2, GitBranch, Languages, Sparkles } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -31,6 +31,19 @@ function parseAlertChannels(raw: unknown): string[] {
 function ensureArray<T>(data: unknown): T[] {
   return Array.isArray(data) ? data : [];
 }
+
+/**
+ * 24 节气（checkbox 78）。与后端 `holiday-reminder.service.ts` 的 JIEQI_NAMES
+ * 保持一致的固定顺序；后端只接受这 24 个名字，非法值一律丢弃。
+ */
+const JIEQI_NAMES = [
+  '立春', '雨水', '惊蛰', '春分', '清明', '谷雨',
+  '立夏', '小满', '芒种', '夏至', '小暑', '大暑',
+  '立秋', '处暑', '白露', '秋分', '寒露', '霜降',
+  '立冬', '小雪', '大雪', '冬至', '小寒', '大寒',
+] as const;
+
+type HolidayReminderMode = 'keep' | 'shift' | 'suppress';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -71,6 +84,10 @@ export default function Settings() {
   const [quietHoursStart, setQuietHoursStart] = useState('');
   const [quietHoursEnd, setQuietHoursEnd] = useState('');
   const [quietHoursSaving, setQuietHoursSaving] = useState(false);
+  // checkbox 78: 节假日感知模式 + 节气提醒（默认关闭）
+  const [holidayReminderMode, setHolidayReminderMode] = useState<HolidayReminderMode>('keep');
+  const [jieqiReminderList, setJieqiReminderList] = useState<string[]>([]);
+  const [holidaySaving, setHolidaySaving] = useState(false);
   const [defaultTestEmail, setDefaultTestEmail] = useState('');
   const [defaultReminderEmails, setDefaultReminderEmails] = useState('');
   const [notificationDefaultsSaving, setNotificationDefaultsSaving] = useState(false);
@@ -110,7 +127,7 @@ export default function Settings() {
     setPageLoading(true);
     setPageError('');
     Promise.all([
-      api.get<{ timezone?: string; alert_channels?: unknown; alert_emails?: string[]; alert_account_ids?: number[]; default_test_email?: string; reminder_emails?: string[]; quiet_hours_start?: string | null; quiet_hours_end?: string | null }>('/config').catch(() => null),
+      api.get<{ timezone?: string; alert_channels?: unknown; alert_emails?: string[]; alert_account_ids?: number[]; default_test_email?: string; reminder_emails?: string[]; quiet_hours_start?: string | null; quiet_hours_end?: string | null; holiday_reminder_mode?: string; jieqi_reminder_list?: string[] }>('/config').catch(() => null),
       api.get('/config/accounts').catch(() => []),
       api.get<any[]>('/email-logs?limit=50').catch(() => []),
       api.get<{
@@ -128,6 +145,12 @@ export default function Settings() {
         if (cancelled) return;
         if (config?.quiet_hours_start) setQuietHoursStart(config.quiet_hours_start);
         if (config?.quiet_hours_end) setQuietHoursEnd(config.quiet_hours_end);
+        if (config?.holiday_reminder_mode === 'shift' || config?.holiday_reminder_mode === 'suppress' || config?.holiday_reminder_mode === 'keep') {
+          setHolidayReminderMode(config.holiday_reminder_mode);
+        }
+        if (Array.isArray(config?.jieqi_reminder_list)) {
+          setJieqiReminderList(config.jieqi_reminder_list.filter((x): x is string => typeof x === 'string'));
+        }
         if (config?.default_test_email) setDefaultTestEmail(config.default_test_email);
         if (Array.isArray(config?.reminder_emails)) {
           setDefaultReminderEmails(config.reminder_emails.join(', '));
@@ -385,6 +408,28 @@ export default function Settings() {
       alert(e instanceof Error ? e.message : '保存失败');
     } finally {
       setQuietHoursSaving(false);
+    }
+  };
+
+  // checkbox 78: 节假日策略 + 节气提醒
+  const toggleJieqi = (name: string) => {
+    setJieqiReminderList((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+    );
+  };
+
+  const saveHolidayReminders = async () => {
+    setHolidaySaving(true);
+    try {
+      await api.post('/config', {
+        holiday_reminder_mode: holidayReminderMode,
+        jieqi_reminder_list: jieqiReminderList,
+      });
+      alert('日历提醒设置已保存');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setHolidaySaving(false);
     }
   };
 
@@ -999,6 +1044,68 @@ export default function Settings() {
                 </div>
                 <Button onClick={saveAdvancedNotification} disabled={advancedSaving} className="min-h-11">
                   {advancedSaving ? '保存中...' : '保存高级通知设置'}
+                </Button>
+              </div>
+            </div>
+          </section>
+
+          {/* 日历增强提醒（checkbox 78） */}
+          <section>
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3 px-4 uppercase tracking-wider">日历增强提醒</h2>
+            <div className="glass-panel rounded-[2.5rem] p-2 ring-1 ring-black/5 dark:ring-white/10 space-y-1">
+              <div className="p-4 rounded-[2rem]">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center shadow-inner border border-amber-100 dark:border-amber-800/50">
+                    <Sparkles size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">法定节假日提醒策略</h3>
+                    <p className="text-xs text-slate-500">非关键提醒命中法定节假日时：默认保留原时间并在内容中标注节日名，也可顺延到节后工作日或不提醒。用药与证件到期提醒不受影响。</p>
+                  </div>
+                </div>
+                <select
+                  value={holidayReminderMode}
+                  onChange={(e) => setHolidayReminderMode(e.target.value as HolidayReminderMode)}
+                  aria-label="法定节假日提醒策略"
+                  className="h-11 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm w-full max-w-md text-slate-900 dark:text-white"
+                >
+                  <option value="keep">保留原时间（内容中标注节日名）</option>
+                  <option value="shift">顺延到节后第一个工作日</option>
+                  <option value="suppress">法定节假日当天不提醒</option>
+                </select>
+              </div>
+              <div className="p-4 rounded-[2rem] border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between mb-3 gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">节气提醒（默认关闭）</h3>
+                    <p className="text-xs text-slate-500">勾选想被告知的节气；当天将以现有提醒渠道发送一条通知</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="min-h-11" onClick={() => setJieqiReminderList([])}>清空</Button>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                  {JIEQI_NAMES.map((name) => {
+                    const active = jieqiReminderList.includes(name);
+                    return (
+                      <label
+                        key={name}
+                        className={`flex items-center justify-center h-9 rounded-xl border text-sm cursor-pointer transition-colors ${active ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={active}
+                          onChange={() => toggleJieqi(name)}
+                          aria-label={`节气提醒 ${name}`}
+                        />
+                        {name}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="p-4 rounded-[2rem] border-t border-slate-100 dark:border-slate-800">
+                <Button onClick={saveHolidayReminders} disabled={holidaySaving} className="min-h-11">
+                  {holidaySaving ? '保存中...' : '保存日历提醒设置'}
                 </Button>
               </div>
             </div>

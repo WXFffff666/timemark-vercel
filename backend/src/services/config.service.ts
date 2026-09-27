@@ -110,6 +110,9 @@ export async function saveUserConfig(userId: number, config: Record<string, unkn
     quiet_hours_start: { column: 'quiet_hours_start' },
     quiet_hours_end: { column: 'quiet_hours_end' },
     default_test_email: { column: 'default_test_email' },
+    // checkbox 78: 节假日感知模式 + 节气提醒列表（v45 新增列）
+    holiday_reminder_mode: { column: 'holiday_reminder_mode' },
+    jieqi_reminder_list: { column: 'jieqi_reminder_list', json: true },
   };
 
   const updates: string[] = [];
@@ -192,6 +195,9 @@ export async function getUserConfig(userId: number): Promise<any> {
     markdown_email_template: r.markdown_email_template || null,
     notification_preset: r.notification_preset || null,
     api_scopes: r.api_scopes || 'read,write',
+    // checkbox 78 (v45 columns)
+    holiday_reminder_mode: r.holiday_reminder_mode || 'keep',
+    jieqi_reminder_list: parseStringArrayColumn(r.jieqi_reminder_list),
   };
 
   // Persist re-encrypted values if any fields were migrated

@@ -598,11 +598,30 @@ type ChannelResultMap = Record<string, ChannelResultEntry>;
  * @param userId - The user's ID
  * @param channels - Array of channel IDs to send through (e.g., ['resend', 'telegram'])
  */
+/**
+ * 把节假日文案并入事件正文（checkbox 78）。与 conflictHint / lunarLabel 完全同一套
+ * `customMessage` 渠道契约：有正文就追加，没有就补一个最小正文，绝不覆盖已有内容，
+ * 且同一文案不会重复追加。缺省（未传 label）返回原值 —— 非节假日提醒零变化。
+ */
+export function appendHolidayLabel(
+  customMessage: string | undefined,
+  holidayLabel: string | undefined,
+  event: { date?: unknown; type?: unknown },
+): string | undefined {
+  const label = typeof holidayLabel === 'string' ? holidayLabel.trim() : '';
+  if (!label) return customMessage;
+  if (!customMessage) {
+    return `**日期:** ${String(event.date ?? '')}\n**类型:** ${String(event.type ?? '')}\n🎉 ${label}`;
+  }
+  if (customMessage.includes(label)) return customMessage;
+  return `${customMessage}\n🎉 ${label}`;
+}
+
 export async function sendNotifications(
   event: any,
   userId: number,
   channels: string[],
-  options?: { skipQuietHours?: boolean; profileId?: number | null },
+  options?: { skipQuietHours?: boolean; profileId?: number | null; holidayLabel?: string },
 ): Promise<ChannelResultMap> {
   event = normalizeEventForNotification(event as Record<string, unknown>);
   const config = await getUserConfig(userId);
@@ -685,6 +704,11 @@ export async function sendNotifications(
   } else if (lunarLabel && mappedEvent.customMessage && !mappedEvent.customMessage.includes(lunarLabel)) {
     mappedEvent.customMessage = `${mappedEvent.customMessage}\n📅 ${lunarLabel}`;
   }
+
+  // checkbox 78: 节假日文案（默认 keep 模式把节假日名带进正文）。只影响显式传入
+  // holidayLabel 的调用方（事件提醒 + 到期/库存/保养迭代器）；medication 与
+  // document 调用方从不传该选项 → 行为逐字节不变。
+  mappedEvent.customMessage = appendHolidayLabel(mappedEvent.customMessage, options?.holidayLabel, event);
   
   // 获取事件绑定的通知账户ID
   const boundAccountIds: number[] = (() => {

@@ -12,13 +12,14 @@ import { TimezoneSelector } from '@/components/TimezoneSelector';
 import { ProfileSwitcher } from '@/components/ProfileSwitcher';
 import { useProfileStore } from '@/stores/profile.store';
 import type { Event, CreateEventRequest } from '@timemark/shared';
-import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail, Inbox, AlarmClock, Package, Wrench } from 'lucide-react';
+import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail, Inbox, AlarmClock, Package, Wrench, Target } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { api } from '@/lib/api';
 import { prefetchRoute } from '@/lib/prefetch-routes';
 import { getTodoEvents, isEventToday } from '@/lib/calendar-utils';
 import { useTodoCompletions } from '@/hooks/useTodoCompletions';
 import { AlmanacCard } from '@/components/almanac/AlmanacCard';
+import { TimeMachineCard } from '@/components/dashboard/TimeMachineCard';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -44,6 +45,7 @@ export function Dashboard() {
     prefetchRoute('/expiry');
     prefetchRoute('/inventory');
     prefetchRoute('/maintenance');
+    prefetchRoute('/goals');
     prefetchRoute('/settings');
   }, []);
 
@@ -291,9 +293,23 @@ export function Dashboard() {
             <p className="text-xs text-slate-500 flex items-center gap-1"><Wrench size={12} />保养</p>
             <p className="text-sm font-medium text-orange-600">管理 →</p>
           </div>
+          <div
+            className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-violet-400/50 transition"
+            onClick={() => navigate('/goals')}
+            role="button"
+            tabIndex={0}
+            data-testid="nav-goals"
+            onKeyDown={(e) => e.key === 'Enter' && navigate('/goals')}
+          >
+            <p className="text-xs text-slate-500 flex items-center gap-1"><Target size={12} />目标</p>
+            <p className="text-sm font-medium text-violet-600">管理 →</p>
+          </div>
         </div>
         <div className="mb-6">
           <AlmanacCard />
+        </div>
+        <div className="mb-6">
+          <TimeMachineCard />
         </div>
         {conflicts.length > 0 && (
           <div className="mb-6 glass-panel rounded-2xl p-4 border border-amber-200/60 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-900/10">

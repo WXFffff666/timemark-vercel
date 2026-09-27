@@ -49,6 +49,13 @@ import {
 import { sendNotifications, isInQuietHours } from '../services/notifications/index.js';
 import { createInboxMessage } from '../services/inbox.service.js';
 import { refreshUserEventCache } from '../services/event-cache.service.js';
+import {
+  holidayContextLabel,
+  jieqiOn,
+  normalizeJieqiList,
+  resolveHolidayEvalDays,
+  resolveHolidayMode,
+} from '../services/holiday-reminder.service.js';
 import { createLogger } from '../utils/logger.js';
 import { recordEventTrigger } from '../services/trigger-log.service.js';
 import { getSyncedNow, scheduleTimeSync, DEFAULT_SYNC_TIMEZONE } from '../utils/ntp.js';
@@ -201,6 +208,13 @@ interface DatedReminderSource {
    */
   buildExpiredSendKey?: (dueYmd: string) => string;
   toEventType: (kind: string, daysUntil: number) => string;
+  /**
+   * checkbox 78: 是否接入节假日感知（默认 keep 附节假日名 / suppress 抑制 /
+   * shift 顺延到节后工作日）。证件（document）明确为 FALSE：按计划要求
+   * 「绝不调整 medication 与 document-expiry 提醒」。medication 走的是独立
+   * 函数，根本不经过本迭代器。
+   */
+  holidayAware: boolean;
 }
 
 const EXPIRY_SOURCE: DatedReminderSource = {
@@ -215,6 +229,7 @@ const EXPIRY_SOURCE: DatedReminderSource = {
   defaultLeadDays: () => DEFAULT_EXPIRY_LEAD_DAYS,
   buildSendKey: buildExpirySendKey,
   toEventType: (kind) => expiryEventType(kind),
+  holidayAware: true,
 };
 
 const INVENTORY_SOURCE: DatedReminderSource = {
@@ -230,6 +245,7 @@ const INVENTORY_SOURCE: DatedReminderSource = {
   defaultLeadDays: () => DEFAULT_EXPIRY_LEAD_DAYS,
   buildSendKey: buildInventorySendKey,
   toEventType: (kind) => inventoryEventType(kind),
+  holidayAware: true,
 };
 
 const MAINTENANCE_SOURCE: DatedReminderSource = {
@@ -245,6 +261,7 @@ const MAINTENANCE_SOURCE: DatedReminderSource = {
   defaultLeadDays: () => DEFAULT_EXPIRY_LEAD_DAYS,
   buildSendKey: buildMaintenanceSendKey,
   toEventType: (kind) => maintenanceEventType(kind),
+  holidayAware: true,
 };
 
 /**
@@ -264,6 +281,8 @@ const DOCUMENT_SOURCE: DatedReminderSource = {
   buildSendKey: buildDocumentSendKey,
   buildExpiredSendKey: buildDocumentExpiredKey,
   toEventType: documentEventType,
+  // 证件到期提醒绝不调整（checkbox 78 明确要求）
+  holidayAware: false,
 };
 
 /**
@@ -299,7 +318,8 @@ async function runDatedReminderIterator(
   now: Date,
 ): Promise<{ candidates: number; sent: number; claimed: number; skipped: number }> {
   const result = await query(
-    `SELECT ${source.alias}.*, uc.timezone, uc.reminders_enabled, p.timezone AS profile_timezone
+    `SELECT ${source.alias}.*, uc.timezone, uc.reminders_enabled, uc.holiday_reminder_mode,
+            p.timezone AS profile_timezone
      FROM ${source.table} ${source.alias}
      LEFT JOIN user_configs uc ON uc.user_id = ${source.alias}.user_id
      LEFT JOIN profiles p ON p.id = ${source.alias}.profile_id
@@ -325,7 +345,6 @@ async function runDatedReminderIterator(
       skipped += 1;
       continue;
     }
-    const daysUntil = diffCalendarDays(today, due);
 
     const config = parseJsonField<DatedReminderConfig>(raw.reminder_config);
     if (config?.enabled === false) {
@@ -334,20 +353,36 @@ async function runDatedReminderIterator(
     }
 
     const kind = String(raw[source.kindColumn] ?? source.defaultKind);
-    // 过去日期默认不提醒（逾期视图负责呈现）；documents 例外：发一条最终「已过期」提醒
-    const isExpired = daysUntil < 0;
-    if (isExpired && !source.buildExpiredSendKey) {
-      skipped += 1;
-      continue;
-    }
-
     const leadDays = config?.daysBeforeList?.length
       ? config.daysBeforeList
       : [...source.defaultLeadDays(kind)];
-    if (!isExpired && !leadDays.includes(daysUntil)) {
+
+    // checkbox 78: 非关键到期提醒的节假日调度（documents 显式关闭，保持逐字节不变）。
+    // evalDays 顺序 = [今天, 最近的顺延源日, ...]；取第一个命中 → 每行每次最多一条。
+    const evalDays = source.holidayAware
+      ? resolveHolidayEvalDays(today, resolveHolidayMode(raw.holiday_reminder_mode))
+      : [today];
+
+    let chosen: { evalDay: string; daysUntil: number; isExpired: boolean } | null = null;
+    for (const evalDay of evalDays) {
+      const daysUntil = diffCalendarDays(evalDay, due);
+      const isExpired = daysUntil < 0;
+      if (isExpired) {
+        // 过去日期默认不提醒（逾期视图负责呈现）；documents 例外：发一条最终「已过期」提醒
+        if (!source.buildExpiredSendKey) continue;
+        chosen = { evalDay, daysUntil, isExpired };
+        break;
+      }
+      if (!leadDays.includes(daysUntil)) continue;
+      chosen = { evalDay, daysUntil, isExpired };
+      break;
+    }
+    if (!chosen) {
       skipped += 1;
       continue;
     }
+    const { evalDay, daysUntil, isExpired } = chosen;
+    const holidayLabel = source.holidayAware ? holidayContextLabel(evalDay, today) : undefined;
 
     const reminderTimes = config?.reminderTimes?.length
       ? config.reminderTimes
@@ -369,7 +404,7 @@ async function runDatedReminderIterator(
 
     const sendKey = isExpired
       ? (source.buildExpiredSendKey as (dueYmd: string) => string)(due)
-      : source.buildSendKey(today, daysUntil, matchedReminderTime);
+      : source.buildSendKey(evalDay, daysUntil, matchedReminderTime);
     const claim = await query(
       `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
        ON CONFLICT DO NOTHING RETURNING event_id`,
@@ -401,6 +436,8 @@ async function runDatedReminderIterator(
       const results = await sendNotifications(notificationEvent, userId, channels, {
         // 档案级通知路由（checkbox 70）
         profileId: (raw.profile_id ?? null) as number | null,
+        // checkbox 78: 仅非关键来源可能带节假日文案；documents 为 undefined（不变）
+        ...(holidayLabel ? { holidayLabel } : {}),
       });
       if (!deliveredToAnyChannel(results, channels)) {
         // 所有渠道都失败：释放 claim，让下个 ±2 分钟窗口重试
@@ -1108,6 +1145,112 @@ export async function sendMedicationReminders(
   return { candidates: rows.length, reminded, snoozed, escalated, skipped };
 }
 
+export interface JieqiReminderStats {
+  candidates: number;
+  sent: number;
+  skipped: number;
+}
+
+/**
+ * 节气提醒（D10，checkbox 78）：用户在 `user_configs.jieqi_reminder_list` 里选出
+ * 想被告知的 24 节气；默认 `[]`（关闭）。当天恰为所选节气时，在 daily_check_time
+ * （默认 09:00）的 ±2 分钟窗口内发一条；去重键 `jieqi#u<userId>#<date>` → 同一
+ * 节气日恰好一次。复用现有 reminder_send_claims 与分钟级调度，不新建调度器。
+ * 日历库异常/未覆盖 → 静默跳过（fail-open），绝不影响其它提醒。
+ */
+export async function sendJieqiReminders(
+  now: Date = getSyncedNow(DEFAULT_SYNC_TIMEZONE),
+): Promise<JieqiReminderStats> {
+  const result = await query(
+    `SELECT user_id, timezone, reminders_enabled, daily_check_time, jieqi_reminder_list
+     FROM user_configs
+     WHERE jieqi_reminder_list IS NOT NULL`,
+  );
+
+  const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
+  let sent = 0;
+  let skipped = 0;
+
+  for (const raw of result.rows as Array<Record<string, unknown>>) {
+    if (raw.reminders_enabled === false) {
+      skipped += 1;
+      continue;
+    }
+    const userId = Number(raw.user_id);
+    const selected = normalizeJieqiList(raw.jieqi_reminder_list);
+    if (selected.length === 0) {
+      skipped += 1;
+      continue;
+    }
+    const timeZone = typeof raw.timezone === 'string' && raw.timezone.trim() ? raw.timezone : 'Asia/Shanghai';
+    const today = getTodayString(now, timeZone);
+    const name = jieqiOn(today);
+    if (!name || !selected.includes(name)) {
+      skipped += 1;
+      continue;
+    }
+    const rawTime = typeof raw.daily_check_time === 'string' ? raw.daily_check_time.slice(0, 5) : '';
+    const reminderTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(rawTime) ? rawTime : '09:00';
+    const currentTime = getCurrentHHmm(now, timeZone);
+    if (!matchesReminderTimeWindow(currentTime, reminderTime, 2)) {
+      skipped += 1;
+      continue;
+    }
+
+    const sendKey = `jieqi#u${userId}#${today}`;
+    const claim = await query(
+      `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING RETURNING event_id`,
+      [userId, sendKey],
+    );
+    if (claim.rows.length === 0) {
+      skipped += 1;
+      continue;
+    }
+
+    const channels = await resolveReminderChannels(userId, [], 0);
+    if (channels.length === 0) {
+      await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [userId, sendKey]);
+      skipped += 1;
+      continue;
+    }
+
+    try {
+      const results = await sendNotifications(
+        {
+          id: null,
+          user_id: userId,
+          name: `节气提醒：${name}`,
+          type: 'jieqi_reminder',
+          date: today,
+          calendar_type: 'gregorian',
+          reminder_time: reminderTime,
+          reminder_config: null,
+          reminderConfig: null,
+          customMessage: `🌿 今日节气「${name}」，记得留意时令变化。`,
+        },
+        userId,
+        channels,
+      );
+      if (!deliveredToAnyChannel(results, channels)) {
+        await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [userId, sendKey]);
+        skipped += 1;
+        log.warn({ userId, name, channels, results }, 'Jieqi reminder delivered to no channel; claim released');
+        continue;
+      }
+      sent += 1;
+      log.info({ userId, name, reminderTime, channels }, 'Jieqi reminder dispatched');
+    } catch (error) {
+      await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [userId, sendKey]);
+      skipped += 1;
+      log.error({ userId, err: error }, 'Failed to send jieqi reminder');
+    }
+  }
+
+  log.info({ candidates: result.rows.length, sent, skipped }, 'Jieqi reminders checked');
+  return { candidates: result.rows.length, sent, skipped };
+}
+
 export async function sendReminders() {
   log.info('Checking reminders...');
 
@@ -1116,7 +1259,7 @@ export async function sendReminders() {
 
   // Batch load ALL user configs upfront to avoid N+1 queries
   const allUserConfigs = await query(
-    `SELECT user_id, timezone, reminders_enabled, daily_check_time, days_before_list, reminder_emails 
+    `SELECT user_id, timezone, reminders_enabled, daily_check_time, days_before_list, reminder_emails, holiday_reminder_mode 
      FROM user_configs`
   );
   const userConfigMap = new Map<number, any>();
@@ -1277,6 +1420,8 @@ export async function sendReminders() {
     targetDate?: Date;
     daysUntil: number;
     matchedReminderTime: string;
+    /** checkbox 78: 节假日/顺延文案（非节假日为 undefined） */
+    holidayLabel?: string;
   }> = [];
   
   for (const event of allEventRows) {
@@ -1291,9 +1436,7 @@ export async function sendReminders() {
     const today = getTodayString(now, timeZone);
 
     const calendarType = event.calendar_type;
-    let eventTargetDate: Date | null = null;
-    let matchedDaysUntil: number | null = null;
-    
+
     // 获取此事件的提前提醒天数列表
     // 优先从 reminder_config.daysBeforeList 读取，回退到 reminder_days_before
     let daysBeforeList: number[] = [];
@@ -1314,43 +1457,56 @@ export async function sendReminders() {
     
     // 包含 0 表示当天也提醒
     const allDays = daysBeforeList.includes(0) ? daysBeforeList : [0, ...daysBeforeList];
-    
-    try {
-      if (calendarType === 'gregorian' || calendarType === 'both') {
-        const gTarget = resolveGregorianTarget(today, event, allDays);
-        if (gTarget) {
-          eventTargetDate = gTarget.targetDate;
-          matchedDaysUntil = gTarget.daysUntil;
-        }
-      }
-      if ((calendarType === 'lunar' || calendarType === 'both') && event.lunar_date) {
-        const lTarget = resolveLunarTarget(today, event.lunar_date, allDays, now);
-        if (lTarget) {
-          eventTargetDate = lTarget;
-          if (matchedDaysUntil === null) {
-            try {
-              const lunarData = typeof event.lunar_date === 'string' ? JSON.parse(event.lunar_date) : event.lunar_date;
-              const month = lunarData.isLeap ? -lunarData.month : lunarData.month;
-              for (const year of [now.getFullYear(), now.getFullYear() + 1]) {
-                const tryLunarDate = Lunar.fromYmd(year, month, lunarData.day);
-                const trySolar = tryLunarDate.getSolar();
-                const tryDateStr = `${trySolar.getYear()}-${String(trySolar.getMonth()).padStart(2, '0')}-${String(trySolar.getDay()).padStart(2, '0')}`;
-                const diff = diffCalendarDays(today, tryDateStr);
-                if (diff >= 0 && allDays.includes(diff)) {
-                  matchedDaysUntil = diff;
-                  break;
-                }
-              }
-            } catch { /* ignore */ }
+
+    // checkbox 78：节假日感知调度。`keep`（默认）保留原定日并在正文附节假日名；
+    // `suppress` 在法定假日抑制；`shift` 顺延到节后第一个工作日。FAIL-OPEN：日历
+    // 未覆盖（如 2031）时 resolveHolidayEvalDays 返回 [today]，提醒绝不丢失。
+    const holidayMode = resolveHolidayMode(userConfigMap.get(event.user_id)?.holiday_reminder_mode);
+    const evalDays = resolveHolidayEvalDays(today, holidayMode);
+    if (evalDays.length === 0) continue;
+
+    // 每个候选日取第一个命中（今天优先，其次最近的顺延源日）→ 每个事件每次至多一条。
+    for (const evalDay of evalDays) {
+      let eventTargetDate: Date | null = null;
+      let matchedDaysUntil: number | null = null;
+
+      try {
+        if (calendarType === 'gregorian' || calendarType === 'both') {
+          const gTarget = resolveGregorianTarget(evalDay, event, allDays);
+          if (gTarget) {
+            eventTargetDate = gTarget.targetDate;
+            matchedDaysUntil = gTarget.daysUntil;
           }
         }
+        if ((calendarType === 'lunar' || calendarType === 'both') && event.lunar_date) {
+          const lTarget = resolveLunarTarget(evalDay, event.lunar_date, allDays, now);
+          if (lTarget) {
+            eventTargetDate = lTarget;
+            if (matchedDaysUntil === null) {
+              try {
+                const lunarData = typeof event.lunar_date === 'string' ? JSON.parse(event.lunar_date) : event.lunar_date;
+                const month = lunarData.isLeap ? -lunarData.month : lunarData.month;
+                for (const year of [now.getFullYear(), now.getFullYear() + 1]) {
+                  const tryLunarDate = Lunar.fromYmd(year, month, lunarData.day);
+                  const trySolar = tryLunarDate.getSolar();
+                  const tryDateStr = `${trySolar.getYear()}-${String(trySolar.getMonth()).padStart(2, '0')}-${String(trySolar.getDay()).padStart(2, '0')}`;
+                  const diff = diffCalendarDays(evalDay, tryDateStr);
+                  if (diff >= 0 && allDays.includes(diff)) {
+                    matchedDaysUntil = diff;
+                    break;
+                  }
+                }
+              } catch { /* ignore */ }
+            }
+          }
+        }
+      } catch (error) {
+        log.error({ eventId: event.id, err: error }, 'Failed to parse lunar date');
+        await recordEventTrigger(event.id, event.user_id, 'scheduled', evalDay, 'failed', `Lunar date conversion failed: ${String(error)}`);
       }
-    } catch (error) {
-      log.error({ eventId: event.id, err: error }, 'Failed to parse lunar date');
-      await recordEventTrigger(event.id, event.user_id, 'scheduled', today, 'failed', `Lunar date conversion failed: ${String(error)}`);
-    }
-    
-    if (eventTargetDate) {
+
+      if (!eventTargetDate) continue;
+
       // Check if current time matches any of the event's reminder times
       const currentHour = new Intl.DateTimeFormat('en-US', {
         timeZone,
@@ -1376,7 +1532,7 @@ export async function sendReminders() {
       
       
       // Debug logging
-      const nextOccurrence = resolveNextGregorianOccurrence(event.date, today, {
+      const nextOccurrence = resolveNextGregorianOccurrence(event.date, evalDay, {
         eventType: event.type,
         recurringConfig: parseJsonField(event.recurring_config),
         nextOccurrence: event.next_occurrence,
@@ -1386,8 +1542,8 @@ export async function sendReminders() {
         name: event.name,
         date: event.date,
         nextOccurrence,
-        today,
-        diff: diffCalendarDays(today, nextOccurrence),
+        today: evalDay,
+        diff: diffCalendarDays(evalDay, nextOccurrence),
         allDays,
         reminderTimes,
         currentTime,
@@ -1400,15 +1556,18 @@ export async function sendReminders() {
         return match;
       });
       
+      // 时间窗口与候选日无关；不匹配则尝试下一个候选日
       if (!shouldRemind || !matchedReminderTime) {
-        continue; // Skip - not the right time for this event
+        continue;
       }
       eventsToRemind.push({
         ...event,
         targetDate: eventTargetDate,
         daysUntil: matchedDaysUntil ?? 0,
         matchedReminderTime,
+        holidayLabel: holidayContextLabel(evalDay, today),
       });
+      break;
     }
   }
   
@@ -1451,6 +1610,8 @@ export async function sendReminders() {
         const channelResults = await sendNotifications(event, event.user_id, channels, {
           // 档案级通知路由（checkbox 70）：有路由行时只发该档案的账户，否则全部启用账户
           profileId: event.profile_id,
+          // checkbox 78: 仅在节假日/顺延场景附加正文文案（非节假日时与旧行为逐字节一致）
+          ...(event.holidayLabel ? { holidayLabel: event.holidayLabel } : {}),
         });
         log.info({ eventId: event.id, channelResults }, 'Sent notifications');
         
@@ -1528,6 +1689,13 @@ export async function sendReminders() {
     await sendHabitReminders(now);
   } catch (error) {
     log.error({ err: error }, 'Habit reminder evaluation failed');
+  }
+
+  // 节气提醒（D10，checkbox 78）：用户选定的节气当天发一条（默认关闭）
+  try {
+    await sendJieqiReminders(now);
+  } catch (error) {
+    log.error({ err: error }, 'Jieqi reminder evaluation failed');
   }
 
   // 家庭用药（D3，checkbox 73）：按剂量 scheduled_for 的定时 / 稍后 / 升级提醒

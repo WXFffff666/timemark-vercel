@@ -38,6 +38,9 @@ export function maskUserConfigForClient(config: Record<string, unknown> | null):
     markdown_email_template: config.markdown_email_template ?? null,
     notification_preset: config.notification_preset ?? null,
     api_scopes: config.api_scopes ?? 'read,write',
+    // checkbox 78: 节假日感知模式（keep|shift|suppress）与节气提醒列表
+    holiday_reminder_mode: config.holiday_reminder_mode ?? 'keep',
+    jieqi_reminder_list: config.jieqi_reminder_list ?? [],
     channel_webhooks_configured: !!channelWebhookConfigured,
   };
 

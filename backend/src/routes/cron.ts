@@ -14,6 +14,7 @@ import { purgeOldTodoCompletions } from '../services/todo.service.js';
 import { purgeOldHabitLogs } from '../services/habit.service.js';
 import { materializeUpcomingDoses, markMissedDoses, purgeOldMedicationDoses } from '../services/medication.service.js';
 import { purgeOrphanAttachments } from '../services/attachment-retention.service.js';
+import { sendDigestsForAllUsers, type DigestPeriod } from '../services/digest.service.js';
 import { query } from '../db/index.js';
 import { pingHeartbeat } from '../utils/heartbeat.js';
 import { testConnection, type TestConnectionResult } from '../services/notifications/test-connection.js';
@@ -168,6 +169,28 @@ cronRoutes.get('/retry-notifications', async (c) => {
   } catch (error: any) {
     await logCronRun('retry-notifications', 'failed', startedAt, undefined, error.message);
     return c.json({ success: false, error: error.message || 'Job failed' }, 500);
+  }
+});
+
+// Periodic digest (checkbox 79) — call monthly (and optionally yearly) via the external
+// cron list. Auth is the shared CRON_SECRET middleware (401 without `Bearer <secret>`).
+// The job deliberately does NOT consult `cron_execution_logs`: a stale row for the same
+// period can never skip a digest run.
+cronRoutes.get('/digest', async (c) => {
+  const startedAt = Date.now();
+  const periodRaw = c.req.query('period') ?? 'monthly';
+  if (periodRaw !== 'monthly' && periodRaw !== 'yearly') {
+    return c.json({ success: false, error: 'period must be monthly or yearly' }, 400);
+  }
+  const period = periodRaw as DigestPeriod;
+  try {
+    const stats = await sendDigestsForAllUsers(period);
+    await logCronRun(`digest-${period}`, 'success', startedAt, `sent ${stats.sent}/${stats.users}`);
+    return c.json({ success: true, job: `digest-${period}`, users: stats.users, sent: stats.sent, skipped: stats.skipped });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    await logCronRun(`digest-${period}`, 'failed', startedAt, undefined, message);
+    return c.json({ success: false, error: message || 'Job failed' }, 500);
   }
 });
 

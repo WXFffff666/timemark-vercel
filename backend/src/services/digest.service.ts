@@ -1,0 +1,590 @@
+import { PDFDocument, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib';
+import { htmlToPlainText, EMAIL_CHANNEL_TYPES } from '@timemark/shared';
+import { diffCalendarDays } from '@timemark/shared/event-schedule';
+import { isHabitScheduledOn, normalizeScheduleDays } from '@timemark/shared/habit-schedule';
+import { query } from '../db/index.js';
+import { embedReportFont } from '../utils/pdf-font.js';
+import { createLogger } from '../utils/logger.js';
+import { getAdherence } from './medication.service.js';
+import { getExpiryCosts } from './expiry.service.js';
+import { createInboxMessage } from './inbox.service.js';
+import { getNotificationAccounts, getUserConfig } from './config.service.js';
+import { resolveEmailAccount, sendRawEmail } from './email-send.service.js';
+import { resolveRecipientEmails } from './notifications/index.js';
+
+/**
+ * 周期性图文摘要（checkbox 79）。
+ *
+ * - **确定性渲染**：不调用任何 LLM（叙事版是 checkbox 108）。所有数字都来自 SQL 聚合
+ *   或既有 service（`getAdherence` / `getExpiryCosts`），正文由固定模板拼成。
+ * - **零常驻算力 / 零额外网络**：只有被 cron 或 `POST /api/digest/send` 触发时才运行；
+ *   唯一的网络调用是复用现有的邮件投递器。
+ * - PDF 字节稳定：`PDFDocument.create({ updateMetadata: false })`，无 CreationDate/ModDate，
+ *   内容只由 payload 决定（与 checkbox 74 的医生报告同一套做法）。
+ * - 邮件头注入：主题由静态文本 + 期号构成，绝不拼接用户输入；收件人来自
+ *   `resolveRecipientEmails`（只接受含 `@` 的地址）。
+ */
+
+const log = createLogger('digest');
+
+export type DigestPeriod = 'monthly' | 'yearly';
+
+const PERIOD_LABEL: Record<DigestPeriod, string> = { monthly: '月度', yearly: '年度' };
+
+/* ------------------------------------------------------------------ */
+/* 数据结构                                                            */
+/* ------------------------------------------------------------------ */
+
+export interface DigestUpcomingRow { id: number; name: string; type: string; date: string }
+export interface DigestOverdueRow { kind: string; title: string; due: string; daysOverdue: number }
+export interface DigestHabitRow { name: string; logged: number; target: number; rate: number }
+export interface DigestMedicationRow { name: string; taken: number; skipped: number; missed: number; total: number; percentage: number }
+export interface DigestMaintenanceRow { assetName: string; due: string; overdue: boolean }
+export interface DigestGoalRow { title: string; status: string; progress: number | null; milestonesDone: number; milestonesTotal: number }
+
+export interface DigestSpend {
+  from: string;
+  to: string;
+  byCurrency: Record<string, number>;
+  onceByCurrency: Record<string, number>;
+  onceCount: number;
+  byKind: Array<{ kind: string; currency: string; cents: number; count: number }>;
+}
+
+export interface DigestMedicationSummary {
+  taken: number;
+  skipped: number;
+  missed: number;
+  total: number;
+  percentage: number;
+  perMedication: DigestMedicationRow[];
+}
+
+export interface DigestData {
+  userId: number;
+  period: DigestPeriod;
+  from: string;
+  to: string;
+  /** 计算「未来 30 天 / 逾期」所用的今天（YYYY-MM-DD）。 */
+  today: string;
+  upcoming: DigestUpcomingRow[];
+  overdue: DigestOverdueRow[];
+  spend: DigestSpend;
+  habits: DigestHabitRow[];
+  medications: DigestMedicationSummary;
+  maintenance: DigestMaintenanceRow[];
+  goals: DigestGoalRow[];
+  /** 所有区块都为空 → 渲染「本期无记录」。 */
+  isEmpty: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/* 日期工具（全部 UTC，确定性强）                                       */
+/* ------------------------------------------------------------------ */
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function toYmd(date: Date): string {
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+}
+
+function addDaysYmd(ymd: string, delta: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const shifted = new Date(Date.UTC(y, m - 1, d + delta));
+  return toYmd(shifted);
+}
+
+/**
+ * 摘要覆盖区间：
+ * - monthly → 刚结束的那个自然月（例如 2026-09-01 .. 2026-09-30）
+ * - yearly  → 刚结束的那个自然年
+ * 「未来 30 天 / 逾期」始终相对 `now` 当天。
+ */
+export function digestPeriodBounds(period: DigestPeriod, now: Date): { from: string; to: string } {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  if (period === 'yearly') {
+    return { from: `${year - 1}-01-01`, to: `${year - 1}-12-31` };
+  }
+  return {
+    from: toYmd(new Date(Date.UTC(year, month - 1, 1))),
+    to: toYmd(new Date(Date.UTC(year, month, 0))),
+  };
+}
+
+function countScheduledDays(from: string, to: string, scheduleDays: number[] | null): number {
+  let count = 0;
+  let cursor = from;
+  for (let i = 0; i < 400 && cursor <= to; i++) {
+    if (isHabitScheduledOn(cursor, scheduleDays)) count += 1;
+    cursor = addDaysYmd(cursor, 1);
+  }
+  return count;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function asYmd(value: unknown): string {
+  if (value instanceof Date) return toYmd(value);
+  return String(value ?? '').slice(0, 10);
+}
+
+/* ------------------------------------------------------------------ */
+/* 数据聚合（真实 SQL + 既有 service）                                  */
+/* ------------------------------------------------------------------ */
+
+export async function buildDigestData(
+  userId: number,
+  period: DigestPeriod,
+  now: Date = new Date(),
+): Promise<DigestData> {
+  const bounds = digestPeriodBounds(period, now);
+  const today = toYmd(now);
+  const horizon = addDaysYmd(today, 30);
+
+  const [upcomingResult, overdueResult, habitsResult, maintenanceResult, goalsResult, spend, adherence] = await Promise.all([
+    query(
+      `SELECT id, name, type, TO_CHAR(COALESCE(next_occurrence, date), 'YYYY-MM-DD') AS occurrence
+       FROM events
+       WHERE user_id = $1
+         AND COALESCE(next_occurrence, date) >= $2::date
+         AND COALESCE(next_occurrence, date) <= $3::date
+       ORDER BY occurrence ASC, id ASC
+       LIMIT 200`,
+      [userId, today, horizon],
+    ),
+    query(
+      `SELECT 'expiry' AS kind, title, TO_CHAR(next_due_date, 'YYYY-MM-DD') AS due
+         FROM expiry_items WHERE user_id = $1 AND is_active = TRUE AND next_due_date < $2::date
+       UNION ALL
+       SELECT 'maintenance', asset_name, TO_CHAR(next_due_at, 'YYYY-MM-DD')
+         FROM maintenance_plans WHERE user_id = $1 AND is_active = TRUE AND next_due_at IS NOT NULL AND next_due_at < $2::date
+       UNION ALL
+       SELECT 'document', title, TO_CHAR(expires_at, 'YYYY-MM-DD')
+         FROM documents WHERE user_id = $1 AND is_active = TRUE AND expires_at IS NOT NULL AND expires_at < $2::date
+       ORDER BY due ASC`,
+      [userId, today],
+    ),
+    query(
+      `SELECT h.id, h.name, h.target_per_period, h.period, h.schedule_days,
+              COALESCE((SELECT SUM(hl.count) FROM habit_logs hl
+                        WHERE hl.habit_id = h.id AND hl.logged_on BETWEEN $2::date AND $3::date), 0)::int AS logged
+       FROM habits h
+       WHERE h.user_id = $1 AND h.is_active = TRUE
+       ORDER BY h.id ASC`,
+      [userId, bounds.from, bounds.to],
+    ),
+    query(
+      `SELECT asset_name, TO_CHAR(next_due_at, 'YYYY-MM-DD') AS due
+       FROM maintenance_plans
+       WHERE user_id = $1 AND is_active = TRUE AND next_due_at IS NOT NULL AND next_due_at <= $2::date
+       ORDER BY next_due_at ASC`,
+      [userId, horizon],
+    ),
+    query(
+      `SELECT g.id, g.title, g.status, g.target_value, g.current_value,
+              COUNT(m.id)::int AS milestone_total,
+              COUNT(m.id) FILTER (WHERE m.done_at IS NOT NULL)::int AS milestone_done
+       FROM goals g
+       LEFT JOIN milestones m ON m.goal_id = g.id
+       WHERE g.user_id = $1 AND g.status IN ('active', 'paused')
+       GROUP BY g.id
+       ORDER BY g.id ASC`,
+      [userId],
+    ),
+    getExpiryCosts(userId, { granularity: period === 'yearly' ? 'year' : 'month', from: bounds.from, to: bounds.to }),
+    getAdherence(userId, bounds.from, bounds.to),
+  ]);
+
+  const upcoming: DigestUpcomingRow[] = upcomingResult.rows.map((row) => ({
+    id: asNumber(row.id),
+    name: String(row.name ?? ''),
+    type: String(row.type ?? ''),
+    date: asYmd(row.occurrence),
+  }));
+
+  const overdue: DigestOverdueRow[] = overdueResult.rows.map((row) => {
+    const due = asYmd(row.due);
+    return {
+      kind: String(row.kind ?? ''),
+      title: String(row.title ?? ''),
+      due,
+      daysOverdue: Math.max(0, diffCalendarDays(due, today)),
+    };
+  });
+
+  const habits: DigestHabitRow[] = habitsResult.rows.map((row) => {
+    const scheduledDays = countScheduledDays(bounds.from, bounds.to, normalizeScheduleDays((row.schedule_days ?? null) as number[] | null));
+    const perPeriod = Math.max(1, Math.trunc(asNumber(row.target_per_period, 1)));
+    const periods = row.period === 'week' ? Math.ceil(scheduledDays / 7) : scheduledDays;
+    const target = perPeriod * Math.max(0, periods);
+    const logged = asNumber(row.logged);
+    const rate = target > 0 ? Math.min(100, Math.round((logged / target) * 100)) : 0;
+    return { name: String(row.name ?? ''), logged, target, rate };
+  });
+
+  const maintenance: DigestMaintenanceRow[] = maintenanceResult.rows.map((row) => {
+    const due = asYmd(row.due);
+    return { assetName: String(row.asset_name ?? ''), due, overdue: due < today };
+  });
+
+  const goals: DigestGoalRow[] = goalsResult.rows.map((row) => {
+    const target = row.target_value == null ? null : asNumber(row.target_value);
+    const current = asNumber(row.current_value);
+    const progress = target != null && target > 0 ? Math.min(100, Math.round((current / target) * 100)) : null;
+    return {
+      title: String(row.title ?? ''),
+      status: String(row.status ?? ''),
+      progress,
+      milestonesDone: asNumber(row.milestone_done),
+      milestonesTotal: asNumber(row.milestone_total),
+    } as DigestGoalRow;
+  });
+
+  const spendData: DigestSpend = {
+    from: bounds.from,
+    to: bounds.to,
+    byCurrency: spend.byCurrency,
+    onceByCurrency: spend.once.byCurrency,
+    onceCount: spend.once.count,
+    byKind: spend.byKind,
+  };
+
+  const medications: DigestMedicationSummary = {
+    taken: adherence.overall.taken,
+    skipped: adherence.overall.skipped,
+    missed: adherence.overall.missed,
+    total: adherence.overall.total,
+    percentage: adherence.overall.percentage,
+    perMedication: adherence.medications.map((med) => ({
+      name: med.name,
+      taken: med.taken,
+      skipped: med.skipped,
+      missed: med.missed,
+      total: med.total,
+      percentage: med.percentage,
+    })),
+  };
+
+  const isEmpty =
+    upcoming.length === 0 &&
+    overdue.length === 0 &&
+    Object.keys(spendData.byCurrency).length === 0 &&
+    spendData.onceCount === 0 &&
+    habits.every((habit) => habit.logged === 0) &&
+    medications.total === 0 &&
+    maintenance.length === 0 &&
+    goals.length === 0;
+
+  return {
+    userId,
+    period,
+    from: bounds.from,
+    to: bounds.to,
+    today,
+    upcoming,
+    overdue,
+    spend: spendData,
+    habits,
+    medications,
+    maintenance,
+    goals,
+    isEmpty,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* HTML                                                                */
+/* ------------------------------------------------------------------ */
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function money(cents: number, currency = 'CNY'): string {
+  const amount = (cents / 100).toFixed(2);
+  return currency === 'CNY' ? `¥${amount}` : `${currency} ${amount}`;
+}
+
+const HTML_STYLE = `
+:root{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--muted:#64748b;--text:#0f172a;--primary:#2563eb;--green:#10b981;--amber:#f59e0b;--red:#ef4444}
+*{box-sizing:border-box}body{margin:0;padding:32px 16px;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;font-size:14px;line-height:1.65}
+.report{max-width:840px;margin:0 auto}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 2px rgba(15,23,42,.06)}
+h1{font-size:22px;margin:0 0 8px}h2{font-size:15px;margin:0 0 12px}.meta{margin:2px 0;color:var(--muted)}.meta strong{color:var(--text)}
+table{width:100%;border-collapse:collapse}th,td{padding:7px 9px;border-bottom:1px solid var(--border);text-align:left}th{color:var(--muted);font-size:12px}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.empty{margin:0;padding:6px 0;color:var(--muted)}.banner{padding:14px 18px;margin-bottom:16px}.banner strong{color:var(--primary)}
+`;
+
+function htmlSection(title: string, body: string): string {
+  return `<section class="card"><h2>${escapeHtml(title)}</h2>${body}</section>`;
+}
+
+function htmlRows(headers: string[], rows: Array<Array<string | number>>, emptyLabel = '无记录'): string {
+  if (rows.length === 0) return `<p class="empty">${escapeHtml(emptyLabel)}</p>`;
+  const head = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('');
+  const body = rows
+    .map((cells) => `<tr>${cells.map((cell, i) => `<td${i > 0 ? ' class="num"' : ''}>${escapeHtml(String(cell))}</td>`).join('')}</tr>`)
+    .join('');
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+export function renderDigestHtml(data: DigestData): string {
+  const banner = data.isEmpty
+    ? '<section class="card banner"><strong>本期无记录</strong><p class="meta">该账户在本期没有任何事件、待办、订阅、习惯、用药、保养或目标数据。</p></section>'
+    : '';
+
+  const spendRows: Array<Array<string | number>> = Object.entries(data.spend.byCurrency)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([currency, cents]) => [`周期折算 (${currency})`, money(cents, currency)]);
+  for (const [currency, cents] of Object.entries(data.spend.onceByCurrency).sort(([a], [b]) => a.localeCompare(b))) {
+    spendRows.push([`一次性支出 (${currency})`, money(cents, currency)]);
+  }
+
+  return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>TimeMark ${escapeHtml(PERIOD_LABEL[data.period])}摘要</title><style>${HTML_STYLE}</style></head>
+<body><main class="report">
+<section class="card"><h1>TimeMark ${escapeHtml(PERIOD_LABEL[data.period])}摘要</h1>
+<p class="meta">统计区间：<strong>${escapeHtml(data.from)}</strong> 至 <strong>${escapeHtml(data.to)}</strong></p>
+<p class="meta">生成日期：${escapeHtml(data.today)} · 本摘要由 TimeMark 确定性生成，不含 AI 叙述。</p></section>
+${banner}
+${htmlSection('未来 30 天', htmlRows(['事项', '类型', '日期'], data.upcoming.map((e) => [e.name, e.type, e.date])))}
+${htmlSection('逾期事项', htmlRows(['类型', '事项', '到期', '逾期天数'], data.overdue.map((o) => [o.kind, o.title, o.due, o.daysOverdue])))}
+${htmlSection('订阅与到期支出', htmlRows(['项目', '金额'], spendRows))}
+${htmlSection('习惯完成率', htmlRows(['习惯', '已完成', '目标', '完成率'], data.habits.map((h) => [h.name, h.logged, h.target, `${h.rate}%`])))}
+${htmlSection('用药依从性', htmlRows(['药品', '已服', '跳过', '漏服', '合计', '依从率'], data.medications.perMedication.map((m) => [m.name, m.taken, m.skipped, m.missed, m.total, `${m.percentage}%`])))}
+${htmlSection('保养到期', htmlRows(['资产', '到期', '状态'], data.maintenance.map((m) => [m.assetName, m.due, m.overdue ? '已逾期' : '临近'])))}
+${htmlSection('目标进度', htmlRows(['目标', '状态', '进度', '里程碑'], data.goals.map((g) => [g.title, g.status, g.progress == null ? '—' : `${g.progress}%`, `${g.milestonesDone}/${g.milestonesTotal}`])))}
+<footer class="card" style="text-align:center;color:var(--muted);font-size:12px">本摘要由 TimeMark 生成，仅作记录。</footer>
+</main></body></html>
+`;
+}
+
+/* ------------------------------------------------------------------ */
+/* PDF（字节稳定）                                                     */
+/* ------------------------------------------------------------------ */
+
+const PAGE_SIZE: [number, number] = [595.28, 841.89];
+const PAGE_MARGIN = 48;
+const PAGE_BOTTOM = 64;
+const SLATE_900 = rgb(0.06, 0.09, 0.16);
+const SLATE_500 = rgb(0.39, 0.45, 0.55);
+const RULE = rgb(0.89, 0.91, 0.94);
+const BLUE = rgb(0.15, 0.39, 0.92);
+
+interface PdfWriter { doc: PDFDocument; font: PDFFont; page: PDFPage; y: number }
+
+function ensureSpace(writer: PdfWriter, needed: number): void {
+  if (writer.y - needed < PAGE_BOTTOM) {
+    writer.page = writer.doc.addPage(PAGE_SIZE);
+    writer.y = PAGE_SIZE[1] - PAGE_MARGIN;
+  }
+}
+
+function writeLine(writer: PdfWriter, text: string, opts: { size?: number; color?: RGB; gap?: number } = {}): void {
+  const size = opts.size ?? 10;
+  ensureSpace(writer, size + 6);
+  writer.page.drawText(text, { x: PAGE_MARGIN, y: writer.y, size, font: writer.font, color: opts.color ?? SLATE_900 });
+  writer.y -= size + (opts.gap ?? 6);
+}
+
+function fitText(font: PDFFont, text: string, maxWidth: number, size: number): string {
+  if (text.length === 0) return text;
+  if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
+  let cut = text;
+  while (cut.length > 1 && font.widthOfTextAtSize(`${cut}…`, size) > maxWidth) cut = cut.slice(0, -1);
+  return `${cut}…`;
+}
+
+function drawRows(writer: PdfWriter, rows: string[][], columns: number[]): void {
+  const rowHeight = 15;
+  const totalWidth = columns.reduce((sum, w) => sum + w, 0);
+  for (const row of rows) {
+    ensureSpace(writer, rowHeight);
+    let x = PAGE_MARGIN;
+    columns.forEach((width, index) => {
+      const cell = row[index] ?? '';
+      if (cell.length > 0) {
+        const text = fitText(writer.font, cell, width - 8, 9.5);
+        writer.page.drawText(text, { x, y: writer.y, size: 9.5, font: writer.font, color: SLATE_900 });
+      }
+      x += width;
+    });
+    writer.y -= rowHeight;
+  }
+  writer.page.drawLine({ start: { x: PAGE_MARGIN, y: writer.y + 5 }, end: { x: PAGE_MARGIN + totalWidth, y: writer.y + 5 }, thickness: 0.6, color: RULE });
+  writer.y -= 9;
+}
+
+function pdfSection(writer: PdfWriter, title: string, headers: string[], rows: string[][], columns: number[]): void {
+  writeLine(writer, title, { size: 13, gap: 8 });
+  if (rows.length === 0) {
+    writeLine(writer, '无记录', { size: 10, color: SLATE_500, gap: 12 });
+    return;
+  }
+  ensureSpace(writer, 20);
+  writer.page.drawText(headers.join('   '), { x: PAGE_MARGIN, y: writer.y, size: 9, font: writer.font, color: SLATE_500 });
+  writer.y -= 13;
+  drawRows(writer, rows, columns);
+}
+
+/** A4 PDF。`updateMetadata: false` → 无时间戳；内容完全由 payload 决定（字节稳定）。 */
+export async function renderDigestPdf(data: DigestData): Promise<Uint8Array> {
+  const doc = await PDFDocument.create({ updateMetadata: false });
+  const font = await embedReportFont(doc);
+  const writer: PdfWriter = { doc, font, page: doc.addPage(PAGE_SIZE), y: PAGE_SIZE[1] - PAGE_MARGIN };
+
+  writeLine(writer, `TimeMark ${PERIOD_LABEL[data.period]}摘要`, { size: 18, gap: 10, color: BLUE });
+  writeLine(writer, `统计区间：${data.from} 至 ${data.to}`, { size: 11, gap: 2 });
+  writeLine(writer, `生成日期：${data.today}`, { size: 11, gap: 2 });
+  writeLine(writer, '本摘要由 TimeMark 确定性生成，不含 AI 叙述。', { size: 9, color: SLATE_500, gap: 14 });
+  if (data.isEmpty) writeLine(writer, '本期无记录', { size: 12, gap: 14, color: SLATE_500 });
+
+  pdfSection(writer, '未来 30 天', ['事项', '类型', '日期'], data.upcoming.map((e) => [e.name, e.type, e.date]), [220, 130, 137]);
+  pdfSection(writer, '逾期事项', ['类型', '事项', '到期', '逾期'], data.overdue.map((o) => [o.kind, o.title, o.due, `${o.daysOverdue} 天`]), [90, 230, 100, 67]);
+  const spendRows: string[][] = Object.entries(data.spend.byCurrency).sort(([a], [b]) => a.localeCompare(b)).map(([c, cents]) => [`周期折算 (${c})`, money(cents, c)]);
+  for (const [c, cents] of Object.entries(data.spend.onceByCurrency).sort(([a], [b]) => a.localeCompare(b))) spendRows.push([`一次性 (${c})`, money(cents, c)]);
+  pdfSection(writer, '订阅与到期支出', ['项目', '金额'], spendRows, [340, 147]);
+  pdfSection(writer, '习惯完成率', ['习惯', '已完成', '目标', '完成率'], data.habits.map((h) => [h.name, String(h.logged), String(h.target), `${h.rate}%`]), [270, 90, 90, 37]);
+  pdfSection(writer, '用药依从性', ['药品', '已服', '跳过', '漏服', '依从率'], data.medications.perMedication.map((m) => [m.name, String(m.taken), String(m.skipped), String(m.missed), `${m.percentage}%`]), [250, 77, 77, 77, 6]);
+  pdfSection(writer, '保养到期', ['资产', '到期', '状态'], data.maintenance.map((m) => [m.assetName, m.due, m.overdue ? '已逾期' : '临近']), [280, 120, 87]);
+  pdfSection(writer, '目标进度', ['目标', '状态', '进度', '里程碑'], data.goals.map((g) => [g.title, g.status, g.progress == null ? '—' : `${g.progress}%`, `${g.milestonesDone}/${g.milestonesTotal}`]), [260, 90, 70, 67]);
+
+  writeLine(writer, '本摘要由 TimeMark 生成，仅作记录。', { size: 9, color: SLATE_500 });
+  return doc.save();
+}
+
+/* ------------------------------------------------------------------ */
+/* 发送                                                                */
+/* ------------------------------------------------------------------ */
+
+export interface DigestSendResult {
+  userId: number;
+  period: DigestPeriod;
+  from: string;
+  to: string;
+  emailed: boolean;
+  recipients: string[];
+  inbox: boolean;
+  reason?: 'no_email_recipient' | 'no_email_channel';
+}
+
+function plainSummary(data: DigestData): string {
+  return [
+    `TimeMark ${PERIOD_LABEL[data.period]}摘要（${data.from} 至 ${data.to}）`,
+    `未来 30 天：${data.upcoming.length} 项`,
+    `逾期：${data.overdue.length} 项`,
+    `习惯完成：${data.habits.length} 项`,
+    `用药剂量：${data.medications.total} 条`,
+    `保养到期：${data.maintenance.length} 项`,
+    `目标：${data.goals.length} 项`,
+  ].join('\n');
+}
+
+/**
+ * 为一个用户生成并投递摘要：写一条 Inbox 消息，并按解析出的收件人发一封带 PDF 附件的邮件。
+ * 每次调用最多发 **一封** 邮件（收件人用逗号合并）；无邮件渠道/收件人时仍写 Inbox 并优雅返回。
+ */
+export async function sendDigestForUser(
+  userId: number,
+  period: DigestPeriod,
+  now: Date = new Date(),
+): Promise<DigestSendResult> {
+  const data = await buildDigestData(userId, period, now);
+  const html = renderDigestHtml(data);
+  const pdf = await renderDigestPdf(data);
+
+  const base: DigestSendResult = { userId, period, from: data.from, to: data.to, emailed: false, recipients: [], inbox: false };
+
+  let inbox = false;
+  try {
+    const message = await createInboxMessage({
+      userId,
+      title: `TimeMark ${PERIOD_LABEL[period]}摘要 · ${data.to}`,
+      body: plainSummary(data),
+      source: 'inbound',
+      senderLabel: '定期摘要',
+    });
+    inbox = message !== null;
+  } catch (error) {
+    log.warn({ event: 'digest.inbox_failed', userId, err: error }, 'Digest inbox message failed');
+  }
+
+  const accounts = await getNotificationAccounts(userId);
+  const emailAccounts = accounts.filter((account) => account.is_active !== false && EMAIL_CHANNEL_TYPES.has(account.type));
+  const chConfig = {
+    emails: emailAccounts
+      .map((account) => account.chat_id)
+      .filter((email): email is string => typeof email === 'string' && email.includes('@')),
+  };
+  const userConfig = await getUserConfig(userId);
+  const recipients = resolveRecipientEmails({}, chConfig, userConfig);
+  if (recipients.length === 0) {
+    return { ...base, inbox, reason: 'no_email_recipient' };
+  }
+
+  const creds = await resolveEmailAccount(userId).catch(() => null);
+  if (!creds) {
+    return { ...base, recipients, inbox, reason: 'no_email_channel' };
+  }
+
+  await sendRawEmail(
+    creds,
+    recipients,
+    `TimeMark ${PERIOD_LABEL[period]}摘要 · ${data.to}`,
+    html,
+    [{ filename: `timemark-digest-${period}-${data.to}.pdf`, content: pdf, contentType: 'application/pdf' }],
+  );
+
+  return { ...base, emailed: true, recipients, inbox };
+}
+
+export interface DigestBatchResult {
+  period: DigestPeriod;
+  users: number;
+  sent: number;
+  skipped: number;
+  results: DigestSendResult[];
+}
+
+/** cron 用：为每个用户生成并投递一份摘要（逐用户隔离失败）。 */
+export async function sendDigestsForAllUsers(
+  period: DigestPeriod,
+  now: Date = new Date(),
+): Promise<DigestBatchResult> {
+  const usersResult = await query(`SELECT id FROM users ORDER BY id ASC`);
+  let sent = 0;
+  let skipped = 0;
+  const results: DigestSendResult[] = [];
+
+  for (const row of usersResult.rows) {
+    const userId = asNumber(row.id);
+    try {
+      const result = await sendDigestForUser(userId, period, now);
+      results.push(result);
+      if (result.emailed) sent += 1;
+      else skipped += 1;
+    } catch (error) {
+      skipped += 1;
+      log.error({ event: 'digest.user_failed', userId, period, err: error }, 'Digest failed for user');
+    }
+  }
+
+  log.info({ period, users: usersResult.rows.length, sent, skipped }, 'Digest run finished');
+  return { period, users: usersResult.rows.length, sent, skipped, results };
+}
+
+/** 供校验/测试：把 digest 的纯文本正文（邮件 text/plain 版本）。 */
+export function digestPlainText(html: string): string {
+  return htmlToPlainText(html);
+}
