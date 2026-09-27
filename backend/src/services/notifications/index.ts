@@ -43,6 +43,7 @@ import { sendRocketChatNotification } from './rocketchat.service.js';
 import { sendFcmNotification } from './fcm.service.js';
 import { sendTwilioWhatsAppNotification } from './twilio-whatsapp.service.js';
 import { filterSupportedChannels } from './supported-channels.js';
+import { resolveProfileRoutedAccountIds } from '../reminder-channel-resolver.service.js';
 
 function formatLunarLabel(lunarDateRaw: unknown): string {
   if (!lunarDateRaw) return '';
@@ -156,8 +157,13 @@ export function resolveRecipientEmails(event: Record<string, unknown>, chConfig:
 /**
  * Check if current time is within quiet hours for the user's timezone.
  * Handles overnight ranges (e.g., "22:00" to "07:00").
+ *
+ * Exported for the medication reminder job (checkbox 73), which must respect
+ * quiet hours for every non-critical medication and may bypass them only for a
+ * medication explicitly marked `is_critical`. The semantics for every other
+ * notification are unchanged.
  */
-function isInQuietHours(quietStart: string | null, quietEnd: string | null, timezone: string): boolean {
+export function isInQuietHours(quietStart: string | null, quietEnd: string | null, timezone: string): boolean {
   if (!quietStart || !quietEnd) return false;
 
   const [startH, startM] = quietStart.split(':').map(Number);
@@ -596,7 +602,7 @@ export async function sendNotifications(
   event: any,
   userId: number,
   channels: string[],
-  options?: { skipQuietHours?: boolean },
+  options?: { skipQuietHours?: boolean; profileId?: number | null },
 ): Promise<ChannelResultMap> {
   event = normalizeEventForNotification(event as Record<string, unknown>);
   const config = await getUserConfig(userId);
@@ -695,6 +701,14 @@ export async function sendNotifications(
   
   // 获取用户所有通知账户
   const allAccounts = await getNotificationAccounts(userId);
+
+  // 档案级通知路由（checkbox 70）：该档案存在显式路由行时，只有这些账户参与
+  // 「未显式绑定账户」的渠道解析与失败回退；没有路由行 = 回退全部启用账户。
+  // 事件级 notification_account_ids 绑定不受影响（下面 boundAccountIds 分支仍优先）。
+  const routedAccountIds = await resolveProfileRoutedAccountIds(userId, options?.profileId);
+  const eligibleAccounts = routedAccountIds === null
+    ? allAccounts
+    : allAccounts.filter((account) => routedAccountIds.has(Number(account.id)));
   
   // 构建账户ID到账户的映射
   const accountsMap = new Map<number, any>();
@@ -719,10 +733,11 @@ export async function sendNotifications(
         }
       }
     } else {
-      // 未显式绑定时，使用该渠道所有已启用的通知账号（与渠道测试页一致）
+      // 未显式绑定时，使用该渠道所有已启用的通知账号（与渠道测试页一致）。
+      // 档案路由存在时只在这些账户里选（eligibleAccounts），否则就是全部启用账户。
       const accountType = channelToAccountType[ch];
       if (accountType) {
-        for (const account of allAccounts) {
+        for (const account of eligibleAccounts) {
           if (account.type === accountType && account.is_active) {
             const accountConfig = getChannelConfigFromAccount(account, ch);
             if (accountConfig) configs.push(accountConfig);
@@ -778,7 +793,7 @@ export async function sendNotifications(
           if (config?.resend_api_key) {
             globalConfig.apiKey = config.resend_api_key;
             // Get email addresses from notification_accounts
-            const emailAccounts = allAccounts.filter(a => (a.type === 'email' || a.type === 'resend') && a.is_active);
+            const emailAccounts = eligibleAccounts.filter(a => (a.type === 'email' || a.type === 'resend') && a.is_active);
             if (emailAccounts.length > 0) {
               globalConfig.emails = emailAccounts.map((a: any) => a.chat_id || a.name);
             } else if (config?.reminder_emails?.length > 0) {
@@ -1085,15 +1100,15 @@ export async function sendNotifications(
   const failedChannels = Object.entries(channelResults).filter(
     ([, r]) => !r.success && r.error !== 'no_configuration' && r.error !== 'unsupported_channel',
   );
-  if (failedChannels.length > 0 && allAccounts.length > 1) {
+  if (failedChannels.length > 0 && eligibleAccounts.length > 1) {
     // Collect account IDs already tried
     const triedAccountIds = new Set<number>();
     for (const task of sendTasks) {
       if (task.accountId) triedAccountIds.add(task.accountId);
     }
     
-    // Find other active accounts not already tried
-    const fallbackCandidates = allAccounts.filter(
+    // Find other active accounts not already tried (within the profile's routing, if any)
+    const fallbackCandidates = eligibleAccounts.filter(
       a => a.is_active && !triedAccountIds.has(a.id)
     );
     

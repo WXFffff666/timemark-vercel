@@ -39,7 +39,14 @@ import {
   normalizeReminderTimes,
   normalizeScheduleDays,
 } from '@timemark/shared/habit-schedule';
-import { sendNotifications } from '../services/notifications/index.js';
+import {
+  MEDICATION_ESCALATION_MINUTES,
+  MEDICATION_REMINDER_WINDOW_MINUTES,
+  buildDoseEscalationKey,
+  buildDoseReminderKey,
+  isWithinMinutes,
+} from '@timemark/shared';
+import { sendNotifications, isInQuietHours } from '../services/notifications/index.js';
 import { createInboxMessage } from '../services/inbox.service.js';
 import { refreshUserEventCache } from '../services/event-cache.service.js';
 import { createLogger } from '../utils/logger.js';
@@ -276,14 +283,26 @@ function deliveredToAnyChannel(results: unknown, channels: readonly string[]): b
   });
 }
 
+/**
+ * 提醒时区解析（checkbox 69）：行的 family profile（v41）若配置了 IANA 时区，
+ * 优先于用户时区；两者都缺失时回退 Asia/Shanghai。这里只做时区，不做通知路由
+ * （按档案路由通知账号是 checkbox 70）。
+ */
+function resolveReminderTimeZone(row: Record<string, unknown>): string {
+  const profileTz = row.profile_timezone;
+  if (typeof profileTz === 'string' && profileTz.trim()) return profileTz;
+  return typeof row.timezone === 'string' && row.timezone.trim() ? row.timezone : 'Asia/Shanghai';
+}
+
 async function runDatedReminderIterator(
   source: DatedReminderSource,
   now: Date,
 ): Promise<{ candidates: number; sent: number; claimed: number; skipped: number }> {
   const result = await query(
-    `SELECT ${source.alias}.*, uc.timezone, uc.reminders_enabled
+    `SELECT ${source.alias}.*, uc.timezone, uc.reminders_enabled, p.timezone AS profile_timezone
      FROM ${source.table} ${source.alias}
      LEFT JOIN user_configs uc ON uc.user_id = ${source.alias}.user_id
+     LEFT JOIN profiles p ON p.id = ${source.alias}.profile_id
      WHERE ${source.alias}.is_active = TRUE ${source.extraWhere}`,
   );
 
@@ -298,7 +317,7 @@ async function runDatedReminderIterator(
     }
 
     const userId = Number(raw.user_id);
-    const timeZone = typeof raw.timezone === 'string' ? raw.timezone : 'Asia/Shanghai';
+    const timeZone = resolveReminderTimeZone(raw);
     const today = getTodayString(now, timeZone);
     const due = toYmdString(raw[source.dueColumn]);
     // 过去日期不是「即将到来」；逾期项由各自的 overdue/expiring/低库存视图呈现，不发提醒
@@ -379,7 +398,10 @@ async function runDatedReminderIterator(
         // 过期最终提醒带明确的「已过期」文案（渠道在无用户自定义模板时使用 customMessage）
         ...(isExpired ? { customMessage: `⚠️ ${title} 已过期（到期日 ${due}），请尽快处理。` } : {}),
       };
-      const results = await sendNotifications(notificationEvent, userId, channels);
+      const results = await sendNotifications(notificationEvent, userId, channels, {
+        // 档案级通知路由（checkbox 70）
+        profileId: (raw.profile_id ?? null) as number | null,
+      });
       if (!deliveredToAnyChannel(results, channels)) {
         // 所有渠道都失败：释放 claim，让下个 ±2 分钟窗口重试
         await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [raw.id, sendKey]);
@@ -475,12 +497,13 @@ export async function sendCadenceReminders(
 ): Promise<CadenceReminderStats> {
   const result = await query(
     `SELECT fc.id, fc.user_id, fc.name, fc.nickname, fc.relationship,
-            fc.cadence_days, fc.last_contact_at,
+            fc.cadence_days, fc.last_contact_at, fc.profile_id,
             latest.occurred_at AS effective_last_contact_at,
             latest.summary AS last_interaction_summary,
-            uc.timezone, uc.reminders_enabled
+            uc.timezone, uc.reminders_enabled, p.timezone AS profile_timezone
      FROM fixed_contacts fc
      LEFT JOIN user_configs uc ON uc.user_id = fc.user_id
+     LEFT JOIN profiles p ON p.id = fc.profile_id
      LEFT JOIN LATERAL (
        SELECT i.occurred_at, i.summary
        FROM interactions i
@@ -508,7 +531,7 @@ export async function sendCadenceReminders(
     }
 
     const userId = Number(raw.user_id);
-    const timeZone = typeof raw.timezone === 'string' ? raw.timezone : 'Asia/Shanghai';
+    const timeZone = resolveReminderTimeZone(raw);
     const today = getTodayString(now, timeZone);
 
     // 从未联系（有效最后联系为 NULL）没有周期起点：跳过，不发「上次联系：从未」。
@@ -581,6 +604,7 @@ export async function sendCadenceReminders(
         },
         userId,
         channels,
+        { profileId: (raw.profile_id ?? null) as number | null },
       );
       if (!deliveredToAnyChannel(results, channels)) {
         // 所有渠道都失败：释放 claim，下个分钟窗口可重试
@@ -642,11 +666,12 @@ export async function sendHabitReminders(
 ): Promise<HabitReminderStats> {
   const result = await query(
     `SELECT h.id, h.user_id, h.name, h.icon, h.target_per_period, h.period,
-            h.schedule_days, h.reminder_times,
-            uc.timezone, uc.reminders_enabled,
+            h.schedule_days, h.reminder_times, h.profile_id,
+            uc.timezone, uc.reminders_enabled, p.timezone AS profile_timezone,
             COALESCE(uc.habit_streak_nudge_hour, $1) AS habit_streak_nudge_hour
      FROM habits h
      LEFT JOIN user_configs uc ON uc.user_id = h.user_id
+     LEFT JOIN profiles p ON p.id = h.profile_id
      WHERE h.is_active = TRUE`,
     [DEFAULT_HABIT_STREAK_NUDGE_HOUR],
   );
@@ -664,7 +689,7 @@ export async function sendHabitReminders(
 
     const habitId = Number(raw.id);
     const userId = Number(raw.user_id);
-    const timeZone = typeof raw.timezone === 'string' ? raw.timezone : 'Asia/Shanghai';
+    const timeZone = resolveReminderTimeZone(raw);
     const today = getTodayString(now, timeZone);
     const scheduleDays = normalizeScheduleDays(raw.schedule_days ?? null);
     // 未排期的日子绝不提醒
@@ -720,6 +745,7 @@ export async function sendHabitReminders(
               },
               userId,
               channels,
+              { profileId: (raw.profile_id ?? null) as number | null },
             );
             if (!deliveredToAnyChannel(results, channels)) {
               await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [habitId, sendKey]);
@@ -774,6 +800,7 @@ export async function sendHabitReminders(
               },
               userId,
               channels,
+              { profileId: (raw.profile_id ?? null) as number | null },
             );
             if (!deliveredToAnyChannel(results, channels)) {
               await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [habitId, riskKey]);
@@ -881,6 +908,206 @@ export async function sendMaintenanceUsageNudges(): Promise<{
   return { candidates: result.rows.length, nudged, skipped };
 }
 
+export interface MedicationReminderStats {
+  candidates: number;
+  reminded: number;
+  snoozed: number;
+  escalated: number;
+  skipped: number;
+}
+
+/**
+ * 用药提醒（D3，checkbox 73）：按每个剂量自己的 `scheduled_for`（绝对时刻）触发，
+ * 绝不套用事件的 ±2 分钟 `reminder_time` 模型。
+ *
+ * - 计划提醒：scheduled_for ±2 分钟内，键 `med:dose#<doseId>#<ISO>` → 每个时刻每天一条。
+ * - 稍后提醒：用户在 /api/doses/:id/snooze 写入 `med:snooze#…` 请求，到点后发一条并写
+ *   `med:snooze-sent#…` 去重。
+ * - 升级提醒：scheduled_for + 30 分钟仍 pending 时发一条，键 `med:esc#<doseId>#<ISO>`；
+ *   已记录（taken/skipped/missed）的剂量不在候选里 → 记录后升级提醒为零次。
+ * - 免打扰：非关键用药在 quiet_hours 内一律跳过；`medications.is_critical` 为真时
+ *   显式绕过（这是迁移里 is_critical 的唯一语义，UI 上由用户显式勾选）。
+ */
+export async function sendMedicationReminders(
+  now: Date = getSyncedNow(DEFAULT_SYNC_TIMEZONE),
+): Promise<MedicationReminderStats> {
+  const result = await query(
+    `SELECT d.id, d.user_id, d.medication_id, d.scheduled_for, d.status,
+            m.name, m.dosage, m.units_per_dose, m.is_critical, m.profile_id,
+            uc.timezone, uc.quiet_hours_start, uc.quiet_hours_end, uc.reminders_enabled,
+            p.timezone AS profile_timezone
+     FROM medication_doses d
+     JOIN medications m ON m.id = d.medication_id
+     LEFT JOIN user_configs uc ON uc.user_id = d.user_id
+     LEFT JOIN profiles p ON p.id = m.profile_id
+     WHERE d.status = 'pending'
+       AND m.is_active = TRUE
+       AND d.scheduled_for >= $1::timestamptz - interval '6 hours'
+       AND d.scheduled_for <= $1::timestamptz + interval '5 minutes'
+     ORDER BY d.scheduled_for ASC
+     LIMIT 500`,
+    [now],
+  );
+
+  const rows = result.rows as Array<Record<string, unknown>>;
+
+  // 稍后提醒请求（med:snooze#…）批量取回，按 doseId 归组
+  const snoozeByDose = new Map<number, string[]>();
+  const doseIds = rows.map((r) => Number(r.id)).filter((id) => Number.isInteger(id));
+  if (doseIds.length > 0) {
+    const snoozeRows = await query(
+      `SELECT event_id, trigger_date FROM reminder_send_claims
+       WHERE event_id = ANY($1::int[]) AND trigger_date LIKE 'med:snooze#%'`,
+      [doseIds],
+    );
+    for (const claim of snoozeRows.rows as Array<{ event_id: number; trigger_date: string }>) {
+      const due = String(claim.trigger_date).split('#').pop() ?? '';
+      if (!due) continue;
+      const list = snoozeByDose.get(Number(claim.event_id)) ?? [];
+      list.push(due);
+      snoozeByDose.set(Number(claim.event_id), list);
+    }
+  }
+
+  const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
+  let reminded = 0;
+  let snoozed = 0;
+  let escalated = 0;
+  let skipped = 0;
+
+  for (const raw of rows) {
+    if (raw.reminders_enabled === false) {
+      skipped += 1;
+      continue;
+    }
+
+    const doseId = Number(raw.id);
+    const userId = Number(raw.user_id);
+    const timeZone = resolveReminderTimeZone(raw);
+    const scheduled = new Date(String(raw.scheduled_for));
+    if (Number.isNaN(scheduled.getTime())) {
+      skipped += 1;
+      continue;
+    }
+
+    const profileId = raw.profile_id == null ? null : Number(raw.profile_id);
+    const isCritical = raw.is_critical === true;
+
+    const dueSnooze = (snoozeByDose.get(doseId) ?? [])
+      .filter((iso) => {
+        const t = new Date(iso);
+        return !Number.isNaN(t.getTime()) && t.getTime() <= now.getTime();
+      })
+      .sort()[0] ?? null;
+
+    let kind: 'reminder' | 'snooze' | 'escalation' | null = null;
+    let sendKey = '';
+    if (dueSnooze) {
+      kind = 'snooze';
+      sendKey = `med:snooze-sent#${doseId}#${dueSnooze}`;
+    } else if (isWithinMinutes(now, scheduled, MEDICATION_REMINDER_WINDOW_MINUTES)) {
+      kind = 'reminder';
+      sendKey = buildDoseReminderKey(doseId, scheduled.toISOString());
+    } else if (
+      isWithinMinutes(
+        now,
+        new Date(scheduled.getTime() + MEDICATION_ESCALATION_MINUTES * 60_000),
+        MEDICATION_REMINDER_WINDOW_MINUTES,
+      )
+    ) {
+      kind = 'escalation';
+      sendKey = buildDoseEscalationKey(doseId, scheduled.toISOString());
+    }
+    if (!kind) {
+      skipped += 1;
+      continue;
+    }
+
+    // 免打扰：非关键用药一律遵守；关键用药（显式 is_critical）可绕过
+    if (
+      !isCritical &&
+      isInQuietHours(
+        typeof raw.quiet_hours_start === 'string' ? raw.quiet_hours_start : null,
+        typeof raw.quiet_hours_end === 'string' ? raw.quiet_hours_end : null,
+        timeZone,
+      )
+    ) {
+      skipped += 1;
+      continue;
+    }
+
+    const claim = await query(
+      `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING RETURNING event_id`,
+      [doseId, sendKey],
+    );
+    if (claim.rows.length === 0) {
+      skipped += 1;
+      continue;
+    }
+
+    const channels = await resolveReminderChannels(userId, [], 0);
+    if (channels.length === 0) {
+      await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [doseId, sendKey]);
+      skipped += 1;
+      continue;
+    }
+
+    const name = String(raw.name ?? '');
+    const dosage = raw.dosage == null ? '' : String(raw.dosage);
+    const doseTime = getCurrentHHmm(scheduled, timeZone);
+    const label = `${name}${dosage ? `（${dosage}）` : ''}`;
+    const customMessage = kind === 'escalation'
+      ? `⏰ 仍未记录服药：${label}（计划 ${doseTime}），请尽快服用或标记。`
+      : kind === 'snooze'
+        ? `💊 稍后提醒：该服用 ${label} 了（计划 ${doseTime}）。`
+        : `💊 服药提醒：${label}，请按计划服药（${doseTime}）。`;
+    const type = kind === 'escalation'
+      ? 'medication_escalation'
+      : kind === 'snooze'
+        ? 'medication_snooze'
+        : 'medication_reminder';
+
+    try {
+      const results = await sendNotifications(
+        {
+          id: null,
+          user_id: userId,
+          name,
+          type,
+          date: getTodayString(scheduled, timeZone),
+          calendar_type: 'gregorian',
+          reminder_time: doseTime,
+          reminder_config: null,
+          reminderConfig: null,
+          customMessage,
+        },
+        userId,
+        channels,
+        // 关键用药显式绕过免打扰（is_critical 的唯一语义）；其余一律遵守
+        { profileId, skipQuietHours: isCritical },
+      );
+      if (!deliveredToAnyChannel(results, channels)) {
+        await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [doseId, sendKey]);
+        skipped += 1;
+        log.warn({ doseId, kind, channels, results }, 'Medication reminder delivered to no channel; claim released');
+        continue;
+      }
+      if (kind === 'reminder') reminded += 1;
+      else if (kind === 'snooze') snoozed += 1;
+      else escalated += 1;
+      log.info({ doseId, kind, channels, doseTime }, 'Medication reminder dispatched');
+    } catch (error) {
+      await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [doseId, sendKey]);
+      skipped += 1;
+      log.error({ doseId, err: error }, 'Failed to send medication reminder');
+    }
+  }
+
+  log.info({ candidates: rows.length, reminded, snoozed, escalated, skipped }, 'Medication reminders checked');
+  return { candidates: rows.length, reminded, snoozed, escalated, skipped };
+}
+
 export async function sendReminders() {
   log.info('Checking reminders...');
 
@@ -926,6 +1153,24 @@ export async function sendReminders() {
     if (userTimezoneCache.has(userId)) return userTimezoneCache.get(userId)!;
     // User not in user_configs table - use defaults
     return 'Asia/Shanghai';
+  }
+
+  // v41 家庭档案时区（checkbox 69）：事件归属的档案若配置了时区，优先使用；
+  // 否则回退用户时区。只影响时区计算，通知路由仍按用户（checkbox 70）。
+  const profileTimezoneCache = new Map<number, string>();
+  const profileTimezoneRows = await query(
+    `SELECT id, timezone FROM profiles WHERE timezone IS NOT NULL AND timezone <> ''`,
+  );
+  for (const row of profileTimezoneRows.rows) {
+    profileTimezoneCache.set(Number(row.id), String(row.timezone));
+  }
+
+  function getEventTimezone(userId: number, profileId: unknown): string {
+    const pid = profileId == null || profileId === '' ? null : Number(profileId);
+    if (pid !== null && Number.isInteger(pid) && profileTimezoneCache.has(pid)) {
+      return profileTimezoneCache.get(pid)!;
+    }
+    return getUserTimezone(userId);
   }
   
   function getDaysBeforeList(userId: number, eventReminderDaysBefore: any): number[] {
@@ -1027,6 +1272,8 @@ export async function sendReminders() {
     calendar_type: string;
     notification_channels: string[];
     notification_account_ids: any;
+    /** v41 家庭档案：提醒时区优先取该档案的 timezone（checkbox 69） */
+    profile_id?: number | null;
     targetDate?: Date;
     daysUntil: number;
     matchedReminderTime: string;
@@ -1039,8 +1286,8 @@ export async function sendReminders() {
     }
     if (!userEnabledCache.get(event.user_id)) continue;
 
-    // Get per-user timezone and calculate today's date in that timezone
-    const timeZone = getUserTimezone(event.user_id);
+    // Get per-profile timezone and calculate today's date in that timezone
+    const timeZone = getEventTimezone(event.user_id, event.profile_id);
     const today = getTodayString(now, timeZone);
 
     const calendarType = event.calendar_type;
@@ -1127,6 +1374,7 @@ export async function sendReminders() {
         reminderTimes = [eventReminderTime];
       }
       
+      
       // Debug logging
       const nextOccurrence = resolveNextGregorianOccurrence(event.date, today, {
         eventType: event.type,
@@ -1172,7 +1420,7 @@ export async function sendReminders() {
     const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
     const channels = await resolveReminderChannels(event.user_id, baseChannels, event.daysUntil ?? 0);
     if (channels.length > 0) {
-      const timeZone = getUserTimezone(event.user_id);
+      const timeZone = getEventTimezone(event.user_id, event.profile_id);
       const today = getTodayString(now, timeZone);
 
       const sendKey = buildReminderSendKey(today, event.daysUntil ?? 0, event.matchedReminderTime);
@@ -1200,7 +1448,10 @@ export async function sendReminders() {
       }
       try {
         // Relationship mapping is handled inside sendNotifications() per-recipient
-        const channelResults = await sendNotifications(event, event.user_id, channels);
+        const channelResults = await sendNotifications(event, event.user_id, channels, {
+          // 档案级通知路由（checkbox 70）：有路由行时只发该档案的账户，否则全部启用账户
+          profileId: event.profile_id,
+        });
         log.info({ eventId: event.id, channelResults }, 'Sent notifications');
         
         // Determine overall status from per-channel results
@@ -1277,6 +1528,13 @@ export async function sendReminders() {
     await sendHabitReminders(now);
   } catch (error) {
     log.error({ err: error }, 'Habit reminder evaluation failed');
+  }
+
+  // 家庭用药（D3，checkbox 73）：按剂量 scheduled_for 的定时 / 稍后 / 升级提醒
+  try {
+    await sendMedicationReminders(now);
+  } catch (error) {
+    log.error({ err: error }, 'Medication reminder evaluation failed');
   }
 }
 

@@ -143,14 +143,17 @@ function inputToMethods(input: CreateFixedContactInput | UpdateFixedContactInput
   });
 }
 
-export async function listFixedContacts(userId: number): Promise<FixedContactRow[]> {
+export async function listFixedContacts(userId: number, profileId?: number | null): Promise<FixedContactRow[]> {
+  // Optional profile filter (checkbox 69): omitted = all profiles, byte-identical
+  // to the pre-profile API shape. The predicate is ADDED, never a rewrite.
+  const profileClause = profileId == null ? '' : ' AND profile_id = $2';
   const result = await query(
     `SELECT id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid,
             contact_methods, preferred_channels, relationship, gender, notes,
             cadence_days, last_contact_at, cadence_enabled,
             validation_status, last_validated_at, created_at, updated_at
-     FROM fixed_contacts WHERE user_id = $1 ORDER BY name ASC`,
-    [userId],
+     FROM fixed_contacts WHERE user_id = $1${profileClause} ORDER BY name ASC`,
+    profileId == null ? [userId] : [userId, profileId],
   );
   return result.rows.map(mapContactRow);
 }

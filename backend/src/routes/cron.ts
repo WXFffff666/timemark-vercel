@@ -12,6 +12,7 @@ import { purgeExpiredEventCache } from '../services/event-cache.service.js';
 import { purgeOldInboxMessages } from '../services/inbox.service.js';
 import { purgeOldTodoCompletions } from '../services/todo.service.js';
 import { purgeOldHabitLogs } from '../services/habit.service.js';
+import { materializeUpcomingDoses, markMissedDoses, purgeOldMedicationDoses } from '../services/medication.service.js';
 import { purgeOrphanAttachments } from '../services/attachment-retention.service.js';
 import { query } from '../db/index.js';
 import { pingHeartbeat } from '../utils/heartbeat.js';
@@ -186,6 +187,11 @@ cronRoutes.get('/daily-maintenance', async (c) => {
     const purgedTodos = await purgeOldTodoCompletions();
     // Habit logs follow the same 365-day retention as todo completions (checkbox 64).
     const purgedHabitLogs = await purgeOldHabitLogs();
+    // Medications (D3, checkbox 72): materialise today+tomorrow's doses (idempotent)
+    // and close out yesterday's unlogged pending doses as missed; 365-day dose history.
+    const materializedDoses = await materializeUpcomingDoses(undefined, 1);
+    const missedDoses = await markMissedDoses();
+    const purgedDoses = await purgeOldMedicationDoses();
     // Attachment retention (todo 57): orphan rows (no owner row) older than 30 days,
     // rows first then objects. Referenced attachments are never touched.
     const purgedAttachments = await purgeOrphanAttachments();
@@ -198,7 +204,7 @@ cronRoutes.get('/daily-maintenance', async (c) => {
       'daily-maintenance',
       'success',
       startedAt,
-      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged trigger logs: ${purged.triggerLogs}; purged emails: ${purged.emailLogs}; purged login attempts: ${purged.loginAttempts}; purged queue: ${purged.notificationQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged habit logs: ${purgedHabitLogs}; purged orphan attachments: ${purgedAttachments.purged}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}`,
+      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged trigger logs: ${purged.triggerLogs}; purged emails: ${purged.emailLogs}; purged login attempts: ${purged.loginAttempts}; purged queue: ${purged.notificationQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged habit logs: ${purgedHabitLogs}; doses materialized: ${materializedDoses}; doses missed: ${missedDoses}; purged doses: ${purgedDoses}; purged orphan attachments: ${purgedAttachments.purged}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}`,
     );
     await pingHeartbeat('daily-maintenance');
     return c.json({

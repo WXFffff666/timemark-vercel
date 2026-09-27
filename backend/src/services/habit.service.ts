@@ -121,12 +121,19 @@ function streakFor(habit: HabitRow, logs: HabitLogRow[], now: Date, timeZone: st
 
 export async function listHabits(
   userId: number,
-  opts: { active?: boolean; now?: Date } = {},
+  opts: { active?: boolean; now?: Date; profileId?: number | null } = {},
 ): Promise<HabitWithStreak[]> {
   const activeClause = opts.active === undefined ? '' : opts.active ? ' AND is_active = TRUE' : ' AND is_active = FALSE';
+  // 可选档案过滤（checkbox 69）：省略 = 全部档案。只加谓词，不改写原查询。
+  const params: number[] = [userId];
+  let profileClause = '';
+  if (opts.profileId != null) {
+    params.push(opts.profileId);
+    profileClause = ' AND profile_id = $2';
+  }
   const result = await query(
-    `SELECT * FROM habits WHERE user_id = $1${activeClause} ORDER BY created_at ASC, id ASC`,
-    [userId],
+    `SELECT * FROM habits WHERE user_id = $1${activeClause}${profileClause} ORDER BY created_at ASC, id ASC`,
+    params,
   );
   const habits = result.rows.map(mapHabit);
   if (habits.length === 0) return [];
@@ -296,7 +303,7 @@ export async function getHabitGrid(
   userId: number,
   from: string,
   to: string,
-  opts: { activeOnly?: boolean } = {},
+  opts: { activeOnly?: boolean; profileId?: number | null } = {},
 ): Promise<HabitGridResult> {
   const span = diffCalendarDays(from, to);
   if (span < 0 || span >= MAX_HABIT_GRID_DAYS) {
@@ -304,9 +311,16 @@ export async function getHabitGrid(
   }
 
   const activeClause = opts.activeOnly === false ? '' : ' AND is_active = TRUE';
+  // 可选档案过滤（checkbox 69）：省略 = 全部档案。
+  const params: number[] = [userId];
+  let profileClause = '';
+  if (opts.profileId != null) {
+    params.push(opts.profileId);
+    profileClause = ' AND profile_id = $2';
+  }
   const habitsResult = await query(
-    `SELECT * FROM habits WHERE user_id = $1${activeClause} ORDER BY created_at ASC, id ASC`,
-    [userId],
+    `SELECT * FROM habits WHERE user_id = $1${activeClause}${profileClause} ORDER BY created_at ASC, id ASC`,
+    params,
   );
   const habits = habitsResult.rows.map(mapHabit);
 

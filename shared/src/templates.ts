@@ -478,6 +478,31 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
     variables: ['event_name', 'event_date'],
     description: '每晚（默认 20:00）目标未达成时的一条连胜保护提醒',
   },
+  // 家庭用药（D3，checkbox 73）：按 schedule_times 的每个时刻发送
+  {
+    id: 'medication_reminder',
+    name: '服药提醒',
+    content: '💊 服药提醒：{{event_name}}，请按计划服药（{{reminder_time}}）。',
+    isPreset: true,
+    variables: ['event_name', 'reminder_time', 'event_date'],
+    description: '按用药计划的每个时刻发送；支持 10 分钟稍后提醒与 +30 分钟升级提醒',
+  },
+  {
+    id: 'medication_snooze',
+    name: '服药稍后提醒',
+    content: '💊 稍后提醒：该服用 {{event_name}} 了（{{reminder_time}}）。',
+    isPreset: true,
+    variables: ['event_name', 'reminder_time', 'event_date'],
+    description: '用户点击「稍后提醒」后 10 分钟再发一条',
+  },
+  {
+    id: 'medication_escalation',
+    name: '服药升级提醒',
+    content: '⏰ 仍未记录服药：{{event_name}}（计划 {{reminder_time}}），请尽快服用或标记。',
+    isPreset: true,
+    variables: ['event_name', 'reminder_time', 'event_date'],
+    description: '计划时刻 +30 分钟后仍未记录时的升级提醒（仅一次）',
+  },
 ];
 
 /** 批量邮件预设 — 见 broadcast-templates.ts */
@@ -529,6 +554,10 @@ export const EVENT_TYPE_TEMPLATES: Record<string, string[]> = {
   // 习惯打卡（D6）：定时打卡 / 连胜告急
   habit_reminder: ['habit_reminder', 'generic', 'detailed'],
   habit_streak_risk: ['habit_streak_risk', 'generic', 'detailed'],
+  // 家庭用药（D3）：按时刻提醒 / 稍后 / 升级
+  medication_reminder: ['medication_reminder', 'generic', 'detailed'],
+  medication_snooze: ['medication_snooze', 'medication_reminder', 'generic'],
+  medication_escalation: ['medication_escalation', 'medication_reminder', 'generic'],
 };
 
 /**
@@ -617,6 +646,10 @@ export function getEventTypeLabel(type: string): string {
     contact_cadence: '关系维系',
     habit_reminder: '习惯打卡',
     habit_streak_risk: '习惯连胜',
+    // 家庭用药（D3）
+    medication_reminder: '服药提醒',
+    medication_snooze: '服药稍后提醒',
+    medication_escalation: '服药升级提醒',
   };
   return labels[type] || type;
 }

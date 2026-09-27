@@ -9,6 +9,7 @@ import {
   todoOccurrenceDate,
 } from '../services/todo.service.js';
 import { query } from '../db/index.js';
+import { parseProfileFilter } from './profile-filter.js';
 
 const todos = new Hono<{ Variables: { user: User } }>();
 todos.use('*', authMiddleware);
@@ -20,7 +21,10 @@ const completeSchema = z.object({
 
 todos.get('/completions', async (c) => {
   const userId = Number(c.get('user').id);
-  const rows = await listTodoCompletions(userId);
+  // 可选档案过滤（checkbox 69）：完成记录跟随其事件的档案；省略 = 全部档案。
+  const profileFilter = await parseProfileFilter(c, userId);
+  if (profileFilter instanceof Response) return profileFilter;
+  const rows = await listTodoCompletions(userId, profileFilter);
   return c.json({
     success: true,
     data: rows.map((r) => ({

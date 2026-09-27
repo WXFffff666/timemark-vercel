@@ -20,6 +20,7 @@ import {
   updateInventoryItem,
   type InventoryItemFilters,
 } from '../services/inventory.service.js';
+import { parseProfileFilter } from './profile-filter.js';
 
 /**
  * 库存 API（D12，todo 49）。
@@ -70,11 +71,16 @@ inventory.get('/', async (c) => {
     return c.json({ success: false, error: "lowStock 只能为 'true' 或 'false'" }, 400);
   }
 
+  // 可选档案过滤（checkbox 69）：省略 = 全部档案；他人的档案一律 404。
+  const profileFilter = await parseProfileFilter(c, userId);
+  if (profileFilter instanceof Response) return profileFilter;
+
   const filters: InventoryItemFilters = {
     category: categoryRaw,
     active,
     lowStock,
     q: c.req.query('q') || undefined,
+    profileId: profileFilter,
   };
   const page = parsePage(c.req.query('page'));
   const limit = parseLimit(c.req.query('limit'));

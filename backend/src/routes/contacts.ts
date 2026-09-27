@@ -28,6 +28,7 @@ import {
 import { mergeContactMethodsInput } from '@timemark/shared';
 import { sendContactEmail } from '../services/contact-send.service.js';
 import { query } from '../db/index.js';
+import { parseProfileFilter } from './profile-filter.js';
 
 const contacts = new Hono<{ Variables: { user: User } }>();
 contacts.use('*', authMiddleware);
@@ -54,7 +55,10 @@ const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 
 contacts.get('/', async (c) => {
   const user = c.get('user');
-  const data = await listFixedContacts(Number(user.id));
+  // 可选档案过滤（checkbox 69）：省略 = 全部档案；他人的档案一律 404。
+  const profileFilter = await parseProfileFilter(c, Number(user.id));
+  if (profileFilter instanceof Response) return profileFilter;
+  const data = await listFixedContacts(Number(user.id), profileFilter);
   return c.json({ success: true, data });
 });
 

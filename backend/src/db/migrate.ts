@@ -26,6 +26,21 @@ export async function runMigrations(): Promise<void> {
   }
 }
 
+/**
+ * Tables that carry the nullable `profile_id` added by v41 and are backfilled to the
+ * owner's default `我` profile. `medications` (v42) is created after that backfill runs
+ * and has no pre-existing rows, so it is not part of the v41 backfill list.
+ */
+const PROFILE_AWARE_TABLES = [
+  'events',
+  'fixed_contacts',
+  'expiry_items',
+  'inventory_items',
+  'maintenance_plans',
+  'documents',
+  'habits',
+] as const;
+
 export async function applyIncrementalMigrations(currentVersion: number): Promise<void> {
   const migrations: Array<{
     version: number;
@@ -902,6 +917,201 @@ CREATE TABLE IF NOT EXISTS habit_logs (
 CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_date ON habit_logs(habit_id, logged_on DESC);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_user_date ON habit_logs(user_id, logged_on DESC);
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS habit_streak_nudge_hour TEXT DEFAULT '20:00';`,
+    },
+    {
+      // v41 (todo 68): household member profiles (D5). The plan text said "version: 39", but
+      // 39 (CRM) and 40 (habits) were already taken when this landed, so the next free number
+      // is 41. This is a PERSONAL household model (self/family/pet) - no organisations, no
+      // teams, no seats, no multi-tenancy. `profile_id` is nullable everywhere on purpose
+      // (future imports may omit it) and references profiles ON DELETE SET NULL, so deleting
+      // a profile orphans its rows back to "unassigned" instead of deleting data.
+      //
+      // Additive and idempotent: every statement is IF NOT EXISTS / existence-guarded and the
+      // only data writes are in postMigrate - the default `我` profile INSERT (guarded by
+      // NOT EXISTS kind='self') and the NULL-only backfill of profile_id. Re-running creates
+      // no second `我` and rewrites nothing.
+      //
+      // v34-v40 created five of these columns BARE (no FK): ADD COLUMN IF NOT EXISTS is a
+      // no-op when the column already exists, so the DO block below attaches the FK for any
+      // table that has the column without the constraint - first nulling values that point at
+      // no profile (profiles is brand new, so every pre-existing value is dangling; postMigrate
+      // re-points them at the user's default profile).
+      version: 41,
+      name: 'profiles_v41',
+      sql: `CREATE TABLE IF NOT EXISTS profiles (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  relation TEXT,
+  kind TEXT NOT NULL DEFAULT 'family' CHECK (kind IN ('self', 'family', 'pet')),
+  birth_date DATE,
+  lunar_birthday JSONB,
+  avatar_emoji TEXT,
+  timezone TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_profiles_user ON profiles(user_id);
+-- Exactly one self profile per user (the 我 default); family/pet profiles are unlimited.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_profiles_user_self ON profiles(user_id) WHERE kind = 'self';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL;
+ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL;
+ALTER TABLE expiry_items ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL;
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL;
+ALTER TABLE maintenance_plans ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL;
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL;
+-- medications is created by v42, which lands AFTER this migration: guard so a database where
+-- the table already exists still gets the column; v42 adds it for the table it creates.
+DO $$
+BEGIN
+  IF to_regclass('medications') IS NOT NULL THEN
+    ALTER TABLE medications ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+-- Attach the FK to columns that already existed bare (v34 expiry, v35 inventory, v36 maintenance,
+-- v38 documents, v40 habits). Also covers events/fixed_contacts on a database pre-created from
+-- shared/src/schema.pg.sql. The repair only nulls dangling values and only on first run.
+DO $$
+DECLARE t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['events', 'fixed_contacts', 'expiry_items', 'inventory_items', 'maintenance_plans', 'documents', 'habits'] LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint c JOIN pg_class cl ON cl.oid = c.conrelid
+      WHERE cl.relname = t AND c.conname = t || '_profile_id_fkey' AND c.contype = 'f'
+    ) THEN
+      EXECUTE format('UPDATE %I SET profile_id = NULL WHERE profile_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM profiles p WHERE p.id = %I.profile_id)', t, t);
+      EXECUTE format('ALTER TABLE %I ADD CONSTRAINT %I FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE SET NULL', t, t || '_profile_id_fkey');
+    END IF;
+  END LOOP;
+END $$;
+-- (user_id, profile_id) covering index on every table the profile filter can scope (todo 69).
+CREATE INDEX IF NOT EXISTS idx_events_user_profile ON events(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_user_profile ON fixed_contacts(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_expiry_items_user_profile ON expiry_items(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_user_profile ON inventory_items(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_plans_user_profile ON maintenance_plans(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_documents_user_profile ON documents(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_habits_user_profile ON habits(user_id, profile_id);`,
+      postMigrate: async () => {
+        // One default profile per user (`我`, kind='self'). The NOT EXISTS guard makes a
+        // re-run a no-op - never a second 我. (The partial unique index enforces the same
+        // invariant at the schema level.)
+        const created = await query(
+          `INSERT INTO profiles (user_id, name, kind)
+           SELECT u.id, '我', 'self' FROM users u
+           WHERE NOT EXISTS (
+             SELECT 1 FROM profiles p WHERE p.user_id = u.id AND p.kind = 'self'
+           )`,
+        );
+        if (created.rowCount && created.rowCount > 0) {
+          console.log(`[DB] Created ${created.rowCount} default profile(s) 我`);
+        }
+
+        // Backfill every pre-existing row to the owner's default profile. NULL-only, so
+        // re-running this never overwrites an explicit assignment.
+        let backfilled = 0;
+        for (const table of PROFILE_AWARE_TABLES) {
+          const updated = await query(
+            `UPDATE ${table} t SET profile_id = p.id
+             FROM profiles p
+             WHERE t.profile_id IS NULL AND p.user_id = t.user_id AND p.kind = 'self'`,
+          );
+          backfilled += updated.rowCount ?? 0;
+        }
+        if (backfilled > 0) {
+          console.log(`[DB] Backfilled profile_id for ${backfilled} row(s)`);
+        }
+      },
+    },
+    {
+      // v42 (todo 71): medication domain (D3) - medications + their dose log. The plan
+      // text said "version: 41", but 41 (profiles) was taken by todo 68 when this landed,
+      // so the next free number is 42. Reminder and log ONLY: no medical advice, no
+      // pharmacy integration, no AI features on this data (all explicitly out of scope).
+      //
+      // Additive and idempotent: every statement is IF NOT EXISTS-guarded; the only ALTER
+      // is ADD COLUMN IF NOT EXISTS (for a pre-existing medications table, parity with
+      // v41's guarded block). `profile_id` is nullable (ON DELETE SET NULL), created
+      // inline here AND guarded so both fresh and pre-created databases converge.
+      //
+      // `schedule_times TEXT[]` is NOT NULL DEFAULT '{}' on purpose: an empty array is a
+      // valid PRN / as-needed regimen and materialises zero scheduled doses, while NULL
+      // would force every reader to special-case it. `UNIQUE (medication_id,
+      // scheduled_for)` is what makes dose materialisation idempotent - inserting the
+      // same scheduled instant twice is rejected, never a second row.
+      version: 42,
+      name: 'medications_v42',
+      sql: `CREATE TABLE IF NOT EXISTS medications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  dosage TEXT,
+  form TEXT NOT NULL DEFAULT 'tablet' CHECK (form IN ('tablet', 'capsule', 'liquid', 'injection', 'patch', 'drops', 'other')),
+  schedule_times TEXT[] NOT NULL DEFAULT '{}',
+  schedule_days INTEGER[],
+  start_date DATE NOT NULL,
+  end_date DATE CHECK (end_date IS NULL OR end_date >= start_date),
+  stock_quantity NUMERIC CHECK (stock_quantity IS NULL OR stock_quantity >= 0),
+  stock_unit TEXT,
+  units_per_dose NUMERIC NOT NULL DEFAULT 1 CHECK (units_per_dose > 0),
+  refill_threshold NUMERIC CHECK (refill_threshold IS NULL OR refill_threshold >= 0),
+  prescriber TEXT,
+  pharmacy TEXT,
+  notes TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_critical BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_medications_user_profile ON medications(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_medications_user_active ON medications(user_id) WHERE is_active = TRUE;
+CREATE TABLE IF NOT EXISTS medication_doses (
+  id SERIAL PRIMARY KEY,
+  medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  scheduled_for TIMESTAMPTZ NOT NULL,
+  logged_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('taken', 'skipped', 'missed', 'pending')),
+  note TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (medication_id, scheduled_for)
+);
+CREATE INDEX IF NOT EXISTS idx_medication_doses_user_scheduled ON medication_doses(user_id, scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_medication_doses_med_status ON medication_doses(medication_id, status);
+ALTER TABLE medications ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL;`,
+    },
+    {
+      // v43 (todo 70): per-profile notification routing. The plan text said
+      // "migration 40", but 40 (habits), 41 (profiles) and 42 (medications) were
+      // already taken when this landed, so the next free number is 43.
+      //
+      // `profile_channel_accounts(profile_id, account_id)` is the join table that
+      // decides WHICH channel accounts receive a profile's reminders. Semantics:
+      //   - rows exist for a profile  -> only those accounts are eligible (explicit
+      //     routing wins), an event-level `notification_account_ids` binding stays
+      //     authoritative regardless;
+      //   - no rows for a profile     -> fall back to ALL active accounts (the
+      //     pre-routing behaviour, so nothing changes for existing users).
+      //
+      // Additive and idempotent: CREATE TABLE IF NOT EXISTS + CREATE INDEX IF NOT
+      // EXISTS only, no data writes, no ALTER of existing tables. Both FKs are
+      // ON DELETE CASCADE: deleting a profile or an account removes its routing
+      // rows, never the other side. The PK makes the pair unique (a profile cannot
+      // route to the same account twice). Same-user ownership is enforced by the
+      // API (profile.service) because profiles and accounts are both user-scoped.
+      version: 43,
+      name: 'profile_channel_accounts_v43',
+      sql: `CREATE TABLE IF NOT EXISTS profile_channel_accounts (
+  profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  account_id INTEGER NOT NULL REFERENCES notification_accounts(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (profile_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS idx_profile_channel_accounts_account ON profile_channel_accounts(account_id);`,
     },
   ];
 

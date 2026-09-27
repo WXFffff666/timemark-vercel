@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
+    "@pdf-lib/fontkit": "1.1.1",
     "@simplewebauthn/server": "^13.3.2",
     "@timemark/shared": "workspace:*",
     "@vercel/blob": "^2.8.0",
@@ -23,6 +24,7 @@
     "lunar-javascript": "^1.7.7",
     "nodemailer": "^10.0.10",
     "otplib": "^12.0.1",
+    "pdf-lib": "1.17.1",
     "pg": "^8.23.0",
     "pino": "^10.3.1",
     "qrcode": "^1.5.3",

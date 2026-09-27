@@ -17,6 +17,8 @@ export interface InventoryItemFilters {
   lowStock?: boolean;
   /** name / location 子串（大小写不敏感） */
   q?: string;
+  /** 家庭档案过滤（v41）：省略 = 全部档案，predicate 由路由做归属校验后传入 */
+  profileId?: number | null;
 }
 
 export interface InventoryItem {
@@ -90,6 +92,11 @@ export async function listInventoryItems(
   const where: string[] = ['user_id = $1'];
   const params: unknown[] = [userId];
 
+  // 可选档案过滤（checkbox 69）：省略 = 全部档案。只加谓词，不改写原查询。
+  if (filters.profileId != null) {
+    params.push(filters.profileId);
+    where.push(`profile_id = $${params.length}`);
+  }
   if (filters.category) {
     params.push(filters.category);
     where.push(`category = $${params.length}`);

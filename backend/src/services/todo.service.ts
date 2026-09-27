@@ -10,13 +10,21 @@ export function todoOccurrenceDate(eventDate: string): string {
   return eventDate.slice(0, 10);
 }
 
-export async function listTodoCompletions(userId: number): Promise<TodoCompletionRow[]> {
+export async function listTodoCompletions(userId: number, profileId?: number | null): Promise<TodoCompletionRow[]> {
+  // Optional profile filter (checkbox 69): a completion belongs to the event's profile.
+  // Omitted = all profiles, byte-identical to the pre-profile API shape.
+  const params: number[] = [userId];
+  let profileClause = '';
+  if (profileId != null) {
+    params.push(profileId);
+    profileClause = ' AND event_id IN (SELECT id FROM events WHERE user_id = $1 AND profile_id = $2)';
+  }
   const result = await query(
     `SELECT event_id, occurrence_date::text AS occurrence_date, completed_at
      FROM todo_completions
-     WHERE user_id = $1
+     WHERE user_id = $1${profileClause}
      ORDER BY completed_at DESC`,
-    [userId],
+    params,
   );
   return result.rows as TodoCompletionRow[];
 }

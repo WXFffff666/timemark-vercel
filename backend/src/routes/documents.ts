@@ -23,6 +23,7 @@ import {
   type DocumentFilters,
 } from '../services/document.service.js';
 import { toPublicAttachment } from '../services/attachment.service.js';
+import { parseProfileFilter } from './profile-filter.js';
 
 /**
  * 证件保险箱 API（D2，todo 54）。
@@ -72,10 +73,15 @@ documents.get('/', async (c) => {
     return c.json({ success: false, error: "active 只能为 'true' 或 'false'" }, 400);
   }
 
+  // 可选档案过滤（checkbox 69）：省略 = 全部档案；他人的档案一律 404。
+  const profileFilter = await parseProfileFilter(c, userId);
+  if (profileFilter instanceof Response) return profileFilter;
+
   const filters: DocumentFilters = {
     kind: kindRaw,
     active,
     q: c.req.query('q') || undefined,
+    profileId: profileFilter,
   };
   const page = parsePage(c.req.query('page'));
   const limit = parseLimit(c.req.query('limit'));

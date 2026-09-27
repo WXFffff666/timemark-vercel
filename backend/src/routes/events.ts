@@ -6,6 +6,7 @@ import { createEventSchema, updateEventSchema, batchDeleteSchema, csvImportSchem
 import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
 import { logFireAndForget } from '../utils/logger.js';
+import { parseProfileFilter } from './profile-filter.js';
 
 const events = new Hono<{ Variables: { user: User } }>();
 
@@ -18,9 +19,13 @@ events.get('/', async (c) => {
   const page = parseInt(c.req.query('page') || '1', 10);
   const limit = parseInt(c.req.query('limit') || '50', 10);
   const offset = (page - 1) * limit;
+
+  // 可选档案过滤（checkbox 69）：省略 = 全部档案；他人的档案一律 404。
+  const profileFilter = await parseProfileFilter(c, Number(user.id));
+  if (profileFilter instanceof Response) return profileFilter;
   
   // 获取分页数据
-  const result = await getEventsByUserIdPaginated(user.id, limit, offset);
+  const result = await getEventsByUserIdPaginated(user.id, limit, offset, profileFilter);
   
   return c.json({
     success: true,

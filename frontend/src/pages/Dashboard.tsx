@@ -9,6 +9,8 @@ import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { RealtimeClock, useTimezone } from '@/components/RealtimeClock';
 import { TimezoneSelector } from '@/components/TimezoneSelector';
+import { ProfileSwitcher } from '@/components/ProfileSwitcher';
+import { useProfileStore } from '@/stores/profile.store';
 import type { Event, CreateEventRequest } from '@timemark/shared';
 import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail, Inbox, AlarmClock, Package, Wrench } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
@@ -24,6 +26,8 @@ export function Dashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent, deleteEventsBatch, testSendEvent } = useEventStore();
+  // 档案切换器（checkbox 70）：切换后重新拉取事件（fetchEvents 内部会带上 profileId）
+  const profileId = useProfileStore((s) => s.profileId);
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | undefined>();
   const [batchMode, setBatchMode] = useState(false);
@@ -47,7 +51,7 @@ export function Dashboard() {
     api.getRaw<unknown[]>('/inbox?limit=1')
       .then((res) => setInboxUnread((res.pagination?.unreadCount as number) || 0))
       .catch(() => setInboxUnread(0));
-  }, [fetchEvents]);
+  }, [fetchEvents, profileId]);
 
   useEffect(() => {
     if (!events.length) return;
@@ -183,6 +187,7 @@ export function Dashboard() {
               <div className="w-px h-4 bg-slate-300 dark:bg-slate-600" aria-hidden></div>
               <TimezoneSelector />
             </div>
+            <ProfileSwitcher />
             <div className="flex items-center gap-1" role="toolbar" aria-label="快捷操作">
               <Button variant="ghost" size="icon" className="rounded-full relative" onClick={() => navigate('/inbox')} aria-label={`收件箱${inboxUnread > 0 ? `，${inboxUnread} 条未读` : ''}`}>
                 <Inbox size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />

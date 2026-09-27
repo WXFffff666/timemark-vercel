@@ -12,6 +12,7 @@ import { api } from '@/lib/api';
 import { getLang, setLang } from '@/i18n';
 import { TIMEZONE_OPTIONS } from '@/lib/timezone-utils';
 import { useTimezone } from '@/components/RealtimeClock';
+import { ProfileSettings } from '@/components/ProfileSettings';
 
 function parseAlertChannels(raw: unknown): string[] {
   if (!raw) return [];
@@ -631,6 +632,9 @@ export default function Settings() {
               </div>
             </div>
           </section>
+
+          {/* 家庭档案（D5，checkbox 70）：CRUD + 每档案通知路由 */}
+          <ProfileSettings />
 
           {/* 外观与通知 */}
           <section>

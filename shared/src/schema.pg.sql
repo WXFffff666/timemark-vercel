@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS events (
   tags JSONB DEFAULT '[]',
   share_token TEXT,
   event_photo_url TEXT,
+  -- v41 (todo 68): household profile assignment (nullable, ON DELETE SET NULL).
+  -- The FK constraint + backfill are applied by the v41 migration.
+  profile_id INTEGER,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_events_user_date ON events(user_id, date);
@@ -482,6 +485,9 @@ CREATE TABLE IF NOT EXISTS fixed_contacts (
   cadence_days INT,
   last_contact_at TIMESTAMPTZ,
   cadence_enabled BOOLEAN DEFAULT FALSE,
+  -- v41 (todo 68): household profile assignment (nullable, ON DELETE SET NULL).
+  -- The FK constraint + backfill are applied by the v41 migration.
+  profile_id INTEGER,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -563,6 +569,107 @@ CREATE TABLE IF NOT EXISTS habit_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_date ON habit_logs(habit_id, logged_on DESC);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_user_date ON habit_logs(user_id, logged_on DESC);
+
+-- ============================================================
+-- profiles — D5 household member profiles (self/family/pet). Mirrors
+-- backend/src/db/migrate.ts v41. Personal household model only: no
+-- organisations / teams / seats. The nullable profile_id columns on
+-- events/fixed_contacts/expiry_items/inventory_items/maintenance_plans/
+-- documents/habits are declared inline above; the FK constraints, the
+-- per-user default `我` profile and the backfill are applied by the v41
+-- migration (profiles + this table's indexes are mirrored here so the base
+-- file is self-describing).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS profiles (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  relation TEXT,
+  kind TEXT NOT NULL DEFAULT 'family' CHECK (kind IN ('self', 'family', 'pet')),
+  birth_date DATE,
+  lunar_birthday JSONB,
+  avatar_emoji TEXT,
+  timezone TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_profiles_user ON profiles(user_id);
+-- Exactly one self profile per user (the 我 default); family/pet are unlimited.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_profiles_user_self ON profiles(user_id) WHERE kind = 'self';
+-- (user_id, profile_id) covering index on every table the profile filter scopes (todo 69).
+CREATE INDEX IF NOT EXISTS idx_events_user_profile ON events(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_user_profile ON fixed_contacts(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_expiry_items_user_profile ON expiry_items(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_user_profile ON inventory_items(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_plans_user_profile ON maintenance_plans(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_documents_user_profile ON documents(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_habits_user_profile ON habits(user_id, profile_id);
+
+-- ============================================================
+-- medications / medication_doses — D3 medication reminders + dose log.
+-- Mirrors backend/src/db/migrate.ts v42. Reminder and log only: no medical
+-- advice and no pharmacy integration (both explicitly out of scope).
+-- `is_critical` is part of v42 from the start (may bypass quiet hours in the
+-- reminder job; the choice is explicit in the UI). `schedule_times TEXT[]` may
+-- be empty (PRN / as-needed) and then materialises no scheduled doses; the
+-- UNIQUE (medication_id, scheduled_for) makes dose materialisation idempotent.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS medications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  dosage TEXT,
+  form TEXT NOT NULL DEFAULT 'tablet' CHECK (form IN ('tablet', 'capsule', 'liquid', 'injection', 'patch', 'drops', 'other')),
+  schedule_times TEXT[] NOT NULL DEFAULT '{}',
+  schedule_days INTEGER[],
+  start_date DATE NOT NULL,
+  end_date DATE CHECK (end_date IS NULL OR end_date >= start_date),
+  stock_quantity NUMERIC CHECK (stock_quantity IS NULL OR stock_quantity >= 0),
+  stock_unit TEXT,
+  units_per_dose NUMERIC NOT NULL DEFAULT 1 CHECK (units_per_dose > 0),
+  refill_threshold NUMERIC CHECK (refill_threshold IS NULL OR refill_threshold >= 0),
+  prescriber TEXT,
+  pharmacy TEXT,
+  notes TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_critical BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_medications_user_profile ON medications(user_id, profile_id);
+CREATE INDEX IF NOT EXISTS idx_medications_user_active ON medications(user_id) WHERE is_active = TRUE;
+
+CREATE TABLE IF NOT EXISTS medication_doses (
+  id SERIAL PRIMARY KEY,
+  medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  scheduled_for TIMESTAMPTZ NOT NULL,
+  logged_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('taken', 'skipped', 'missed', 'pending')),
+  note TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  -- One dose row per medication per scheduled instant: materialisation is idempotent.
+  UNIQUE (medication_id, scheduled_for)
+);
+CREATE INDEX IF NOT EXISTS idx_medication_doses_user_scheduled ON medication_doses(user_id, scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_medication_doses_med_status ON medication_doses(medication_id, status);
+
+-- ============================================================
+-- profile_channel_accounts — per-profile notification routing (D5, checkbox 70).
+-- Mirrors backend/src/db/migrate.ts v43. Rows exist -> only those accounts receive
+-- that profile's reminders; no rows -> all active accounts (pre-routing default).
+-- Both FKs CASCADE: deleting a profile or an account drops its routing rows only.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS profile_channel_accounts (
+  profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  account_id INTEGER NOT NULL REFERENCES notification_accounts(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (profile_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS idx_profile_channel_accounts_account ON profile_channel_accounts(account_id);
 
 -- ============================================================
 -- Initial schema version (v15 = all incremental migrations merged)

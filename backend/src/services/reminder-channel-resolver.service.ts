@@ -68,3 +68,39 @@ export async function resolveReminderChannels(
 
   return resolveActiveAccountChannels(userId);
 }
+
+/**
+ * 档案级通知账户路由（D5，checkbox 70）。
+ *
+ * `profile_channel_accounts(profile_id, account_id)` 决定该档案的提醒可以走哪些
+ * 通知账户：
+ * - 存在路由行 → 只有这些账户可选（显式路由优先）；
+ * - 不存在路由行 → 返回 null，调用方回退到「全部启用账户」（引入路由前的行为，
+ *   老用户不做任何配置也照常收到提醒）；
+ * - profileId 缺失（null/undefined）→ 同样返回 null（无档案上下文 = 不施加路由）。
+ *
+ * 只影响「用哪个账户发」，不影响「用哪些渠道发」：渠道选择仍由事件/规则解析，
+ * 事件级 `notification_account_ids` 绑定始终最优先（见 sendNotifications）。
+ */
+export async function resolveProfileRoutedAccountIds(
+  userId: number,
+  profileId: number | null | undefined,
+): Promise<Set<number> | null> {
+  if (profileId == null || !Number.isInteger(Number(profileId))) return null;
+
+  const result = await query(
+    `SELECT pca.account_id
+     FROM profile_channel_accounts pca
+     JOIN profiles p ON p.id = pca.profile_id
+     WHERE pca.profile_id = $1 AND p.user_id = $2`,
+    [Number(profileId), userId],
+  );
+  const rows = Array.isArray(result?.rows) ? result.rows : [];
+  // 空结果（或畸形 mock）= 该档案没有显式路由 → 全部启用账户。
+  if (rows.length === 0) return null;
+
+  const ids = rows
+    .map((row) => Number((row as { account_id?: unknown }).account_id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  return ids.length > 0 ? new Set(ids) : null;
+}

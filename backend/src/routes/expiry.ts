@@ -20,6 +20,7 @@ import {
   type ExpiryCostGranularity,
   type ExpiryItemFilters,
 } from '../services/expiry.service.js';
+import { parseProfileFilter } from './profile-filter.js';
 
 /**
  * 到期中心 API（D1，todo 45）。
@@ -69,12 +70,17 @@ expiry.get('/', async (c) => {
   if (from && !YMD_RE.test(from)) return c.json({ success: false, error: 'from 必须为 YYYY-MM-DD' }, 400);
   if (to && !YMD_RE.test(to)) return c.json({ success: false, error: 'to 必须为 YYYY-MM-DD' }, 400);
 
+  // 可选档案过滤（checkbox 69）：省略 = 全部档案；他人的档案一律 404。
+  const profileFilter = await parseProfileFilter(c, userId);
+  if (profileFilter instanceof Response) return profileFilter;
+
   const filters: ExpiryItemFilters = {
     kind: kindRaw,
     active,
     from,
     to,
     q: c.req.query('q') || undefined,
+    profileId: profileFilter,
   };
   const page = parsePage(c.req.query('page'));
   const limit = parseLimit(c.req.query('limit'));

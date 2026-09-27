@@ -18,6 +18,7 @@ import {
   logHabit,
   updateHabit,
 } from '../services/habit.service.js';
+import { parseProfileFilter } from './profile-filter.js';
 
 /**
  * 习惯打卡 API（D6，checkbox 64/65）。
@@ -48,7 +49,11 @@ habits.get('/', async (c) => {
     return c.json({ success: false, error: "active 只能为 'true' 或 'false'" }, 400);
   }
 
-  const data = await listHabits(userId, { active });
+  // 可选档案过滤（checkbox 69）：省略 = 全部档案；他人的档案一律 404。
+  const profileFilter = await parseProfileFilter(c, userId);
+  if (profileFilter instanceof Response) return profileFilter;
+
+  const data = await listHabits(userId, { active, profileId: profileFilter });
   return c.json({ success: true, data });
 });
 
@@ -61,7 +66,11 @@ habits.get('/grid', async (c) => {
     return c.json({ success: false, error: 'from / to 必须为 YYYY-MM-DD' }, 400);
   }
   try {
-    const data = await getHabitGrid(userId, from, to);
+    // 可选档案过滤（checkbox 69）：省略 = 全部档案；他人的档案一律 404。
+    const profileFilter = await parseProfileFilter(c, userId);
+    if (profileFilter instanceof Response) return profileFilter;
+
+    const data = await getHabitGrid(userId, from, to, { profileId: profileFilter });
     return c.json({ success: true, data });
   } catch (error) {
     if (error instanceof RangeError) {

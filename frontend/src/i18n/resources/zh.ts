@@ -12,6 +12,7 @@ export const zh = {
   'nav.maintenance': '保养',
   'nav.documents': '证件',
   'nav.habits': '习惯',
+  'nav.medications': '用药',
   'login.submit': '登录',
 } as const;
 

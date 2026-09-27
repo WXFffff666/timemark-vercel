@@ -339,20 +339,29 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
  * @param offset - Number of events to skip
  * @returns Object containing events array and total count
  */
-export async function getEventsByUserIdPaginated(userId: string, limit: number, offset: number): Promise<{ events: Event[]; total: number }> {
+export async function getEventsByUserIdPaginated(userId: string, limit: number, offset: number, profileId?: number | null): Promise<{ events: Event[]; total: number }> {
   const numericUserId = parseInt(userId, 10);
   if (isNaN(numericUserId)) {
     return { events: [], total: 0 };
   }
-  
+
+  // Optional profile filter (checkbox 69): omitted = all profiles, byte-identical
+  // to the pre-profile API shape. The predicate is ADDED, never a rewrite.
+  const params: number[] = [numericUserId];
+  let profileClause = '';
+  if (profileId != null) {
+    params.push(profileId);
+    profileClause = ' AND profile_id = $2';
+  }
+
   // 获取总数
-  const countResult = await query('SELECT COUNT(*) as total FROM events WHERE user_id = $1', [numericUserId]);
+  const countResult = await query(`SELECT COUNT(*) as total FROM events WHERE user_id = $1${profileClause}`, params);
   const total = countResult.rows[0]?.total || 0;
   
   // 获取分页数据
   const result = await query(
-    'SELECT * FROM events WHERE user_id = $1 ORDER BY date ASC LIMIT $2 OFFSET $3',
-    [numericUserId, limit, offset]
+    `SELECT * FROM events WHERE user_id = $1${profileClause} ORDER BY date ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, limit, offset]
   );
   
   const events = result.rows.map((row: EventRow) => {

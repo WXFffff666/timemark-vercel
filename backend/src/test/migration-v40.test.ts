@@ -75,7 +75,8 @@ describe('migration v40 registration (todo 64)', () => {
 
     const inserts = versionInserts();
     expect(inserts).toContain(39);
-    expect(inserts[inserts.length - 1]).toBe(40);
+    // v40 must still be applied immediately after 39; later migrations (41+) follow.
+    expect(inserts.indexOf(40)).toBeGreaterThan(inserts.indexOf(39));
     expect(inserts.filter((v) => v === 40)).toHaveLength(1);
   });
 
@@ -84,7 +85,7 @@ describe('migration v40 registration (todo 64)', () => {
 
     expect(callsMatching('CREATE TABLE IF NOT EXISTS interactions')).toHaveLength(0);
     expect(callsMatching('CREATE TABLE IF NOT EXISTS habits')).toHaveLength(1);
-    expect(versionInserts()).toEqual([40]);
+    expect(versionInserts()[0]).toBe(40);
   });
 
   it('stale-state: a recorded v40 row makes the runner skip v40 (no re-apply, no duplicate write)', async () => {
@@ -134,7 +135,8 @@ describe('migration v40 registration (todo 64)', () => {
     expect(versions).toContain(40);
     expect(versions.filter((v) => v === 40)).toHaveLength(1);
     expect(versions.indexOf(40)).toBe(versions.indexOf(39) + 1);
-    expect(versions[versions.length - 1]).toBe(40);
+    // Later migrations (41+) may follow; 40 must remain the version right after 39.
+    expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(40);
     // The plan text claimed version 38; the real previous max was 39.
     expect(versions.filter((v) => v === 38)).toHaveLength(1);
 

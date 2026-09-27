@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Shield, Bell, Settings, BarChart2, AlarmClock, Package, Wrench, FileText, Flame } from 'lucide-react';
+import { Home, Shield, Bell, Settings, BarChart2, AlarmClock, Package, Wrench, FileText, Flame, Pill } from 'lucide-react';
 import { prefetchRoute } from '@/lib/prefetch-routes';
 import { getLang, t } from '@/i18n';
 
@@ -13,6 +13,7 @@ const items = [
   { path: '/maintenance', icon: Wrench, labelKey: 'nav.maintenance' as const },
   { path: '/documents', icon: FileText, labelKey: 'nav.documents' as const },
   { path: '/habits', icon: Flame, labelKey: 'nav.habits' as const },
+  { path: '/medications', icon: Pill, labelKey: 'nav.medications' as const },
   { path: '/security', icon: Shield, labelKey: 'nav.security' as const },
   { path: '/settings', icon: Settings, labelKey: 'nav.settings' as const },
 ];
