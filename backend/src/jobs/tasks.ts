@@ -5,8 +5,27 @@ import {
   diffCalendarDays,
   matchesReminderTimeWindow,
   resolveNextGregorianOccurrence,
+  toYmdString,
 } from '@timemark/shared/event-schedule';
+import {
+  buildExpirySendKey,
+  DEFAULT_EXPIRY_LEAD_DAYS,
+  DEFAULT_EXPIRY_REMINDER_TIMES,
+  expiryEventType,
+} from '@timemark/shared/expiry-schedule';
+import {
+  buildInventorySendKey,
+  inventoryEventType,
+} from '@timemark/shared/inventory-schedule';
+import {
+  buildMaintenanceSendKey,
+  buildMaintenanceUsageKey,
+  maintenanceEventType,
+  usageNeedsNudge,
+  USAGE_NUDGE_RATIO,
+} from '@timemark/shared/maintenance-schedule';
 import { sendNotifications } from '../services/notifications/index.js';
+import { createInboxMessage } from '../services/inbox.service.js';
 import { refreshUserEventCache } from '../services/event-cache.service.js';
 import { createLogger } from '../utils/logger.js';
 import { recordEventTrigger } from '../services/trigger-log.service.js';
@@ -89,6 +108,329 @@ function parseReminderDays(raw: any): number[] | null {
     }
   } catch { /* ignore parse errors */ }
   return null;
+}
+
+/** 当前 HH:mm（按用户时区），与事件提醒使用同一套 Intl 逻辑 */
+function getCurrentHHmm(now: Date, timeZone: string): string {
+  const hour = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: '2-digit',
+    hour12: false,
+  }).format(now);
+  const minute = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    minute: '2-digit',
+    hour12: false,
+  }).format(now);
+  return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+}
+
+/**
+ * 「带到期日」提醒的通用迭代器（D1/D12）。
+ *
+ * 到期项（todo 48）、库存（todo 49）、保养计划日期间隔（todo 50）共用同一套逻辑：
+ * - 时间窗口：同一个 matchesReminderTimeWindow（±2 分钟）
+ * - 渠道：同一个 resolveReminderChannels + sendNotifications
+ * - 去重：同一张 reminder_send_claims，键带各自前缀（expiry:/inventory:/maintenance:）
+ * - 提前天数：row.reminder_config.daysBeforeList，缺省 [30, 7, 3, 1, 0]
+ * - 过期的 due / is_active=false / reminders_enabled=false 一律不提醒
+ * 绝不新建第二个调度器：三个来源都由 sendReminders 在同一个分钟级 cron 里调用。
+ *
+ * 发送事件不携带 event.id（email_logs / notification_queue 的 event_id 外键指向
+ * events 表），因此这些提醒不写事件触发日志，去重完全由 claim 承担；发送失败会
+ * 释放 claim，让下个时间窗口重试。
+ */
+interface DatedReminderConfig {
+  enabled?: boolean;
+  daysBeforeList?: number[];
+  reminderTimes?: string[];
+  channels?: string[];
+}
+
+interface DatedReminderSource {
+  /** 表名与别名（代码常量，非用户输入） */
+  table: string;
+  alias: string;
+  /** 到期日列（YYYY-MM-DD DATE） */
+  dueColumn: string;
+  /** 标题列 */
+  titleColumn: string;
+  /** 分类/类型列（选择模板家族） */
+  kindColumn: string;
+  /** 默认分类（行缺失时兜底） */
+  defaultKind: string;
+  /** 附加 WHERE 片段（别名限定，代码常量） */
+  extraWhere: string;
+  /** 日志与返回用的来源标签 */
+  label: string;
+  buildSendKey: (todayYmd: string, daysUntil: number, reminderTime: string) => string;
+  toEventType: (kind: string) => string;
+}
+
+const EXPIRY_SOURCE: DatedReminderSource = {
+  table: 'expiry_items',
+  alias: 'e',
+  dueColumn: 'next_due_date',
+  titleColumn: 'title',
+  kindColumn: 'kind',
+  defaultKind: 'custom',
+  extraWhere: '',
+  label: 'expiry',
+  buildSendKey: buildExpirySendKey,
+  toEventType: expiryEventType,
+};
+
+const INVENTORY_SOURCE: DatedReminderSource = {
+  table: 'inventory_items',
+  alias: 'i',
+  dueColumn: 'expires_at',
+  titleColumn: 'name',
+  kindColumn: 'category',
+  defaultKind: 'other',
+  // 非易腐品（expires_at IS NULL）永不进入提醒候选
+  extraWhere: 'AND i.expires_at IS NOT NULL',
+  label: 'inventory',
+  buildSendKey: buildInventorySendKey,
+  toEventType: inventoryEventType,
+};
+
+const MAINTENANCE_SOURCE: DatedReminderSource = {
+  table: 'maintenance_plans',
+  alias: 'p',
+  dueColumn: 'next_due_at',
+  titleColumn: 'asset_name',
+  kindColumn: 'asset_kind',
+  defaultKind: 'other',
+  // 仅按用量保养的计划没有日期提醒（next_due_at IS NULL）
+  extraWhere: 'AND p.next_due_at IS NOT NULL',
+  label: 'maintenance',
+  buildSendKey: buildMaintenanceSendKey,
+  toEventType: maintenanceEventType,
+};
+
+async function runDatedReminderIterator(
+  source: DatedReminderSource,
+  now: Date,
+): Promise<{ candidates: number; sent: number; claimed: number; skipped: number }> {
+  const result = await query(
+    `SELECT ${source.alias}.*, uc.timezone, uc.reminders_enabled
+     FROM ${source.table} ${source.alias}
+     LEFT JOIN user_configs uc ON uc.user_id = ${source.alias}.user_id
+     WHERE ${source.alias}.is_active = TRUE ${source.extraWhere}`,
+  );
+
+  let sent = 0;
+  let claimed = 0;
+  let skipped = 0;
+
+  for (const raw of result.rows as Array<Record<string, unknown>>) {
+    if (raw.is_active === false || raw.reminders_enabled === false) {
+      skipped += 1;
+      continue;
+    }
+
+    const userId = Number(raw.user_id);
+    const timeZone = typeof raw.timezone === 'string' ? raw.timezone : 'Asia/Shanghai';
+    const today = getTodayString(now, timeZone);
+    const due = toYmdString(raw[source.dueColumn]);
+    // 过去日期不是「即将到来」；逾期项由各自的 overdue/expiring/低库存视图呈现，不发提醒
+    if (!due) {
+      skipped += 1;
+      continue;
+    }
+    const daysUntil = diffCalendarDays(today, due);
+    if (daysUntil < 0) {
+      skipped += 1;
+      continue;
+    }
+
+    const config = parseJsonField<DatedReminderConfig>(raw.reminder_config);
+    if (config?.enabled === false) {
+      skipped += 1;
+      continue;
+    }
+
+    const leadDays = config?.daysBeforeList?.length ? config.daysBeforeList : [...DEFAULT_EXPIRY_LEAD_DAYS];
+    if (!leadDays.includes(daysUntil)) {
+      skipped += 1;
+      continue;
+    }
+
+    const reminderTimes = config?.reminderTimes?.length
+      ? config.reminderTimes
+      : [...DEFAULT_EXPIRY_REMINDER_TIMES];
+    const currentTime = getCurrentHHmm(now, timeZone);
+    const matchedReminderTime = reminderTimes.find((time) => matchesReminderTimeWindow(currentTime, time, 2));
+    if (!matchedReminderTime) {
+      skipped += 1;
+      continue;
+    }
+
+    const baseChannels = Array.isArray(config?.channels) ? config.channels : [];
+    const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
+    const channels = await resolveReminderChannels(userId, baseChannels, daysUntil);
+    if (channels.length === 0) {
+      skipped += 1;
+      continue;
+    }
+
+    const kind = String(raw[source.kindColumn] ?? source.defaultKind);
+    const sendKey = source.buildSendKey(today, daysUntil, matchedReminderTime);
+    const claim = await query(
+      `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING RETURNING event_id`,
+      [raw.id, sendKey],
+    );
+    if (claim.rows.length === 0) {
+      // 同一窗口内已被本进程或并行的 cron 发送过
+      skipped += 1;
+      continue;
+    }
+    claimed += 1;
+
+    try {
+      const notificationEvent = {
+        // 故意不带 id：email_logs / notification_queue 的 event_id 外键指向 events
+        id: null,
+        user_id: userId,
+        name: String(raw[source.titleColumn] ?? ''),
+        type: source.toEventType(kind),
+        date: due,
+        calendar_type: 'gregorian',
+        reminder_time: matchedReminderTime,
+        reminder_config: config ?? null,
+        reminderConfig: config ?? null,
+      };
+      const results = await sendNotifications(notificationEvent, userId, channels);
+      sent += 1;
+      log.info(
+        { source: source.label, itemId: raw.id, kind, daysUntil, matchedReminderTime, channels, results },
+        'Dated reminder dispatched',
+      );
+    } catch (error) {
+      // 释放 claim，让下个 ±2 分钟窗口可以重试
+      await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [raw.id, sendKey]);
+      skipped += 1;
+      log.error({ source: source.label, itemId: raw.id, err: error }, 'Failed to send dated reminder');
+    }
+  }
+
+  log.info({ source: source.label, candidates: result.rows.length, sent, claimed, skipped }, 'Dated reminders checked');
+  return { candidates: result.rows.length, sent, claimed, skipped };
+}
+
+/** 到期项提醒（D1，todo 48）：复用同一引擎，send key 带 `expiry:` 前缀 */
+export async function sendExpiryReminders(now: Date = getSyncedNow(DEFAULT_SYNC_TIMEZONE)): Promise<{
+  candidates: number;
+  sent: number;
+  claimed: number;
+  skipped: number;
+}> {
+  return runDatedReminderIterator(EXPIRY_SOURCE, now);
+}
+
+/** 库存到期提醒（D12，todo 49）：仅 expires_at 非空的行，send key 带 `inventory:` 前缀 */
+export async function sendInventoryReminders(now: Date = getSyncedNow(DEFAULT_SYNC_TIMEZONE)): Promise<{
+  candidates: number;
+  sent: number;
+  claimed: number;
+  skipped: number;
+}> {
+  return runDatedReminderIterator(INVENTORY_SOURCE, now);
+}
+
+/** 保养日期提醒（D12，todo 50）：仅 next_due_at 非空的行，send key 带 `maintenance:` 前缀 */
+export async function sendMaintenanceReminders(now: Date = getSyncedNow(DEFAULT_SYNC_TIMEZONE)): Promise<{
+  candidates: number;
+  sent: number;
+  claimed: number;
+  skipped: number;
+}> {
+  return runDatedReminderIterator(MAINTENANCE_SOURCE, now);
+}
+
+function toFiniteNumberOrNull(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * 保养用量提醒（D12，todo 50）：剩余用量 <= 间隔的 10% 时写一条收件箱提醒。
+ * - 不做第二个调度器：由 sendReminders 在同一个分钟级 cron 里调用
+ * - 去重：同一张 reminder_send_claims，键 `maintenance:usage#<planId>#u<nextDueUsage>`；
+ *   下次保养用量变化后键随之变化 → 每个保养周期最多提醒一次
+ * - source='inbound'：收件箱列表只展示 inbound（inbox.service.listInboxMessages），
+ *   这样提醒才真的出现在「收件箱」而不是只进日志
+ */
+export async function sendMaintenanceUsageNudges(): Promise<{
+  candidates: number;
+  nudged: number;
+  skipped: number;
+}> {
+  const result = await query(
+    `SELECT p.id, p.user_id, p.asset_name, p.interval_usage, p.current_usage, p.next_due_usage,
+            COALESCE(p.usage_unit, '') AS usage_unit, uc.reminders_enabled
+     FROM maintenance_plans p
+     LEFT JOIN user_configs uc ON uc.user_id = p.user_id
+     WHERE p.is_active = TRUE
+       AND p.interval_usage IS NOT NULL
+       AND p.current_usage IS NOT NULL
+       AND p.next_due_usage IS NOT NULL
+       AND p.next_due_usage - p.current_usage <= p.interval_usage * ${USAGE_NUDGE_RATIO}`,
+  );
+
+  let nudged = 0;
+  let skipped = 0;
+
+  for (const raw of result.rows as Array<Record<string, unknown>>) {
+    if (raw.reminders_enabled === false) {
+      skipped += 1;
+      continue;
+    }
+
+    const currentUsage = toFiniteNumberOrNull(raw.current_usage);
+    const nextDueUsage = toFiniteNumberOrNull(raw.next_due_usage);
+    const intervalUsage = toFiniteNumberOrNull(raw.interval_usage);
+    // SQL 已过滤，这里再用纯函数复核一次（同一规则两处实现互为证明）
+    if (!usageNeedsNudge({ currentUsage, nextDueUsage, intervalUsage })) {
+      skipped += 1;
+      continue;
+    }
+
+    const planId = Number(raw.id);
+    const claimKey = buildMaintenanceUsageKey(planId, nextDueUsage as number);
+    const claim = await query(
+      `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING RETURNING event_id`,
+      [planId, claimKey],
+    );
+    if (claim.rows.length === 0) {
+      skipped += 1;
+      continue;
+    }
+
+    try {
+      const unit = typeof raw.usage_unit === 'string' ? raw.usage_unit : '';
+      const remaining = (nextDueUsage as number) - (currentUsage as number);
+      await createInboxMessage({
+        userId: Number(raw.user_id),
+        title: `保养提醒：${String(raw.asset_name)}`,
+        body: `按用量保养临近：当前 ${currentUsage}${unit}，下次保养 ${nextDueUsage}${unit}（剩余 ${remaining}${unit}）`,
+        source: 'inbound',
+        senderLabel: '保养计划',
+      });
+      nudged += 1;
+    } catch (error) {
+      // 释放 claim，下个分钟窗口可重试
+      await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [planId, claimKey]);
+      skipped += 1;
+      log.error({ planId, err: error }, 'Failed to send maintenance usage nudge');
+    }
+  }
+
+  log.info({ candidates: result.rows.length, nudged, skipped }, 'Maintenance usage nudges checked');
+  return { candidates: result.rows.length, nudged, skipped };
 }
 
 export async function sendReminders() {
@@ -440,6 +782,32 @@ export async function sendReminders() {
         await recordEventTrigger(event.id, event.user_id, 'scheduled', sendKey, 'failed', String(error));
       }
     }
+  }
+
+  // 到期中心（D1，todo 48）：同一引擎、同一分钟级调度，事件提醒失败也不阻断
+  try {
+    await sendExpiryReminders(now);
+  } catch (error) {
+    log.error({ err: error }, 'Expiry reminder evaluation failed');
+  }
+
+  // 库存（D12，todo 49）：同一引擎、同一分钟级调度（仅 expires_at 非空的行）
+  try {
+    await sendInventoryReminders(now);
+  } catch (error) {
+    log.error({ err: error }, 'Inventory reminder evaluation failed');
+  }
+
+  // 保养（D12，todo 50）：日期间隔走同一引擎；用量间隔在 10% 阈值内写收件箱提醒
+  try {
+    await sendMaintenanceReminders(now);
+  } catch (error) {
+    log.error({ err: error }, 'Maintenance reminder evaluation failed');
+  }
+  try {
+    await sendMaintenanceUsageNudges();
+  } catch (error) {
+    log.error({ err: error }, 'Maintenance usage nudge evaluation failed');
   }
 }
 

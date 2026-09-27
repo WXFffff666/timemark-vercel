@@ -26,6 +26,9 @@ const PAGES = [
   { path: '/settings', heading: '系统设置', anonymous: false },
   { path: '/channels', heading: '通知渠道', anonymous: false },
   { path: '/todos', heading: '近期待办', anonymous: false },
+  { path: '/expiry', heading: '到期中心', anonymous: false },
+  { path: '/inventory', heading: '库存', anonymous: false },
+  { path: '/maintenance', heading: '保养', anonymous: false },
   { path: '/login', heading: /TimeMark/i, anonymous: true },
 ] as const;
 

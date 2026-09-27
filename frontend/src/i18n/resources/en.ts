@@ -9,5 +9,8 @@ export const en: Record<TranslationKey, string> = {
   'nav.inbox': 'Inbox',
   'nav.settings': 'Settings',
   'nav.channels': 'Channels',
+  'nav.expiry': 'Expiry',
+  'nav.inventory': 'Inventory',
+  'nav.maintenance': 'Maintenance',
   'login.submit': 'Sign in',
 };

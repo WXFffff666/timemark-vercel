@@ -10,7 +10,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { RealtimeClock, useTimezone } from '@/components/RealtimeClock';
 import { TimezoneSelector } from '@/components/TimezoneSelector';
 import type { Event, CreateEventRequest } from '@timemark/shared';
-import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail, Inbox } from 'lucide-react';
+import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail, Inbox, AlarmClock, Package, Wrench } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { api } from '@/lib/api';
 import { prefetchRoute } from '@/lib/prefetch-routes';
@@ -36,6 +36,9 @@ export function Dashboard() {
     prefetchRoute('/channels');
     prefetchRoute('/calendar');
     prefetchRoute('/todos');
+    prefetchRoute('/expiry');
+    prefetchRoute('/inventory');
+    prefetchRoute('/maintenance');
     prefetchRoute('/settings');
   }, []);
 
@@ -251,6 +254,36 @@ export function Dashboard() {
           <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition" onClick={() => navigate('/calendar')}>
             <p className="text-xs text-slate-500 flex items-center gap-1"><Calendar size={12} />日历视图</p>
             <p className="text-sm font-medium text-indigo-600">查看 →</p>
+          </div>
+          <div
+            className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-rose-400/50 transition"
+            onClick={() => navigate('/expiry')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && navigate('/expiry')}
+          >
+            <p className="text-xs text-slate-500 flex items-center gap-1"><AlarmClock size={12} />到期中心</p>
+            <p className="text-sm font-medium text-rose-600">管理 →</p>
+          </div>
+          <div
+            className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-teal-400/50 transition"
+            onClick={() => navigate('/inventory')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && navigate('/inventory')}
+          >
+            <p className="text-xs text-slate-500 flex items-center gap-1"><Package size={12} />库存</p>
+            <p className="text-sm font-medium text-teal-600">管理 →</p>
+          </div>
+          <div
+            className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-orange-400/50 transition"
+            onClick={() => navigate('/maintenance')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && navigate('/maintenance')}
+          >
+            <p className="text-xs text-slate-500 flex items-center gap-1"><Wrench size={12} />保养</p>
+            <p className="text-sm font-medium text-orange-600">管理 →</p>
           </div>
         </div>
         {conflicts.length > 0 && (

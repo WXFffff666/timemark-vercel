@@ -299,6 +299,111 @@ CREATE TABLE IF NOT EXISTS cron_execution_logs (
 CREATE INDEX IF NOT EXISTS idx_cron_logs_job ON cron_execution_logs(job_name, executed_at);
 
 -- ============================================================
+-- expiry_items / expiry_history — 到期中心 (subscriptions, bills, insurance,
+-- domains, warranties, custom). Mirrors backend/src/db/migrate.ts v34.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS expiry_items (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER,
+  kind TEXT NOT NULL CHECK (kind IN ('subscription', 'bill', 'insurance', 'domain', 'warranty', 'custom')),
+  title TEXT NOT NULL,
+  vendor TEXT,
+  amount_cents BIGINT,
+  currency TEXT NOT NULL DEFAULT 'CNY',
+  cycle TEXT NOT NULL DEFAULT 'once' CHECK (cycle IN ('once', 'monthly', 'quarterly', 'yearly', 'custom')),
+  cycle_days INTEGER,
+  start_date DATE,
+  next_due_date DATE NOT NULL,
+  auto_renew BOOLEAN NOT NULL DEFAULT FALSE,
+  notes TEXT,
+  tags TEXT[] DEFAULT '{}',
+  reminder_config JSONB,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_expiry_items_user_due ON expiry_items(user_id, next_due_date);
+CREATE INDEX IF NOT EXISTS idx_expiry_items_user_kind ON expiry_items(user_id, kind);
+CREATE INDEX IF NOT EXISTS idx_expiry_items_active_due ON expiry_items(user_id, next_due_date) WHERE is_active = TRUE;
+
+CREATE TABLE IF NOT EXISTS expiry_history (
+  id SERIAL PRIMARY KEY,
+  item_id INTEGER NOT NULL REFERENCES expiry_items(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  from_date DATE,
+  to_date DATE,
+  amount_cents BIGINT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_expiry_history_item ON expiry_history(item_id, created_at DESC);
+
+-- ============================================================
+-- inventory_items — 库存 (food / medicine / supply / other) with quantity,
+-- low-stock threshold and optional expires_at. Mirrors backend/src/db/migrate.ts v35.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS inventory_items (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'other' CHECK (category IN ('food', 'medicine', 'supply', 'other')),
+  quantity NUMERIC NOT NULL DEFAULT 1 CHECK (quantity >= 0),
+  unit TEXT,
+  low_stock_threshold NUMERIC CHECK (low_stock_threshold IS NULL OR low_stock_threshold >= 0),
+  purchased_at DATE,
+  expires_at DATE,
+  location TEXT,
+  notes TEXT,
+  reminder_config JSONB,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_user_expires ON inventory_items(user_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_user_category ON inventory_items(user_id, category);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_active_expires ON inventory_items(user_id, expires_at) WHERE is_active = TRUE;
+
+-- ============================================================
+-- maintenance_plans / maintenance_logs — 保养计划 (date and/or usage interval)
+-- with its service history. Mirrors backend/src/db/migrate.ts v36.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS maintenance_plans (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER,
+  asset_name TEXT NOT NULL,
+  asset_kind TEXT NOT NULL DEFAULT 'other' CHECK (asset_kind IN ('vehicle', 'appliance', 'device', 'other')),
+  interval_days INTEGER CHECK (interval_days IS NULL OR interval_days > 0),
+  interval_usage INTEGER CHECK (interval_usage IS NULL OR interval_usage > 0),
+  usage_unit TEXT CHECK (usage_unit IS NULL OR usage_unit IN ('km', 'hours', 'cycles')),
+  current_usage NUMERIC CHECK (current_usage IS NULL OR current_usage >= 0),
+  last_done_at DATE,
+  next_due_at DATE,
+  next_due_usage NUMERIC CHECK (next_due_usage IS NULL OR next_due_usage >= 0),
+  notes TEXT,
+  reminder_config JSONB,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT maintenance_plans_interval_present CHECK (interval_days IS NOT NULL OR interval_usage IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_maintenance_plans_user_due ON maintenance_plans(user_id, next_due_at);
+CREATE INDEX IF NOT EXISTS idx_maintenance_plans_user_kind ON maintenance_plans(user_id, asset_kind);
+CREATE INDEX IF NOT EXISTS idx_maintenance_plans_active_due ON maintenance_plans(user_id, next_due_at) WHERE is_active = TRUE;
+
+CREATE TABLE IF NOT EXISTS maintenance_logs (
+  id SERIAL PRIMARY KEY,
+  plan_id INTEGER NOT NULL REFERENCES maintenance_plans(id) ON DELETE CASCADE,
+  done_at DATE NOT NULL,
+  usage_at NUMERIC,
+  cost_cents BIGINT,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_maintenance_logs_plan ON maintenance_logs(plan_id, done_at DESC);
+
+-- ============================================================
 -- Initial schema version (v15 = all incremental migrations merged)
 -- ============================================================
 INSERT INTO schema_version (version) VALUES (16) ON CONFLICT DO NOTHING;

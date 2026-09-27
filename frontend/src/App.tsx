@@ -28,6 +28,9 @@ const LunarHolidays = lazy(() => import('./pages/LunarHolidays'));
 const CalendarPage = lazy(() => import('./pages/Calendar'));
 const TodosPage = lazy(() => import('./pages/Todos'));
 const NotificationRules = lazy(() => import('./pages/NotificationRules'));
+const ExpiryPage = lazy(() => import('./pages/Expiry'));
+const InventoryPage = lazy(() => import('./pages/Inventory'));
+const MaintenancePage = lazy(() => import('./pages/Maintenance'));
 
 function PageLoader() {
   return (
@@ -105,6 +108,9 @@ function AnimatedRoutes() {
           <Route path="/broadcast" element={<ProtectedRoute><Broadcast /></ProtectedRoute>} />
           <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
           <Route path="/todos" element={<ProtectedRoute><TodosPage /></ProtectedRoute>} />
+          <Route path="/expiry" element={<ProtectedRoute><ExpiryPage /></ProtectedRoute>} />
+          <Route path="/inventory" element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} />
+          <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
           <Route path="/integrations-docs" element={<ProtectedRoute><IntegrationsDocs /></ProtectedRoute>} />
           <Route path="/cron-monitor" element={<ProtectedRoute><CronMonitor /></ProtectedRoute>} />
           <Route path="/docker-migration" element={<ProtectedRoute><DockerMigration /></ProtectedRoute>} />

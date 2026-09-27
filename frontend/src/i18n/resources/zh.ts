@@ -7,6 +7,9 @@ export const zh = {
   'nav.inbox': '收件箱',
   'nav.settings': '设置',
   'nav.channels': '渠道',
+  'nav.expiry': '到期',
+  'nav.inventory': '库存',
+  'nav.maintenance': '保养',
   'login.submit': '登录',
 } as const;
 

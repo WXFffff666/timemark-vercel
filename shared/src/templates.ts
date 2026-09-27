@@ -264,6 +264,121 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
     variables: ['event_name', 'event_date', 'person_name', 'days_until', 'blessing'],
     description: '显示完整的事件信息',
   },
+  // 到期中心模板（D1：按 kind 的模板家族，事件类型为 expiry_<kind>）
+  {
+    id: 'expiry_subscription',
+    name: '订阅续费提醒',
+    content: '📦 {{event_name}} 还有 {{days_until}} 天到期，记得确认订阅续费。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于会员/软件订阅等周期扣费项目',
+  },
+  {
+    id: 'expiry_bill',
+    name: '账单缴费提醒',
+    content: '🧾 {{event_name}} 还有 {{days_until}} 天到期，请及时缴费。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于房租/水电/话费等账单',
+  },
+  {
+    id: 'expiry_insurance',
+    name: '保险续保提醒',
+    content: '🛡️ {{event_name}} 还有 {{days_until}} 天到期，记得办理续保。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于车险/医疗险等保险到期',
+  },
+  {
+    id: 'expiry_domain',
+    name: '域名到期提醒',
+    content: '🌐 {{event_name}} 还有 {{days_until}} 天到期，请及时续费以免解析中断。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于域名/证书等到期',
+  },
+  {
+    id: 'expiry_warranty',
+    name: '保修到期提醒',
+    content: '🔧 {{event_name}} 还有 {{days_until}} 天过保，如有问题请尽快送修。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于家电/数码产品保修到期',
+  },
+  {
+    id: 'expiry_custom',
+    name: '自定义到期提醒',
+    content: '📌 {{event_name}} 还有 {{days_until}} 天到期。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于其它需要跟踪到期日的项目',
+  },
+  // 库存模板（D12：按 category 的模板家族，事件类型为 inventory_<category>）
+  {
+    id: 'inventory_food',
+    name: '食品保质期提醒',
+    content: '🥛 {{event_name}} 还有 {{days_until}} 天到保质期，记得优先食用。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于牛奶/生鲜等食品库存',
+  },
+  {
+    id: 'inventory_medicine',
+    name: '药品有效期提醒',
+    content: '💊 {{event_name}} 还有 {{days_until}} 天过期，请及时更换或补货。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于家庭药箱药品',
+  },
+  {
+    id: 'inventory_supply',
+    name: '耗材补货提醒',
+    content: '🧴 {{event_name}} 还有 {{days_until}} 天到期，注意库存并及时补货。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于日化/纸品等耗材',
+  },
+  {
+    id: 'inventory_other',
+    name: '库存到期提醒',
+    content: '📦 {{event_name}} 还有 {{days_until}} 天到期。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于其它需要跟踪保质期的库存',
+  },
+  // 保养模板（D12：按 asset_kind 的模板家族，事件类型为 maintenance_<kind>）
+  {
+    id: 'maintenance_vehicle',
+    name: '车辆保养提醒',
+    content: '🚗 {{event_name}} 还有 {{days_until}} 天到保养日期，记得预约。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于汽车/摩托等车辆保养',
+  },
+  {
+    id: 'maintenance_appliance',
+    name: '家电保养提醒',
+    content: '🔌 {{event_name}} 还有 {{days_until}} 天到保养日期。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于空调/净水器等家电保养',
+  },
+  {
+    id: 'maintenance_device',
+    name: '设备保养提醒',
+    content: '🛠️ {{event_name}} 还有 {{days_until}} 天到保养日期。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于发电机/仪器等设备保养',
+  },
+  {
+    id: 'maintenance_other',
+    name: '保养提醒',
+    content: '🗓️ {{event_name}} 还有 {{days_until}} 天到保养日期。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于其它定期保养项目',
+  },
 ];
 
 /** 批量邮件预设 — 见 broadcast-templates.ts */
@@ -283,6 +398,23 @@ export const EVENT_TYPE_TEMPLATES: Record<string, string[]> = {
   wedding: ['wedding', 'anniversary', 'generic', 'detailed'],
   medical: ['medical', 'generic', 'detailed'],
   other: ['generic', 'detailed'],
+  // 到期中心（D1）：kind → expiry_<kind> 模板家族
+  expiry_subscription: ['expiry_subscription', 'generic', 'detailed'],
+  expiry_bill: ['expiry_bill', 'generic', 'detailed'],
+  expiry_insurance: ['expiry_insurance', 'generic', 'detailed'],
+  expiry_domain: ['expiry_domain', 'generic', 'detailed'],
+  expiry_warranty: ['expiry_warranty', 'generic', 'detailed'],
+  expiry_custom: ['expiry_custom', 'generic', 'detailed'],
+  // 库存（D12）：category → inventory_<category> 模板家族
+  inventory_food: ['inventory_food', 'generic', 'detailed'],
+  inventory_medicine: ['inventory_medicine', 'generic', 'detailed'],
+  inventory_supply: ['inventory_supply', 'generic', 'detailed'],
+  inventory_other: ['inventory_other', 'generic', 'detailed'],
+  // 保养（D12）：asset_kind → maintenance_<kind> 模板家族
+  maintenance_vehicle: ['maintenance_vehicle', 'generic', 'detailed'],
+  maintenance_appliance: ['maintenance_appliance', 'generic', 'detailed'],
+  maintenance_device: ['maintenance_device', 'generic', 'detailed'],
+  maintenance_other: ['maintenance_other', 'generic', 'detailed'],
 };
 
 /**
@@ -340,6 +472,23 @@ export function getEventTypeLabel(type: string): string {
     anniversary: '纪念日',
     holiday: '节日',
     other: '其他',
+    // 到期中心（D1）
+    expiry_subscription: '订阅',
+    expiry_bill: '账单',
+    expiry_insurance: '保险',
+    expiry_domain: '域名',
+    expiry_warranty: '保修',
+    expiry_custom: '到期项',
+    // 库存（D12）
+    inventory_food: '食品',
+    inventory_medicine: '药品',
+    inventory_supply: '耗材',
+    inventory_other: '库存',
+    // 保养（D12）
+    maintenance_vehicle: '车辆保养',
+    maintenance_appliance: '家电保养',
+    maintenance_device: '设备保养',
+    maintenance_other: '保养',
   };
   return labels[type] || type;
 }

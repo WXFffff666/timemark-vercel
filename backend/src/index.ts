@@ -51,6 +51,9 @@ import conditionalRulesRoutes from './routes/conditional-rules.js';
 import todosRoutes from './routes/todos.js';
 import cspReportRoutes from './routes/csp-report.js';
 import timeRoutes from './routes/time.js';
+import expiryRoutes from './routes/expiry.js';
+import inventoryRoutes from './routes/inventory.js';
+import maintenanceRoutes from './routes/maintenance.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -128,6 +131,9 @@ app.route('/api/conditional-rules', conditionalRulesRoutes);
 app.route('/api/todos', todosRoutes);
 app.route('/api/csp-report', cspReportRoutes);
 app.route('/api/time', timeRoutes);
+app.route('/api/expiry', expiryRoutes);
+app.route('/api/inventory', inventoryRoutes);
+app.route('/api/maintenance', maintenanceRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {

@@ -51,7 +51,9 @@ describe('migration v33 registration (todo 41)', () => {
     }
     // The version row is written only after the migration SQL ran.
     expect(mockQuery.mock.calls[1][0]).toContain('INSERT INTO schema_version');
-    expect(versionInserts()).toEqual([33]);
+    // v34 (expiry domain) plus the later v35/v36 (inventory/maintenance) are appended
+    // after v33, so a 32-era DB gets all of them in ascending order.
+    expect(versionInserts().slice(0, 2)).toEqual([33, 34]);
   });
 
   it('applies v32 before v33 in ascending order when the recorded max version is 31', async () => {
@@ -62,16 +64,20 @@ describe('migration v33 registration (todo 41)', () => {
     const v33Index = sqls.findIndex((sql) => sql.includes('logging_indexes') || sql.includes('pg_trgm'));
     expect(v32Index).toBeGreaterThanOrEqual(0);
     expect(v33Index).toBeGreaterThan(v32Index);
-    expect(versionInserts()).toEqual([32, 33]);
+    expect(versionInserts().slice(0, 3)).toEqual([32, 33, 34]);
   });
 
-  it('is a runner-level no-op when version 33 is already recorded', async () => {
+  it('is a runner-level no-op for v33 when version 33 is already recorded', async () => {
     // Documented runner behaviour: `currentVersion < migration.version` gates each
     // migration, and the version row is INSERTed only after the SQL succeeds, so a
     // "stale" row can only exist from manual tampering. The migration itself is
     // idempotent (IF NOT EXISTS / guarded DO), so re-running it by hand is safe.
+    // With 33 recorded, only the later migrations are pending.
     await applyIncrementalMigrations(33);
-    expect(mockQuery).not.toHaveBeenCalled();
+    const sqls = mockQuery.mock.calls.map(([sql]) => sql);
+    expect(sqls.some((sql) => sql.includes('CREATE EXTENSION IF NOT EXISTS pg_trgm'))).toBe(false);
+    expect(versionInserts()).not.toContain(33);
+    expect(versionInserts()[0]).toBe(34);
   });
 
   it('does not record v33 when the migration SQL fails, so a later startup retries', async () => {
@@ -85,7 +91,7 @@ describe('migration v33 registration (todo 41)', () => {
     // Must not throw: the runner logs and leaves the version unrecorded.
     await applyIncrementalMigrations(32);
 
-    expect(versionInserts()).toEqual([]);
+    expect(versionInserts()).not.toContain(33);
   });
 
   it('keeps every CREATE INDEX IF NOT EXISTS-guarded and never drops or rewrites data', async () => {

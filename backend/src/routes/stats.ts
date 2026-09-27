@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
 import { sendReminders } from '../jobs/tasks.js';
+import { getExpiryCosts, getExpirySummary } from '../services/expiry.service.js';
 import type { User } from '@timemark/shared';
 
 const stats = new Hono<{ Variables: { user: User } }>();
@@ -11,7 +12,7 @@ stats.get('/', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);
   
-  const [events, triggers, accounts, monthlyTriggers, eventsByType, upcoming] = await Promise.all([
+  const [events, triggers, accounts, monthlyTriggers, eventsByType, upcoming, expirySummary, expiryCosts] = await Promise.all([
     query('SELECT COUNT(*) as count FROM events WHERE user_id = $1', [userId]),
     query(`SELECT status, COUNT(*) as count FROM event_trigger_logs 
            WHERE user_id = $1 AND created_at > NOW() - INTERVAL '30 days' 
@@ -24,6 +25,9 @@ stats.get('/', async (c) => {
            ORDER BY month`, [userId]),
     query(`SELECT type, COUNT(*)::int as count FROM events WHERE user_id = $1 GROUP BY type`, [userId]),
     query(`SELECT COUNT(*)::int as count FROM events WHERE user_id = $1`, [userId]),
+    // 到期中心（D1）：计数 + 周期成本（按货币分组，绝不跨货币求和）
+    getExpirySummary(userId),
+    getExpiryCosts(userId, { granularity: 'month' }),
   ]);
   
   return c.json({
@@ -35,6 +39,10 @@ stats.get('/', async (c) => {
       channelUsage: accounts.rows,
       monthlyTriggers: monthlyTriggers.rows,
       eventsByType: eventsByType.rows,
+      expiry: {
+        ...expirySummary,
+        costs: expiryCosts,
+      },
     },
   });
 });
