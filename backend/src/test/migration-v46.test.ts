@@ -75,8 +75,9 @@ describe('migration v46 registration (checkbox 80)', () => {
 
     expect(callsMatching('ADD COLUMN IF NOT EXISTS digest_enabled')).toHaveLength(0);
     expect(versionInserts()).not.toContain(46);
-    // v47 (checkbox 86, CalDAV write-back) is newer and does run on top of a recorded 46.
-    expect(versionInserts()).toEqual([47]);
+    // v47 (checkbox 86, CalDAV write-back) and v48 (checkbox 89, public ICS feeds)
+    // are newer and do run on top of a recorded 46.
+    expect(versionInserts()).toEqual([47, 48]);
   });
 
   it('does not record v46 when its SQL fails, so a later cold start retries', async () => {
@@ -114,9 +115,11 @@ describe('migration v46 registration (checkbox 80)', () => {
     expect(versions).toContain(46);
     expect(versions.filter((v) => v === 46)).toHaveLength(1);
     expect(versions.indexOf(46)).toBe(versions.indexOf(45) + 1);
-    // v47 (checkbox 86, CalDAV write-back) continues the chain; 46 is no longer the tail.
+    // v47 (checkbox 86, CalDAV write-back) and v48 (checkbox 89, public ICS feeds)
+    // continue the chain; 46 is no longer the tail.
     expect(versions.indexOf(47)).toBe(versions.indexOf(46) + 1);
-    expect(versions[versions.length - 1]).toBe(47);
+    expect(versions.indexOf(48)).toBe(versions.indexOf(47) + 1);
+    expect(versions[versions.length - 1]).toBe(48);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

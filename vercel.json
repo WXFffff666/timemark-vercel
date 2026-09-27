@@ -32,13 +32,17 @@
       "destination": "/api/index"
     },
     {
+      "source": "/share/:token",
+      "destination": "/api/index"
+    },
+    {
       "source": "/((?!api/|.*\\..*).*)",
       "destination": "/index.html"
     }
   ],
   "functions": {
     "api/index.js": {
-      "maxDuration": 60
+      "maxDuration": 300
     }
   }
 }

@@ -47,6 +47,16 @@ const JIEQI_NAMES = [
 
 type HolidayReminderMode = 'keep' | 'shift' | 'suppress';
 
+/** 公开 ICS 订阅源（checkbox 89）：令牌只存哈希，列表接口永不返回令牌。 */
+interface IcsFeed {
+  id: number;
+  name: string;
+  filter: { type: string; value: string | number } | null;
+  createdAt: string | null;
+  lastAccessAt: string | null;
+  revokedAt: string | null;
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
@@ -104,6 +114,12 @@ export default function Settings() {
   const [calendarFeedUrl, setCalendarFeedUrl] = useState<string | null>(null);
   const [externalCalendarUrls, setExternalCalendarUrls] = useState<string[]>([]);
   const [calendarFeedTokens, setCalendarFeedTokens] = useState<Array<{ name: string; url: string }>>([]);
+  const [icsFeeds, setIcsFeeds] = useState<IcsFeed[]>([]);
+  const [newIcsFeedName, setNewIcsFeedName] = useState('');
+  const [newIcsFeedType, setNewIcsFeedType] = useState<'category' | 'profile' | 'contact'>('category');
+  const [newIcsFeedValue, setNewIcsFeedValue] = useState('');
+  const [createdIcsFeed, setCreatedIcsFeed] = useState<{ id: number; url: string } | null>(null);
+  const [icsFeedBusy, setIcsFeedBusy] = useState(false);
   const [syncStrategy, setSyncStrategy] = useState<'add_only' | 'replace'>('add_only');
   const [caldavUrl, setCaldavUrl] = useState('');
   const [caldavUsername, setCaldavUsername] = useState('');
@@ -142,8 +158,9 @@ export default function Settings() {
       }>('/calendar/integrations').catch(() => null),
       api.get<{ markdown_email_template?: string | null; api_scopes?: string }>('/config/notification-advanced').catch(() => null),
       api.get<{ configured?: boolean; connected?: boolean; email?: string | null; calendarId?: string }>('/calendar/google-oauth/status').catch(() => null),
+      api.get<{ feeds: IcsFeed[] }>('/calendar/ics-feeds').catch(() => null),
     ])
-      .then(([config, accounts, logs, integrations, advanced, googleStatus]) => {
+      .then(([config, accounts, logs, integrations, advanced, googleStatus, icsFeedData]) => {
         if (cancelled) return;
         if (config?.quiet_hours_start) setQuietHoursStart(config.quiet_hours_start);
         if (config?.quiet_hours_end) setQuietHoursEnd(config.quiet_hours_end);
@@ -182,6 +199,9 @@ export default function Settings() {
         }
         if (advanced?.markdown_email_template) setMarkdownTemplate(advanced.markdown_email_template);
         if (advanced?.api_scopes) setApiScopes(advanced.api_scopes);
+        if (icsFeedData) {
+          setIcsFeeds(Array.isArray(icsFeedData.feeds) ? icsFeedData.feeds : []);
+        }
         if (googleStatus) {
           setGoogleOAuth({
             configured: !!googleStatus.configured,
@@ -284,6 +304,60 @@ export default function Settings() {
       setCalendarFeedTokens((prev) => [...prev, { name, url: result.url }]);
     } catch (e) {
       alert(e instanceof Error ? e.message : '创建失败');
+    }
+  };
+
+  // 公开 ICS 订阅源（checkbox 89）：创建后明文令牌只在响应中出现一次。
+  const createIcsFeed = async () => {
+    const value = newIcsFeedValue.trim();
+    if (!value) {
+      alert('请填写筛选值（事件分类 / 档案 ID / 联系人姓名）');
+      return;
+    }
+    const filter: { type: 'category' | 'profile' | 'contact'; value: string | number } =
+      newIcsFeedType === 'profile'
+        ? { type: 'profile', value: Number(value) }
+        : { type: newIcsFeedType, value };
+    if (filter.type === 'profile' && (!Number.isInteger(filter.value) || Number(filter.value) <= 0)) {
+      alert('档案筛选值必须是正整数 ID');
+      return;
+    }
+
+    setIcsFeedBusy(true);
+    try {
+      const result = await api.post<IcsFeed & { url: string }>('/calendar/ics-feeds', {
+        name: newIcsFeedName.trim() || undefined,
+        filter,
+      });
+      setIcsFeeds((prev) => [
+        ...prev,
+        {
+          id: result.id,
+          name: result.name,
+          filter: result.filter,
+          createdAt: result.createdAt,
+          lastAccessAt: null,
+          revokedAt: null,
+        },
+      ]);
+      setCreatedIcsFeed({ id: result.id, url: result.url });
+      setNewIcsFeedName('');
+      setNewIcsFeedValue('');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '创建订阅源失败');
+    } finally {
+      setIcsFeedBusy(false);
+    }
+  };
+
+  const revokeIcsFeed = async (id: number) => {
+    if (!confirm('撤销后公开订阅 URL 立即失效且无法恢复，确定撤销？')) return;
+    try {
+      await api.delete(`/calendar/ics-feeds/${id}`);
+      setIcsFeeds((prev) => prev.map((f) => (f.id === id ? { ...f, revokedAt: new Date().toISOString() } : f)));
+      setCreatedIcsFeed((prev) => (prev && prev.id === id ? null : prev));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '撤销失败');
     }
   };
 
@@ -838,6 +912,91 @@ export default function Settings() {
                   </ul>
                 )}
                 <Button variant="outline" size="sm" className="mt-2 min-h-11" onClick={addFeedToken}>新建 Feed Token</Button>
+              </div>
+
+              {/* 公开订阅源（checkbox 89）：令牌只存哈希；正文不含证件号/备注/金额 */}
+              <div data-testid="ics-feeds-section">
+                <label className="text-xs font-semibold text-slate-500 mb-1 block">公开订阅源（按分类 / 档案 / 联系人）</label>
+                <p className="text-xs text-slate-400 mb-2">
+                  生成带令牌的公开 ICS 地址，可添加到 Google / Apple 日历。令牌仅存 SHA-256 哈希，正文只含标题与日期，不含证件号、备注或金额。
+                </p>
+                {icsFeeds.length > 0 && (
+                  <ul className="mb-2 space-y-2">
+                    {icsFeeds.map((feed) => (
+                      <li key={feed.id} className="flex items-center gap-2 text-xs" data-testid={`ics-feed-row-${feed.id}`}>
+                        <span className="flex-1 truncate text-slate-600 dark:text-slate-300">
+                          {feed.name}（{feed.filter ? `${feed.filter.type}: ${String(feed.filter.value)}` : '无效筛选'}）
+                          {feed.revokedAt && <span className="ml-1 text-red-500">已撤销</span>}
+                        </span>
+                        {createdIcsFeed && createdIcsFeed.id === feed.id && (
+                          <>
+                            <span className="font-mono truncate max-w-[160px]" data-testid="ics-feed-url">{createdIcsFeed.url}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="min-h-11 min-w-11"
+                              onClick={() => copyToClipboard(createdIcsFeed.url, feed.name)}
+                              aria-label="复制公开订阅 URL"
+                            >
+                              <Copy size={14} />
+                            </Button>
+                          </>
+                        )}
+                        {!feed.revokedAt && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="min-h-11 text-red-500"
+                            onClick={() => revokeIcsFeed(feed.id)}
+                            aria-label={`撤销订阅源 ${feed.name}`}
+                          >
+                            撤销
+                          </Button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    placeholder="名称（可选）"
+                    value={newIcsFeedName}
+                    onChange={(e) => setNewIcsFeedName(e.target.value)}
+                    className="sm:w-36"
+                    aria-label="公开订阅源名称"
+                  />
+                  <select
+                    value={newIcsFeedType}
+                    onChange={(e) => setNewIcsFeedType(e.target.value as 'category' | 'profile' | 'contact')}
+                    className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    aria-label="公开订阅源筛选类型"
+                  >
+                    <option value="category">分类</option>
+                    <option value="profile">家庭档案（ID）</option>
+                    <option value="contact">联系人</option>
+                  </select>
+                  <Input
+                    placeholder={newIcsFeedType === 'profile' ? '档案 ID，如 1' : newIcsFeedType === 'contact' ? '联系人姓名' : '事件分类，如 birthday'}
+                    value={newIcsFeedValue}
+                    onChange={(e) => setNewIcsFeedValue(e.target.value)}
+                    className="flex-1"
+                    aria-label="公开订阅源筛选值"
+                  />
+                  <Button
+                    variant="outline"
+                    className="min-h-11"
+                    onClick={createIcsFeed}
+                    disabled={icsFeedBusy}
+                    data-testid="ics-feed-create"
+                  >
+                    {icsFeedBusy ? '创建中...' : '创建订阅源'}
+                  </Button>
+                </div>
+                {createdIcsFeed && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">
+                    请在离开页面前复制上面的 URL —— 明文令牌仅创建时显示一次。
+                  </p>
+                )}
               </div>
 
               <div>

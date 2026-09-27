@@ -43,6 +43,7 @@ import webauthnRoutes from './routes/webauthn.js';
 import emailLogsRoutes from './routes/email-logs.js';
 import webhookInboundRoutes from './routes/webhook-inbound.js';
 import calendarPublicRoutes from './routes/calendar-public.js';
+import publicIcsRoutes from './routes/public-ics.js';
 import inboxRoutes from './routes/inbox.js';
 import inboxPublicRoutes from './routes/inbox-public.js';
 import cronMonitorRoutes from './routes/cron-monitor.js';
@@ -133,6 +134,9 @@ app.route('/api/broadcast', broadcastRoutes);
 app.route('/api/email-logs', emailLogsRoutes);
 app.route('/api/webhook', webhookInboundRoutes);
 app.route('/api/calendar', calendarPublicRoutes);
+// checkbox 89: tokenised public ICS subscription feeds. Mounted under /api/... so the
+// existing vercel.json SPA rewrite (owned by another lane) needs no change.
+app.route('/api/public/ics', publicIcsRoutes);
 app.route('/api/inbox', inboxRoutes);
 app.route('/api/inbox', inboxPublicRoutes);
 app.route('/api/cron-monitor', cronMonitorRoutes);

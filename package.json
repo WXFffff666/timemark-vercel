@@ -26,7 +26,7 @@
   },
   "scripts": {
     "install:deps": "pnpm install",
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/check-cron-docs.mjs",
     "lint:fix": "eslint . --fix",
     "dev:frontend": "pnpm --filter frontend dev",
     "dev:backend": "pnpm --filter backend dev",

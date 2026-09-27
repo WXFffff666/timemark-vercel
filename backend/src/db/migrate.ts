@@ -1228,6 +1228,33 @@ CREATE TABLE IF NOT EXISTS caldav_writeback_objects (
 );
 CREATE INDEX IF NOT EXISTS idx_caldav_writeback_objects_user ON caldav_writeback_objects(user_id);`,
     },
+    {
+      // v48 (checkbox 89): opt-in public ICS subscription feeds. Each row is a saved
+      // filter (a category, a profile, or a contact) plus the SHA-256 HASH of the
+      // public token. Only the hash is stored - the raw token is shown exactly once
+      // at creation, so a database read can never reconstruct a subscription URL.
+      // `revoked_at` is a soft delete: the public route only serves rows with
+      // `revoked_at IS NULL`, and the hash is kept forever so a revoked feed can
+      // never be silently resurrected by a token collision.
+      //
+      // Purely additive and idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS
+      // only, no ALTER of existing tables, no backfill, and the table starts empty
+      // (nothing is ever served until a user explicitly creates a feed).
+      version: 48,
+      name: 'ics_feeds_v48',
+      sql: `CREATE TABLE IF NOT EXISTS ics_feeds (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  "filter" JSONB NOT NULL,
+  token_hash TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_access_at TIMESTAMP,
+  revoked_at TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ics_feeds_token_hash ON ics_feeds(token_hash);
+CREATE INDEX IF NOT EXISTS idx_ics_feeds_user ON ics_feeds(user_id);`,
+    },
   ];
 
   for (const migration of migrations) {

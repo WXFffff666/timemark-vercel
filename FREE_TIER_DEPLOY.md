@@ -4,10 +4,12 @@
 
 ## 为什么需要外部 Cron？
 
-Vercel **Hobby（免费）** 内置 Cron **每天最多 1 次**（`vercel.json` 仅配置 `daily-maintenance`）。  
-TimeMark 需要 **每分钟** 扫描到期事件，因此用 [cron-job.org](https://cron-job.org)（免费）调用 `/api/cron/reminder-check` 等端点。
+Vercel **Hobby（免费）** 内置 Cron **每天最多 1 次**、调度精度按小时（±59 分钟），子日级表达式（如 `*/5 * * * *`）会在**部署时报错**（官方限制：每项目 100 条、最小间隔每天一次）。  
+TimeMark 的提醒扫描需要 **每分钟** 执行，因此用 [cron-job.org](https://cron-job.org)（免费）调用 `/api/cron/reminder-check` 等外部端点。
 
 提醒精度：**每分钟扫描 + ±2 分钟时间窗口**（设 09:00 会在 08:58–09:02 内触发）。
+
+> 每个任务的完整清单（频率、调度方、精确 URL、认证）见 **[docs/CRON.md](docs/CRON.md)**——那是唯一权威清单，`pnpm lint` 会自动校验它与 `backend/src/routes/cron.ts` 逐条一致。
 
 ---
 
@@ -69,15 +71,20 @@ Authorization: Bearer 你的CRON_SECRET
 
 | 端点 | Schedule | 说明 |
 |------|----------|------|
-| `/api/cron/reminder-check` | `* * * * *` | **必须** — 每分钟检查提醒 |
-| `/api/cron/retry-notifications` | `*/10 * * * *` | 建议 — 重试失败通知 |
-| `/api/cron/calendar-sync` | `*/15 * * * *` | 可选 — 外部 ICS + Google OAuth（已连接时）同步 |
-| `/api/cron/digest?period=monthly` | `0 9 1 * *` | 可选 — 每月 1 日 09:00 发送上月摘要（Inbox + 邮件 PDF 附件）；年度摘要可另建一条 `?period=yearly` |
-| `/api/cron/warmup` | `* * * * *` | 可选 — 减少冷启动延迟 |
+| `/api/cron/reminder-check` | `* * * * *` | **必须** — 每分钟检查提醒（含数据库预热） |
+| `/api/cron/retry-notifications` | `*/10 * * * *` | **必须** — 重试失败通知（5m/30m/2h/6h 退避） |
+| `/api/cron/calendar-sync` | `*/15 * * * *` | **必须** — 外部 ICS + Google OAuth（已连接时）同步 |
+| `/api/cron/caldav-sync` | `*/30 * * * *` | 推荐 — CalDAV 订阅同步 + 可选回写（每用户默认关闭） |
+| `/api/cron/lunar-phase-reminders` | `* * * * *` | **必须** — 农历初一/十五提醒 |
+| `/api/cron/channel-health` | `0 3 * * *` | 推荐 — 每天 1 次渠道健康检查（Vercel 内置 cron 亦可） |
+| `/api/cron/digest?period=monthly` | `0 9 1 * *` | 推荐 — 每月 1 日 09:00 发送上月摘要（Inbox + 邮件 PDF 附件）；年度摘要另建 `?period=yearly`（`0 9 1 1 *`） |
+| `/api/cron/warmup` | `* * * * *` | 可选 — 减少冷启动延迟（B28 起已并入 reminder-check） |
 
 完整 URL 示例：`https://你的域名/api/cron/reminder-check`
 
 **双路并存（推荐）**：Vercel 内置 `daily-maintenance`（每天 1 次）+ cron-job.org 分钟级任务可同时启用；重复触发不会重复发通知。
+
+函数时长：`vercel.json` 已将 `functions["api/index.js"].maxDuration` 设为 Hobby 上限 **300 秒**，摘要、PDF 渲染、日历同步与 AI 调用有足够余量。
 
 一键配置 cron-job.org（需先在 [console.cron-job.org](https://console.cron-job.org) → Settings 生成 API 密钥）：
 
@@ -85,7 +92,7 @@ Authorization: Bearer 你的CRON_SECRET
 .\scripts\setup-external-cron.ps1 -CronJobOrgApiKey "你的cron-job.org-API密钥"
 ```
 
-脚本会自动读取 Vercel 中的 `CRON_SECRET` 并创建 `reminder-check`（每分钟）与 `retry-notifications`（每 10 分钟）。
+脚本会读取 Vercel 中的 `CRON_SECRET`，并在 cron-job.org 上创建 `reminder-check`（每分钟）与 `retry-notifications`（每 10 分钟）。
 
 应用内 **设置 → 部署向导** 可复制各端点 URL 与 curl 示例。
 

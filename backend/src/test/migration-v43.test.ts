@@ -76,9 +76,10 @@ describe('migration v43 registration (todo 70)', () => {
 
     expect(callsMatching('CREATE TABLE IF NOT EXISTS profile_channel_accounts')).toHaveLength(0);
     expect(versionInserts()).not.toContain(43);
-    // v44 (todo 81), v45 (todo 78), v46 (checkbox 80) and v47 (checkbox 86) are newer
-    // and do run on top of a recorded 43; v43 itself is never re-applied or re-recorded.
-    expect(versionInserts()).toEqual([44, 45, 46, 47]);
+    // v44 (todo 81), v45 (todo 78), v46 (checkbox 80), v47 (checkbox 86) and
+    // v48 (checkbox 89, public ICS feeds) are newer and do run on top of a recorded
+    // 43; v43 itself is never re-applied or re-recorded.
+    expect(versionInserts()).toEqual([44, 45, 46, 47, 48]);
   });
 
   it('does not record v43 when its SQL fails, so a later cold start retries', async () => {
@@ -122,9 +123,11 @@ describe('migration v43 registration (todo 70)', () => {
     // v45 (todo 78) and v46 (checkbox 80, digest preferences) continue the chain.
     expect(versions.indexOf(45)).toBe(versions.indexOf(44) + 1);
     expect(versions.indexOf(46)).toBe(versions.indexOf(45) + 1);
-    // v47 (checkbox 86, CalDAV write-back) continues the chain; 46 is no longer the tail.
+    // v47 (checkbox 86, CalDAV write-back) and v48 (checkbox 89, public ICS feeds)
+    // continue the chain; 46 is no longer the tail.
     expect(versions.indexOf(47)).toBe(versions.indexOf(46) + 1);
-    expect(versions[versions.length - 1]).toBe(47);
+    expect(versions.indexOf(48)).toBe(versions.indexOf(47) + 1);
+    expect(versions[versions.length - 1]).toBe(48);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

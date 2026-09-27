@@ -3,6 +3,13 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { getEventsByUserId } from '../services/event.service.js';
 import { query } from '../db/index.js';
 import { isSafePublicUrl } from '../utils/url-safety.js';
+import {
+  createIcsFeed,
+  defaultIcsFeedName,
+  listIcsFeeds,
+  parseIcsFeedFilter,
+  revokeIcsFeed,
+} from '../services/ics-feed.service.js';
 import type { User } from '@timemark/shared';
 
 const calendar = new Hono<{ Variables: { user: User } }>();
@@ -155,6 +162,61 @@ calendar.post('/caldav-writeback', async (c) => {
   );
 
   return c.json({ success: true, data: { enabled, url: url || null } });
+});
+
+/**
+ * 公开 ICS 订阅源（checkbox 89）
+ * GET    /api/calendar/ics-feeds       列出当前用户的订阅源（永不返回令牌或哈希）
+ * POST   /api/calendar/ics-feeds       创建保存的筛选器（一次性返回明文令牌 + 订阅 URL）
+ * DELETE /api/calendar/ics-feeds/:id   撤销（软删除；公开路由下一次请求即 404）
+ *
+ * 令牌只存 SHA-256 哈希，明文仅在创建响应中出现一次；正文仅含 VEVENT 摘要，
+ * 不含证件号、备注或金额。公开读取路径为 /api/public/ics/:token.ics。
+ */
+calendar.get('/ics-feeds', async (c) => {
+  const user = c.get('user');
+  const feeds = await listIcsFeeds(Number(user.id));
+  return c.json({ success: true, data: { feeds } });
+});
+
+calendar.post('/ics-feeds', async (c) => {
+  const user = c.get('user');
+  const body = await c.req
+    .json<Record<string, unknown>>()
+    .catch((): Record<string, unknown> => ({}));
+
+  const filter = parseIcsFeedFilter(body.filter);
+  if (!filter) {
+    return c.json(
+      { success: false, error: 'filter 无效：需要 { type: "category" | "profile" | "contact", value }' },
+      400,
+    );
+  }
+
+  const rawName = typeof body.name === 'string' ? body.name.trim() : '';
+  const name = rawName ? rawName.slice(0, 80) : defaultIcsFeedName(filter);
+  const { feed, token } = await createIcsFeed(Number(user.id), name, filter);
+
+  const host = c.req.header('Host') || 'localhost';
+  const protocol = c.req.header('X-Forwarded-Proto') || 'https';
+  const url = `${protocol}://${host}/api/public/ics/${token}.ics`;
+  return c.json(
+    { success: true, data: { ...feed, url, webcalUrl: url.replace(/^https/, 'webcal') } },
+    201,
+  );
+});
+
+calendar.delete('/ics-feeds/:id', async (c) => {
+  const user = c.get('user');
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) {
+    return c.json({ success: false, error: '无效的订阅源 ID' }, 400);
+  }
+  const revoked = await revokeIcsFeed(Number(user.id), id);
+  if (!revoked) {
+    return c.json({ success: false, error: '订阅源不存在或已撤销' }, 404);
+  }
+  return c.json({ success: true });
 });
 
 /**
