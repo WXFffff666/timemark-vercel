@@ -54,6 +54,9 @@ import timeRoutes from './routes/time.js';
 import expiryRoutes from './routes/expiry.js';
 import inventoryRoutes from './routes/inventory.js';
 import maintenanceRoutes from './routes/maintenance.js';
+import attachmentsRoutes from './routes/attachments.js';
+import documentsRoutes from './routes/documents.js';
+import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
 const log = createLogger('bootstrap');
@@ -134,6 +137,8 @@ app.route('/api/time', timeRoutes);
 app.route('/api/expiry', expiryRoutes);
 app.route('/api/inventory', inventoryRoutes);
 app.route('/api/maintenance', maintenanceRoutes);
+app.route('/api/attachments', attachmentsRoutes);
+app.route('/api/documents', documentsRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {
@@ -216,6 +221,9 @@ async function bootstrap() {
   log.info('Initializing secret keys...');
   initSecretKeys();
   log.info('Secret keys ready');
+
+  // 0.5 附件存储模式：本地回退响亮告警；生产缺 token 时附件将拒绝服务（不写盘）
+  logStorageStartupStatus();
 
   // 1. 等待数据库就绪
   log.info('等待数据库初始化...');

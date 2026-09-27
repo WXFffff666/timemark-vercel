@@ -88,7 +88,9 @@ describe('migration v35 + v36 registration (todos 49, 50)', () => {
     }
 
     // Version rows are written only after their migration SQL ran, in ascending order.
-    expect(versionInserts()).toEqual([35, 36]);
+    // Later lanes append beyond 36 (v37 attachments, v38 documents), so only the
+    // v35 -> v36 prefix is owned here.
+    expect(versionInserts().slice(0, 2)).toEqual([35, 36]);
   });
 
   it('applies only v36 when the recorded max version is 35', async () => {
@@ -96,15 +98,19 @@ describe('migration v35 + v36 registration (todos 49, 50)', () => {
 
     expect(callsMatching('CREATE TABLE IF NOT EXISTS inventory_items')).toHaveLength(0);
     expect(callsMatching('CREATE TABLE IF NOT EXISTS maintenance_plans')).toHaveLength(1);
-    expect(versionInserts()).toEqual([36]);
+    expect(versionInserts()[0]).toBe(36);
+    expect(versionInserts()).not.toContain(35);
   });
 
-  it('stale_state: a recorded v36 row makes the runner a no-op (nothing is skipped or re-applied)', async () => {
+  it('stale_state: a recorded v36 row means v36 is neither re-applied nor skipped', async () => {
     // The runner gates each migration with `currentVersion < migration.version`, so a
     // stale/enlarged schema_version cannot silently skip 35/36; re-running the SQL by
-    // hand is still safe because every statement is IF NOT EXISTS-guarded.
+    // hand is still safe because every statement is IF NOT EXISTS-guarded. Later
+    // migrations (v37+) may still be pending after 36, so assert on the v36 SQL itself.
     await applyIncrementalMigrations(36);
-    expect(mockQuery).not.toHaveBeenCalled();
+    expect(callsMatching('CREATE TABLE IF NOT EXISTS maintenance_plans')).toHaveLength(0);
+    expect(callsMatching('CREATE TABLE IF NOT EXISTS inventory_items')).toHaveLength(0);
+    expect(versionInserts()).not.toContain(36);
   });
 
   it('does not record a version when its SQL fails, so a later cold start retries', async () => {
@@ -118,7 +124,10 @@ describe('migration v35 + v36 registration (todos 49, 50)', () => {
 
     await applyIncrementalMigrations(34);
 
-    expect(versionInserts()).toEqual([35]);
+    // v35 recorded, v36 not; later migrations (v37+) may still be recorded after the failure.
+    const inserts = versionInserts();
+    expect(inserts).toContain(35);
+    expect(inserts).not.toContain(36);
   });
 
   it('keeps every v35/v36 statement additive and IF NOT EXISTS-guarded', async () => {
@@ -141,11 +150,13 @@ describe('migration v35 + v36 registration (todos 49, 50)', () => {
     }
   });
 
-  it('bumps the source-of-truth migration list to exactly 36, ascending, with 34 immediately before 35', () => {
+  it('bumps the source-of-truth migration list through 36, ascending, with 34 immediately before 35', () => {
     const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
     expect(versions.length).toBeGreaterThan(0);
-    expect(versions[versions.length - 1]).toBe(36);
-    expect(Math.max(...versions)).toBe(36);
+    // Later lanes append beyond 36 (v37 attachments, v38 documents); tolerance here mirrors
+    // the v34 test's precedent. What this test owns: 35/36 exist once, ascending and in place.
+    expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(36);
+    expect(Math.max(...versions)).toBeGreaterThanOrEqual(36);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

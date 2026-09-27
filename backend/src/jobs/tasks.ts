@@ -24,6 +24,12 @@ import {
   usageNeedsNudge,
   USAGE_NUDGE_RATIO,
 } from '@timemark/shared/maintenance-schedule';
+import {
+  buildDocumentExpiredKey,
+  buildDocumentSendKey,
+  documentEventType,
+  documentLeadDays,
+} from '@timemark/shared/document-schedule';
 import { sendNotifications } from '../services/notifications/index.js';
 import { createInboxMessage } from '../services/inbox.service.js';
 import { refreshUserEventCache } from '../services/event-cache.service.js';
@@ -126,15 +132,17 @@ function getCurrentHHmm(now: Date, timeZone: string): string {
 }
 
 /**
- * 「带到期日」提醒的通用迭代器（D1/D12）。
+ * 「带到期日」提醒的通用迭代器（D1/D12/D2）。
  *
- * 到期项（todo 48）、库存（todo 49）、保养计划日期间隔（todo 50）共用同一套逻辑：
+ * 到期项（todo 48）、库存（todo 49）、保养计划日期间隔（todo 50）、证件（todo 55）
+ * 共用同一套逻辑：
  * - 时间窗口：同一个 matchesReminderTimeWindow（±2 分钟）
  * - 渠道：同一个 resolveReminderChannels + sendNotifications
- * - 去重：同一张 reminder_send_claims，键带各自前缀（expiry:/inventory:/maintenance:）
- * - 提前天数：row.reminder_config.daysBeforeList，缺省 [30, 7, 3, 1, 0]
- * - 过期的 due / is_active=false / reminders_enabled=false 一律不提醒
- * 绝不新建第二个调度器：三个来源都由 sendReminders 在同一个分钟级 cron 里调用。
+ * - 去重：同一张 reminder_send_claims，键带各自前缀（expiry:/inventory:/maintenance:/document:）
+ * - 提前天数：row.reminder_config.daysBeforeList，缺省由各来源的 defaultLeadDays(kind) 决定
+ * - 过期的 due / is_active=false / reminders_enabled=false 一律不提醒；只有提供了
+ *   buildExpiredSendKey 的来源（documents）才在过期后发一条最终提醒（claim 键不含日期 → 恰好一次）
+ * 绝不新建第二个调度器：所有来源都由 sendReminders 在同一个分钟级 cron 里调用。
  *
  * 发送事件不携带 event.id（email_logs / notification_queue 的 event_id 外键指向
  * events 表），因此这些提醒不写事件触发日志，去重完全由 claim 承担；发送失败会
@@ -163,8 +171,15 @@ interface DatedReminderSource {
   extraWhere: string;
   /** 日志与返回用的来源标签 */
   label: string;
+  /** 每个 kind 的默认提前天数（用户 reminder_config.daysBeforeList 优先） */
+  defaultLeadDays: (kind: string) => readonly number[];
   buildSendKey: (todayYmd: string, daysUntil: number, reminderTime: string) => string;
-  toEventType: (kind: string) => string;
+  /**
+   * 过去到期日的「最终提醒」去重键。缺省 = 过去日期不提醒；
+   * 提供时键必须不含今天日期（同一到期日恰好一次）。
+   */
+  buildExpiredSendKey?: (dueYmd: string) => string;
+  toEventType: (kind: string, daysUntil: number) => string;
 }
 
 const EXPIRY_SOURCE: DatedReminderSource = {
@@ -176,8 +191,9 @@ const EXPIRY_SOURCE: DatedReminderSource = {
   defaultKind: 'custom',
   extraWhere: '',
   label: 'expiry',
+  defaultLeadDays: () => DEFAULT_EXPIRY_LEAD_DAYS,
   buildSendKey: buildExpirySendKey,
-  toEventType: expiryEventType,
+  toEventType: (kind) => expiryEventType(kind),
 };
 
 const INVENTORY_SOURCE: DatedReminderSource = {
@@ -190,8 +206,9 @@ const INVENTORY_SOURCE: DatedReminderSource = {
   // 非易腐品（expires_at IS NULL）永不进入提醒候选
   extraWhere: 'AND i.expires_at IS NOT NULL',
   label: 'inventory',
+  defaultLeadDays: () => DEFAULT_EXPIRY_LEAD_DAYS,
   buildSendKey: buildInventorySendKey,
-  toEventType: inventoryEventType,
+  toEventType: (kind) => inventoryEventType(kind),
 };
 
 const MAINTENANCE_SOURCE: DatedReminderSource = {
@@ -204,8 +221,28 @@ const MAINTENANCE_SOURCE: DatedReminderSource = {
   // 仅按用量保养的计划没有日期提醒（next_due_at IS NULL）
   extraWhere: 'AND p.next_due_at IS NOT NULL',
   label: 'maintenance',
+  defaultLeadDays: () => DEFAULT_EXPIRY_LEAD_DAYS,
   buildSendKey: buildMaintenanceSendKey,
-  toEventType: maintenanceEventType,
+  toEventType: (kind) => maintenanceEventType(kind),
+};
+
+/**
+ * 证件（D2，todo 55）：无到期日的证件不提醒；passport/visa 默认
+ * [180,90,30,7,0]，其余 [90,30,7,0]；过期后发一条最终「已过期」提醒。
+ */
+const DOCUMENT_SOURCE: DatedReminderSource = {
+  table: 'documents',
+  alias: 'd',
+  dueColumn: 'expires_at',
+  titleColumn: 'title',
+  kindColumn: 'kind',
+  defaultKind: 'other',
+  extraWhere: 'AND d.expires_at IS NOT NULL',
+  label: 'document',
+  defaultLeadDays: documentLeadDays,
+  buildSendKey: buildDocumentSendKey,
+  buildExpiredSendKey: buildDocumentExpiredKey,
+  toEventType: documentEventType,
 };
 
 async function runDatedReminderIterator(
@@ -239,10 +276,6 @@ async function runDatedReminderIterator(
       continue;
     }
     const daysUntil = diffCalendarDays(today, due);
-    if (daysUntil < 0) {
-      skipped += 1;
-      continue;
-    }
 
     const config = parseJsonField<DatedReminderConfig>(raw.reminder_config);
     if (config?.enabled === false) {
@@ -250,8 +283,18 @@ async function runDatedReminderIterator(
       continue;
     }
 
-    const leadDays = config?.daysBeforeList?.length ? config.daysBeforeList : [...DEFAULT_EXPIRY_LEAD_DAYS];
-    if (!leadDays.includes(daysUntil)) {
+    const kind = String(raw[source.kindColumn] ?? source.defaultKind);
+    // 过去日期默认不提醒（逾期视图负责呈现）；documents 例外：发一条最终「已过期」提醒
+    const isExpired = daysUntil < 0;
+    if (isExpired && !source.buildExpiredSendKey) {
+      skipped += 1;
+      continue;
+    }
+
+    const leadDays = config?.daysBeforeList?.length
+      ? config.daysBeforeList
+      : [...source.defaultLeadDays(kind)];
+    if (!isExpired && !leadDays.includes(daysUntil)) {
       skipped += 1;
       continue;
     }
@@ -274,8 +317,9 @@ async function runDatedReminderIterator(
       continue;
     }
 
-    const kind = String(raw[source.kindColumn] ?? source.defaultKind);
-    const sendKey = source.buildSendKey(today, daysUntil, matchedReminderTime);
+    const sendKey = isExpired
+      ? (source.buildExpiredSendKey as (dueYmd: string) => string)(due)
+      : source.buildSendKey(today, daysUntil, matchedReminderTime);
     const claim = await query(
       `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
        ON CONFLICT DO NOTHING RETURNING event_id`,
@@ -289,22 +333,25 @@ async function runDatedReminderIterator(
     claimed += 1;
 
     try {
+      const title = String(raw[source.titleColumn] ?? '');
       const notificationEvent = {
         // 故意不带 id：email_logs / notification_queue 的 event_id 外键指向 events
         id: null,
         user_id: userId,
-        name: String(raw[source.titleColumn] ?? ''),
-        type: source.toEventType(kind),
+        name: title,
+        type: source.toEventType(kind, daysUntil),
         date: due,
         calendar_type: 'gregorian',
         reminder_time: matchedReminderTime,
         reminder_config: config ?? null,
         reminderConfig: config ?? null,
+        // 过期最终提醒带明确的「已过期」文案（渠道在无用户自定义模板时使用 customMessage）
+        ...(isExpired ? { customMessage: `⚠️ ${title} 已过期（到期日 ${due}），请尽快处理。` } : {}),
       };
       const results = await sendNotifications(notificationEvent, userId, channels);
       sent += 1;
       log.info(
-        { source: source.label, itemId: raw.id, kind, daysUntil, matchedReminderTime, channels, results },
+        { source: source.label, itemId: raw.id, kind, daysUntil, isExpired, matchedReminderTime, channels, results },
         'Dated reminder dispatched',
       );
     } catch (error) {
@@ -347,6 +394,19 @@ export async function sendMaintenanceReminders(now: Date = getSyncedNow(DEFAULT_
   skipped: number;
 }> {
   return runDatedReminderIterator(MAINTENANCE_SOURCE, now);
+}
+
+/**
+ * 证件到期提醒（D2，todo 55）：仅 expires_at 非空的证件，send key 带 `document:` 前缀。
+ * passport/visa 默认 [180,90,30,7,0]，其余 [90,30,7,0]；过期后发一条「已过期」最终提醒。
+ */
+export async function sendDocumentReminders(now: Date = getSyncedNow(DEFAULT_SYNC_TIMEZONE)): Promise<{
+  candidates: number;
+  sent: number;
+  claimed: number;
+  skipped: number;
+}> {
+  return runDatedReminderIterator(DOCUMENT_SOURCE, now);
 }
 
 function toFiniteNumberOrNull(value: unknown): number | null {
@@ -808,6 +868,13 @@ export async function sendReminders() {
     await sendMaintenanceUsageNudges();
   } catch (error) {
     log.error({ err: error }, 'Maintenance usage nudge evaluation failed');
+  }
+
+  // 证件（D2，todo 55）：同一引擎、同一分钟级调度（仅 expires_at 非空的行）
+  try {
+    await sendDocumentReminders(now);
+  } catch (error) {
+    log.error({ err: error }, 'Document reminder evaluation failed');
   }
 }
 

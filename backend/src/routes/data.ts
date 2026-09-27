@@ -1,9 +1,21 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { query } from '../db/index.js';
+import { query, withTransaction } from '../db/index.js';
 import type { User } from '@timemark/shared';
+import { createLogger } from '../utils/logger.js';
+import {
+  DATA_EXPORT_VERSION,
+  DataImportEncryptionError,
+  DataImportValidationError,
+  assertImportPayloadShape,
+  exportKeyFingerprint,
+  importNewEntities,
+  isSupportedExportVersion,
+  validateImportEncryption,
+} from '../services/data-transfer.service.js';
 
 const data = new Hono<{ Variables: { user: User } }>();
+const log = createLogger('data');
 
 data.use('*', authMiddleware);
 
@@ -58,32 +70,84 @@ data.get('/export', async (c) => {
   const userId = Number(user.id);
 
   try {
-    const [events, configs, accounts, mappings, templates, triggerLogs] = await Promise.all([
+    const [
+      events,
+      configs,
+      accounts,
+      mappings,
+      templates,
+      triggerLogs,
+      attachments,
+      expiryItems,
+      expiryHistory,
+      inventoryItems,
+      maintenancePlans,
+      maintenanceLogs,
+      documents,
+    ] = await Promise.all([
       query('SELECT * FROM events WHERE user_id = $1', [userId]),
       query('SELECT * FROM user_configs WHERE user_id = $1', [userId]),
       query('SELECT * FROM notification_accounts WHERE user_id = $1', [userId]),
       query('SELECT * FROM relationship_mappings WHERE user_id = $1', [userId]),
       query('SELECT * FROM event_templates WHERE user_id = $1', [userId]),
       query('SELECT * FROM event_trigger_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 500', [userId]),
+      // Attachment METADATA only (todo 57): bytes live in the object store and are never
+      // exported. `storage_key` is an internal object reference (not a signed URL and not
+      // a credential) that lets an import re-point at blobs still present in the store.
+      query(
+        `SELECT id, owner_type, owner_id, filename, content_type, byte_size, sha256, storage_key, created_at
+         FROM attachments WHERE user_id = $1 ORDER BY id ASC`,
+        [userId],
+      ),
+      // Life-domain entities (todo 58). Explicit tables/joins keep child rows user-scoped.
+      query('SELECT * FROM expiry_items WHERE user_id = $1 ORDER BY id ASC', [userId]),
+      query(
+        `SELECT h.* FROM expiry_history h
+         JOIN expiry_items e ON e.id = h.item_id
+         WHERE e.user_id = $1 ORDER BY h.id ASC`,
+        [userId],
+      ),
+      query('SELECT * FROM inventory_items WHERE user_id = $1 ORDER BY id ASC', [userId]),
+      query('SELECT * FROM maintenance_plans WHERE user_id = $1 ORDER BY id ASC', [userId]),
+      query(
+        `SELECT l.* FROM maintenance_logs l
+         JOIN maintenance_plans p ON p.id = l.plan_id
+         WHERE p.user_id = $1 ORDER BY l.id ASC`,
+        [userId],
+      ),
+      // `document_number_encrypted` stays ciphertext; no plaintext column exists to leak.
+      query('SELECT * FROM documents WHERE user_id = $1 ORDER BY id ASC', [userId]),
     ]);
 
+    const masterKeyFingerprint = exportKeyFingerprint();
     const exportData = {
-      version: '1.0',
+      version: DATA_EXPORT_VERSION,
       exportedAt: new Date().toISOString(),
       user: { id: user.id, username: user.username },
+      encryption: {
+        algorithm: 'aes-256-gcm',
+        masterKeyFingerprint,
+      },
       events: events.rows,
       configs: configs.rows.map((row) => sanitizeUserConfig(row)),
       notificationAccounts: accounts.rows.map((row) => sanitizeNotificationAccount(row)),
       relationshipMappings: mappings.rows,
       eventTemplates: templates.rows,
       triggerLogs: triggerLogs.rows,
+      attachments: attachments.rows,
+      expiryItems: expiryItems.rows,
+      expiryHistory: expiryHistory.rows,
+      inventoryItems: inventoryItems.rows,
+      maintenancePlans: maintenancePlans.rows,
+      maintenanceLogs: maintenanceLogs.rows,
+      documents: documents.rows,
     };
 
     c.header('Content-Disposition', `attachment; filename="timemark-export-${new Date().toISOString().split('T')[0]}.json"`);
     c.header('Content-Type', 'application/json');
     return c.json(exportData);
   } catch (error: any) {
-    console.error('[Data Export] Failed:', error.message || error);
+    log.error({ event: 'data_export.failed', err: error }, 'Data export failed');
     return c.json({ success: false, error: error.message || 'Export failed' }, 500);
   }
 });
@@ -96,13 +160,30 @@ data.post('/import', async (c) => {
   try {
     const body = await c.req.json();
 
-    if (!body.version || !body.events) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || !body.version || !body.events) {
       return c.json({ success: false, error: 'Invalid import data format' }, 400);
+    }
+    if (!isSupportedExportVersion(body.version)) {
+      return c.json(
+        { success: false, error: `不支持的导出版本 ${String(body.version)}（本服务最高支持 2.x）` },
+        400,
+      );
+    }
+
+    // Fail closed BEFORE any write: shape, then encryption-key compatibility.
+    try {
+      assertImportPayloadShape(body);
+      validateImportEncryption(body);
+    } catch (error) {
+      if (error instanceof DataImportValidationError || error instanceof DataImportEncryptionError) {
+        return c.json({ success: false, error: error.message }, 400);
+      }
+      throw error;
     }
 
     const imported = { events: 0, mappings: 0, templates: 0 };
 
-    // Import events
+    // Import events (pre-existing behaviour, unchanged)
     if (Array.isArray(body.events)) {
       for (const event of body.events) {
         await query(
@@ -128,7 +209,7 @@ data.post('/import', async (c) => {
       }
     }
 
-    // Import relationship mappings
+    // Import relationship mappings (pre-existing behaviour, unchanged)
     if (Array.isArray(body.relationshipMappings)) {
       for (const mapping of body.relationshipMappings) {
         await query(
@@ -140,7 +221,7 @@ data.post('/import', async (c) => {
       }
     }
 
-    // Import event templates
+    // Import event templates (pre-existing behaviour, unchanged)
     if (Array.isArray(body.eventTemplates)) {
       for (const template of body.eventTemplates) {
         await query(
@@ -152,9 +233,28 @@ data.post('/import', async (c) => {
       }
     }
 
-    return c.json({ success: true, data: imported });
+    // New life-domain entities (todo 58): idempotent, newer-wins, all inside ONE
+    // transaction - any failure rolls back every new-entity write.
+    let newCounts: { applied: Record<string, number>; skipped: number };
+    try {
+      newCounts = await withTransaction((client) => importNewEntities(client, userId, body));
+    } catch (error: any) {
+      log.error({ event: 'data_import.new_entities_failed', err: error }, 'New-entity import failed; transaction rolled back');
+      return c.json(
+        {
+          success: false,
+          error: `导入失败，新实体数据未写入（事务已回滚）：${error.message || '未知错误'}`,
+        },
+        500,
+      );
+    }
+
+    return c.json({
+      success: true,
+      data: { ...imported, ...newCounts.applied, skipped: newCounts.skipped },
+    });
   } catch (error: any) {
-    console.error('[Data Import] Failed:', error.message || error);
+    log.error({ event: 'data_import.failed', err: error }, 'Data import failed');
     return c.json({ success: false, error: error.message || 'Import failed' }, 500);
   }
 });

@@ -11,6 +11,7 @@ import { aggregateDailyStats } from '../services/stats-daily.service.js';
 import { purgeExpiredEventCache } from '../services/event-cache.service.js';
 import { purgeOldInboxMessages } from '../services/inbox.service.js';
 import { purgeOldTodoCompletions } from '../services/todo.service.js';
+import { purgeOrphanAttachments } from '../services/attachment-retention.service.js';
 import { query } from '../db/index.js';
 import { pingHeartbeat } from '../utils/heartbeat.js';
 import { testConnection, type TestConnectionResult } from '../services/notifications/test-connection.js';
@@ -182,6 +183,9 @@ cronRoutes.get('/daily-maintenance', async (c) => {
     await purgeExpiredEventCache();
     const purgedInbox = await purgeOldInboxMessages();
     const purgedTodos = await purgeOldTodoCompletions();
+    // Attachment retention (todo 57): orphan rows (no owner row) older than 30 days,
+    // rows first then objects. Referenced attachments are never touched.
+    const purgedAttachments = await purgeOrphanAttachments();
     const purgedCronLogs = await query(
       `DELETE FROM cron_execution_logs WHERE executed_at < NOW() - INTERVAL '90 days'`,
     );
@@ -191,7 +195,7 @@ cronRoutes.get('/daily-maintenance', async (c) => {
       'daily-maintenance',
       'success',
       startedAt,
-      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged trigger logs: ${purged.triggerLogs}; purged emails: ${purged.emailLogs}; purged login attempts: ${purged.loginAttempts}; purged queue: ${purged.notificationQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}`,
+      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged trigger logs: ${purged.triggerLogs}; purged emails: ${purged.emailLogs}; purged login attempts: ${purged.loginAttempts}; purged queue: ${purged.notificationQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged orphan attachments: ${purgedAttachments.purged}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}`,
     );
     await pingHeartbeat('daily-maintenance');
     return c.json({
@@ -200,6 +204,7 @@ cronRoutes.get('/daily-maintenance', async (c) => {
       timestamp: new Date().toISOString(),
       pluginSessionsDeleted: pluginResult.rowCount ?? 0,
       purged,
+      purgedAttachments,
     });
   } catch (error: any) {
     await logCronRun('daily-maintenance', 'failed', startedAt, undefined, error.message);

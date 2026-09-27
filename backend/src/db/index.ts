@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 
 export type QueryResult = {
   rows: any[];
@@ -25,7 +25,12 @@ async function initPool(): Promise<Pool> {
     connectionString: databaseUrl,
     connectionTimeoutMillis: 10_000,
     idleTimeoutMillis: 10_000,
-    max: 10,
+    // Default 10; test harnesses against a single-threaded engine (PGlite) can set
+    // PG_POOL_MAX=1 to serialize every query over one connection.
+    max: (() => {
+      const configured = Number(process.env.PG_POOL_MAX);
+      return Number.isInteger(configured) && configured > 0 ? Math.min(configured, 50) : 10;
+    })(),
   });
 
   pool.on('error', (err) => {
@@ -135,4 +140,30 @@ export function getClient(): Pool {
   return pool;
 }
 
-export default { query, db: { getClient }, waitForDb };
+/**
+ * Run `fn` inside a single-connection transaction (BEGIN/COMMIT/ROLLBACK).
+ *
+ * Data import (todo 58) uses this so a mid-import failure leaves NOTHING written;
+ * callers must use the provided `client` for every statement in the unit of work.
+ */
+export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const pool = await waitForDb();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // The connection is broken; the original error is the useful one.
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export default { query, db: { getClient }, waitForDb, withTransaction };

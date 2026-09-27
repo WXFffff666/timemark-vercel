@@ -17,6 +17,10 @@ export const REDACTED_KEYS = [
   'api_key',
   'webhook',
   'private_key',
+  // Attachment download signatures / signed URLs must never reach a log sink (todo 57).
+  'signature',
+  'signedUrl',
+  'signed_url',
 ] as const;
 
 /** Wildcard levels below a key that are covered: `*.k`, `*.*.k`, `*.*.*.k`. */

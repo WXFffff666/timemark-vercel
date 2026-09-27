@@ -379,6 +379,79 @@ export const PRESET_TEMPLATES: NotificationTemplate[] = [
     variables: ['event_name', 'days_until'],
     description: '适用于其它定期保养项目',
   },
+  // 证件模板（D2，todo 55：按 kind 的模板家族，事件类型为 document_<kind>）
+  {
+    id: 'document_passport',
+    name: '护照到期提醒',
+    content: '🛂 {{event_name}} 还有 {{days_until}} 天到期，请及时安排换发。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于护照到期（默认提前 180/90/30/7/0 天提醒）',
+  },
+  {
+    id: 'document_visa',
+    name: '签证到期提醒',
+    content: '✈️ {{event_name}} 还有 {{days_until}} 天到期，请提前规划续签。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于签证到期（默认提前 180/90/30/7/0 天提醒）',
+  },
+  {
+    id: 'document_id_card',
+    name: '身份证到期提醒',
+    content: '🪪 {{event_name}} 还有 {{days_until}} 天到期，请及时换领。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于身份证等身份证件',
+  },
+  {
+    id: 'document_driver_license',
+    name: '驾照到期提醒',
+    content: '🚗 {{event_name}} 还有 {{days_until}} 天到期，记得办理换证。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于驾驶证到期换证',
+  },
+  {
+    id: 'document_certificate',
+    name: '证书到期提醒',
+    content: '📜 {{event_name}} 还有 {{days_until}} 天到期，请留意有效期。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于资格证书、职业证书等',
+  },
+  {
+    id: 'document_policy',
+    name: '保单到期提醒',
+    content: '🛡️ {{event_name}} 还有 {{days_until}} 天到期，记得续保。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于保险保单到期',
+  },
+  {
+    id: 'document_contract',
+    name: '合同到期提醒',
+    content: '📄 {{event_name}} 还有 {{days_until}} 天到期，请确认是否续签。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于租约、服务合同到期',
+  },
+  {
+    id: 'document_other',
+    name: '证件到期提醒',
+    content: '📌 {{event_name}} 还有 {{days_until}} 天到期。',
+    isPreset: true,
+    variables: ['event_name', 'days_until'],
+    description: '适用于其它需要跟踪有效期的证件',
+  },
+  {
+    id: 'document_expired',
+    name: '证件已过期',
+    content: '⚠️ {{event_name}} 已过期（到期日 {{event_date}}），请尽快处理。',
+    isPreset: true,
+    variables: ['event_name', 'event_date'],
+    description: '证件过期后的最终提醒（每本证件只发一次）',
+  },
 ];
 
 /** 批量邮件预设 — 见 broadcast-templates.ts */
@@ -415,6 +488,16 @@ export const EVENT_TYPE_TEMPLATES: Record<string, string[]> = {
   maintenance_appliance: ['maintenance_appliance', 'generic', 'detailed'],
   maintenance_device: ['maintenance_device', 'generic', 'detailed'],
   maintenance_other: ['maintenance_other', 'generic', 'detailed'],
+  // 证件（D2）：kind → document_<kind> 模板家族；过期有独立家族
+  document_passport: ['document_passport', 'generic', 'detailed'],
+  document_visa: ['document_visa', 'generic', 'detailed'],
+  document_id_card: ['document_id_card', 'generic', 'detailed'],
+  document_driver_license: ['document_driver_license', 'generic', 'detailed'],
+  document_certificate: ['document_certificate', 'generic', 'detailed'],
+  document_policy: ['document_policy', 'generic', 'detailed'],
+  document_contract: ['document_contract', 'generic', 'detailed'],
+  document_other: ['document_other', 'generic', 'detailed'],
+  document_expired: ['document_expired', 'generic', 'detailed'],
 };
 
 /**
@@ -489,6 +572,16 @@ export function getEventTypeLabel(type: string): string {
     maintenance_appliance: '家电保养',
     maintenance_device: '设备保养',
     maintenance_other: '保养',
+    // 证件（D2，todo 55）
+    document_passport: '护照',
+    document_visa: '签证',
+    document_id_card: '身份证',
+    document_driver_license: '驾驶证',
+    document_certificate: '证书',
+    document_policy: '保单',
+    document_contract: '合同',
+    document_other: '证件',
+    document_expired: '证件已过期',
   };
   return labels[type] || type;
 }

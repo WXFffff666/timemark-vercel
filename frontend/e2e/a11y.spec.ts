@@ -29,6 +29,7 @@ const PAGES = [
   { path: '/expiry', heading: '到期中心', anonymous: false },
   { path: '/inventory', heading: '库存', anonymous: false },
   { path: '/maintenance', heading: '保养', anonymous: false },
+  { path: '/documents', heading: '证件保险箱', anonymous: false },
   { path: '/login', heading: /TimeMark/i, anonymous: true },
 ] as const;
 

@@ -714,6 +714,81 @@ CREATE TABLE IF NOT EXISTS maintenance_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_maintenance_logs_plan ON maintenance_logs(plan_id, done_at DESC);`,
     },
+    {
+      // v37 (todo 52): attachment metadata for the D2 document vault. The plan text said
+      // "version: 35", but 35 (inventory) and 36 (maintenance) were already taken when this
+      // landed, so the next free number is 37. Bytes live in object storage (Vercel Blob, or
+      // the dev-only .data/ fallback) - NEVER in Postgres (Neon Free is 0.5 GB/project total).
+      // Additive and idempotent: every statement is IF NOT EXISTS-guarded; no columns are
+      // altered and no data is dropped or rewritten.
+      //
+      // Polymorphic owner: (owner_type, owner_id) points at a user-owned row in
+      // documents / expiry_items / inventory_items / maintenance_plans / events.
+      // Both columns are nullable as a PAIR (CHECK below): an attachment can be uploaded
+      // scoped to an owner and later unlinked without deleting the object.
+      version: 37,
+      name: 'attachments_v37',
+      sql: `CREATE TABLE IF NOT EXISTS attachments (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_type TEXT CHECK (owner_type IS NULL OR owner_type IN ('document', 'expiry', 'inventory', 'maintenance', 'event')),
+  owner_id INTEGER,
+  filename TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  byte_size INTEGER NOT NULL CHECK (byte_size > 0),
+  sha256 TEXT NOT NULL,
+  storage_key TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT attachments_owner_pair CHECK ((owner_type IS NULL) = (owner_id IS NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_attachments_user_owner ON attachments(user_id, owner_type, owner_id);`,
+    },
+    {
+      // v38 (todo 54): the document vault (passport / id_card / driver_license / visa /
+      // certificate / policy / contract / other). The plan text said "version: 36", but 36
+      // (maintenance) was already taken when this landed, so the next free number is 38.
+      // `document_number_encrypted` holds an AES-256-GCM ciphertext (same MASTER_KEY
+      // convention as notification credentials) and is NEVER returned by list responses -
+      // only a `numberConfigured` flag is. Document images live in the attachment store;
+      // this table stores no bytes. Additive and idempotent: every statement is
+      // IF NOT EXISTS-guarded; no columns are altered and no data is dropped or rewritten.
+      version: 38,
+      name: 'documents_v38',
+      sql: `CREATE TABLE IF NOT EXISTS documents (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER,
+  kind TEXT NOT NULL CHECK (kind IN ('passport', 'id_card', 'driver_license', 'visa', 'certificate', 'policy', 'contract', 'other')),
+  title TEXT NOT NULL,
+  issuer TEXT,
+  document_number_encrypted TEXT,
+  issued_at DATE,
+  expires_at DATE,
+  country TEXT,
+  notes TEXT,
+  reminder_config JSONB,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_documents_user_expires ON documents(user_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_documents_user_kind ON documents(user_id, kind);
+CREATE INDEX IF NOT EXISTS idx_documents_active_expires ON documents(user_id, expires_at) WHERE is_active = TRUE;
+-- Forward-looking trigram for the q filter; guarded because pg_trgm may be absent
+-- (v33 failed on CREATE EXTENSION in that case). Mirrors the v34/v35 blocks.
+DO $$
+BEGIN
+  IF to_regclass('documents') IS NOT NULL THEN
+    BEGIN
+      CREATE INDEX IF NOT EXISTS idx_documents_title_trgm ON documents USING gin (title gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_documents_issuer_trgm ON documents USING gin (issuer gin_trgm_ops);
+    EXCEPTION WHEN undefined_object THEN
+      -- pg_trgm is unavailable; the q filter falls back to ILIKE
+      NULL;
+    END;
+  END IF;
+END $$;`,
+    },
   ];
 
   for (const migration of migrations) {

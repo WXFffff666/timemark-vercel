@@ -404,6 +404,55 @@ CREATE TABLE IF NOT EXISTS maintenance_logs (
 CREATE INDEX IF NOT EXISTS idx_maintenance_logs_plan ON maintenance_logs(plan_id, done_at DESC);
 
 -- ============================================================
+-- attachments — D2 document-vault attachment METADATA only. Bytes live in object
+-- storage (Vercel Blob, or the dev-only .data/ fallback), never in Postgres.
+-- Mirrors backend/src/db/migrate.ts v37. (owner_type, owner_id) is a polymorphic
+-- nullable pair: set on upload/link, cleared on unlink.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS attachments (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_type TEXT CHECK (owner_type IS NULL OR owner_type IN ('document', 'expiry', 'inventory', 'maintenance', 'event')),
+  owner_id INTEGER,
+  filename TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  byte_size INTEGER NOT NULL CHECK (byte_size > 0),
+  sha256 TEXT NOT NULL,
+  storage_key TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT attachments_owner_pair CHECK ((owner_type IS NULL) = (owner_id IS NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_attachments_user_owner ON attachments(user_id, owner_type, owner_id);
+
+-- ============================================================
+-- documents — 证件保险箱 (passport / id_card / driver_license / visa / certificate /
+-- policy / contract / other). `document_number_encrypted` is AES-256-GCM ciphertext
+-- (MASTER_KEY, same convention as notification credentials) and is never returned in
+-- list responses. Document images live in the attachment store; no bytes here.
+-- Mirrors backend/src/db/migrate.ts v38.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS documents (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER,
+  kind TEXT NOT NULL CHECK (kind IN ('passport', 'id_card', 'driver_license', 'visa', 'certificate', 'policy', 'contract', 'other')),
+  title TEXT NOT NULL,
+  issuer TEXT,
+  document_number_encrypted TEXT,
+  issued_at DATE,
+  expires_at DATE,
+  country TEXT,
+  notes TEXT,
+  reminder_config JSONB,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_documents_user_expires ON documents(user_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_documents_user_kind ON documents(user_id, kind);
+CREATE INDEX IF NOT EXISTS idx_documents_active_expires ON documents(user_id, expires_at) WHERE is_active = TRUE;
+
+-- ============================================================
 -- Initial schema version (v15 = all incremental migrations merged)
 -- ============================================================
 INSERT INTO schema_version (version) VALUES (16) ON CONFLICT DO NOTHING;

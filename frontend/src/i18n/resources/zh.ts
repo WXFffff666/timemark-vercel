@@ -10,6 +10,7 @@ export const zh = {
   'nav.expiry': '到期',
   'nav.inventory': '库存',
   'nav.maintenance': '保养',
+  'nav.documents': '证件',
   'login.submit': '登录',
 } as const;
 

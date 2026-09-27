@@ -4,6 +4,7 @@ import { initSecretKeys } from './utils/secrets.js';
 import { hashPassword } from './utils/password.js';
 import { createLogger } from './utils/logger.js';
 import { assertCanCreateUser } from './utils/single-user.js';
+import { logStorageStartupStatus } from './services/storage.service.js';
 
 const log = createLogger('vercel-init');
 
@@ -29,6 +30,7 @@ async function bootstrapVercel(): Promise<void> {
     throw new Error('DATABASE_URL not configured — set it in Vercel Environment Variables');
   }
   initSecretKeys();
+  logStorageStartupStatus();
   await waitForDb();
   await runMigrations();
   await migrateEncryptionKey();
