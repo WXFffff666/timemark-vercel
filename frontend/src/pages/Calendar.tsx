@@ -14,9 +14,15 @@ import {
 } from '@/lib/calendar-utils';
 import { getTodayDateKey } from '@/lib/timezone-utils';
 import { useTimezone } from '@/components/RealtimeClock';
+import { getHolidayCoverage, getHolidayMarker, isYearCovered } from '@/lib/chinese-holidays';
+import { HolidayBadge } from '@/components/calendar/HolidayBadge';
+import { StaticSearchBox } from '@/components/StaticSearchBox';
+import { AlmanacCard } from '@/components/almanac/AlmanacCard';
 
 type ViewMode = 'year' | 'month' | 'day';
 type ListScope = 'month' | 'year';
+
+const COVERAGE_LABEL = getHolidayCoverage().label;
 
 export default function Calendar() {
   const navigate = useNavigate();
@@ -39,6 +45,8 @@ export default function Calendar() {
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
+  const coverage = getHolidayCoverage();
+  const yearCovered = isYearCovered(year);
 
   const selectDate = (d: Date) => {
     const key = dateKey(d);
@@ -133,6 +141,18 @@ export default function Calendar() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-4 space-y-4">
+        {!yearCovered && (
+          <section
+            data-testid="coverage-warning"
+            className="glass-panel rounded-2xl p-4 text-sm text-amber-600 dark:text-amber-300 ring-1 ring-amber-300/50 dark:ring-amber-700/40"
+          >
+            数据未覆盖：已收录 {coverage.label} 年法定节假日与调休（chinese-days@{coverage.version}），
+            本年不显示 休/班 标记。
+          </section>
+        )}
+
+        <StaticSearchBox />
+
         {viewMode === 'year' && (
           <YearGrid
             year={year}
@@ -308,10 +328,12 @@ function MonthGrid({
           const dayEvents = eventsByDate.get(key) || [];
           const isToday = key === todayKey;
           const isSelected = key === selectedKey;
+          const marker = getHolidayMarker(key);
           return (
             <button
               key={key}
               type="button"
+              data-date={key}
               onClick={() => onSelectDate(day)}
               onDoubleClick={() => onDayOpen(day)}
               className={`min-h-[4.5rem] rounded-xl p-1.5 border text-xs text-left transition hover:ring-2 hover:ring-primary-300/60 ${
@@ -322,7 +344,10 @@ function MonthGrid({
                     : 'border-transparent bg-slate-50/50 dark:bg-slate-800/30'
               }`}
             >
-              <div className={`font-bold mb-0.5 ${isToday ? 'text-primary-600' : ''}`}>{day.getDate()}</div>
+              <div className="flex items-start justify-between gap-0.5">
+                <span className={`font-bold mb-0.5 ${isToday ? 'text-primary-600' : ''}`}>{day.getDate()}</span>
+                {marker && <HolidayBadge marker={marker} className="flex-col items-end leading-none" />}
+              </div>
               {dayEvents.slice(0, 2).map((e) => (
                 <div
                   key={e.id}
@@ -339,6 +364,19 @@ function MonthGrid({
         })}
       </div>
       <p className="text-[10px] text-slate-400 mt-2 text-center">单击选日期 · 双击进入日视图</p>
+      {isYearCovered(year) && (
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 text-[10px] text-slate-500" data-testid="holiday-legend">
+          <span className="inline-flex items-center gap-1">
+            <span className="rounded px-1 font-bold bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300">休</span>
+            法定节假日
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="rounded px-1 font-bold bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300">班</span>
+            调休上班
+          </span>
+          <span>数据覆盖 {COVERAGE_LABEL}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -358,6 +396,7 @@ function DayPanel({
   const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
   const isToday = key === todayKey;
   const diff = daysUntilEvent(key, new Date(), timeZone);
+  const marker = getHolidayMarker(key);
 
   return (
     <div className="glass-panel rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10 text-center">
@@ -366,8 +405,16 @@ function DayPanel({
       <p className="text-lg text-slate-600 dark:text-slate-300 mt-1">
         {d.getFullYear()}年{d.getMonth() + 1}月
       </p>
+      {marker && (
+        <p className="mt-2 flex items-center justify-center" data-testid="day-holiday-marker">
+          <HolidayBadge marker={marker} />
+        </p>
+      )}
       {diff === 0 && <p className="text-sm text-primary-600 font-medium mt-2">今天</p>}
       {diff > 0 && <p className="text-sm text-slate-500 mt-2">{diff} 天后</p>}
+      <div className="mt-4 text-left">
+        <AlmanacCard dateKey={key} variant="detail" />
+      </div>
       <div className="mt-6 text-left space-y-2">
         {events.length === 0 ? (
           <p className="text-sm text-slate-500 text-center py-4">当天暂无事件</p>

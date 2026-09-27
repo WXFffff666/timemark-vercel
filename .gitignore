@@ -19,6 +19,12 @@ api/handler.cjs
 data/
 data-test/
 backend/data/
+# ...except the vendored chinese-days dataset, which IS checked-in source
+!shared/src/data/
+!shared/src/data/**
+
+# Playwright artifacts
+frontend/test-results/
 
 # Test files with credentials
 test-login.json
@@ -33,3 +39,6 @@ test-api*.ps1
 # Vercel
 .vercel
 .env*
+
+# Generated build-time static search index (scripts/build-search-index.mjs)
+frontend/public/search-index.json

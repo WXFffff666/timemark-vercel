@@ -1113,6 +1113,59 @@ ALTER TABLE medications ADD COLUMN IF NOT EXISTS profile_id INTEGER REFERENCES p
 );
 CREATE INDEX IF NOT EXISTS idx_profile_channel_accounts_account ON profile_channel_accounts(account_id);`,
     },
+    {
+      // v44 (todo 81): personal goals + milestones with progress tracking. The plan
+      // text said "version: 42", but 42 (medications) and 43 (per-profile routing)
+      // were already taken when this landed, so the next free number is 44.
+      //
+      // Additive and idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only,
+      // no ALTER of existing tables and no data writes. This is a personal
+      // checklist - no OKR jargon, no team features.
+      //
+      // - `current_value` stores the RAW value on purpose: a goal may over-achieve
+      //   (150 of 100) and only the derived percentage is clamped to 100 - never
+      //   the stored value.
+      // - `target_value` is NULLable (a pure milestone goal) but never 0 (a zero
+      //   denominator makes the percentage meaningless) - the CHECK guards it.
+      // - `milestones.goal_id` is ON DELETE CASCADE: deleting a goal removes its
+      //   checklist.
+      // - `milestones.event_id` is an OPTIONAL link to the existing events
+      //   reminder engine: a linked milestone rides that event's reminders.
+      //   ON DELETE SET NULL, so deleting the event only unlinks the milestone,
+      //   and deleting the goal never touches the event row.
+      version: 44,
+      name: 'goals_milestones_v44',
+      sql: `CREATE TABLE IF NOT EXISTS goals (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  category TEXT,
+  target_value NUMERIC CHECK (target_value IS NULL OR target_value > 0),
+  current_value NUMERIC NOT NULL DEFAULT 0 CHECK (current_value >= 0),
+  unit TEXT,
+  start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  target_date DATE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'done', 'abandoned')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT goals_target_after_start CHECK (target_date IS NULL OR target_date >= start_date)
+);
+CREATE INDEX IF NOT EXISTS idx_goals_user_status ON goals(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_goals_user_profile ON goals(user_id, profile_id);
+CREATE TABLE IF NOT EXISTS milestones (
+  id SERIAL PRIMARY KEY,
+  goal_id INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  due_at DATE,
+  done_at TIMESTAMPTZ,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  event_id INTEGER REFERENCES events(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_milestones_goal ON milestones(goal_id, sort_order, id);
+CREATE INDEX IF NOT EXISTS idx_milestones_event ON milestones(event_id) WHERE event_id IS NOT NULL;`,
+    },
   ];
 
   for (const migration of migrations) {

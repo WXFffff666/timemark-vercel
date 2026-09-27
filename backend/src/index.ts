@@ -60,6 +60,7 @@ import habitsRoutes from './routes/habits.js';
 import profilesRoutes from './routes/profiles.js';
 import medicationsRoutes from './routes/medications.js';
 import dosesRoutes from './routes/doses.js';
+import goalsRoutes from './routes/goals.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -147,6 +148,7 @@ app.route('/api/habits', habitsRoutes);
 app.route('/api/profiles', profilesRoutes);
 app.route('/api/medications', medicationsRoutes);
 app.route('/api/doses', dosesRoutes);
+app.route('/api/goals', goalsRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', platform: process.env.VERCEL ? 'vercel' : 'local' }));
 app.get('/api/health', async (c) => {

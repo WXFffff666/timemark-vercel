@@ -136,11 +136,13 @@ describe('migration v42 registration (todo 71)', () => {
     expect(versions).toContain(42);
     expect(versions.filter((v) => v === 42)).toHaveLength(1);
     expect(versions.indexOf(42)).toBe(versions.indexOf(41) + 1);
-    // v43 (todo 70, per-profile notification routing) landed right after v42, so 42 is
+    // v43 (todo 70) and v44 (todo 81, goals/milestones) landed right after v42, so 42 is
     // no longer the tail - assert the chain continues instead of pinning 42 as last.
     expect(versions.filter((v) => v === 43)).toHaveLength(1);
     expect(versions.indexOf(43)).toBe(versions.indexOf(42) + 1);
-    expect(versions[versions.length - 1]).toBe(43);
+    expect(versions.filter((v) => v === 44)).toHaveLength(1);
+    expect(versions.indexOf(44)).toBe(versions.indexOf(43) + 1);
+    expect(versions[versions.length - 1]).toBe(44);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

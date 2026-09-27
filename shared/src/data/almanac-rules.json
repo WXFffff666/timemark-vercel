@@ -1,0 +1,55 @@
+{
+  "solarTerms": [
+    { "name": "立春", "season": "春", "description": "二十四节气之首，春季开始，万物复苏。" },
+    { "name": "雨水", "season": "春", "description": "降雨渐多，冰雪融化，草木萌动。" },
+    { "name": "惊蛰", "season": "春", "description": "春雷乍动，蛰伏的虫类被惊醒。" },
+    { "name": "春分", "season": "春", "description": "昼夜几乎等长，春意正浓。" },
+    { "name": "清明", "season": "春", "description": "天气清朗，草木繁茂，民间扫墓祭祖。" },
+    { "name": "谷雨", "season": "春", "description": "雨生百谷，春季最后一个节气。" },
+    { "name": "立夏", "season": "夏", "description": "夏季开始，气温升高，作物生长旺盛。" },
+    { "name": "小满", "season": "夏", "description": "夏熟作物的籽粒开始饱满，但尚未成熟。" },
+    { "name": "芒种", "season": "夏", "description": "有芒的麦类作物成熟，抢收抢种的大忙时节。" },
+    { "name": "夏至", "season": "夏", "description": "白昼最长，盛夏将至。" },
+    { "name": "小暑", "season": "夏", "description": "天气渐热，但还不是一年中最热的时候。" },
+    { "name": "大暑", "season": "夏", "description": "一年中最炎热的时期。" },
+    { "name": "立秋", "season": "秋", "description": "秋季开始，暑气将逐渐消退。" },
+    { "name": "处暑", "season": "秋", "description": "处暑即出暑，炎热暑气渐消。" },
+    { "name": "白露", "season": "秋", "description": "昼夜温差加大，清晨露水凝结发白。" },
+    { "name": "秋分", "season": "秋", "description": "昼夜再次均分，秋收秋种时节。" },
+    { "name": "寒露", "season": "秋", "description": "露水更凉，秋意渐深。" },
+    { "name": "霜降", "season": "秋", "description": "天气渐冷，开始降霜，秋季最后一个节气。" },
+    { "name": "立冬", "season": "冬", "description": "冬季开始，万物收藏。" },
+    { "name": "小雪", "season": "冬", "description": "开始降雪，气温持续下降。" },
+    { "name": "大雪", "season": "冬", "description": "降雪增多，天寒地冻。" },
+    { "name": "冬至", "season": "冬", "description": "白昼最短，数九寒天由此开始。" },
+    { "name": "小寒", "season": "冬", "description": "气候严寒，进入一年中最冷的时段。" },
+    { "name": "大寒", "season": "冬", "description": "一年中最寒冷的时期，冬季最后一个节气。" }
+  ],
+  "zhiXing": [
+    { "name": "建", "meaning": "建除十二值星之一，万物生育、强健之日。" },
+    { "name": "除", "meaning": "建除十二值星之一，除旧布新之日。" },
+    { "name": "满", "meaning": "建除十二值星之一，丰收圆满之日。" },
+    { "name": "平", "meaning": "建除十二值星之一，平常无事之日。" },
+    { "name": "定", "meaning": "建除十二值星之一，安定守成之日。" },
+    { "name": "执", "meaning": "建除十二值星之一，执行果断之日。" },
+    { "name": "破", "meaning": "建除十二值星之一，破旧立新之日。" },
+    { "name": "危", "meaning": "建除十二值星之一，危险警戒之日。" },
+    { "name": "成", "meaning": "建除十二值星之一，成功成就之日。" },
+    { "name": "收", "meaning": "建除十二值星之一，收获纳藏之日。" },
+    { "name": "开", "meaning": "建除十二值星之一，开通开放之日。" },
+    { "name": "闭", "meaning": "建除十二值星之一，闭塞收敛之日。" }
+  ],
+  "auspiciousPositions": [
+    { "name": "喜神方位", "description": "传统黄历中司掌喜庆吉事的吉神方位。" },
+    { "name": "财神方位", "description": "传统黄历中司掌财帛利市的吉神方位。" },
+    { "name": "福神方位", "description": "传统黄历中司掌福禄安康的吉神方位。" }
+  ],
+  "almanacRules": [
+    { "name": "宜", "description": "黄历当日适合进行的事项，如祭祀、出行、嫁娶、纳财等。" },
+    { "name": "忌", "description": "黄历当日不宜进行的事项，如动土、安葬、行丧等。" },
+    { "name": "冲煞", "description": "当日地支相冲的生肖与煞方，传统择日参考。" },
+    { "name": "干支", "description": "以十天干与十二地支组合纪年纪月纪日，如乙巳年丙戌月庚戌日。" },
+    { "name": "生肖", "description": "干支纪年对应的十二生肖，如乙巳年属蛇。" },
+    { "name": "星座", "description": "按公历日期划分的西方星座，如 10 月 8 日属于天秤座。" }
+  ]
+}

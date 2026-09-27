@@ -672,6 +672,47 @@ CREATE TABLE IF NOT EXISTS profile_channel_accounts (
 CREATE INDEX IF NOT EXISTS idx_profile_channel_accounts_account ON profile_channel_accounts(account_id);
 
 -- ============================================================
+-- goals / milestones — personal goals with progress tracking (checkbox 81).
+-- Mirrors backend/src/db/migrate.ts v44. `current_value` is the RAW value
+-- (a goal may over-achieve; only the derived percentage is clamped to 100).
+-- `target_value` may be NULL (pure milestone goal) but never 0. Deleting a goal
+-- cascades its milestones; `milestones.event_id` is an optional link to an
+-- existing event (ride the reminder engine) with ON DELETE SET NULL, so deleting
+-- the event only unlinks and deleting the goal never touches the event.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS goals (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  category TEXT,
+  target_value NUMERIC CHECK (target_value IS NULL OR target_value > 0),
+  current_value NUMERIC NOT NULL DEFAULT 0 CHECK (current_value >= 0),
+  unit TEXT,
+  start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  target_date DATE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'done', 'abandoned')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT goals_target_after_start CHECK (target_date IS NULL OR target_date >= start_date)
+);
+CREATE INDEX IF NOT EXISTS idx_goals_user_status ON goals(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_goals_user_profile ON goals(user_id, profile_id);
+
+CREATE TABLE IF NOT EXISTS milestones (
+  id SERIAL PRIMARY KEY,
+  goal_id INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  due_at DATE,
+  done_at TIMESTAMPTZ,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  event_id INTEGER REFERENCES events(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_milestones_goal ON milestones(goal_id, sort_order, id);
+CREATE INDEX IF NOT EXISTS idx_milestones_event ON milestones(event_id) WHERE event_id IS NOT NULL;
+
+-- ============================================================
 -- Initial schema version (v15 = all incremental migrations merged)
 -- ============================================================
 INSERT INTO schema_version (version) VALUES (16) ON CONFLICT DO NOTHING;

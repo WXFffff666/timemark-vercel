@@ -76,7 +76,9 @@ describe('migration v43 registration (todo 70)', () => {
 
     expect(callsMatching('CREATE TABLE IF NOT EXISTS profile_channel_accounts')).toHaveLength(0);
     expect(versionInserts()).not.toContain(43);
-    expect(mockQuery).not.toHaveBeenCalled();
+    // v44 (todo 81) is the newest migration and does run on top of a recorded 43;
+    // v43 itself is never re-applied or re-recorded.
+    expect(versionInserts()).toEqual([44]);
   });
 
   it('does not record v43 when its SQL fails, so a later cold start retries', async () => {
@@ -113,7 +115,11 @@ describe('migration v43 registration (todo 70)', () => {
     expect(versions).toContain(43);
     expect(versions.filter((v) => v === 43)).toHaveLength(1);
     expect(versions.indexOf(43)).toBe(versions.indexOf(42) + 1);
-    expect(versions[versions.length - 1]).toBe(43);
+    // v44 (todo 81, goals/milestones) landed after v43, so 43 is no longer the tail -
+    // assert the chain continues instead of pinning 43 as last.
+    expect(versions.filter((v) => v === 44)).toHaveLength(1);
+    expect(versions.indexOf(44)).toBe(versions.indexOf(43) + 1);
+    expect(versions[versions.length - 1]).toBe(44);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

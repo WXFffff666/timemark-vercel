@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node ../scripts/build-search-index.mjs && vite",
+    "build": "node ../scripts/build-search-index.mjs && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "node ../scripts/build-search-index.mjs && vitest run",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -23,6 +23,7 @@
     "framer-motion": "^13.4.4",
     "lucide-react": "^0.344.0",
     "lunar-javascript": "^1.7.7",
+    "minisearch": "^7.2.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-hook-form": "^7.50.0",
