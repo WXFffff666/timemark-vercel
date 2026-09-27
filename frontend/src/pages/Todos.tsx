@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 
 import { Badge } from '@/components/ui/badge';
 
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 
@@ -170,7 +170,7 @@ export default function Todos() {
 
         <div className="glass-panel rounded-full px-4 py-3 flex items-center gap-3 ring-1 ring-black/5 dark:ring-white/10">
 
-          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}>
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)} aria-label="返回上一页">
 
             <ArrowLeft size={20} />
 
@@ -206,11 +206,9 @@ export default function Todos() {
 
           </TabsList>
 
-        </Tabs>
+          <TabsContent value="active" forceMount className="mt-0">
 
-
-
-        {tab === 'active' ? (
+            {tab === 'active' ? (
 
           <>
 
@@ -324,7 +322,13 @@ export default function Todos() {
 
           </>
 
-        ) : (
+            ) : null}
+
+          </TabsContent>
+
+          <TabsContent value="history" forceMount className="mt-0">
+
+            {tab === 'history' ? (
 
           <>
 
@@ -402,7 +406,11 @@ export default function Todos() {
 
           </>
 
-        )}
+            ) : null}
+
+          </TabsContent>
+
+        </Tabs>
 
       </main>
 

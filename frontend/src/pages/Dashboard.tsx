@@ -321,6 +321,7 @@ export function Dashboard() {
         <Button 
           variant="vision" 
           className="h-16 w-16 rounded-[1.5rem] shadow-2xl shadow-primary-600/50 flex items-center justify-center p-0 bg-gradient-to-br from-primary-600 to-primary-700 hover:from-primary-500 hover:to-primary-600" 
+          aria-label="新建事件"
           onClick={() => { setEditingEvent(undefined); setShowForm(true); }}
         >
           <Plus size={28} className="text-white" />

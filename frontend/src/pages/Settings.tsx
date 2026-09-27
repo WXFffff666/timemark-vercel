@@ -659,7 +659,7 @@ export default function Settings() {
                     <p className="text-xs text-slate-500">倒计时结束时播放提示音</p>
                   </div>
                 </div>
-                <Switch checked={soundEnabled} onCheckedChange={handleSoundToggle} />
+                <Switch checked={soundEnabled} onCheckedChange={handleSoundToggle} aria-label="应用内提醒声音" />
               </div>
             </div>
           </section>
@@ -736,9 +736,9 @@ export default function Settings() {
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">收件箱接收 URL</label>
                 <div className="flex gap-2">
-                  <Input readOnly value={inboxReceiveUrl || '加载中...'} className="font-mono text-xs" />
+                  <Input readOnly value={inboxReceiveUrl || '加载中...'} className="font-mono text-xs" aria-label="收件箱接收 URL" />
                   {inboxReceiveUrl && (
-                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(inboxReceiveUrl, '收件箱接收 URL')}>
+                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(inboxReceiveUrl, '收件箱接收 URL')} aria-label="复制收件箱接收 URL">
                       <Copy size={16} />
                     </Button>
                   )}
@@ -749,9 +749,9 @@ export default function Settings() {
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">Webhook 入站 URL</label>
                 <div className="flex gap-2">
-                  <Input readOnly value={webhookUrl || '加载中...'} className="font-mono text-xs" />
+                  <Input readOnly value={webhookUrl || '加载中...'} className="font-mono text-xs" aria-label="Webhook 入站 URL" />
                   {webhookUrl && (
-                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(webhookUrl, 'Webhook URL')}>
+                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(webhookUrl, 'Webhook URL')} aria-label="复制 Webhook 入站 URL">
                       <Copy size={16} />
                     </Button>
                   )}
@@ -762,9 +762,9 @@ export default function Settings() {
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">日历 Feed URL（ICS）</label>
                 <div className="flex gap-2">
-                  <Input readOnly value={calendarFeedUrl || '加载中...'} className="font-mono text-xs" />
+                  <Input readOnly value={calendarFeedUrl || '加载中...'} className="font-mono text-xs" aria-label="日历 Feed URL（ICS）" />
                   {calendarFeedUrl && (
-                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(calendarFeedUrl, '日历 Feed URL')}>
+                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(calendarFeedUrl, '日历 Feed URL')} aria-label="复制日历 Feed URL">
                       <Copy size={16} />
                     </Button>
                   )}
@@ -776,7 +776,7 @@ export default function Settings() {
                       <li key={t.url} className="flex gap-2 items-center">
                         <span className="text-slate-500 shrink-0">{t.name}:</span>
                         <span className="truncate">{t.url}</span>
-                        <Button variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={() => copyToClipboard(t.url, t.name)}>
+                        <Button variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={() => copyToClipboard(t.url, t.name)} aria-label="复制 Feed Token">
                           <Copy size={14} />
                         </Button>
                       </li>
@@ -853,6 +853,7 @@ export default function Settings() {
                         variant="ghost"
                         size="icon"
                         onClick={() => setExternalCalendarUrls(externalCalendarUrls.filter((_, i) => i !== idx))}
+                        aria-label="删除外部日历 URL"
                       >
                         <Trash2 size={16} className="text-red-500" />
                       </Button>
@@ -906,6 +907,7 @@ export default function Settings() {
                 <select
                   value={timezone}
                   onChange={(e) => handleTimezoneChange(e.target.value)}
+                  aria-label="系统时区"
                   className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   {TIMEZONE_OPTIONS.map((tz) => (
@@ -931,6 +933,7 @@ export default function Settings() {
                       value={quietHoursStart}
                       onChange={(e) => setQuietHoursStart(e.target.value)}
                       className="w-36"
+                      aria-label="免打扰开始时间"
                     />
                   </div>
                   <div>
@@ -940,6 +943,7 @@ export default function Settings() {
                       value={quietHoursEnd}
                       onChange={(e) => setQuietHoursEnd(e.target.value)}
                       className="w-36"
+                      aria-label="免打扰结束时间"
                     />
                   </div>
                   <Button onClick={saveQuietHours} disabled={quietHoursSaving} size="sm" className="min-h-11">
