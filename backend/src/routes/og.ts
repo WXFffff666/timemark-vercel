@@ -250,9 +250,28 @@ export function renderNotFoundHtml(): string {
 interface ShareRow {
   name: string | null;
   type: string | null;
-  date: string | null;
-  next_occurrence: string | null;
+  date: Date | string | null;
+  next_occurrence: Date | string | null;
   recurring_config: unknown;
+}
+
+/**
+ * pg returns DATE columns as JS Date objects built at LOCAL midnight
+ * (postgres-date uses `new Date(y, m, d)`), so the TZ-correct inverse uses
+ * LOCAL getters. `String(date)` would yield the human form ("Mon Oct 05"),
+ * and getUTC* / toISOString would shift the day under a positive UTC offset.
+ */
+function toYmdColumn(value: unknown): string {
+  if (value == null || value === '') return '';
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return '';
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(value);
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : '';
 }
 
 function parseRecurring(value: unknown): { enabled?: boolean; frequency?: string } | null {
@@ -283,11 +302,11 @@ export async function loadSharedEvent(token: string | undefined): Promise<ShareR
 }
 
 export function toOgInput(row: ShareRow, nowYmd = todayYmd()): OgInput {
-  const date = row.date ? String(row.date).slice(0, 10) : '';
+  const date = toYmdColumn(row.date);
   const next = resolveNextGregorianOccurrence(date || nowYmd, nowYmd, {
     eventType: row.type ?? undefined,
     recurringConfig: parseRecurring(row.recurring_config),
-    nextOccurrence: row.next_occurrence,
+    nextOccurrence: toYmdColumn(row.next_occurrence) || null,
   });
   const days = diffCalendarDays(nowYmd, next);
   return { name: row.name ?? 'TimeMark', type: row.type ?? 'other', date, days };

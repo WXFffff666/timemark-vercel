@@ -28,6 +28,7 @@ import ogRoutes, {
   escapeXml,
   formatCountdown,
   renderOgSvg,
+  renderShareHtml,
   toOgInput,
   OG_IMAGE_PATH,
 } from '../routes/og.js';
@@ -287,5 +288,65 @@ describe('todo 88 — countdown + escaping units', () => {
     const b = renderOgSvg({ name: '稳定性', type: 'birthday', date: '2026-01-01', days: 7 });
     expect(a).toBe(b);
     expect(sha256(a)).toBe(sha256(b));
+  });
+});
+
+/**
+ * Regression — pg returns DATE columns as JS Date objects built at LOCAL midnight
+ * (postgres-date uses `new Date(y, m, d)`). The old `String(row.date).slice(0, 10)`
+ * produced "Mon Oct 05" (regex-rejected), blanking the rendered date and poisoning
+ * the countdown. These tests build real Date objects and assert TZ-independently via
+ * the local constructor + local-getter expectations (never toISOString).
+ */
+describe('todo 88 — pg DATE coercion (regression)', () => {
+  const DATE_ROW = { ...eventRow({ type: 'birthday' }), date: new Date(2026, 9, 5) };
+
+  it('toOgInput normalizes a Date date to YYYY-MM-DD and yields a FINITE countdown', () => {
+    const input = toOgInput(DATE_ROW, '2026-09-01');
+    expect(input.date).toBe('2026-10-05');
+    expect(Number.isFinite(input.days)).toBe(true);
+    expect(input.days).toBe(34); // 2026-09-01 -> 2026-10-05
+  });
+
+  it('renderOgSvg shows the normalized date and a real countdown (not the generic fallback)', () => {
+    const svg = renderOgSvg(toOgInput(DATE_ROW, '2026-09-01'));
+    expect(svg).toContain('2026-10-05');
+    expect(svg).not.toContain('重要日子');
+    expect(svg).toMatch(/还有 \d+ 天|就是今天|已过去 \d+ 天/);
+  });
+
+  it('renderShareHtml shows the normalized date and a real countdown', () => {
+    const html = renderShareHtml({
+      ...toOgInput(DATE_ROW, '2026-09-01'),
+      token: TOKEN,
+      origin: 'http://localhost',
+    });
+    expect(html).toContain('2026-10-05');
+    expect(html).not.toContain('重要日子');
+    expect(html).toMatch(/还有 \d+ 天|就是今天|已过去 \d+ 天/);
+  });
+
+  it('honours a next_occurrence supplied as a Date object', () => {
+    const dateRowWithNext = {
+      ...eventRow({ date: '1990-08-15', type: 'birthday' }),
+      next_occurrence: new Date(2026, 7, 20),
+    };
+    const withNext = toOgInput(dateRowWithNext, '2026-08-01');
+    expect(withNext.date).toBe('1990-08-15');
+    expect(withNext.days).toBe(19); // 2026-08-01 -> supplied 2026-08-20, NOT the rolled 08-15 (14)
+
+    const withoutNext = toOgInput(eventRow({ date: '1990-08-15', type: 'birthday' }), '2026-08-01');
+    expect(withoutNext.days).toBe(14);
+    expect(withNext.days).not.toBe(withoutNext.days);
+  });
+
+  it('degrades gracefully for a genuinely unusable Date (no crash, no date text)', () => {
+    const bogus = { ...eventRow({ type: 'birthday' }), date: new Date('not a real date') };
+    const input = toOgInput(bogus, '2026-09-01');
+    expect(input.date).toBe('');
+    expect(Number.isFinite(input.days)).toBe(true);
+    const svg = renderOgSvg(input);
+    expect(svg.startsWith('<svg')).toBe(true);
+    expect(svg).not.toContain('not a real date');
   });
 });
