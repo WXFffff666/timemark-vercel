@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { query } from '../db/index.js';
+import { logFireAndForget } from '../utils/logger.js';
 
 const resendWebhook = new Hono();
 
@@ -48,7 +49,12 @@ resendWebhook.post('/delivery', async (c) => {
       `UPDATE email_logs SET error_message = COALESCE(error_message, '') || $1
        WHERE user_id = $2 AND id = (SELECT id FROM email_logs WHERE user_id = $2 ORDER BY sent_at DESC LIMIT 1)`,
       [` [resend:${status}]`, verifiedUserId],
-    ).catch(() => {});
+    ).catch(
+      logFireAndForget(
+        'resend_webhook.email_log_update_failed',
+        'Failed to annotate email log with delivery status',
+      ),
+    );
   }
 
   return c.json({ received: true });

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 
 // 【徽章优化】：使用更加饱满、对比度更高的小色块，文字显眼
 const badgeVariants = cva(
-  "inline-flex items-center justify-center rounded-full border px-3 py-1 text-[11px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 shadow-sm uppercase tracking-wider",
+  "inline-flex items-center justify-center rounded-full border px-3 py-1 text-[11px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 shadow-xs uppercase tracking-wider",
   {
     variants: {
       variant: {

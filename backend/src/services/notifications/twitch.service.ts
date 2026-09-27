@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getBlessing } from '../../../../shared/src/blessings.js';
+import { getBlessing } from '@timemark/shared/blessings';
 
 /**
  * Twitch EventSub/Webhook 通知服务

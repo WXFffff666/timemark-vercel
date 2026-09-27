@@ -3,6 +3,9 @@ import { verifyPassword } from '../utils/password.js';
 import { randomUUID } from 'crypto';
 import { authenticator } from 'otplib';
 import type { User } from '@timemark/shared';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('auth');
 
 export type LoginUser = User & {
   totpSecret?: string | null;
@@ -112,7 +115,10 @@ export async function createLoginLog(
       [id, userId, username, ip, userAgent, fingerprint, success ? true : false, reason || null],
     );
   } catch (error) {
-    console.error('[createLoginLog] Failed:', error);
+    log.warn(
+      { event: 'auth.login_log_write_failed', err: error, success, reason: reason ?? null },
+      'Failed to write login log',
+    );
   }
 }
 

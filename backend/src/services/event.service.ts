@@ -192,7 +192,7 @@ function calculateNextOccurrence(
     }
 
     const baseDate = new Date(date + 'T00:00:00');
-    let nextDate = new Date(baseDate);
+    const nextDate = new Date(baseDate);
 
     while (nextDate <= now) {
       switch (config.frequency) {

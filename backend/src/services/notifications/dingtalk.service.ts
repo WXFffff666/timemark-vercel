@@ -1,6 +1,6 @@
 import axios from 'axios';
 import crypto from 'crypto';
-import { getBlessing } from '../../../../shared/src/blessings.js';
+import { getBlessing } from '@timemark/shared/blessings';
 
 export async function sendDingTalkNotification(event: any, webhookUrl: string, Secret: string): Promise<void> {
   let markdownText: string;

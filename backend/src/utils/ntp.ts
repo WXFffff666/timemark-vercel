@@ -2,6 +2,7 @@
  * 网络时间校准：按 IANA 时区拉取权威时间，Cron 提醒与双历校验共用。
  * 默认 Asia/Shanghai；用户切换时区后，后续校准跟随该时区。
  */
+import { logFireAndForget } from './logger.js';
 
 export const DEFAULT_SYNC_TIMEZONE = 'Asia/Shanghai';
 
@@ -136,7 +137,9 @@ export function getLastTimeSyncResult(timeZone?: string): TimeSyncResult | null 
 
 /** 后台刷新，不阻塞请求 */
 export function scheduleTimeSync(timeZone?: string): void {
-  void syncTime(timeZone).catch(() => {});
+  void syncTime(timeZone).catch(
+    logFireAndForget('ntp.background_sync_failed', 'Background time sync failed'),
+  );
 }
 
 export async function syncTime(timeZone?: string, options?: { force?: boolean }): Promise<TimeSyncResult> {
@@ -199,7 +202,9 @@ export async function syncTime(timeZone?: string, options?: { force?: boolean })
 export async function getSyncedTimestamp(timeZone?: string): Promise<number> {
   const tz = normalizeTimeZone(timeZone);
   if (!getCache(tz)) {
-    await syncTime(tz).catch(() => {});
+    await syncTime(tz).catch(
+      logFireAndForget('ntp.cached_sync_failed', 'Time sync before timestamp read failed'),
+    );
   }
   return getSyncedNow(tz).getTime();
 }

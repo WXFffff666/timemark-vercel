@@ -1,12 +1,11 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, ChevronDown, Clock, Eye, ExternalLink } from 'lucide-react';
+import { CalendarClock, Type, AlignLeft, Globe, Bell, Users, Plus, X, Heart, GraduationCap, PartyPopper, Calendar, Sparkles, Clock, Eye, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lunar, Solar } from 'lunar-javascript';
 import { useNavigate } from 'react-router-dom';
@@ -21,10 +20,11 @@ import {
 import { normalizeEmail, suggestTemplateForContact, isFamilyLikeContact } from '@timemark/shared';
 import { resolveNextGregorianOccurrence } from '@timemark/shared/event-schedule';
 import { contactHasAnyEmail, getContactEmailList } from '@/lib/contact-utils';
+import { channelToAccountTypeFor } from '@/lib/channel-account-type';
 import { api, fetchAvailableChannels, type AvailableChannel } from '@/lib/api';
 import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
 import { getBlessing } from '@timemark/shared/blessings';
-import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate } from '@timemark/shared';
+import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate, NotificationChannel } from '@timemark/shared';
 
 interface NotificationAccountResponse {
   id: number;
@@ -167,6 +167,17 @@ const notificationChannels = [
   { value: 'ntfy', label: 'ntfy', icon: '📢' },
   { value: 'pushover', label: 'Pushover', icon: '🔔' },
   { value: 'apprise', label: 'Apprise', icon: '🔗' },
+  // Wave 2 渠道（Server酱³ / 息知 / AnPush / Chanify / Pushback / SimplePush / Zulip / Rocket.Chat / FCM / Twilio WhatsApp）
+  { value: 'serverchan3', label: 'Server酱³', icon: '📡' },
+  { value: 'xizhi', label: '息知', icon: '💬' },
+  { value: 'anpush', label: 'AnPush', icon: '🔔' },
+  { value: 'chanify', label: 'Chanify', icon: '📲' },
+  { value: 'pushback', label: 'Pushback', icon: '🔔' },
+  { value: 'simplepush', label: 'SimplePush', icon: '⚡' },
+  { value: 'zulip', label: 'Zulip', icon: '🧵' },
+  { value: 'rocketchat', label: 'Rocket.Chat', icon: '🚀' },
+  { value: 'fcm', label: 'Firebase 推送', icon: '🔥' },
+  { value: 'twilio_whatsapp', label: 'Twilio WhatsApp', icon: '🟢' },
 ];
 
 const defaultReminderConfig: ReminderConfig = {
@@ -393,7 +404,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     const template = allTemplates.find(t => t.id === selectedTemplateId);
     if (!template) return '请选择模板';
     
-    const blessing = getBlessing(formData.type, undefined, formData.personName, formData.reminderRecipientName);
+    const blessing = getBlessing(formData.type, undefined, formData.personName ?? undefined, formData.reminderRecipientName ?? undefined);
     const data: Record<string, string> = {
       event_name: formData.name || '示例事件',
       event_date: formData.date || '2026-05-04',
@@ -610,7 +621,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
     if (isSelected) {
       // 取消选择该渠道，并移除相关 accountIds
-      const accountType = channelToAccountType[channel];
+      const accountType = channelToAccountTypeFor(channel);
       const newAccountIds = accountType
         ? currentAccountIds.filter(id => !accounts.some(a => String(a.id) === id && a.type === accountType))
         : currentAccountIds;
@@ -655,41 +666,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
     });
   };
 
-  const channelToAccountType: Record<string, string> = {
-    email: 'email',
-    resend: 'resend',
-    smtp: 'smtp',
-    feishu: 'feishu',
-    wecom: 'wecom',
-    dingtalk: 'dingtalk',
-    telegram: 'telegram',
-    discord: 'discord',
-    slack: 'slack',
-    googlechat: 'googlechat',
-    irc: 'irc',
-    synologychat: 'synologychat',
-    twitch: 'twitch',
-    line: 'line',
-    matrix: 'matrix',
-    mattermost: 'mattermost',
-    msteams: 'msteams',
-    nextcloud_talk: 'nextcloudtalk',
-    qmsg: 'qmsg',
-    wxpusher: 'wxpusher',
-    serverchan: 'serverchan',
-    pushplus: 'pushplus',
-    bark: 'bark',
-    gotify: 'gotify',
-    meow: 'meow',
-    pushme: 'pushme',
-    wecomapp: 'wecomapp',
-    ntfy: 'ntfy',
-    pushover: 'pushover',
-    apprise: 'apprise',
-  };
-
   const openAccountPicker = async (channel: string, currentAccountIds: string[]) => {
-    const accountType = channelToAccountType[channel];
+    const accountType = channelToAccountTypeFor(channel);
     if (!accountType) return;
 
     setAccountsLoading(true);
@@ -786,7 +764,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   const itemVariants = {
     hidden: { opacity: 0, y: 15 },
-    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
+    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } as const }
   };
 
   return (
@@ -1323,12 +1301,12 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">通知渠道</label>
                     <div className="grid grid-cols-4 gap-2">
                       {notificationChannels.map((channel) => {
-                        const accountType = channelToAccountType[channel.value];
+                        const accountType = channelToAccountTypeFor(channel.value);
                         const configuredAccounts = availableChannels.filter(a => a.type === accountType);
                         const hasActive = configuredAccounts.some(a => a.is_active && a.last_test_result !== 'failed');
                         const hasWarning = configuredAccounts.some(a => a.is_active && a.last_test_result === 'failed');
                         const isConfigured = configuredAccounts.length > 0;
-                        const isSelected = formData.reminderConfig.channels?.includes(channel.value);
+                        const isSelected = formData.reminderConfig.channels?.includes(channel.value as NotificationChannel);
                         const isDisabled = !isConfigured;
 
                         return (
@@ -1382,9 +1360,9 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">通知账户</label>
                       <div className="space-y-2">
                         {notificationChannels
-                          .filter(ch => formData.reminderConfig.channels?.includes(ch.value))
+                          .filter(ch => formData.reminderConfig.channels?.includes(ch.value as NotificationChannel))
                           .map(channel => {
-                            const accountType = channelToAccountType[channel.value];
+                            const accountType = channelToAccountTypeFor(channel.value);
                             const selectedIds = formData.reminderConfig.accountIds || [];
                             const channelAccounts = accounts.filter(a => a.type === accountType && selectedIds.includes(String(a.id)));
 

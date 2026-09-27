@@ -8,7 +8,7 @@ import { securityHeaders } from './middleware/security-headers.js';
 import { zeroTrustGuard } from './middleware/zero-trust-guard.js';
 import { httpsEnforcement } from './middleware/https-enforcement.js';
 import { csrfProtection } from './middleware/csrf.js';
-import { loginRateLimit, apiRateLimit, rateLimit } from './middleware/rate-limit.js';
+import { apiRateLimit, rateLimit } from './middleware/rate-limit.js';
 import { getConfiguredOrigins, isAllowedOrigin } from './utils/allowed-origins.js';
 import 'dotenv/config';
 import { createLogger } from './utils/logger.js';
@@ -208,7 +208,7 @@ async function bootstrap() {
 
   // 0. 初始化密钥（首次启动自动生成，后续启动从文件读取）
   log.info('Initializing secret keys...');
-  const secrets = initSecretKeys();
+  initSecretKeys();
   log.info('Secret keys ready');
 
   // 1. 等待数据库就绪

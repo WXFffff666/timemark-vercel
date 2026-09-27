@@ -7,7 +7,5 @@ export function createSmtpTransporter(
   fromEmail: string,
   password: string,
 ) {
-  return nodemailer.createTransport(
-    buildSmtpTransportOptions(host, port, fromEmail, password) as nodemailer.TransportOptions,
-  );
+  return nodemailer.createTransport(buildSmtpTransportOptions(host, port, fromEmail, password));
 }

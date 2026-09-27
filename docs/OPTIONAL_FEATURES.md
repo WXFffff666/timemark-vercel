@@ -83,7 +83,7 @@ Google OAuth 完整步骤：[GOOGLE_CALENDAR_OAUTH.md](./GOOGLE_CALENDAR_OAUTH.m
 | 端点 | 必须？ | 说明 |
 |------|--------|------|
 | `reminder-check` | **是** | 每分钟提醒扫描 |
-| `retry-notifications` | 建议 | 失败重试 |
+| `retry-notifications` | 建议 | 失败自动落库 `notification_queue`，按 5m/30m/2h/6h 退避重试（最多 4 次） |
 | `calendar-sync` | 可选 | 仅在使用外部 ICS / Google OAuth 时需要 |
 | `caldav-sync` | 可选 | 仅配置 CalDAV 时需要 |
 | `daily-maintenance` | 建议 | 日志清理、统计聚合、待办历史清理（365 天） |

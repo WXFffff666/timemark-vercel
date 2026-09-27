@@ -6,9 +6,6 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
 const schedulerStub = join(root, 'backend/src/queue/scheduler.vercel-stub.ts')
-const imServicePattern =
-  /[/\\]notifications[/\\](wechaty|whatsapp|qqbot|signal|zalo|bluebubbles|clawbot|wechat-openclaw|nostr)\.service\.js$/
-const imAuthStub = join(root, 'backend/src/services/notifications/im-auth.vercel-stub.ts')
 
 const outfile = 'api/handler.cjs'
 
@@ -23,26 +20,12 @@ await esbuild.build({
   outfile,
   mainFields: ['module', 'main'],
   packages: 'bundle',
-  external: [
-    'baileys',
-    'wechaty',
-    'oicq',
-    '@tencent-weixin/openclaw-weixin',
-  ],
   plugins: [
     {
       name: 'scheduler-vercel-stub',
       setup(build) {
         build.onResolve({ filter: /[/\\]queue[/\\]scheduler\.js$/ }, () => ({
           path: schedulerStub,
-        }))
-      },
-    },
-    {
-      name: 'drop-removed-channel-services',
-      setup(build) {
-        build.onResolve({ filter: imServicePattern }, () => ({
-          path: imAuthStub,
         }))
       },
     },

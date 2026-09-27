@@ -1,5 +1,5 @@
 import { query } from '../db/index.js';
-import { Lunar, Solar } from 'lunar-javascript';
+import { Lunar } from 'lunar-javascript';
 import {
   buildReminderSendKey,
   diffCalendarDays,
@@ -61,7 +61,6 @@ function resolveGregorianTarget(
 
 /** Resolve lunar date to next matching gregorian target within current/next lunar year */
 function resolveLunarTarget(today: string, lunarDateRaw: unknown, allDays: number[], now: Date): Date | null {
-  try {
     const lunarData = typeof lunarDateRaw === 'string' ? JSON.parse(lunarDateRaw) : lunarDateRaw;
     if (!lunarData?.month || !lunarData?.day) return null;
 
@@ -77,9 +76,6 @@ function resolveLunarTarget(today: string, lunarDateRaw: unknown, allDays: numbe
         return new Date(tryDateStr + 'T00:00:00Z');
       }
     }
-  } catch (error) {
-    throw error;
-  }
   return null;
 }
 
@@ -477,8 +473,3 @@ export async function cleanupSessions() {
   log.info({ count: triggerResult.rowCount ?? 0 }, 'Cleaned up old event trigger logs');
 }
 
-function addDays(dateStr: string, days: number): string {
-  const date = new Date(dateStr);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().split('T')[0];
-}

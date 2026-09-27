@@ -132,7 +132,10 @@ function App() {
     };
     mq.addEventListener('change', onChange);
 
-    if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    // Registered in every mode: the worker is intentionally cache-free (todo 37),
+    // so it cannot serve stale HTML; the e2e suite asserts registration under the
+    // dev server as well. Todo 84 re-adds the Web Push handlers.
+    if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
 

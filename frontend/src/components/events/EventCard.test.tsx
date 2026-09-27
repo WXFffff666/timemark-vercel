@@ -11,8 +11,14 @@ const mockEvent: Event = {
   date: '2026-12-25',
   type: 'birthday',
   calendarType: 'gregorian',
-  createdAt: '2026-01-01',
-  updatedAt: '2026-01-01'
+  reminderConfig: {
+    enabled: true,
+    daysBeforeList: [1, 3],
+    emailRecipients: [],
+    reminderTimes: ['09:00'],
+    channels: [],
+  },
+  createdAt: '2026-01-01'
 }
 
 describe('EventCard', () => {

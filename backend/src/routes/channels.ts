@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import {
   getSupportedChannelTemplates,
@@ -14,7 +15,9 @@ import { query } from '../db/index.js';
 import { testConnection } from '../services/notifications/test-connection.js';
 import { checkAllChannels, checkChannel } from '../services/notifications/network-check.js';
 import { getNotificationAccounts } from '../services/config.service.js';
+import { classifyChannelTestResult } from './cron.js';
 import { SMTP_PROVIDER_PRESETS } from '@timemark/shared';
+import { logFireAndForget } from '../utils/logger.js';
 
 const channels = new Hono<{ Variables: { user: User } }>();
 
@@ -69,7 +72,7 @@ channels.post('/test', async (c) => {
     return c.json({
       success: false,
       error: formatZodError(parsed.error),
-      details: parsed.error.flatten(),
+      details: z.flattenError(parsed.error),
     }, 400);
   }
   if (parsed.data.type && !isSupportedChannel(parsed.data.type)) {
@@ -146,11 +149,12 @@ channels.post('/test', async (c) => {
     });
 
     if (accountId) {
-      const testResult = result.success ? 'success' : 'failed';
-      const connStatus = result.success ? 'healthy' : 'unhealthy';
+      // Same truthfulness contract as the channel-health cron: a channel without a
+      // test path is 'unknown'/'unsupported', real outcomes keep healthy/unhealthy.
+      const { connectionStatus, lastTestResult } = classifyChannelTestResult(result);
       await query(
         'UPDATE notification_accounts SET last_test_result = $1, last_test_at = CURRENT_TIMESTAMP, connection_status = $2 WHERE id = $3',
-        [testResult, connStatus, accountId],
+        [lastTestResult, connectionStatus, accountId],
       );
     }
 
@@ -170,9 +174,14 @@ channels.post('/test', async (c) => {
     const message = error instanceof Error ? error.message : '测试连接失败';
     if (accountId) {
       await query(
-        'UPDATE notification_accounts SET last_test_result = $1, last_test_at = CURRENT_TIMESTAMP WHERE id = $2',
-        ['failed', accountId],
-      ).catch(() => {});
+        'UPDATE notification_accounts SET last_test_result = $1, last_test_at = CURRENT_TIMESTAMP, connection_status = $2 WHERE id = $3',
+        ['error', 'unknown', accountId],
+      ).catch(
+        logFireAndForget(
+          'channels.test_result_persist_failed',
+          'Failed to persist failed test result for account',
+        ),
+      );
     }
     return c.json({ success: false, error: message }, 500);
   }

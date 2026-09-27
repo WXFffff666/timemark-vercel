@@ -101,7 +101,7 @@ function decryptLegacyFormat(data: Buffer, masterKey: string): string {
   try {
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
     return decrypted.toString('utf8');
-  } catch (error) {
+  } catch {
     throw new Error('Decryption failed: invalid key or tampered data');
   }
 }

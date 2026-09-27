@@ -41,7 +41,7 @@ export function RealtimeClock() {
 
   return (
     <div className="flex items-center justify-center px-3 py-1 bg-white/40 dark:bg-black/30 rounded-xl border border-white/20 dark:border-white/5 shadow-inner backdrop-blur-md">
-      <span className="font-mono text-lg font-extrabold tracking-wider bg-clip-text text-transparent bg-gradient-to-b from-primary-500 to-purple-600 dark:from-primary-400 dark:to-purple-400 tabular-nums drop-shadow-sm">
+      <span className="font-mono text-lg font-extrabold tracking-wider bg-clip-text text-transparent bg-gradient-to-b from-primary-500 to-purple-600 dark:from-primary-400 dark:to-purple-400 tabular-nums drop-shadow-xs">
         {formattedTime}
       </span>
     </div>

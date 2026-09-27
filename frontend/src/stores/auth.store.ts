@@ -165,7 +165,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   loginPasskey: async (username, rememberMe = false, totpCode?: string) => {
     const { loginWithPasskey } = await import('../lib/webauthn');
     const response = await loginWithPasskey(username.trim(), rememberMe, totpCode);
-    return applyLoginResponse({ ...response, authMode: 'cookie' }, rememberMe);
+    return applyLoginResponse({ ...response, authMode: 'cookie', user: response.user as User | undefined }, rememberMe);
   },
 
   logout: async () => {
@@ -189,9 +189,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   checkAuth: async () => {
-    // Check for persistent login flag first
-    const isPersistentLogin = localStorage.getItem('timemark_persistent_login') === 'true';
-    
     // Get tokens from appropriate storage
     let accessToken = localStorage.getItem('accessToken');
     let refreshToken = localStorage.getItem('refreshToken');
@@ -208,7 +205,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     
     // 超时保护
-    const timeoutPromise = new Promise((_, reject) => 
+    const timeoutPromise = new Promise<never>((_, reject) => 
       setTimeout(() => reject(new Error('Auth check timeout')), 5000)
     );
     
@@ -238,7 +235,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             const user = await api.get<User>('/auth/session');
             set({ user, isAuthenticated: true, isLoading: false });
             return;
-          } catch (refreshError) {
+          } catch {
             // Token refresh failed — clear session silently
             // Only clear tokens if refresh also fails
             localStorage.removeItem('accessToken');

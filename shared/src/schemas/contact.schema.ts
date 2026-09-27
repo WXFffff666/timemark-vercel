@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const emailField = z.string().email('邮箱格式不正确').optional().or(z.literal(''));
+const emailField = z.email('邮箱格式不正确').optional().or(z.literal(''));
 const optionalText = z.string().max(200).optional().or(z.literal(''));
 
 export const labeledValueSchema = z.object({
@@ -44,7 +44,7 @@ export const contactSendEmailSchema = z.object({
   subject: z.string().min(1, '主题不能为空').max(200),
   html: z.string().min(1, '内容不能为空').max(50000),
   /** 指定收件邮箱；留空则发往联系人全部邮箱 */
-  recipientEmails: z.array(z.string().email()).min(1).max(20).optional(),
+  recipientEmails: z.array(z.email()).min(1).max(20).optional(),
 });
 
 export const createFixedContactSchema = contactBaseSchema.refine(hasAnyContactMethod, {

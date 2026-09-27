@@ -16,5 +16,19 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install --config.blockExoticSubdeps=false
-      - run: pnpm build
+      - name: Install dependencies
+        run: pnpm install
+      - name: Build shared package
+        run: pnpm --filter @timemark/shared run build
+      - name: Typecheck all workspaces
+        run: pnpm -r exec tsc --noEmit
+      - name: Run unit tests
+        run: pnpm -r test --if-present
+      - name: Lint
+        run: pnpm lint
+      - name: Build
+        run: pnpm build
+      - name: Install Playwright browsers
+        run: pnpm --filter frontend exec playwright install --with-deps chromium
+      - name: Run e2e tests
+        run: pnpm --filter frontend exec playwright test

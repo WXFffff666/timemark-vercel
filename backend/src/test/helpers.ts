@@ -1,5 +1,3 @@
-import { vi } from 'vitest';
-
 export function createTestEvent(overrides: Record<string, any> = {}) {
   return {
     id: 1,

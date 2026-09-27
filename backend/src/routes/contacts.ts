@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import type { User } from '@timemark/shared';
 import {
@@ -31,7 +32,7 @@ contacts.post('/', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = createFixedContactSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: 'Validation failed', details: z.flattenError(parsed.error) }, 400);
   }
   try {
     const row = await createFixedContact(Number(user.id), parsed.data);
@@ -47,7 +48,7 @@ contacts.put('/:id', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = updateFixedContactSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: 'Validation failed', details: z.flattenError(parsed.error) }, 400);
   }
   try {
     const row = await updateFixedContact(Number(user.id), id, parsed.data);
@@ -152,7 +153,7 @@ contacts.post('/:id/send-email', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = contactSendEmailSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: 'Validation failed', details: z.flattenError(parsed.error) }, 400);
   }
   try {
     const result = await sendContactEmail(userId, id, parsed.data);

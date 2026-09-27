@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getBlessing } from '../../../../shared/src/blessings.js';
+import { getBlessing } from '@timemark/shared/blessings';
 
 /**
  * IRC Webhook 通知服务 (通过桥接服务如 matterbridge 等)

@@ -3,11 +3,12 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173',
   },
   webServer: {
-    command: 'pnpm dev',
+    command: 'pnpm --filter frontend dev',
     port: 5173,
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
+    stdout: 'pipe',
   },
 });

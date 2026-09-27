@@ -1,18 +1,101 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+﻿@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Tailwind v4 CSS-first config 鈥?replaces tailwind.config.js.
+ * darkMode: ['class']  ->  @custom-variant dark (&:where(.dark, .dark *));
+ * theme.extend.*       ->  @theme inline { ... }   (kept `inline` so light/dark runtime var swaps keep working)
+ * plugins: [tailwindcss-animate] -> @import "tw-animate-css";
+ * container config     ->  @utility container { ... }
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Pin the font stacks to the Tailwind v3 defaults so preflight text rendering is byte-identical. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+@theme inline {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-50: hsl(var(--primary-50));
+  --color-primary-100: hsl(var(--primary-100));
+  --color-primary-500: hsl(var(--primary-500));
+  --color-primary-600: hsl(var(--primary-600));
+  --color-primary-900: hsl(var(--primary-900));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-blob-spin: blob-spin 30s linear infinite;
+  --animate-blob-spin-slow: blob-spin 40s linear infinite reverse;
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes blob-spin {
+    0% { transform: rotate(0deg) scale(1); }
+    33% { transform: rotate(120deg) scale(1.05); }
+    66% { transform: rotate(240deg) scale(0.95); }
+    100% { transform: rotate(360deg) scale(1); }
+  }
+}
+
+/* v3 container: { center: true, padding: '2rem', screens: { '2xl': '1400px' } } */
+@utility container {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: 2rem;
+  @media (width >= 640px) { max-width: 640px; }
+  @media (width >= 768px) { max-width: 768px; }
+  @media (width >= 1024px) { max-width: 1024px; }
+  @media (width >= 1280px) { max-width: 1280px; }
+  @media (width >= 1400px) { max-width: 1400px; }
+}
 
 @layer base {
   :root {
-    /* 【浅色模式彻底重构】：参考 MacOS / Windows 11 云母质感 */
-    /* 背景不再纯白，而是带有呼吸感的浅灰蓝色底，加上高饱和度的动态渐变球 */
+    /* 銆愭祬鑹叉ā寮忓交搴曢噸鏋勩€戯細鍙傝€?MacOS / Windows 11 浜戞瘝璐ㄦ劅 */
+    /* 鑳屾櫙涓嶅啀绾櫧锛岃€屾槸甯︽湁鍛煎惛鎰熺殑娴呯伆钃濊壊搴曪紝鍔犱笂楂橀ケ鍜屽害鐨勫姩鎬佹笎鍙樼悆 */
     --background: 210 40% 98%; 
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 221 83% 53%; /* 苹果科技蓝 */
+    --primary: 221 83% 53%; /* 鑻规灉绉戞妧钃?*/
     --primary-foreground: 210 40% 98%;
     --primary-50: 221 83% 95%;
     --primary-100: 221 83% 90%;
@@ -32,17 +115,17 @@
     --ring: 221 83% 53%;
     --radius: 1rem;
 
-    /* 浅色模式网格渐变底色：鲜艳清透的色块，被毛玻璃覆盖后显出高级感 */
-    --mesh-color-1: #93c5fd; /* 明亮天蓝 */
-    --mesh-color-2: #d8b4fe; /* 明亮紫罗兰 */
-    --mesh-color-3: #f8fafc; /* 极浅冷灰底色 */
-    --mesh-opacity: 0.65;    /* 提高透明度让颜色显现 */
+    /* 娴呰壊妯″紡缃戞牸娓愬彉搴曡壊锛氶矞鑹虫竻閫忕殑鑹插潡锛岃姣涚幓鐠冭鐩栧悗鏄惧嚭楂樼骇鎰?*/
+    --mesh-color-1: #93c5fd; /* 鏄庝寒澶╄摑 */
+    --mesh-color-2: #d8b4fe; /* 鏄庝寒绱綏鍏?*/
+    --mesh-color-3: #f8fafc; /* 鏋佹祬鍐风伆搴曡壊 */
+    --mesh-opacity: 0.65;    /* 鎻愰珮閫忔槑搴﹁棰滆壊鏄剧幇 */
     --mesh-blur: 100px;
   }
 
   .dark {
-    /* 【深色模式彻底重构】：参考 iOS 黑暗模式与 HyperOS 暗夜模式 */
-    /* 去除导致噪点的花哨高亮渐变，采用极致的深空黑和极低透明度的环境光，彻底消除色带和噪点 */
+    /* 銆愭繁鑹叉ā寮忓交搴曢噸鏋勩€戯細鍙傝€?iOS 榛戞殫妯″紡涓?HyperOS 鏆楀妯″紡 */
+    /* 鍘婚櫎瀵艰嚧鍣偣鐨勮姳鍝ㄩ珮浜笎鍙橈紝閲囩敤鏋佽嚧鐨勬繁绌洪粦鍜屾瀬浣庨€忔槑搴︾殑鐜鍏夛紝褰诲簳娑堥櫎鑹插甫鍜屽櫔鐐?*/
     --background: 240 10% 4%;
     --foreground: 210 40% 98%;
     --card: 240 10% 4%;
@@ -68,12 +151,12 @@
     --input: 217 22% 20%;
     --ring: 221 83% 60%;
 
-    /* 深色模式网格：极其幽暗的光晕，极大程度降低不透明度和增加模糊，解决噪点问题 */
-    --mesh-color-1: #1e1b4b; /* 极暗靛蓝 */
-    --mesh-color-2: #0f172a; /* 深邃石板黑 */
-    --mesh-color-3: #040405; /* 纯黑底色 */
-    --mesh-opacity: 0.15;    /* 极低的不透明度 */
-    --mesh-blur: 150px;      /* 巨大的模糊半径 */
+    /* 娣辫壊妯″紡缃戞牸锛氭瀬鍏跺菇鏆楃殑鍏夋檿锛屾瀬澶х▼搴﹂檷浣庝笉閫忔槑搴﹀拰澧炲姞妯＄硦锛岃В鍐冲櫔鐐归棶棰?*/
+    --mesh-color-1: #1e1b4b; /* 鏋佹殫闈涜摑 */
+    --mesh-color-2: #0f172a; /* 娣遍們鐭虫澘榛?*/
+    --mesh-color-3: #040405; /* 绾粦搴曡壊 */
+    --mesh-opacity: 0.15;    /* 鏋佷綆鐨勪笉閫忔槑搴?*/
+    --mesh-blur: 150px;      /* 宸ㄥぇ鐨勬ā绯婂崐寰?*/
   }
 }
 
@@ -83,26 +166,26 @@
 }
 
 /* 
- * 国际大厂融合 UI：Apple 空间拟态 + Windows 云母 + Xiaomi Alive
- * 确保在任何背景下都不融为一体，层次分明
+ * 鍥介檯澶у巶铻嶅悎 UI锛欰pple 绌洪棿鎷熸€?+ Windows 浜戞瘝 + Xiaomi Alive
+ * 纭繚鍦ㄤ换浣曡儗鏅笅閮戒笉铻嶄负涓€浣擄紝灞傛鍒嗘槑
  */
 
-/* 次要毛玻璃层：用于小组件、悬浮条 */
+/* 娆¤姣涚幓鐠冨眰锛氱敤浜庡皬缁勪欢銆佹偓娴潯 */
 .glass {
-  @apply bg-white/60 dark:bg-zinc-900/60 backdrop-blur-2xl border border-white dark:border-white/5 shadow-sm dark:shadow-none;
+  @apply bg-white/60 dark:bg-zinc-900/60 backdrop-blur-2xl border border-white dark:border-white/5 shadow-xs dark:shadow-none;
 }
 
-/* 主面板毛玻璃：浅色下是带有实体白色的透贴，自带明显的立体投影；深色下是深灰半透加顶部高光白线 */
+/* 涓婚潰鏉挎瘺鐜荤拑锛氭祬鑹蹭笅鏄甫鏈夊疄浣撶櫧鑹茬殑閫忚创锛岃嚜甯︽槑鏄剧殑绔嬩綋鎶曞奖锛涙繁鑹蹭笅鏄繁鐏板崐閫忓姞椤堕儴楂樺厜鐧界嚎 */
 .glass-panel {
   @apply bg-white/80 dark:bg-[#18181b]/75 backdrop-blur-3xl border border-white dark:border-white/15 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_16px_40px_rgb(0,0,0,0.5)];
 }
 
-/* 辅助说明文字：深浅色均保证可读对比度 */
+/* 杈呭姪璇存槑鏂囧瓧锛氭繁娴呰壊鍧囦繚璇佸彲璇诲姣斿害 */
 .text-hint {
   @apply text-slate-600 dark:text-slate-400;
 }
 
-/* 深浅色切换：圆形扩散过渡（View Transitions API） */
+/* 娣辨祬鑹插垏鎹細鍦嗗舰鎵╂暎杩囨浮锛圴iew Transitions API锛?*/
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
@@ -126,7 +209,7 @@ html[data-theme-transition='to-light']::view-transition-new(root) {
   }
 }
 
-/* Cloudflare Turnstile：避免被毛玻璃/overflow 裁剪，保证 iframe 完整显示 */
+/* Cloudflare Turnstile锛氶伩鍏嶈姣涚幓鐠?overflow 瑁佸壀锛屼繚璇?iframe 瀹屾暣鏄剧ず */
 .turnstile-host {
   width: 100%;
   min-height: 78px;
@@ -152,12 +235,12 @@ html[data-theme-transition='to-light']::view-transition-new(root) {
   max-width: 100%;
 }
 
-/* 小米 HyperOS 动态弹簧反馈 */
+/* 灏忕背 HyperOS 鍔ㄦ€佸脊绨у弽棣?*/
 .alive-interactive {
   @apply transition-transform duration-300 active:scale-[0.96] cursor-pointer;
 }
 
-/* 纯 CSS 背景网格，极大优化 J4125 性能表现 */
+/* 绾?CSS 鑳屾櫙缃戞牸锛屾瀬澶т紭鍖?J4125 鎬ц兘琛ㄧ幇 */
 .mesh-bg-container {
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; overflow: hidden; background-color: var(--mesh-color-3);
 }

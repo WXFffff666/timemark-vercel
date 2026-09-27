@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import type { User } from '@timemark/shared';
 import { broadcastEmailSchema, broadcastPreviewSchema } from '@timemark/shared';
@@ -25,7 +26,7 @@ broadcast.post('/preview', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = broadcastPreviewSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: 'Validation failed', details: z.flattenError(parsed.error) }, 400);
   }
   return c.json({
     success: true,
@@ -39,7 +40,7 @@ broadcast.post('/email', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = broadcastEmailSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: 'Validation failed', details: z.flattenError(parsed.error) }, 400);
   }
 
   const totpRow = await query('SELECT totp_secret, totp_enabled FROM users WHERE id = $1', [userId]);

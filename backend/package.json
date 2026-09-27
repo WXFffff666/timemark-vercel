@@ -10,42 +10,35 @@
     "migrate-db": "tsx ../scripts/migrate-db.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.8.0",
+    "@hono/node-server": "^2.1.1",
     "@simplewebauthn/server": "^13.3.2",
-    "@tencent-weixin/openclaw-weixin": "^1.0.0",
     "@timemark/shared": "workspace:*",
-    "@vercel/functions": "latest",
-    "axios": "^1.6.7",
+    "@vercel/functions": "^3.9.9",
+    "axios": "^1.20.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
-    "hono": "^4.0.0",
+    "hono": "^4.13.9",
     "ics": "^3.12.0",
-    "lunar-javascript": "^1.6.12",
-    "nodemailer": "^8.0.6",
-    "nostr-tools": "^2.10.4",
+    "lunar-javascript": "^1.7.7",
+    "nodemailer": "^10.0.10",
     "otplib": "^12.0.1",
-    "pg": "latest",
+    "pg": "^8.23.0",
     "pino": "^10.3.1",
     "qrcode": "^1.5.3",
-    "resend": "^3.2.0",
+    "resend": "^6.30.0",
     "web-push": "^3.6.7",
-    "zod": "^3.22.4"
-  },
-  "optionalDependencies": {
-    "baileys": "^6.10.0",
-    "oicq": "^2.3.1",
-    "wechaty": "^1.20.2"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.0.0",
-    "@types/nodemailer": "^8.0.0",
-    "@types/pg": "latest",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
     "@types/pino": "^7.0.5",
     "@types/qrcode": "^1.5.5",
     "@types/web-push": "^3.6.4",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3",
-    "vitest": "^1.6.1"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
   }
 }

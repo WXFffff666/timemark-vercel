@@ -3,7 +3,7 @@ import { z } from 'zod';
 const broadcastBaseSchema = z.object({
   subject: z.string().min(1, '主题不能为空').max(200),
   html: z.string().min(1, '内容不能为空').max(50000),
-  recipientEmails: z.array(z.string().email()).min(1).max(500).optional(),
+  recipientEmails: z.array(z.email()).min(1).max(500).optional(),
   contactIds: z.array(z.number().int().positive()).max(500).optional(),
   useAllContacts: z.boolean().optional(),
   totpCode: z.string().length(6).optional(),

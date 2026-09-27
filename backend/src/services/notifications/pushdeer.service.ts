@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getBlessing } from '../../../../shared/src/blessings.js';
+import { getBlessing } from '@timemark/shared/blessings';
 
 const DEFAULT_PUSHDEER_API = 'https://api2.pushdeer.com';
 

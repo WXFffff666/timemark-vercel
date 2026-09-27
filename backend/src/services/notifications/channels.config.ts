@@ -4,8 +4,12 @@
  */
 
 import { isSupportedChannel } from './supported-channels.js';
+import { CHANNEL_METADATA } from './channels.metadata.js';
 
 export type ChannelConfigMethod = 'webhook' | 'token' | 'plugin';
+
+/** notification_accounts 中实际存储配置值的四个列 */
+export type ChannelColumn = 'webhook' | 'token' | 'secret' | 'chat_id';
 
 export interface ChannelField {
   name: string;
@@ -14,6 +18,14 @@ export interface ChannelField {
   required: boolean;
   placeholder?: string;
   description?: string;
+  /** 该字段在 notification_accounts 中落库的列；缺省时与 name 相同（仅 matrix / pushover 例外） */
+  column?: ChannelColumn;
+  /** 英文标签（由 Docker 版渠道目录合并而来，用于双语配置手册） */
+  labelEn?: string;
+  /** 英文占位提示（同来源） */
+  placeholderEn?: string;
+  /** 字段级帮助文本（同来源） */
+  helpText?: string;
 }
 
 export interface ChannelTemplate {
@@ -28,6 +40,12 @@ export interface ChannelTemplate {
   pluginInstallCommand?: string;
   // 是否已内置实现（不需要额外npm包）
   isBuiltIn: boolean;
+  /** 英文名称（由 Docker 版渠道目录合并而来） */
+  nameEn?: string;
+  /** 英文描述（同来源） */
+  descriptionEn?: string;
+  /** 官方集成页面（同来源；缺省时使用 docsUrl） */
+  officialUrl?: string;
 }
 
 // ============ Webhook-based Channels ============
@@ -238,6 +256,25 @@ const webhookChannels: ChannelTemplate[] = [
       }
     ],
     docsUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Webhooks'
+  },
+  {
+    id: 'rocketchat',
+    name: 'Rocket.Chat',
+    description: 'Rocket.Chat 频道消息推送（传入 Webhook）',
+    icon: 'MessageSquare',
+    configMethod: 'webhook',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: 'Webhook URL',
+        type: 'text',
+        required: true,
+        placeholder: 'https://your-server/hooks/{integrationId}/{token}',
+        description: 'Rocket.Chat → 管理 → 集成 → 传入 Webhook，复制完整 URL'
+      }
+    ],
+    docsUrl: 'https://docs.rocket.chat/docs/integrations'
   }
 ];
 
@@ -389,7 +426,8 @@ const tokenChannels: ChannelTemplate[] = [
         type: 'text',
         required: true,
         placeholder: 'https://matrix.org',
-        description: 'Matrix Homeserver 地址'
+        description: 'Matrix Homeserver 地址',
+        column: 'webhook'
       },
       {
         name: 'token',
@@ -405,7 +443,8 @@ const tokenChannels: ChannelTemplate[] = [
         type: 'text',
         required: true,
         placeholder: '!roomid:matrix.org',
-        description: '目标房间 ID'
+        description: '目标房间 ID',
+        column: 'chat_id'
       }
     ],
     docsUrl: 'https://matrix.org/docs/legacy/client-server-api/'
@@ -908,7 +947,8 @@ const tokenChannels: ChannelTemplate[] = [
         type: 'select',
         required: false,
         description: 'Pushover 消息优先级（-2 静默 ~ 2 紧急）',
-        placeholder: '0'
+        placeholder: '0',
+        column: 'chat_id'
       }
     ],
     docsUrl: 'https://pushover.net/api'
@@ -939,15 +979,286 @@ const tokenChannels: ChannelTemplate[] = [
       }
     ],
     docsUrl: 'https://github.com/caronc/apprise-api'
+  },
+  {
+    id: 'serverchan3',
+    name: 'Server酱³ (SC3)',
+    description: 'Server酱³ 消息推送（SC3，与 Turbo 不同的新产品）',
+    icon: 'Radio',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'SendKey (sctp...)',
+        type: 'password',
+        required: true,
+        placeholder: 'sctp...t...',
+        description: 'SC3 的 SendKey（以 sctp 开头），不是 Turbo 的 SCT 开头 key'
+      },
+      {
+        name: 'webhook',
+        label: 'UID (可选)',
+        type: 'text',
+        required: false,
+        placeholder: '1234',
+        description: '留空时自动从 SendKey 的 sctp<UID>t 段推导；推导失败会给出明确错误'
+      }
+    ],
+    docsUrl: 'https://sct.ftqq.com/compare/'
+  },
+  {
+    id: 'xizhi',
+    name: '息知 (XiZhi)',
+    description: '息知微信推送（xizhi.qqoq.net）',
+    icon: 'MessageCircle',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: '息知 Key',
+        type: 'password',
+        required: true,
+        description: '息知后台复制 key（推送地址 https://xizhi.qqoq.net/{key}.send 中的 {key}）'
+      }
+    ],
+    docsUrl: 'https://xz.qqoq.net/'
+  },
+  {
+    id: 'anpush',
+    name: 'AnPush',
+    description: 'AnPush 多渠道推送',
+    icon: 'BellRing',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Push Token',
+        type: 'password',
+        required: true,
+        description: 'AnPush 控制台获取的推送 Token'
+      },
+      {
+        name: 'chat_id',
+        label: '通道 ID (可选)',
+        type: 'text',
+        required: false,
+        description: '指定推送通道 channel，留空使用 AnPush 默认通道'
+      }
+    ],
+    docsUrl: 'https://anpush.com/'
+  },
+  {
+    id: 'chanify',
+    name: 'Chanify',
+    description: 'Chanify iOS 推送（支持自建服务端）',
+    icon: 'Smartphone',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: '服务器地址 (可选)',
+        type: 'text',
+        required: false,
+        placeholder: 'https://api.chanify.net',
+        description: '自建 Chanify 服务地址；留空使用官方公共服务'
+      },
+      {
+        name: 'token',
+        label: '设备 Token',
+        type: 'password',
+        required: true,
+        description: 'Chanify App → 通道 → 复制 Send Token'
+      }
+    ],
+    docsUrl: 'https://github.com/chanify/chanify-ios'
+  },
+  {
+    id: 'pushback',
+    name: 'Pushback',
+    description: 'Pushback 可回复通知',
+    icon: 'Bell',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Access Token (at_...)',
+        type: 'password',
+        required: true,
+        placeholder: 'at_...',
+        description: 'Pushback 控制台获取的 access token'
+      },
+      {
+        name: 'chat_id',
+        label: 'User ID (User_...)',
+        type: 'text',
+        required: true,
+        placeholder: 'User_1234',
+        description: '接收通知的 User ID'
+      }
+    ],
+    docsUrl: 'https://pushback.io/docs/getting-started'
+  },
+  {
+    id: 'simplepush',
+    name: 'SimplePush',
+    description: 'SimplePush 简单推送',
+    icon: 'Zap',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Key',
+        type: 'password',
+        required: true,
+        description: 'SimplePush App 中显示的 key'
+      }
+    ],
+    docsUrl: 'https://simplepush.io/'
+  },
+  {
+    id: 'zulip',
+    name: 'Zulip',
+    description: 'Zulip 流消息推送',
+    icon: 'Hash',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: '组织地址',
+        type: 'text',
+        required: true,
+        placeholder: 'https://your-org.zulipchat.com',
+        description: 'Zulip 组织 URL（只填到域名，不要带 /api 等路径）'
+      },
+      {
+        name: 'token',
+        label: 'API Key',
+        type: 'password',
+        required: true,
+        description: '机器人账号的 API Key（设置 → 账户与隐私 → 机器人）'
+      },
+      {
+        name: 'chat_id',
+        label: 'Bot 邮箱',
+        type: 'text',
+        required: true,
+        placeholder: 'bot@your-org.zulipchat.com',
+        description: '机器人账号邮箱（HTTP Basic 用户名）'
+      },
+      {
+        name: 'secret',
+        label: 'Stream 名称',
+        type: 'text',
+        required: true,
+        placeholder: 'time-reminders',
+        description: '接收消息的 stream'
+      }
+    ],
+    docsUrl: 'https://zulip.com/api/send-message'
+  },
+  {
+    id: 'fcm',
+    name: 'Firebase 推送 (FCM)',
+    description: 'Firebase Cloud Messaging HTTP v1',
+    icon: 'Flame',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: '服务账号 JSON',
+        type: 'textarea',
+        required: true,
+        placeholder: '{"type":"service_account", ...}',
+        description: 'Firebase 控制台 → 项目设置 → 服务账号 → 生成新的私钥，粘贴整份 JSON（AES 加密存储）'
+      },
+      {
+        name: 'chat_id',
+        label: '设备令牌 / topic',
+        type: 'text',
+        required: true,
+        placeholder: 'fcm-device-token 或 topic:alerts',
+        description: '设备注册令牌，或 topic:<主题名>'
+      }
+    ],
+    docsUrl: 'https://firebase.google.com/docs/cloud-messaging/send/v1-api'
+  },
+  {
+    id: 'twilio_whatsapp',
+    name: 'Twilio WhatsApp',
+    description: '通过 Twilio 发送 WhatsApp 消息',
+    icon: 'MessageCircle',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Account SID',
+        type: 'password',
+        required: true,
+        description: 'Twilio 控制台 Account SID'
+      },
+      {
+        name: 'secret',
+        label: 'Auth Token',
+        type: 'password',
+        required: true,
+        description: 'Twilio Auth Token'
+      },
+      {
+        name: 'webhook',
+        label: '发信号码 (From)',
+        type: 'text',
+        required: true,
+        placeholder: '+14155238886',
+        description: 'Twilio WhatsApp 发信号码（发送时自动加 whatsapp: 前缀）'
+      },
+      {
+        name: 'chat_id',
+        label: '收件号码 (To)',
+        type: 'text',
+        required: true,
+        placeholder: '+8613800138000',
+        description: '接收 WhatsApp 消息的手机号（发送时自动加 whatsapp: 前缀）'
+      }
+    ],
+    docsUrl: 'https://www.twilio.com/docs/whatsapp/api'
   }
 ];
 
 // ============ All Channel Templates ============
 
+/**
+ * 合并 Docker 版渠道目录的展示元数据（officialUrl / 英文标签 / helpText）。
+ * R5.2：`shared/src/channels.ts` 已删除，这里是唯一权威渠道目录；
+ * 元数据缺失时按原模板返回（可正常降级）。
+ */
+function applyChannelMetadata(template: ChannelTemplate): ChannelTemplate {
+  const meta = CHANNEL_METADATA[template.id];
+  if (!meta) return template;
+  return {
+    ...template,
+    nameEn: meta.nameEn ?? template.nameEn,
+    descriptionEn: meta.descriptionEn ?? template.descriptionEn,
+    officialUrl: meta.officialUrl ?? template.officialUrl,
+    fields: template.fields.map((field) => {
+      const fieldMeta = meta.fields?.[field.name];
+      return fieldMeta ? { ...field, ...fieldMeta } : field;
+    }),
+  };
+}
+
 export const allChannelTemplates: ChannelTemplate[] = [
   ...webhookChannels,
   ...tokenChannels.filter((c) => c.id !== 'nostr'),
-];
+].map(applyChannelMetadata);
 
 export function getSupportedChannelTemplates(): ChannelTemplate[] {
   return allChannelTemplates.filter((c) => c.configMethod !== 'plugin' && isSupportedChannel(c.id));

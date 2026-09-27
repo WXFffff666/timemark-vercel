@@ -1,6 +1,7 @@
 import { query } from '../db/index.js';
 import { sendNotifications } from './notifications/index.js';
 import { createLogger } from '../utils/logger.js';
+import { purgeLogTable } from './retention.service.js';
 
 const log = createLogger('notification-retry');
 
@@ -115,10 +116,5 @@ async function scheduleNextRetry(queueId: number, currentRetry: number, errorMes
 }
 
 export async function purgeOldQueueEntries(): Promise<number> {
-  const result = await query(
-    `DELETE FROM notification_queue
-     WHERE status IN ('completed', 'dead')
-       AND updated_at < NOW() - INTERVAL '30 days'`,
-  );
-  return result.rowCount ?? 0;
+  return purgeLogTable('notification_queue');
 }

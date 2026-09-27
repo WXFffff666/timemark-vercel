@@ -26,7 +26,7 @@ export async function runMigrations(): Promise<void> {
   }
 }
 
-async function applyIncrementalMigrations(currentVersion: number): Promise<void> {
+export async function applyIncrementalMigrations(currentVersion: number): Promise<void> {
   const migrations: Array<{
     version: number;
     name: string;
@@ -527,6 +527,37 @@ ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'unknown
           'ALTER TABLE notification_accounts RENAME COLUMN session_data_text TO session_data;'
         );
       },
+    },
+    {
+      // v33 (todo 41): bound the growth of logging tables + add the missing indexes.
+      // Additive and idempotent: every statement is IF NOT EXISTS-guarded and
+      // nothing is dropped or rewritten. The DO block only fires for tables that
+      // a later migration may have created (expiry_items); it is a no-op today.
+      version: 33,
+      name: 'logging_indexes_retention_v33',
+      sql: `-- pg_trgm powers CJK substring search through GIN trigram indexes, no external calls
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- Trigram indexes on the existing searchable text columns
+CREATE INDEX IF NOT EXISTS idx_events_name_trgm ON events USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_events_person_name_trgm ON events USING gin (person_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_events_tags_trgm ON events USING gin ((tags::text) gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_name_trgm ON fixed_contacts USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_nickname_trgm ON fixed_contacts USING gin (nickname gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_notes_trgm ON fixed_contacts USING gin (notes gin_trgm_ops);
+-- Missing access-path indexes for the logging tables
+CREATE INDEX IF NOT EXISTS idx_trigger_logs_user_created ON event_trigger_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trigger_logs_consecutive ON event_trigger_logs(account_id, channel_type, status, id DESC);
+CREATE INDEX IF NOT EXISTS idx_email_logs_user_sent_desc ON email_logs(user_id, sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notification_queue_retry ON notification_queue(status, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_last_attempt ON login_attempts(last_attempt);
+-- Forward-looking trigram indexes for tables created by a later migration
+DO $$
+BEGIN
+  IF to_regclass('expiry_items') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_expiry_items_title_trgm ON expiry_items USING gin (title gin_trgm_ops);
+    CREATE INDEX IF NOT EXISTS idx_expiry_items_vendor_trgm ON expiry_items USING gin (vendor gin_trgm_ops);
+  END IF;
+END $$;`,
     },
   ];
 

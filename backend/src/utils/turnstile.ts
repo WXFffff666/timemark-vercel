@@ -31,12 +31,6 @@ type SiteVerifyResponse = {
   'error-codes'?: string[];
 };
 
-type TurnstileVerifyOptions = {
-  token: string | undefined;
-  /** Only pass to Cloudflare when sourced from a trusted platform header */
-  trustedRemoteIp?: string;
-};
-
 export async function verifyTurnstileToken(
   token: string | undefined,
   /** 兼容旧签名：siteverify 统一不带 remoteip（见上），该参数仅保留不再使用 */
@@ -49,11 +43,8 @@ export async function verifyTurnstileToken(
     return { ok: false, skipped: false, error: '请完成人机验证', code: 'turnstile_required' };
   }
 
-  const verify = async (includeRemoteIp: boolean): Promise<SiteVerifyResponse> => {
+  const verify = async (): Promise<SiteVerifyResponse> => {
     const body = new URLSearchParams({ secret, response: token });
-    if (includeRemoteIp && trustedRemoteIp) {
-      body.set('remoteip', trustedRemoteIp);
-    }
 
     const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
@@ -67,7 +58,7 @@ export async function verifyTurnstileToken(
     // Cloudflare 规定每个 token 只能提交 siteverify 一次：第一次提交（无论成败）即消费。
     // 因此绝不带 remoteip 失败后重试——第二次必然 timeout-or-duplicate，用户永远过不了验证。
     // remoteip 只是可选加固，token+secret 校验本身已足够安全，统一不带。
-    const data = await verify(false);
+    const data = await verify();
 
     if (!data.success) {
       const codes = data['error-codes'] ?? [];

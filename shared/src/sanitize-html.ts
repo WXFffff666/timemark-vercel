@@ -1,7 +1,7 @@
 /** Strip dangerous HTML for preview rendering (not a full HTML mail sanitizer). */
 export function sanitizeHtmlPreview(html: string): string {
   if (!html) return '';
-  let out = html
+  const out = html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')

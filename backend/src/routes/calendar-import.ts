@@ -38,7 +38,7 @@ calendarImport.post('/import-ics', async (c) => {
         },
       });
       imported++;
-    } catch (e) {
+    } catch {
       errors.push(ev.name);
     }
   }

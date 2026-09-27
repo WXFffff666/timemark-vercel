@@ -7,8 +7,6 @@
 Vercel **Hobby（免费）** 内置 Cron **每天最多 1 次**（`vercel.json` 仅配置 `daily-maintenance`）。  
 TimeMark 需要 **每分钟** 扫描到期事件，因此用 [cron-job.org](https://cron-job.org)（免费）调用 `/api/cron/reminder-check` 等端点。
 
-> **装包提示**：本地 `pnpm install` / `pnpm add` 请加 `--config.blockExoticSubdeps=false`，或运行 `pnpm run install:deps`（原因见 README「本地开发与装包」）。
-
 提醒精度：**每分钟扫描 + ±2 分钟时间窗口**（设 09:00 会在 08:58–09:02 内触发）。
 
 ---
@@ -49,7 +47,7 @@ vercel --prod
 
 ### 4. 数据库迁移
 
-**自动**：首次访问 API 时执行 v1–v30 增量迁移。  
+**自动**：首次访问 API 时执行 v1–v32 增量迁移。  
 **手动**（可选）：
 
 ```bash
@@ -57,7 +55,7 @@ vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-登录后打开 **设置 → 部署向导**，确认「数据库结构版本」为 **v30**。
+登录后打开 **设置 → 部署向导**，确认「数据库结构版本」为 **v32**。
 
 默认账号：`admin` / `TimeMark@2026`（首次登录会提示改密码）
 
@@ -124,7 +122,7 @@ GET https://你的域名/api/time/status?timezone=Asia/Shanghai
 
 **设置 → 部署向导 → 系统自检** 检查：
 
-- 数据库连接、结构版本（**v30**）
+- 数据库连接、结构版本（**v32**）
 - `JWT_SECRET`、`MASTER_KEY`、`CRON_SECRET`
 - Turnstile（可选）
 

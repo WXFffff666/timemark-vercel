@@ -69,7 +69,7 @@ export async function createRegistrationOptions(
   userId: number,
   username: string,
   config: WebAuthnRuntimeConfig,
-  deviceName?: string,
+  _deviceName?: string,
 ): Promise<PublicKeyCredentialCreationOptionsJSON> {
   const existing = await query(
     'SELECT credential_id, transports FROM webauthn_credentials WHERE user_id = $1',

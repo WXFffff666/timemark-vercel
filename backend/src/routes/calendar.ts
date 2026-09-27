@@ -64,9 +64,6 @@ calendar.get('/google', async (c) => {
  * GET /api/calendar/apple
  */
 calendar.get('/apple', async (c) => {
-  const user = c.get('user');
-  const events = await getEventsByUserId(user.id);
-
   // Apple Calendar 使用 webcal:// 协议订阅
   // 这里返回 .ics 文件的 URL，用户可以订阅
   const host = c.req.header('Host') || 'localhost:3000';

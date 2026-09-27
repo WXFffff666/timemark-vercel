@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import {
   saveUserConfig,
@@ -39,6 +40,7 @@ import { resolveEmailRecipientForTest } from '../utils/notification-recipients.j
 import { logAudit } from '../services/audit.service.js';
 import { maskNotificationAccountForClient } from '../utils/notification-account-client.js';
 import { maskUserConfigForClient } from '../utils/user-config-client.js';
+import { logFireAndForget } from '../utils/logger.js';
 
 const config = new Hono<{ Variables: { user: User } }>();
 
@@ -56,7 +58,7 @@ config.post('/', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = saveUserConfigSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }
   await saveUserConfig(Number(user.id), parsed.data);
   await logAudit(Number(user.id), 'update', 'user_config', user.id, { keys: Object.keys(parsed.data) });
@@ -103,7 +105,7 @@ config.post('/accounts', async (c) => {
   
   const parsed = createNotificationAccountSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }
   if (!isSupportedChannel(parsed.data.type)) {
     return c.json({ success: false, error: '该通知渠道在云端部署中不可用' }, 400);
@@ -158,7 +160,12 @@ config.post('/accounts', async (c) => {
         `UPDATE notification_accounts SET connection_status = $1, last_test_result = $2, last_test_at = CURRENT_TIMESTAMP WHERE id = $3`,
         [status, result.success ? 'success' : 'failed', account.id],
       );
-    }).catch(() => {});
+    }).catch(
+      logFireAndForget(
+        'config.account_probe_persist_failed',
+        'Background connection probe result could not be persisted',
+      ),
+    );
   }
   
   await logAudit(Number(user.id), 'create', 'notification_account', account.id, { type: parsed.data.type, name: parsed.data.name });
@@ -177,7 +184,7 @@ config.put('/accounts/:id', async (c) => {
   
   const parsed = updateNotificationAccountSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }
   if (parsed.data.configMethod === 'plugin') {
     return c.json({ success: false, error: '插件类通知渠道在云端部署中不可用' }, 400);
@@ -245,7 +252,7 @@ config.post('/relationships', async (c) => {
   
   const parsed = createRelationshipMappingSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }
   
   const mapping = await createRelationshipMapping(Number(user.id), {
@@ -266,7 +273,7 @@ config.put('/relationships/:id', async (c) => {
   
   const parsed = updateRelationshipMappingSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }
   
   const mapping = await updateRelationshipMapping(id, Number(user.id), {
@@ -310,7 +317,7 @@ config.post('/reminders', async (c) => {
   
   const parsed = saveReminderSettingsSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }
   
   await saveReminderSettings(Number(user.id), {
@@ -427,7 +434,7 @@ config.post('/templates', async (c) => {
   
   const parsed = saveEventTemplateSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }
   
   const template = await saveEventTemplate(

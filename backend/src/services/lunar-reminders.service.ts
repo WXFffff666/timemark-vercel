@@ -1,4 +1,4 @@
-import { Lunar, Solar } from 'lunar-javascript';
+import { Solar } from 'lunar-javascript';
 import { query } from '../db/index.js';
 import { sendNotifications } from './notifications/index.js';
 import { createLogger } from '../utils/logger.js';

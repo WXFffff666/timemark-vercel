@@ -164,7 +164,32 @@ Vercel Hobby 内置 Cron 仅 **每天 1 次**（`daily-maintenance`）。以下�
 
 ---
 
-## 9. 相关代码
+## 9. 新增渠道（Wave 2：10 个）
+
+以下 10 个渠道在 v2.17 加入，全部为 HTTP/令牌类，Vercel Serverless 可用。凭证照常在 **通知渠道 → 新建** 保存（`token`/`secret`/`webhook`/`chat_id` 四列，AES 加密）；每个渠道的「测试」按钮都会校验提供方返回体里的成功信号（如 `code`/`status`/`result`/`success`），而不是只看 HTTP 2xx。
+
+| 渠道 | 必填字段 → 存放列 | 请求端点 | 凭证获取 |
+|------|-------------------|----------|----------|
+| Server酱³ (SC3) | SendKey → `token`；UID → `webhook`（可留空，自动从 `sctp<UID>t...` 推导） | `POST https://{uid}.push.ft07.com/send/{SENDKEY}.send`（`title`/`desp`；成功 `code=0`） | [sct.ftqq.com/compare](https://sct.ftqq.com/compare/) 复制 `sctp` 开头的 SendKey |
+| 息知 (XiZhi) | key → `token` | `POST https://xizhi.qqoq.net/{key}.send`（`title`/`content`；成功 `code=200`） | [xz.qqoq.net](https://xz.qqoq.net/) 登录后复制 key |
+| AnPush | Token → `token`；通道 ID → `chat_id`（可选） | `POST https://api.anpush.com/push/{token}`（表单 `title`/`content`/`channel`；成功 `code=200`） | [anpush.com](https://anpush.com/) 控制台复制 Token 与通道 ID |
+| Chanify | 设备 Token → `token`；服务器地址 → `webhook`（默认 `https://api.chanify.net`） | `POST {服务器}/v1/sender/{token}`（表单 `text`，query `title`/`sound=1`；成功 2xx） | Chanify iOS App → 通道 → 复制 Send Token |
+| Pushback | Access Token (`at_…`) → `token`；User ID (`User_…`) → `chat_id` | `POST https://api.pushback.io/v1/send`（Bearer + JSON `id`/`title`/`body`） | [pushback.io](https://pushback.io/docs/getting-started) 控制台 |
+| SimplePush | key → `token` | `POST https://api.simplepush.io/send`（表单 `key`/`msg`/`title`；成功 `status=OK`） | SimplePush App 主界面复制 key |
+| Zulip | 组织地址 → `webhook`；API Key → `token`；Bot 邮箱 → `chat_id`；Stream → `secret` | `POST {组织}/api/v1/messages`（Basic `base64(邮箱:Key)` + 表单 `type=stream`/`to`/`topic`/`content`；成功 `result=success`） | Zulip → 设置 → 账户与隐私 → 机器人 → 创建/查看 API Key |
+| Rocket.Chat | Webhook URL → `webhook` | `POST https://{server}/hooks/{id}/{token}`（JSON `text`；成功 `success=true`） | Rocket.Chat → 管理 → 集成 → 传入 Webhook |
+| Firebase 推送 (FCM) | 服务账号 JSON → `token`；设备令牌或 `topic:<名称>` → `chat_id` | `POST https://fcm.googleapis.com/v1/projects/{projectId}/messages:send` | Firebase 控制台 → 项目设置 → 服务账号 → 生成新的私钥（粘贴整份 JSON） |
+| Twilio WhatsApp | Account SID → `token`；Auth Token → `secret`；From → `webhook`；To → `chat_id` | `POST https://api.twilio.com/2010-04-01/Accounts/{Sid}/Messages.json`（自动加 `whatsapp:` 前缀） | [console.twilio.com](https://console.twilio.com)（需已开通 WhatsApp 发信号码） |
+
+### 注意事项
+
+- **Server酱³ 与 Server酱 (Turbo) 是两个产品**：Turbo 的 `SCT…` key 不能用在这里；SC3 的 `sctp…` key 若既不填 UID 也无法推导，测试会直接报错，而不会向 `https://undefined.push.ft07.com` 发请求。
+- **Chanify 服务器地址只填域名**（默认 `https://api.chanify.net`）；填入带 `/v1` 路径的地址会被拒绝，避免拼出 `/v1/v1`。
+- **Zulip 组织地址只填域名**，尾部斜杠自动归一；带 `/api` 等路径会被明确拒绝。
+- **FCM 测试使用 `validate_only: true`**，不会真实下发；服务账号 JSON 与访问令牌永不写入日志；访问令牌按 warm 实例内存缓存（约 1 小时）。
+- **SimplePush 端点为 `https://api.simplepush.io/send`**（官方 Node SDK 与 2026-09 实测均为此地址；`https://simplepush.io/{key}` 实测返回 404）。
+
+## 10. 相关代码
 
 | 模块 | 路径 |
 |------|------|

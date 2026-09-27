@@ -2,7 +2,6 @@ import { query } from '../db/index.js';
 import type { CreateFixedContactInput, UpdateFixedContactInput } from '@timemark/shared';
 import {
   parseChannelAccountIds,
-  normalizeEmail,
   contactToChannelFields,
 } from '@timemark/shared';
 import {

@@ -75,7 +75,7 @@ export default function Analytics() {
   return (
     <div className="min-h-screen pb-24">
       <header className="sticky top-6 z-40 px-4 max-w-5xl mx-auto">
-        <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
+        <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/dashboard')}>
               <ArrowLeft size={20} />
@@ -183,7 +183,7 @@ export default function Analytics() {
                         cx="50%"
                         cy="50%"
                         outerRadius={90}
-                        label={({ type, count }) => `${type}: ${count}`}
+                        label={({ name, value }) => `${name}: ${value}`}
                       >
                         {stats.eventsByType.map((_, i) => (
                           <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />

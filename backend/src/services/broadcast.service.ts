@@ -2,6 +2,7 @@ import { query } from '../db/index.js';
 import { getContactsByIds, listFixedContacts, getContactAllEmails } from './contact.service.js';
 import { resolveEmailAccount, sendRawEmail } from './email-send.service.js';
 import { escapeHtml } from '../utils/html.js';
+import { logFireAndForget } from '../utils/logger.js';
 import { renderBroadcastTemplate, resolveContactGreetingName, sanitizeHtmlPreview } from '@timemark/shared';
 import type { BroadcastEmailInput } from '@timemark/shared';
 
@@ -115,14 +116,18 @@ export async function sendBroadcastEmail(userId: number, input: BroadcastEmailIn
       await query(
         `INSERT INTO email_logs (user_id, recipient, status, message_id, broadcast_id, subject, channel_type) VALUES ($1, $2, 'sent', $3, $4, $5, $6)`,
         [userId, recipient.email, null, campaignId, subject, creds.type],
-      ).catch(() => {});
+      ).catch(
+        logFireAndForget('broadcast.email_log_write_failed', 'Failed to write sent-email log'),
+      );
     } catch (err) {
       failedCount++;
       errors.push(`${recipient.email}: ${err instanceof Error ? err.message : String(err)}`);
       await query(
         `INSERT INTO email_logs (user_id, recipient, status, broadcast_id, subject, channel_type) VALUES ($1, $2, 'failed', $3, $4, $5)`,
         [userId, recipient.email, campaignId, subject, creds.type],
-      ).catch(() => {});
+      ).catch(
+        logFireAndForget('broadcast.email_log_write_failed', 'Failed to write failed-email log'),
+      );
     }
   }
 

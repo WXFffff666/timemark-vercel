@@ -22,6 +22,7 @@ export interface InboxMessageRow {
 function sanitizeText(input: string, maxLen: number): string {
   return input
     .replace(/<[^>]*>/g, '')
+    // eslint-disable-next-line no-control-regex -- intentionally strips ASCII control characters
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
     .trim()
     .slice(0, maxLen);

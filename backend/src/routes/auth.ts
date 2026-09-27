@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { verifyUserForLogin, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock, getIpBlockStatus, evaluateIpBlock, checkIpWhitelistFromUser, verifyTotpCode, verifyUserPassword } from '../services/auth.service.js';
 import { getClientIp, getClientIpInfo } from '../utils/client-ip.js';
 import { getTurnstileSiteKey, isTurnstileEnabled, verifyTurnstileToken } from '../utils/turnstile.js';
@@ -15,6 +16,7 @@ import { hashPassword } from '../utils/password.js';
 import { query } from '../db/index.js';
 import { setAuthCookies, clearAuthCookies, getRefreshTokenFromCookie, getAccessTokenFromCookie, setAccessCookie, setRefreshCookie } from '../utils/auth-cookies.js';
 import { loginRateLimit, authMutationRateLimit } from '../middleware/rate-limit.js';
+import { logFireAndForget } from '../utils/logger.js';
 
 const auth = new Hono();
 
@@ -31,7 +33,7 @@ auth.post('/login', loginRateLimit, async (c) => {
         success: false,
         error: '请求参数无效',
         code: 'validation_failed',
-        details: parsed.error.flatten(),
+        details: z.flattenError(parsed.error),
       }, 400);
     }
 
@@ -158,11 +160,15 @@ auth.post('/login', loginRateLimit, async (c) => {
         ip,
         userAgent,
       }),
-    ]).catch((err) => console.error('[Login post-success]', err));
+    ]).catch(
+      logFireAndForget('auth.login_post_success_failed', 'Login post-success side effects failed'),
+    );
 
     const mustChangePassword = !user.passwordChangedAt;
 
-    ensureLunarHolidayEvents(numericUserId).catch(() => {});
+    ensureLunarHolidayEvents(numericUserId).catch(
+      logFireAndForget('auth.lunar_holiday_seed_failed', 'Failed to seed lunar holiday events'),
+    );
 
     return c.json({
       success: true,

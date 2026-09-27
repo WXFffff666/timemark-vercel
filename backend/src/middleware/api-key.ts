@@ -22,7 +22,7 @@ export async function apiKeyMiddleware(c: Context<{ Variables: { user: User; api
 
   const hashedKey = createHash('sha256').update(apiKey).digest('hex');
 
-  let result = await query(
+  const result = await query(
     'SELECT user_id, api_scopes FROM user_configs WHERE api_key_hash = $1',
     [hashedKey],
   );

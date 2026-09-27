@@ -38,8 +38,8 @@ Failed sends enqueue `notification_queue` with backoff: 5m → 30m → 2h → 6h
 - `channels.config.ts` — Channel definitions; `getSupportedChannelTemplates()` filters cloud-safe channels
 - `supported-channels.ts` — Blocklist for Vercel / serverless
 - `test-connection.ts` — Connection testing utilities
-- `im-auth.vercel-stub.ts` — Stub for removed IM services in Vercel bundle
 - `*.service.ts` — Individual channel implementations (HTTP only in production)
+- `__tests__/channel-integrity.test.ts` — Repo invariant: every supported channel is wired into the account map and both dispatch chains, and has a test-connection case
 
 ## Adding a New HTTP Channel
 

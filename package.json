@@ -8,10 +8,16 @@
     "shared"
   ],
   "devDependencies": {
-    "hono": "^4.0.0",
-    "@vercel/functions": "^1.0.0",
+    "@eslint/js": "^9.0.0",
+    "@vercel/functions": "^3.9.9",
     "esbuild": "^0.25.0",
-    "tsx": "^4.7.0"
+    "eslint": "^9.0.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.0",
+    "hono": "^4.13.9",
+    "tsx": "^4.7.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.0.0"
   },
   "packageManager": "pnpm@9.12.0",
   "engines": {
@@ -19,7 +25,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "install:deps": "pnpm install --config.blockExoticSubdeps=false",
+    "install:deps": "pnpm install",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "dev:frontend": "pnpm --filter frontend dev",
     "dev:backend": "pnpm --filter backend dev",
     "build:shared": "pnpm --filter @timemark/shared build",

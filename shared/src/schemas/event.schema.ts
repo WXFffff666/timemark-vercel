@@ -4,7 +4,7 @@ export const reminderConfigSchema = z.object({
   enabled: z.boolean(),
   daysBeforeList: z.array(z.number().int().min(0)),
   customMessage: z.string().optional(),
-  emailRecipients: z.array(z.string().email()),
+  emailRecipients: z.array(z.email()),
   channels: z.array(z.string()).optional(),
   accountIds: z.array(z.string()).optional(),
   reminderTimes: z.array(z.string()).optional(), // 多选提醒时间 HH:mm 数组
@@ -48,7 +48,7 @@ export const createEventSchema = z.object({
   birthDateLunar: z.string().optional().nullable(),
   // 提醒人（接收通知的人）- 用于关系映射
   reminderRecipientName: z.string().optional().nullable(),
-  reminderRecipientEmail: z.string().email().optional().nullable(),
+  reminderRecipientEmail: z.email().optional().nullable(),
   relationshipMappingId: z.string().optional(),
 });
 
@@ -75,7 +75,7 @@ export const updateEventSchema = z.object({
     enabled: z.boolean().optional(),
     daysBeforeList: z.array(z.number().int().min(0)).optional(),
     customMessage: z.string().optional(),
-    emailRecipients: z.array(z.string().email()).optional(),
+    emailRecipients: z.array(z.email()).optional(),
     channels: z.array(z.string()).optional(),
     accountIds: z.array(z.string()).optional(),
     reminderTimes: z.array(z.string()).optional(),
@@ -92,6 +92,6 @@ export const updateEventSchema = z.object({
   birthDate: z.string().optional().nullable(),
   birthDateLunar: z.string().optional().nullable(),
   reminderRecipientName: z.string().optional().nullable(),
-  reminderRecipientEmail: z.string().email().optional().nullable(),
+  reminderRecipientEmail: z.email().optional().nullable(),
   relationshipMappingId: z.string().optional(),
 });

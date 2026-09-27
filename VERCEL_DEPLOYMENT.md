@@ -120,7 +120,7 @@ vercel --prod
 
 Vercel will:
 
-1. Install dependencies with `pnpm install --config.blockExoticSubdeps=false`
+1. Install dependencies with `pnpm install`
 2. Build shared, frontend, and backend with `pnpm build`
 3. Deploy frontend static files from `frontend/dist`
 4. Deploy the Hono app as serverless Functions at `/api/*`
@@ -431,7 +431,7 @@ git clone <repo-url>
 cd timemark
 
 # 2. Install dependencies
-pnpm install --config.blockExoticSubdeps=false
+pnpm install
 
 # 3. Build shared package (required before backend/frontend)
 pnpm build:shared

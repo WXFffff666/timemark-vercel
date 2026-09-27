@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.17.0 (2026-09-27) — 占位
+
+> **占位条目**：Wave 0-5 已完成工作的阶段性记录；发布前由 todo 131 补全最终措辞与完整变更列表。
+
+### 依赖与工具链
+
+- React 19 + Vite 8 + Tailwind 4 + react-router-dom 7 前端升级
+- Zod 4、Vitest 5、TypeScript 7（原生编译器）、Hono 4、Recharts 3、Zustand 5 等运行时库升级
+
+### 通知渠道
+
+- 新增 10 个 HTTP 渠道（Server酱³、息知、AnPush、Chanify、Pushback、SimplePush、Zulip、Rocket.Chat、FCM、Twilio WhatsApp）；云端可用渠道 38 → 42
+- `docs/CHANNEL_MATRIX.md` 由 `scripts/gen-channel-matrix.mjs` 生成，渠道元数据合并为 `channels.config.ts` 单一数据源
+
+### 前端与 PWA
+
+- Service Worker 安全化：新增 `CACHE_VERSION`，激活时清空全部缓存并 `clients.claim()`，导航请求仅走网络——不再缓存 HTML，杜绝陈旧资源
+- i18n：以 zh/en 懒加载资源加载器（`t(key, vars?)` / `useI18n` / `LanguageToggle`）替换 8 键 stub
+
+### 文档
+
+- 校正通知重试队列描述：发送失败即写入 `notification_queue`，按 5m/30m/2h/6h 退避，由 `/api/cron/retry-notifications` 处理
+- `docs/OPTIMIZATION_PLAN.md` 后续优化表标注已完成项
+
 ## v2.16.0 (2026-07-31)
 
 ### 双历与农历

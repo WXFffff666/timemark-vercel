@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, Trash2, GitBranch } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +18,6 @@ const CHANNEL_OPTIONS = [
 ];
 
 export default function NotificationRules() {
-  const navigate = useNavigate();
   const goBack = useSmartBack('/settings');
   const [rules, setRules] = useState<ConditionalRule[]>([]);
   const [preset, setPreset] = useState('');
@@ -33,7 +31,7 @@ export default function NotificationRules() {
     try {
       const [rulesRes, cfg] = await Promise.all([
         api.get<ConditionalRule[]>('/conditional-rules'),
-        api.get<{ notification_preset?: string | null }>('/config/notification-advanced').catch(() => ({})),
+        api.get<{ notification_preset?: string | null }>('/config/notification-advanced').catch((): { notification_preset?: string | null } => ({})),
       ]);
       setRules((rulesRes || []).map((r) => ({
         ...r,

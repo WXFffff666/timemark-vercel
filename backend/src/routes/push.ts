@@ -101,7 +101,8 @@ push.post('/test', async (c) => {
   const user = c.get('user');
   
   try {
-    const keys = getVapidKeys();
+    // 确保 VAPID 配置已初始化（webPush.setVapidDetails 首次调用时执行）
+    getVapidKeys();
     
     // 获取用户的订阅
     const subscriptions = await query(
@@ -152,7 +153,8 @@ push.post('/test', async (c) => {
  */
 export async function sendPushNotification(userId: number, title: string, body: string): Promise<void> {
   try {
-    const keys = getVapidKeys();
+    // 确保 VAPID 配置已初始化（webPush.setVapidDetails 首次调用时执行）
+    getVapidKeys();
     
     const subscriptions = await query(
       'SELECT * FROM push_subscriptions WHERE user_id = $1',

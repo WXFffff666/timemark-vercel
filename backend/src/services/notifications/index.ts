@@ -32,6 +32,16 @@ import { sendPushMeNotification } from './pushme.service.js';
 import { sendPushDeerNotification } from './pushdeer.service.js';
 import { sendTwilioSmsNotification } from './twilio.service.js';
 import { sendWeComAppNotification } from './wecomapp.service.js';
+import { sendServerChan3Notification } from './serverchan3.service.js';
+import { sendXizhiNotification } from './xizhi.service.js';
+import { sendAnPushNotification } from './anpush.service.js';
+import { sendChanifyNotification } from './chanify.service.js';
+import { sendPushbackNotification } from './pushback.service.js';
+import { sendSimplePushNotification } from './simplepush.service.js';
+import { sendZulipNotification } from './zulip.service.js';
+import { sendRocketChatNotification } from './rocketchat.service.js';
+import { sendFcmNotification } from './fcm.service.js';
+import { sendTwilioWhatsAppNotification } from './twilio-whatsapp.service.js';
 import { filterSupportedChannels } from './supported-channels.js';
 
 function formatLunarLabel(lunarDateRaw: unknown): string {
@@ -48,14 +58,17 @@ function formatLunarLabel(lunarDateRaw: unknown): string {
 
 import { getUserConfig, getRelationshipMappings, getNotificationAccounts, getEventTemplate } from '../config.service.js';
 import { applyRelationshipMapping } from '@timemark/shared/relationship';
-import { getBlessing } from '../../../../shared/src/blessings.js';
-import { generateNotificationContent } from '../../../../shared/src/templates.js';
+import { getBlessing } from '@timemark/shared/blessings';
+import { generateNotificationContent } from '@timemark/shared/templates';
 import { query } from '../../db/index.js';
 import { logEmail } from '../email-log.service.js';
 import { enqueueNotificationRetry } from '../notification-retry.service.js';
 import { getConflictHint } from '../conflict-hint.service.js';
 import { mapWithConcurrency } from '../../utils/concurrency.js';
 import { classifyErrorForRetry } from '../../utils/retry-classifier.js';
+import { createLogger, logFireAndForget } from '../../utils/logger.js';
+
+const log = createLogger('notifications');
 
 function formatEventDateValue(date: unknown): string {
   if (!date) return '';
@@ -199,27 +212,23 @@ async function retryWithBackoff<T>(
 
 // 通用 Webhook 渠道（通过配置文件中的 channel_webhooks 字段配置）
 const genericWebhookChannels = new Set([
-  'whatsapp',
-  'signal',
-  'imessage',
-  'bluebubbles',
-  'zalo',
-  'zalo_personal',
-  'network_chat',
   'synologychat',
   'twitch',
 ]);
 
 // 渠道类型到通知账户类型的映射
-const channelToAccountType: Record<string, string> = {
+export const channelToAccountType: Record<string, string> = {
   'feishu': 'feishu',
   'wecom': 'wecom',
   'dingtalk': 'dingtalk',
   'telegram': 'telegram',
   'discord': 'discord',
   'slack': 'slack',
+  'generic_webhook': 'generic_webhook',
   'wechat': 'wxpusher',
+  'wxpusher': 'wxpusher',
   'qq': 'qmsg',
+  'qmsg': 'qmsg',
   'email': 'email',
   'resend': 'resend',
   'smtp': 'smtp',
@@ -231,18 +240,13 @@ const channelToAccountType: Record<string, string> = {
   'msteams': 'msteams',
   'nextcloud_talk': 'nextcloud_talk',
   'nextcloudtalk': 'nextcloud_talk',
-  'nostr': 'nostr',
   'irc': 'irc',
   'synologychat': 'synologychat',
   'twitch': 'twitch',
-  'whatsapp': 'whatsapp',
-  'signal': 'signal',
-  'zalo': 'zalo',
   // New channels (batch 2)
   'ntfy': 'ntfy',
   'pushover': 'pushover',
   'apprise': 'apprise',
-  'clawbot': 'clawbot',
   'serverchan': 'serverchan',
   'pushplus': 'pushplus',
   'bark': 'bark',
@@ -252,11 +256,129 @@ const channelToAccountType: Record<string, string> = {
   'pushdeer': 'pushdeer',
   'twilio': 'twilio',
   'wecomapp': 'wecomapp',
-  // Plugin channels
-  'wechat_personal': 'wechat_personal',
-  'qq_bot': 'qq_bot',
-  'imessage': 'imessage',
+  // Wave 2 channels (checkboxes 15-22)
+  'serverchan3': 'serverchan3',
+  'xizhi': 'xizhi',
+  'anpush': 'anpush',
+  'chanify': 'chanify',
+  'pushback': 'pushback',
+  'simplepush': 'simplepush',
+  'zulip': 'zulip',
+  'rocketchat': 'rocketchat',
+  'fcm': 'fcm',
+  'twilio_whatsapp': 'twilio_whatsapp',
 };
+
+/**
+ * 主分发链（sendNotifications 中的 if/else）可处理的渠道 ID。
+ * 与 `__tests__/channel-integrity.test.ts` 共享：渠道目录中的每个渠道都必须在此集合中，
+ * 否则说明它被列入了支持的渠道目录却没有真正的发送分支。
+ */
+export const DISPATCHABLE_CHANNELS = new Set<string>([
+  // Webhook
+  'feishu',
+  'wecom',
+  'dingtalk',
+  'discord',
+  'slack',
+  'googlechat',
+  'irc',
+  'synologychat',
+  'twitch',
+  'generic_webhook',
+  'rocketchat',
+  // Token
+  'resend',
+  'smtp',
+  'telegram',
+  'line',
+  'matrix',
+  'mattermost',
+  'msteams',
+  'nextcloud_talk',
+  'wxpusher',
+  'qmsg',
+  'serverchan',
+  'pushplus',
+  'bark',
+  'gotify',
+  'meow',
+  'pushme',
+  'pushdeer',
+  'twilio',
+  'wecomapp',
+  'ntfy',
+  'pushover',
+  'apprise',
+  'serverchan3',
+  'xizhi',
+  'anpush',
+  'chanify',
+  'pushback',
+  'simplepush',
+  'zulip',
+  'fcm',
+  'twilio_whatsapp',
+  // Legacy aliases（旧事件里可能仍存有这些渠道 ID）
+  'wechat',
+  'qq',
+  'email',
+]);
+
+/**
+ * 回退分发链（sendSingleChannel）可处理的渠道 ID。必须与上面的集合保持一致——
+ * 两个集合由 `channel-integrity.test.ts` 同时校验。
+ */
+export const FALLBACK_DISPATCHABLE_CHANNELS = new Set<string>([
+  // Webhook
+  'feishu',
+  'wecom',
+  'dingtalk',
+  'discord',
+  'slack',
+  'googlechat',
+  'irc',
+  'synologychat',
+  'twitch',
+  'generic_webhook',
+  'rocketchat',
+  // Token
+  'resend',
+  'smtp',
+  'telegram',
+  'line',
+  'matrix',
+  'mattermost',
+  'msteams',
+  'nextcloud_talk',
+  'wxpusher',
+  'qmsg',
+  'serverchan',
+  'pushplus',
+  'bark',
+  'gotify',
+  'meow',
+  'pushme',
+  'pushdeer',
+  'twilio',
+  'wecomapp',
+  'ntfy',
+  'pushover',
+  'apprise',
+  'serverchan3',
+  'xizhi',
+  'anpush',
+  'chanify',
+  'pushback',
+  'simplepush',
+  'zulip',
+  'fcm',
+  'twilio_whatsapp',
+  // Legacy aliases（旧事件里可能仍存有这些渠道 ID）
+  'wechat',
+  'qq',
+  'email',
+]);
 
 /**
  * 根据账户类型获取通知配置
@@ -295,6 +417,11 @@ function getChannelConfigFromAccount(
     case 'synologychat':
     case 'twitch':
       return account.webhook ? { webhook: account.webhook } : null;
+    
+    case 'generic_webhook':
+      return account.webhook
+        ? { webhook: account.webhook, secret: account.secret }
+        : null;
     
     case 'dingtalk':
       return (account.webhook && account.secret)
@@ -376,11 +503,6 @@ function getChannelConfigFromAccount(
         ? { token: account.token, secret: account.secret, chat_id: account.chat_id, webhook: account.webhook }
         : null;
     
-    case 'nostr':
-      return (account.token && account.chat_id)
-        ? { token: account.token, chat_id: account.chat_id, webhook: account.webhook }
-        : null;
-    
     case 'ntfy':
       return (account.webhook && account.token)
         ? { webhook: account.webhook, token: account.token }
@@ -397,35 +519,65 @@ function getChannelConfigFromAccount(
       return account.webhook
         ? { webhook: account.webhook, token: account.token }
         : null;
-    
-    // Plugin-based channels
-    case 'wechat_personal':
-    case 'whatsapp':
-    case 'qq_bot':
-    case 'signal':
-    case 'clawbot':
-    case 'zalo':
-      return (account.session_data || account.token)
-        ? { 
-            sessionData: account.session_data || account.token,
-            toUser: account.chat_id 
-          }
+
+    // Wave 2 channels (checkboxes 15-22)
+    case 'serverchan3':
+      return account.token
+        ? { token: account.token, webhook: account.webhook }
         : null;
-    
-    // iMessage via BlueBubbles
-    case 'imessage':
-      return (account.webhook && account.token && account.chat_id)
-        ? {
-            webhook: account.webhook,
-            token: account.token,
-            chat_id: account.chat_id
-          }
+
+    case 'xizhi':
+      return account.token ? { token: account.token } : null;
+
+    case 'anpush':
+      return account.token
+        ? { token: account.token, chat_id: account.chat_id }
+        : null;
+
+    case 'chanify':
+      // 服务器地址可留空（默认官方 API），设备 Token 必填
+      return account.token
+        ? { webhook: account.webhook, token: account.token }
+        : null;
+
+    case 'pushback':
+      return (account.token && account.chat_id)
+        ? { token: account.token, chat_id: account.chat_id }
+        : null;
+
+    case 'simplepush':
+      return account.token ? { token: account.token } : null;
+
+    case 'zulip':
+      return (account.webhook && account.token && account.chat_id && account.secret)
+        ? { webhook: account.webhook, token: account.token, chat_id: account.chat_id, secret: account.secret }
+        : null;
+
+    case 'rocketchat':
+      return account.webhook ? { webhook: account.webhook } : null;
+
+    case 'fcm':
+      return (account.token && account.chat_id)
+        ? { token: account.token, chat_id: account.chat_id }
+        : null;
+
+    case 'twilio_whatsapp':
+      return (account.token && account.secret && account.webhook && account.chat_id)
+        ? { token: account.token, secret: account.secret, webhook: account.webhook, chat_id: account.chat_id }
         : null;
     
     default:
       return null;
   }
 }
+
+/**
+ * Per-channel result entry returned by sendNotifications.
+ * Every requested channel must produce one entry: success, failure, or
+ * 'no_configuration' when no account/legacy config resolves for it.
+ */
+type ChannelResultEntry = { success: boolean; error?: string; accountId?: number; recipients?: string[] };
+type ChannelResultMap = Record<string, ChannelResultEntry>;
 
 /**
  * Send notifications for an event through specified channels
@@ -445,20 +597,36 @@ export async function sendNotifications(
   userId: number,
   channels: string[],
   options?: { skipQuietHours?: boolean },
-): Promise<Record<string, { success: boolean; error?: string; accountId?: number; recipients?: string[] }>> {
+): Promise<ChannelResultMap> {
   event = normalizeEventForNotification(event as Record<string, unknown>);
   const config = await getUserConfig(userId);
 
   const userTimezone = config?.timezone || 'Asia/Shanghai';
   if (!options?.skipQuietHours && isInQuietHours(config?.quiet_hours_start, config?.quiet_hours_end, userTimezone)) {
     console.log(`[Notifications] Skipping send during quiet hours for user ${userId}`);
-    return { _quiet_hours: { success: false, error: 'quiet_hours' } };
+    const quietHourResults: ChannelResultMap = {
+      _quiet_hours: { success: false, error: 'quiet_hours' },
+    };
+    for (const ch of new Set(channels)) {
+      quietHourResults[ch] = { success: false, error: 'quiet_hours' };
+    }
+    return quietHourResults;
   }
 
   // Vercel / cloud: only HTTP-based channels
-  channels = filterSupportedChannels(channels);
+  const requestedChannels = channels.slice();
+  const supportedChannels = filterSupportedChannels(requestedChannels);
+  // Ids dropped by filterSupportedChannels must still be reported (never silently omitted).
+  const droppedChannels = [...new Set(requestedChannels.filter((ch) => !supportedChannels.includes(ch)))];
+  channels = supportedChannels;
   if (channels.length === 0) {
-    return { _skipped: { success: false, error: 'no_supported_channels' } };
+    const skippedResults: ChannelResultMap = {
+      _skipped: { success: false, error: 'no_supported_channels' },
+    };
+    for (const ch of droppedChannels) {
+      skippedResults[ch] = { success: false, error: 'unsupported_channel' };
+    }
+    return skippedResults;
   }
 
   const channelWebhooks = config?.channel_webhooks || {};
@@ -592,12 +760,14 @@ export async function sendNotifications(
           if (config?.slack_webhook) globalConfig.webhook = config.slack_webhook;
           break;
         case 'wechat':
+        case 'wxpusher':
           if (config?.wxpusher_app_token && config?.wxpusher_uid) {
             globalConfig.token = config.wxpusher_app_token;
             globalConfig.chat_id = config.wxpusher_uid;
           }
           break;
         case 'qq':
+        case 'qmsg':
           if (config?.qmsg_key) {
             globalConfig.token = config.qmsg_key;
             globalConfig.chat_id = config.qmsg_qq;
@@ -634,7 +804,17 @@ export async function sendNotifications(
   }
   
   // 发送通知（每个渠道可能有多个账号配置，独立发送）
-  const channelResults: Record<string, { success: boolean; error?: string; accountId?: number; recipients?: string[] }> = {};
+  const channelResults: ChannelResultMap = {};
+  // 每个被请求的渠道都必须出现在结果里：被 filterSupportedChannels 丢弃的报告 unsupported_channel，
+  // 没有任何配置解析出来的报告 no_configuration，而不是静默省略（复选框 12）。
+  for (const ch of droppedChannels) {
+    channelResults[ch] = { success: false, error: 'unsupported_channel' };
+  }
+  for (const ch of channels) {
+    if (!channelConfigsMap[ch] || channelConfigsMap[ch].length === 0) {
+      channelResults[ch] = { success: false, error: 'no_configuration' };
+    }
+  }
   const channelSendMeta: Record<string, { recipients?: string[] }> = {};
   
   // Build account ID lookup for bound accounts
@@ -666,6 +846,9 @@ export async function sendNotifications(
       accountId: configToAccountId.get(chConfig),
       promise: (async () => {
         try {
+        if (!DISPATCHABLE_CHANNELS.has(ch)) {
+          throw new Error(`渠道 ${ch} 未注册主分发分支（DISPATCHABLE_CHANNELS）`);
+        }
         if (ch === 'feishu' && chConfig.webhook) await retryWithBackoff(() => sendFeishuNotification(mappedEvent, chConfig.webhook));
         else if (ch === 'wecom' && chConfig.webhook) await retryWithBackoff(() => sendWeComNotification(mappedEvent, chConfig.webhook));
         else if (ch === 'dingtalk' && chConfig.webhook && chConfig.secret)
@@ -684,9 +867,9 @@ export async function sendNotifications(
           await retryWithBackoff(() => sendLINENotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if (ch === 'msteams' && chConfig.token && chConfig.chat_id)
           await retryWithBackoff(() => sendMicrosoftTeamsNotification(mappedEvent, chConfig.token, chConfig.chat_id));
-        else if (ch === 'wechat' && chConfig.token && chConfig.chat_id)
+        else if ((ch === 'wechat' || ch === 'wxpusher') && chConfig.token && chConfig.chat_id)
           await retryWithBackoff(() => sendWxPusherNotification(mappedEvent, chConfig.token, chConfig.chat_id));
-        else if (ch === 'qq' && chConfig.token)
+        else if ((ch === 'qq' || ch === 'qmsg') && chConfig.token)
           await retryWithBackoff(() => sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id));
         else if ((ch === 'email' || ch === 'resend') && chConfig.apiKey) {
           const fromEmail = chConfig.fromEmail || 'TimeMark <noreply@timemark.app>';
@@ -764,6 +947,12 @@ export async function sendNotifications(
           }
           channelSendMeta[ch] = { recipients: smtpRecipients };
         }
+        else if (ch === 'generic_webhook' && chConfig.webhook)
+          await retryWithBackoff(() => sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch));
+        else if (ch === 'synologychat' && chConfig.webhook)
+          await retryWithBackoff(() => sendSynologyChatNotification(mappedEvent, chConfig.webhook));
+        else if (ch === 'twitch' && chConfig.webhook)
+          await retryWithBackoff(() => sendTwitchNotification(mappedEvent, chConfig.webhook));
         else if (genericWebhookChannels.has(ch) && chConfig.webhook)
           await retryWithBackoff(() => sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch));
         // Token-based channels with dedicated APIs
@@ -802,11 +991,34 @@ export async function sendNotifications(
           await retryWithBackoff(() => sendPushoverNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.priority));
         else if (ch === 'apprise' && chConfig.webhook)
           await retryWithBackoff(() => sendAppriseNotification(mappedEvent, chConfig.webhook, chConfig.token));
+        // Wave 2 channels (checkboxes 15-22)
+        else if (ch === 'serverchan3' && chConfig.token)
+          await retryWithBackoff(() => sendServerChan3Notification(mappedEvent, chConfig.token, chConfig.webhook));
+        else if (ch === 'xizhi' && chConfig.token)
+          await retryWithBackoff(() => sendXizhiNotification(mappedEvent, chConfig.token));
+        else if (ch === 'anpush' && chConfig.token)
+          await retryWithBackoff(() => sendAnPushNotification(mappedEvent, chConfig.token, chConfig.chat_id));
+        else if (ch === 'chanify' && chConfig.token)
+          await retryWithBackoff(() => sendChanifyNotification(mappedEvent, chConfig.webhook, chConfig.token));
+        else if (ch === 'pushback' && chConfig.token && chConfig.chat_id)
+          await retryWithBackoff(() => sendPushbackNotification(mappedEvent, chConfig.token, chConfig.chat_id));
+        else if (ch === 'simplepush' && chConfig.token)
+          await retryWithBackoff(() => sendSimplePushNotification(mappedEvent, chConfig.token));
+        else if (ch === 'zulip' && chConfig.webhook && chConfig.token && chConfig.chat_id && chConfig.secret)
+          await retryWithBackoff(() => sendZulipNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id, chConfig.secret));
+        else if (ch === 'rocketchat' && chConfig.webhook)
+          await retryWithBackoff(() => sendRocketChatNotification(mappedEvent, chConfig.webhook));
+        else if (ch === 'fcm' && chConfig.token && chConfig.chat_id)
+          await retryWithBackoff(() => sendFcmNotification(mappedEvent, chConfig.token, chConfig.chat_id));
+        else if (ch === 'twilio_whatsapp' && chConfig.token && chConfig.secret && chConfig.webhook && chConfig.chat_id)
+          await retryWithBackoff(() => sendTwilioWhatsAppNotification(
+            mappedEvent, chConfig.token, chConfig.secret, chConfig.webhook, chConfig.chat_id,
+          ));
         else {
           throw new Error(`渠道 ${ch} 配置不完整，无法发送`);
         }
       } catch (e) {
-        console.error(`Failed ${ch}:`, e);
+        log.warn({ event: 'notification.channel_send_failed', channel: ch, err: e }, `Channel ${ch} send failed`);
         throw e;
       }
       })(),
@@ -849,19 +1061,30 @@ export async function sendNotifications(
         await trackConsecutiveFailure(task.accountId, ch, errMsg);
       }
       if (event.id) {
+        // Fire-and-forget: the send result map is returned regardless of whether
+        // the retry row can be persisted; a failure is logged, never rethrown.
         enqueueNotificationRetry({
           eventId: Number(event.id),
           userId,
           channel: ch,
           accountId: task.accountId,
           errorMessage: errMsg,
-        }).catch(() => {});
+        }).catch(
+          logFireAndForget(
+            'notification.retry_enqueue_failed',
+            `Failed to enqueue retry for ${ch}`,
+          ),
+        );
       }
     }
   }
   
   // Channel fallback: when primary channel fails, try other active accounts (max 2 fallback attempts)
-  const failedChannels = Object.entries(channelResults).filter(([, r]) => !r.success);
+  // 'no_configuration' / 'unsupported_channel' are capability mistakes, not send failures:
+  // they must not trigger fallback sends nor consecutive-failure tracking.
+  const failedChannels = Object.entries(channelResults).filter(
+    ([, r]) => !r.success && r.error !== 'no_configuration' && r.error !== 'unsupported_channel',
+  );
   if (failedChannels.length > 0 && allAccounts.length > 1) {
     // Collect account IDs already tried
     const triedAccountIds = new Set<number>();
@@ -899,7 +1122,7 @@ export async function sendNotifications(
         
         try {
           await retryWithBackoff(async () => {
-            await sendSingleChannel(candidateChannel, fallbackConfig, mappedEvent);
+            await sendSingleChannel(candidateChannel, fallbackConfig, mappedEvent, event, config);
           }, 2, 500); // Fewer retries for fallback
           
           channelResults[candidateChannel] = { success: true, accountId: candidate.id };
@@ -920,11 +1143,18 @@ export async function sendNotifications(
   if (successfulChannels.length > 0) {
     // C13: 出站 webhook
     if (config?.outbound_webhook_url) {
+      // Fire-and-forget: outbound webhook delivery is best-effort and must not
+      // affect the channel result map returned to the caller.
       sendGenericWebhookNotification(
         { ...mappedEvent, triggerChannels: successfulChannels },
         config.outbound_webhook_url,
         'outbound',
-      ).catch(() => {});
+      ).catch(
+        logFireAndForget(
+          'notification.outbound_webhook_failed',
+          'Failed to deliver outbound webhook',
+        ),
+      );
     }
   }
 
@@ -935,7 +1165,10 @@ export async function sendNotifications(
  * Send a notification through a single channel with given config.
  * Used by fallback logic to dispatch to the correct channel handler.
  */
-async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any): Promise<void> {
+async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any, event: any, config: any): Promise<void> {
+  if (!FALLBACK_DISPATCHABLE_CHANNELS.has(ch)) {
+    throw new Error(`No dispatch branch for fallback channel ${ch}`);
+  }
   if (ch === 'feishu' && chConfig.webhook) await sendFeishuNotification(mappedEvent, chConfig.webhook);
   else if (ch === 'wecom' && chConfig.webhook) await sendWeComNotification(mappedEvent, chConfig.webhook);
   else if (ch === 'dingtalk' && chConfig.webhook && chConfig.secret)
@@ -950,9 +1183,31 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any): P
     await sendLINENotification(mappedEvent, chConfig.token, chConfig.chat_id);
   else if (ch === 'msteams' && chConfig.token && chConfig.chat_id)
     await sendMicrosoftTeamsNotification(mappedEvent, chConfig.token, chConfig.chat_id);
-  else if (ch === 'wechat' && chConfig.token && chConfig.chat_id)
+  else if ((ch === 'wechat' || ch === 'wxpusher') && chConfig.token && chConfig.chat_id)
     await sendWxPusherNotification(mappedEvent, chConfig.token, chConfig.chat_id);
-  else if (ch === 'qq' && chConfig.token) await sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if ((ch === 'qq' || ch === 'qmsg') && chConfig.token) await sendQmsgNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  // Email-family channels: the fallback chain must cover them too (channel-integrity invariant).
+  // Recipients resolve exactly like the main chain so a failed primary can fall back to email.
+  else if ((ch === 'email' || ch === 'resend') && chConfig.apiKey) {
+    const fromEmail = chConfig.fromEmail || 'TimeMark <noreply@timemark.app>';
+    const recipientEmails = resolveRecipientEmails(event, chConfig, config);
+    if (recipientEmails.length === 0) {
+      throw new Error('未配置收件邮箱：请在事件、通知渠道或设置中填写默认邮箱');
+    }
+    for (const recipient of recipientEmails) {
+      await sendEmailNotification(mappedEvent, chConfig.apiKey, fromEmail, recipient);
+    }
+  }
+  else if (ch === 'smtp' && chConfig.webhook && chConfig.token && chConfig.chat_id) {
+    const smtpRecipients = resolveRecipientEmails(event, chConfig, config);
+    if (smtpRecipients.length === 0) {
+      throw new Error('未配置 SMTP 收件邮箱：请在事件或设置中填写提醒邮箱');
+    }
+    const smtpPort = parseInt(chConfig.secret || '587', 10);
+    for (const recipient of smtpRecipients) {
+      await sendSmtpNotification(mappedEvent, chConfig.webhook, smtpPort, chConfig.token, chConfig.chat_id, recipient);
+    }
+  }
   else if (ch === 'serverchan' && chConfig.token) await sendServerChanNotification(mappedEvent, chConfig.token);
   else if (ch === 'pushplus' && chConfig.token) await sendPushPlusNotification(mappedEvent, chConfig.token, chConfig.chat_id);
   else if (ch === 'bark' && chConfig.webhook && chConfig.token)
@@ -972,6 +1227,30 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any): P
     await sendPushoverNotification(mappedEvent, chConfig.token, chConfig.secret);
   else if (ch === 'apprise' && chConfig.webhook)
     await sendAppriseNotification(mappedEvent, chConfig.webhook, chConfig.token);
+  // Wave 2 channels (checkboxes 15-22)
+  else if (ch === 'serverchan3' && chConfig.token)
+    await sendServerChan3Notification(mappedEvent, chConfig.token, chConfig.webhook);
+  else if (ch === 'xizhi' && chConfig.token) await sendXizhiNotification(mappedEvent, chConfig.token);
+  else if (ch === 'anpush' && chConfig.token)
+    await sendAnPushNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'chanify' && chConfig.token)
+    await sendChanifyNotification(mappedEvent, chConfig.webhook, chConfig.token);
+  else if (ch === 'pushback' && chConfig.token && chConfig.chat_id)
+    await sendPushbackNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'simplepush' && chConfig.token) await sendSimplePushNotification(mappedEvent, chConfig.token);
+  else if (ch === 'zulip' && chConfig.webhook && chConfig.token && chConfig.chat_id && chConfig.secret)
+    await sendZulipNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id, chConfig.secret);
+  else if (ch === 'rocketchat' && chConfig.webhook) await sendRocketChatNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'fcm' && chConfig.token && chConfig.chat_id)
+    await sendFcmNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'twilio_whatsapp' && chConfig.token && chConfig.secret && chConfig.webhook && chConfig.chat_id)
+    await sendTwilioWhatsAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.webhook, chConfig.chat_id);
+  else if (ch === 'generic_webhook' && chConfig.webhook)
+    await sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch);
+  else if (ch === 'synologychat' && chConfig.webhook)
+    await sendSynologyChatNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'twitch' && chConfig.webhook)
+    await sendTwitchNotification(mappedEvent, chConfig.webhook);
   else if (genericWebhookChannels.has(ch) && chConfig.webhook)
     await sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch);
   else throw new Error(`No valid config for channel ${ch}`);
@@ -981,7 +1260,7 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any): P
  * Track consecutive failures for a notification account.
  * After 3 consecutive failures, auto-disable the account.
  */
-async function trackConsecutiveFailure(accountId: number, channelType: string, errorMsg: string): Promise<void> {
+async function trackConsecutiveFailure(accountId: number, channelType: string, _errorMsg: string): Promise<void> {
   try {
     // Count recent consecutive failures for this account
     const result = await query(
@@ -1003,6 +1282,9 @@ async function trackConsecutiveFailure(accountId: number, channelType: string, e
       console.log(`[Notifications] Channel ${channelType} (account ${accountId}) disabled after 3 consecutive failures`);
     }
   } catch (error) {
-    console.error('[Notifications] Failed to track consecutive failure:', error);
+    log.warn(
+      { event: 'notification.consecutive_failure_track_failed', accountId, channelType, err: error },
+      'Failed to track consecutive failure',
+    );
   }
 }

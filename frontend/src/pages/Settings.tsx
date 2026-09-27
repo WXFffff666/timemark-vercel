@@ -39,7 +39,7 @@ export default function Settings() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [, setUploadingAvatar] = useState(false);
   
   // Original user data for reset
   const [originalProfile, setOriginalProfile] = useState({
@@ -588,7 +588,7 @@ export default function Settings() {
   return (
     <div className="min-h-screen pb-24">
       <header className="sticky top-6 z-40 px-4 max-w-3xl mx-auto" role="banner">
-        <div className="glass-panel rounded-full px-6 py-3.5 flex items-center gap-4 ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
+        <div className="glass-panel rounded-full px-6 py-3.5 flex items-center gap-4 ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
           <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)} aria-label="返回上一页"><ArrowLeft size={20} aria-hidden /></Button>
           <div>
             <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">系统设置</h1>

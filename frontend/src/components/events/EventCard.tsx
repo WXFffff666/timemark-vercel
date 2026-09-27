@@ -60,23 +60,6 @@ const getEventTypeColor = (type: EventType): string => {
   }
 };
 
-const getEventTypeLabel = (type: EventType): string => {
-  const labels: Record<string, string> = {
-    birthday: '生日',
-    exam: '考试',
-    anniversary: '纪念日',
-    holiday: '节日',
-    meeting: '会议',
-    deadline: '截止日期',
-    travel: '旅行',
-    graduation: '毕业',
-    wedding: '婚礼',
-    medical: '医疗',
-    other: '其他',
-  };
-  return labels[type] || '其他';
-};
-
 export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, selected, onSelectToggle }: EventCardProps) {
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
   const [isPast, setIsPast] = useState(false);
@@ -159,7 +142,7 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
       {/* Countdown or past indicator */}
       <div className="mb-4 relative z-10">
         {isPast ? (
-          <div className="flex items-center justify-center py-4 bg-red-50/80 dark:bg-red-900/20 rounded-2xl border border-red-100 dark:border-red-500/20 backdrop-blur-sm">
+          <div className="flex items-center justify-center py-4 bg-red-50/80 dark:bg-red-900/20 rounded-2xl border border-red-100 dark:border-red-500/20 backdrop-blur-xs">
             <span className="text-lg font-bold text-red-600 dark:text-red-400 flex items-center gap-2"><Clock size={20} /> 目标时间已过</span>
           </div>
         ) : timeLeft ? (

@@ -55,6 +55,17 @@ export const ACCOUNT_TYPE_TO_CHANNEL: Record<string, string> = {
   ntfy: 'ntfy',
   pushover: 'pushover',
   apprise: 'apprise',
+  // Wave 2：账号类型与渠道 value 同名（identity），与 channel-account-type.ts / backend 对齐
+  serverchan3: 'serverchan3',
+  xizhi: 'xizhi',
+  anpush: 'anpush',
+  chanify: 'chanify',
+  pushback: 'pushback',
+  simplepush: 'simplepush',
+  zulip: 'zulip',
+  rocketchat: 'rocketchat',
+  fcm: 'fcm',
+  twilio_whatsapp: 'twilio_whatsapp',
 };
 
 function getContactEmails(contact: FixedContactForEvent): string[] {
@@ -101,7 +112,7 @@ export function mergeContactIntoReminderConfig(
 
 export function applyContactAsPerson(
   contact: FixedContactForEvent,
-  prev: { personName?: string; name?: string; type?: string },
+  prev: { personName?: string | null; name?: string; type?: string },
 ): Partial<{ personName: string; name: string }> {
   const personName = resolveContactPersonName(contact);
   const updates: Partial<{ personName: string; name: string }> = {
@@ -119,7 +130,7 @@ export function applyContactsAsReminders(
   contacts: FixedContactForEvent[],
   accounts: Array<{ id: string | number; type: string }>,
   existingConfig: ReminderConfig,
-  prev: { reminderRecipientName?: string },
+  prev: { reminderRecipientName?: string | null },
 ): {
   reminderRecipientName: string;
   reminderRecipientEmail?: string;

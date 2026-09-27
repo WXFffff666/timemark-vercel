@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { query } from '../db/index.js';
 import { createEvent } from '../services/event.service.js';
 import { rateLimit } from '../middleware/rate-limit.js';
+import { logFireAndForget } from '../utils/logger.js';
 
 const webhookInbound = new Hono();
 const inboundLimit = rateLimit(30, 60 * 1000);
@@ -104,7 +105,12 @@ webhookInbound.post('/receive/:token', inboundLimit, async (c) => {
       `INSERT INTO webhook_idempotency_keys (idempotency_key, user_id, response_body)
        VALUES ($1, $2, $3) ON CONFLICT (idempotency_key) DO NOTHING`,
       [idempotencyKey, userId, responseBody],
-    ).catch(() => {});
+    ).catch(
+      logFireAndForget(
+        'webhook_inbound.idempotency_store_failed',
+        'Failed to persist webhook idempotency key',
+      ),
+    );
   }
 
   return c.body(responseBody, 200, { 'Content-Type': 'application/json' });

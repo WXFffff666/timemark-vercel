@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { createEvent, getEventsByUserId, getEventsByUserIdPaginated, updateEvent, deleteEvent, deleteEventsByIds } from '../services/event.service.js';
+import { createEvent, getEventsByUserIdPaginated, updateEvent, deleteEvent, deleteEventsByIds } from '../services/event.service.js';
 import { createEventSchema, updateEventSchema, batchDeleteSchema, csvImportSchema, formatZodError } from '@timemark/shared';
 import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
+import { logFireAndForget } from '../utils/logger.js';
 
 const events = new Hono<{ Variables: { user: User } }>();
 
@@ -38,7 +40,7 @@ events.post('/', async (c) => {
   const parsed = createEventSchema.safeParse(body);
 
   if (!parsed.success) {
-    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }
 
   // Validate notification_account_ids if provided
@@ -67,7 +69,9 @@ events.post('/', async (c) => {
 
   const event = await createEvent(user.id, parsed.data);
   const { refreshUserEventCache } = await import('../services/event-cache.service.js');
-  refreshUserEventCache(Number(user.id)).catch(() => {});
+  refreshUserEventCache(Number(user.id)).catch(
+  logFireAndForget('events.cache_refresh_failed', 'Failed to refresh user event cache'),
+);
   
   // 事件创建后立即检查是否需要发送提醒
   // 这样可以确保不会错过即将到来的提醒时间
@@ -180,7 +184,7 @@ events.put('/:id', async (c) => {
   const parsed = updateEventSchema.safeParse(body);
 
   if (!parsed.success) {
-    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }
 
   // Validate notification_account_ids if provided
@@ -212,7 +216,9 @@ events.put('/:id', async (c) => {
     return c.json({ success: false, error: 'Event not found' }, 404);
   }
   const { refreshUserEventCache } = await import('../services/event-cache.service.js');
-  refreshUserEventCache(Number(user.id)).catch(() => {});
+  refreshUserEventCache(Number(user.id)).catch(
+  logFireAndForget('events.cache_refresh_failed', 'Failed to refresh user event cache'),
+);
 
   // 事件更新后立即检查是否需要发送提醒
   // 这样可以确保不会错过即将到来的提醒时间
@@ -232,12 +238,14 @@ events.delete('/batch', async (c) => {
   const parsed = batchDeleteSchema.safeParse(body);
 
   if (!parsed.success) {
-    return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+    return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }
 
   const deleted = await deleteEventsByIds(parsed.data.ids, user.id);
   const { refreshUserEventCache } = await import('../services/event-cache.service.js');
-  refreshUserEventCache(Number(user.id)).catch(() => {});
+  refreshUserEventCache(Number(user.id)).catch(
+  logFireAndForget('events.cache_refresh_failed', 'Failed to refresh user event cache'),
+);
   return c.json({ success: true, data: { deleted } });
 });
 
@@ -250,7 +258,9 @@ events.delete('/:id', async (c) => {
     return c.json({ success: false, error: 'Event not found' }, 404);
   }
   const { refreshUserEventCache } = await import('../services/event-cache.service.js');
-  refreshUserEventCache(Number(user.id)).catch(() => {});
+  refreshUserEventCache(Number(user.id)).catch(
+  logFireAndForget('events.cache_refresh_failed', 'Failed to refresh user event cache'),
+);
 
   return c.json({ success: true });
 });
@@ -265,7 +275,7 @@ events.post('/import-csv', async (c) => {
     const parsed = csvImportSchema.safeParse(body);
     
     if (!parsed.success) {
-      return c.json({ success: false, error: formatZodError(parsed.error), details: parsed.error.flatten() }, 400);
+      return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
     }
     
     const { csvData } = parsed.data;

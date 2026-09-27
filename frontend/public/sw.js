@@ -1,19 +1,37 @@
-const CACHE = 'timemark-v2';
-const SHELL = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/favicon.svg'];
+/**
+ * TimeMark service worker — deliberately cache-free (safe mode, todo 37).
+ *
+ * Web Push was removed from the cloud (Vercel) edition; todo 84 will re-add the
+ * push/notificationclick handlers. Until then this worker only needs to be
+ * *safe*: it must never be able to serve a stale HTML shell or a stale hashed
+ * asset bundle.
+ *
+ * Rules:
+ * - `CACHE_VERSION` identifies this worker build. It is echoed back over
+ *   `postMessage` so the e2e suite can assert the running worker matches the
+ *   served script.
+ * - `install` skips waiting so a new worker takes over immediately.
+ * - `activate` deletes EVERY cache (this worker never writes one) and calls
+ *   `clients.claim()` so already-open pages are controlled without a reload.
+ * - `fetch` handles same-origin navigation with a plain network fetch. It never
+ *   reads from and never writes to the Cache Storage, so a previously installed
+ *   worker (or a seeded stale cache) can never win. Non-navigation requests are
+ *   not intercepted at all.
+ */
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE)
-      .then((cache) => cache.addAll(SHELL))
-      .then(() => self.skipWaiting()),
-  );
+const CACHE_VERSION = 'timemark-v3';
+
+self.addEventListener('install', () => {
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
-    ).then(() => self.clients.claim()),
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+      await self.clients.claim();
+    })(),
   );
 });
 
@@ -22,37 +40,22 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.pathname.startsWith('/api/')) return;
 
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((res) => {
-          if (res.ok) {
-            const clone = res.clone();
-            caches.open(CACHE).then((cache) => cache.put('/index.html', clone));
-          }
-          return res;
-        })
-        .catch(() =>
-          caches.match('/index.html').then((r) => r || caches.match('/offline.html')),
-        ),
-    );
-    return;
+  if (request.mode === 'navigate' && url.origin === self.location.origin) {
+    // Network only. Never cache HTML, never read the cache — no stale bundle.
+    event.respondWith(fetch(request));
   }
 
-  if (url.origin === self.location.origin) {
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) return cached;
-        return fetch(request).then((res) => {
-          if (res.ok && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.endsWith('.svg'))) {
-            const clone = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, clone));
-          }
-          return res;
-        }).catch(() => caches.match('/offline.html'));
-      }),
-    );
+  // Everything else (hashed JS/CSS, API, cross-origin): default browser handling.
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'TIMEMARK_SW_GET_VERSION') {
+    const reply = { type: 'TIMEMARK_SW_VERSION', cacheVersion: CACHE_VERSION };
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage(reply);
+    } else if (event.source && typeof event.source.postMessage === 'function') {
+      event.source.postMessage(reply);
+    }
   }
 });

@@ -402,7 +402,7 @@ export default function AnnualReport() {
 
                     <PieChart>
 
-                      <Pie data={data.eventsByType} dataKey="count" nameKey="type" cx="50%" cy="50%" outerRadius={80} label={({ type, count }) => `${type}: ${count}`}>
+                      <Pie data={data.eventsByType} dataKey="count" nameKey="type" cx="50%" cy="50%" outerRadius={80} label={({ name, value }) => `${name}: ${value}`}>
 
                         {data.eventsByType.map((_, i) => (
 

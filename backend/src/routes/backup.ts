@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { createCipheriv, randomBytes, scryptSync } from 'crypto';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
@@ -28,7 +29,6 @@ function encryptBackupPayload(json: string, password: string): string {
 backup.get('/export', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);
-  const encrypt = c.req.query('encrypt') === '1';
   
   const [events, mappings, templates] = await Promise.all([
     query('SELECT * FROM events WHERE user_id = $1', [userId]),
@@ -86,11 +86,11 @@ backup.post('/import', async (c) => {
     const body = await c.req.json();
     const parsed = backupImportSchema.safeParse(body);
     if (!parsed.success) {
-      return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+      return c.json({ success: false, error: 'Validation failed', details: z.flattenError(parsed.error) }, 400);
     }
     
     const data = parsed.data;
-    let imported = { events: 0, mappings: 0, templates: 0 };
+    const imported = { events: 0, mappings: 0, templates: 0 };
     
     if (Array.isArray(data.events)) {
       for (const event of data.events) {

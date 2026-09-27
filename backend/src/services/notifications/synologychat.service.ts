@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getBlessing } from '../../../../shared/src/blessings.js';
+import { getBlessing } from '@timemark/shared/blessings';
 
 /**
  * Synology Chat Webhook 通知服务
@@ -19,14 +19,15 @@ export async function sendSynologyChatNotification(event: any, webhook: string):
     message = `📅 *${event.name}*\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
   }
   
-  // Synology Chat 使用 payload 格式
+  // Synology Chat 传入 Webhook 要求 form-urlencoded 的 `payload=<json>` 字段
+  // （Content-Type: application/x-www-form-urlencoded），不是裸 JSON。
   const payload = JSON.stringify({
     text: message
   });
 
-  await axios.post(webhook, payload, {
+  await axios.post(webhook, new URLSearchParams({ payload }), {
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/x-www-form-urlencoded'
     },
     timeout: 10000
   });

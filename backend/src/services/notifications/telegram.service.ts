@@ -1,8 +1,8 @@
 import axios from 'axios';
-import { getBlessing } from '../../../../shared/src/blessings.js';
+import { getBlessing } from '@timemark/shared/blessings';
 
 export async function sendTelegramNotification(event: any, botToken: string, chatId: string): Promise<void> {
-  const escape = (t: string) => t.replace(/([_*\[\]()~`>#+\-=|.!])/g, '\\$1');
+  const escape = (t: string) => t.replace(/([_*[\]()~`>#+\-=|.!])/g, '\\$1');
   let text: string;
   if (event.customMessage) {
     text = escape(event.customMessage);

@@ -122,7 +122,7 @@ Write-Host "    请仅在 Vercel Environment Variables 中勾选 Production，�
 
 Write-Host "==> 本地构建验证"
 
-npx pnpm install --config.blockExoticSubdeps=false
+npx pnpm install
 
 npx pnpm build
 

@@ -100,7 +100,7 @@ data.post('/import', async (c) => {
       return c.json({ success: false, error: 'Invalid import data format' }, 400);
     }
 
-    let imported = { events: 0, mappings: 0, templates: 0 };
+    const imported = { events: 0, mappings: 0, templates: 0 };
 
     // Import events
     if (Array.isArray(body.events)) {

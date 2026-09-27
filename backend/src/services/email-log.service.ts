@@ -1,4 +1,5 @@
 import { query } from '../db/index.js';
+import { purgeLogTable } from './retention.service.js';
 
 export type EmailLogInput = {
   userId: number;
@@ -49,10 +50,7 @@ export async function deleteEmailLogs(userId: number): Promise<number> {
   return result.rowCount ?? 0;
 }
 
-/** Retain 30 days of mail history */
+/** Retain 180 days of mail history (threshold lives in services/retention.service.ts) */
 export async function purgeOldEmailLogs(): Promise<number> {
-  const result = await query(
-    `DELETE FROM email_logs WHERE sent_at < NOW() - INTERVAL '30 days'`,
-  );
-  return result.rowCount ?? 0;
+  return purgeLogTable('email_logs');
 }

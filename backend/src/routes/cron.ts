@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { timingSafeEqual } from 'crypto';
 import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions } from '../jobs/tasks.js';
-import { processNotificationRetries, purgeOldQueueEntries } from '../services/notification-retry.service.js';
-import { purgeOldEmailLogs } from '../services/email-log.service.js';
+import { processNotificationRetries } from '../services/notification-retry.service.js';
+import { purgeExpiredLogs } from '../services/retention.service.js';
 import { syncAllExternalCalendars } from '../services/calendar-sync.service.js';
 import { syncAllCalDavSubscriptions } from '../services/caldav-sync.service.js';
 import { syncAllGoogleCalendars } from '../services/google-calendar-sync.service.js';
@@ -13,13 +13,16 @@ import { purgeOldInboxMessages } from '../services/inbox.service.js';
 import { purgeOldTodoCompletions } from '../services/todo.service.js';
 import { query } from '../db/index.js';
 import { pingHeartbeat } from '../utils/heartbeat.js';
-import { testConnection } from '../services/notifications/test-connection.js';
+import { testConnection, type TestConnectionResult } from '../services/notifications/test-connection.js';
 import { isSupportedChannel } from '../services/notifications/supported-channels.js';
 import { getChannelTemplate } from '../services/notifications/channels.config.js';
 import { resolveEmailRecipientForTest } from '../utils/notification-recipients.js';
 import { getCronSecret } from '../utils/heartbeat.js';
+import { decrypt } from '@timemark/shared/crypto';
+import { createLogger } from '../utils/logger.js';
 
 const cronRoutes = new Hono();
+const log = createLogger('cron');
 
 async function logCronRun(
   jobName: string,
@@ -34,8 +37,12 @@ async function logCronRun(
        VALUES ($1, $2, $3, $4, $5)`,
       [jobName, status, Date.now() - startedAt, summary ?? null, errorMessage ?? null],
     );
-  } catch {
-    // Table may not exist on very old DBs — ignore
+  } catch (error) {
+    // Table may not exist on very old DBs — log and continue, never crash the job.
+    log.warn(
+      { event: 'cron.execution_log_write_failed', job: jobName, err: error },
+      'Failed to write cron execution log',
+    );
   }
 }
 
@@ -125,7 +132,13 @@ async function checkCronGapAlert(jobName: string): Promise<void> {
         });
       }
     }
-  } catch { /* ignore */ }
+  } catch (error) {
+    // Gap alerting is advisory only — never let it break reminder-check.
+    log.warn(
+      { event: 'cron.gap_alert_failed', job: jobName, err: error },
+      'Cron gap alert check failed',
+    );
+  }
 }
 
 // Sync external ICS calendars — call every 15 min via external cron
@@ -163,9 +176,10 @@ cronRoutes.get('/daily-maintenance', async (c) => {
     await githubBackup();
     await archiveLoginHistory();
     const retryStats = await processNotificationRetries();
-    const purgedEmails = await purgeOldEmailLogs();
-    const purgedQueue = await purgeOldQueueEntries();
-    const purgedCache = await purgeExpiredEventCache();
+    // Bounded growth of the append-only logging tables (see services/retention.service.ts):
+    // trigger logs 180d, email logs 180d, login attempts 90d, queue 30d after completion/death.
+    const purged = await purgeExpiredLogs();
+    await purgeExpiredEventCache();
     const purgedInbox = await purgeOldInboxMessages();
     const purgedTodos = await purgeOldTodoCompletions();
     const purgedCronLogs = await query(
@@ -177,7 +191,7 @@ cronRoutes.get('/daily-maintenance', async (c) => {
       'daily-maintenance',
       'success',
       startedAt,
-      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged emails: ${purgedEmails}; purged queue: ${purgedQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}`,
+      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged trigger logs: ${purged.triggerLogs}; purged emails: ${purged.emailLogs}; purged login attempts: ${purged.loginAttempts}; purged queue: ${purged.notificationQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}`,
     );
     await pingHeartbeat('daily-maintenance');
     return c.json({
@@ -185,6 +199,7 @@ cronRoutes.get('/daily-maintenance', async (c) => {
       job: 'daily-maintenance',
       timestamp: new Date().toISOString(),
       pluginSessionsDeleted: pluginResult.rowCount ?? 0,
+      purged,
     });
   } catch (error: any) {
     await logCronRun('daily-maintenance', 'failed', startedAt, undefined, error.message);
@@ -230,11 +245,111 @@ cronRoutes.get('/plugin-session-cleanup', async (c) => {
 });
 
 // Channel health re-check for active accounts (daily via external cron)
+//
+// Truthfulness rules (plan checkbox 11):
+//  - A channel type with no test path is reported as 'unknown' + 'unsupported', never 'unhealthy'.
+//  - Credentials are stored AES-256-GCM encrypted; they must be decrypted before the test.
+//  - This cron NEVER auto-disables an account. Only the send path's 3-consecutive-failure
+//    rule (services/notifications/index.ts) may set is_active = FALSE.
+
+export type ChannelHealthStatus = 'healthy' | 'unhealthy' | 'unknown';
+export type ChannelHealthLastResult = 'success' | 'failed' | 'unsupported' | 'error' | 'decrypt_failed';
+
+/** Message test-connection.ts returns when a channel type/method has no dedicated test path. */
+const UNSUPPORTED_TEST_MESSAGE_RE = /^暂不支持测试|^未知的配置方式/;
+
+/**
+ * Single source of truth for mapping a connection-test outcome onto
+ * notification_accounts.connection_status / last_test_result.
+ * Shared by the daily channel-health cron and the single-channel test route.
+ */
+export function classifyChannelTestResult(result: Pick<TestConnectionResult, 'success' | 'message'>): {
+  connectionStatus: ChannelHealthStatus;
+  lastTestResult: ChannelHealthLastResult;
+} {
+  if (result.success) {
+    return { connectionStatus: 'healthy', lastTestResult: 'success' };
+  }
+  if (UNSUPPORTED_TEST_MESSAGE_RE.test(result.message ?? '')) {
+    return { connectionStatus: 'unknown', lastTestResult: 'unsupported' };
+  }
+  return { connectionStatus: 'unhealthy', lastTestResult: 'failed' };
+}
+
+// Old hardcoded default key; mirrors config.service.ts so docker-era rows stay readable.
+const LEGACY_MASTER_KEY = 'timemark-default-master-key-change-in-production-2026';
+
+interface AccountCredentials {
+  webhook?: string;
+  token?: string;
+  secret?: string;
+  chatId?: string;
+  decryptFailed: boolean;
+}
+
+/** Decrypt notification_accounts credential columns for a health check. */
+function decryptAccountCredentials(row: {
+  webhook?: string | null;
+  token?: string | null;
+  secret?: string | null;
+  chat_id?: string | null;
+}): AccountCredentials {
+  const masterKey = process.env.MASTER_KEY;
+  const decode = (raw: unknown): { value?: string; failed: boolean } => {
+    if (raw == null || raw === '') return { failed: false };
+    if (typeof raw !== 'string') return { failed: true };
+    if (masterKey) {
+      try { return { value: decrypt(raw, masterKey), failed: false }; } catch { /* try legacy key */ }
+    }
+    try { return { value: decrypt(raw, LEGACY_MASTER_KEY), failed: false }; } catch { /* maybe plaintext */ }
+    // Both keys failed. Historical plaintext rows remain testable (config.service treats
+    // this case the same way); a base64 ciphertext blob means the key no longer matches
+    // the data, so the account genuinely cannot be tested.
+    const looksLikeCiphertext = raw.length >= 40
+      && /^[A-Za-z0-9+/]+={0,2}$/.test(raw)
+      && Buffer.from(raw, 'base64').length >= 29;
+    return looksLikeCiphertext ? { failed: true } : { value: raw, failed: false };
+  };
+
+  const webhook = decode(row.webhook);
+  const token = decode(row.token);
+  const secret = decode(row.secret);
+  const chatId = decode(row.chat_id);
+  return {
+    webhook: webhook.value,
+    token: token.value,
+    secret: secret.value,
+    chatId: chatId.value,
+    decryptFailed: webhook.failed || token.failed || secret.failed || chatId.failed,
+  };
+}
+
+/**
+ * Persist health fields only — never is_active. A rejected write (e.g. a stray
+ * CHECK constraint on connection_status) must not crash the whole job.
+ */
+async function persistAccountHealth(
+  accountId: number,
+  connectionStatus: ChannelHealthStatus,
+  lastTestResult: ChannelHealthLastResult,
+): Promise<void> {
+  try {
+    await query(
+      `UPDATE notification_accounts SET connection_status = $1, last_test_result = $2, last_test_at = CURRENT_TIMESTAMP WHERE id = $3`,
+      [connectionStatus, lastTestResult, accountId],
+    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[channel-health] Failed to persist status for account ${accountId}: ${message}`);
+  }
+}
+
 cronRoutes.get('/channel-health', async (c) => {
   const startedAt = Date.now();
   let tested = 0;
   let ok = 0;
   let failed = 0;
+  let unsupported = 0;
   try {
     const accounts = await query(
       `SELECT id, user_id, type, webhook, token, secret, chat_id, config_method
@@ -246,37 +361,43 @@ cronRoutes.get('/channel-health', async (c) => {
       if (!tpl) continue;
       tested++;
       try {
+        const credentials = decryptAccountCredentials(row);
+        if (credentials.decryptFailed) {
+          // Credentials cannot be read -> cannot be tested -> unknown, never unhealthy.
+          unsupported++;
+          await persistAccountHealth(row.id, 'unknown', 'decrypt_failed');
+          continue;
+        }
         const chatId = await resolveEmailRecipientForTest(
           row.user_id as number,
           row.type as string,
-          row.chat_id as string | null,
+          credentials.chatId ?? null,
         );
         const result = await testConnection({
           type: row.type,
           configMethod: row.config_method || tpl.configMethod,
-          webhook: row.webhook || undefined,
-          token: row.token || undefined,
+          webhook: credentials.webhook,
+          token: credentials.token,
           chatId: chatId || undefined,
-          secret: row.secret || undefined,
+          secret: credentials.secret,
         });
-        const status = result.success ? 'healthy' : 'unhealthy';
-        if (result.success) ok++; else failed++;
-        await query(
-          `UPDATE notification_accounts SET connection_status = $1, last_test_result = $2, last_test_at = CURRENT_TIMESTAMP WHERE id = $3`,
-          [status, result.success ? 'success' : 'failed', row.id],
-        );
-      } catch {
-        failed++;
-        await query(
-          `UPDATE notification_accounts SET connection_status = 'unhealthy', last_test_result = 'failed', last_test_at = CURRENT_TIMESTAMP WHERE id = $1`,
-          [row.id],
-        ).catch(() => {});
+        const classified = classifyChannelTestResult(result);
+        if (classified.connectionStatus === 'healthy') ok++;
+        else if (classified.connectionStatus === 'unhealthy') failed++;
+        else unsupported++;
+        await persistAccountHealth(row.id, classified.connectionStatus, classified.lastTestResult);
+      } catch (error: unknown) {
+        // One account failing unexpectedly must not abort the whole job.
+        unsupported++;
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[channel-health] Account ${row.id} (${row.type}) test errored: ${message}`);
+        await persistAccountHealth(row.id, 'unknown', 'error');
       }
     }
-    const summary = `tested=${tested} ok=${ok} failed=${failed}`;
+    const summary = `tested=${tested} ok=${ok} failed=${failed} unsupported=${unsupported}`;
     await logCronRun('channel-health', 'success', startedAt, summary);
     await pingHeartbeat('channel-health');
-    return c.json({ success: true, job: 'channel-health', tested, ok, failed });
+    return c.json({ success: true, job: 'channel-health', tested, ok, failed, unsupported });
   } catch (error: any) {
     await logCronRun('channel-health', 'failed', startedAt, undefined, error.message);
     return c.json({ success: false, error: error.message }, 500);

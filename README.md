@@ -4,7 +4,7 @@
 
 <h1>🎂 TimeMark</h1>
 
-<h3>智能事件提醒系统 | 30+ 通知渠道 | 农历转换 | 关系映射</h3>
+<h3>智能事件提醒系统 | 42 个通知渠道 | 农历转换 | 关系映射</h3>
 
 <p>一个为生日、纪念日等重要日期打造的全功能提醒系统。<br/>Vercel Serverless 部署，PostgreSQL 数据库，零服务器运维。</p>
 
@@ -43,7 +43,7 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 | 密钥管理 | data/.env 文件 | **Vercel Environment Variables** |
 | 静态资源 | Docker 镜像内 | **Vercel Edge Network (CDN)** |
 | 免费额度 | 需自备服务器 | **Vercel Hobby 免费套餐可用** |
-| 通知渠道 | 38 个渠道 | **30+ HTTP 渠道（Webhook/Token，云端可用）** |
+| 通知渠道 | 38 个渠道 | **42 个 HTTP 渠道（Webhook/Token，云端可用）** |
 
 ### 架构优势
 
@@ -56,14 +56,14 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 
 ### 🐳 姊妹项目推荐：Docker 单容器版
 
-想要数据完全自持、跑在自己的 NAS 或内网里？同一个 TimeMark 也有自托管版 **[timemark-docker](https://github.com/WXFffff666/timemark-docker)** —— Docker 单容器部署、SQLite 内置存储、零外部依赖、闲置内存约 256MB，`docker compose up -d` 一条命令即可启动，**38 个通知渠道全部可用**（含微信个人号、QQ Bot、Signal 等云端不可用的插件类渠道）。
+想要数据完全自持、跑在自己的 NAS 或内网里？同一个 TimeMark 也有自托管版 **[timemark-docker](https://github.com/WXFffff666/timemark-docker)** —— Docker 单容器部署、SQLite 内置存储、零外部依赖、闲置内存约 256MB，`docker compose up -d` 一条命令即可启动，**38 个渠道全部可用**（含微信个人号、QQ Bot、Signal 等云端不可用的插件类渠道）。
 
 | 对比项 | 🐳 [Docker 版](https://github.com/WXFffff666/timemark-docker) | ☁️ Vercel 版（本仓库） |
 |:------:|:----------------------------------------------------------:|:---------------------:|
 | 部署平台 | Docker / NAS（群晖 · 威联通 · 铁威马 · 飞牛OS） | Vercel Serverless |
 | 数据库 | SQLite (sql.js，内置) | PostgreSQL (Vercel Postgres / Neon) |
 | 定时任务 | Croner（进程内每分钟检查） | Vercel Cron + cron-job.org |
-| 通知渠道 | **38 个全部可用** | 30+ 云端可用 HTTP 渠道 |
+| 通知渠道 | **38 个全部可用** | 42 个云端可用 HTTP 渠道 |
 | 运维成本 | 需自备服务器 | 零运维，Hobby 免费套餐可用 |
 | 适合场景 | 数据完全自持 / 内网 / NAS | 公网访问 / 免服务器 / 快速上线 |
 
@@ -75,7 +75,7 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 
 | 🗓️ 精准农历 | 📢 多渠道通知 | 👨‍👩‍👧‍👦 智能关系映射 | 🔒 安全防护 | 🌍 全球时区 |
 |:----------:|:----------:|:---------------:|:----------:|:--------:|
-| 闰月自动转换 | 30+ 通知渠道 | 40+ 称呼映射 | 登录锁定 + 告警 | NTP 按用户时区校准 |
+| 闰月自动转换 | 42 个通知渠道 | 40+ 称呼映射 | 登录锁定 + 告警 | NTP 按用户时区校准 |
 | 公历/农历/双历 | 同渠道多账户 | 家庭关系映射 | Turnstile + Passkey | 默认北京时间 |
 
 | 📝 通知模板 | 🔄 重复事件 | 📧 多邮箱支持 | 📅 日历导出 | 🎯 11 种事件类型 |
@@ -106,9 +106,8 @@ npm i -g vercel
 git clone https://github.com/WXFffff666/timemark-vercel.git
 cd timemark-vercel
 
-# 2.1 安装依赖（本地开发必加此参数，否则 baileys 间接依赖会报 ERR_PNPM_EXOTIC_SUBDEP）
-pnpm run install:deps
-# 等价于：pnpm install --config.blockExoticSubdeps=false
+# 2.1 安装依赖
+pnpm install
 
 # 3. 链接 Vercel 项目
 vercel link
@@ -125,7 +124,7 @@ vercel --prod
 
 ### 初始化数据库
 
-部署后数据库表会在 **首次 API 冷启动时自动迁移**（v1–v30）。也可手动执行：
+部署后数据库表会在 **首次 API 冷启动时自动迁移**（v1–v32）。也可手动执行：
 
 ```bash
 # 拉取 Vercel 环境变量
@@ -135,7 +134,7 @@ vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-部署完成后可在 **设置 → 部署向导** 查看「系统自检」（数据库连接、结构版本 v30、CRON_SECRET、Turnstile 等）。
+部署完成后可在 **设置 → 部署向导** 查看「系统自检」（数据库连接、结构版本 v32、CRON_SECRET、Turnstile 等）。
 
 部署完成！生产环境请绑定自定义域名（例如 `https://timemark.example.com`）。
 
@@ -170,16 +169,14 @@ npx tsx scripts/migrate-db.ts
 
 ### 本地开发与装包
 
-本仓库根目录 `.npmrc` 已设置 `blockExoticSubdeps=false`，但部分环境（如通过 `npx pnpm`）仍可能触发 `ERR_PNPM_EXOTIC_SUBDEP`（baileys 的间接依赖含 git 源）。**请始终使用：**
+依赖树已清理为标准形态（插件类渠道与其 exotic 依赖已移除），直接使用 pnpm 即可：
 
 ```bash
-pnpm run install:deps
-# 或
-pnpm install --config.blockExoticSubdeps=false
-pnpm add <pkg> --config.blockExoticSubdeps=false
+pnpm install
+pnpm add <pkg>
 ```
 
-Vercel 远程构建已在 `vercel.json` 的 `installCommand` 中配置相同参数。
+Vercel 远程构建同样使用 `vercel.json` 中的 `installCommand: "pnpm install"`。
 
 ---
 
@@ -298,7 +295,7 @@ Cron 每分钟提醒任务使用校正后的时间，在配置的提醒时刻 ±
 |--------|--------|
 | 提醒时间 | 06:00 - 22:00 + 自定义任意时间 (可多选) |
 | 提前天数 | 1天 / 3天 / 7天 / 14天 / 30天 (可多选) |
-| 通知渠道 | 30+ HTTP 渠道任意组合 (可多选) |
+| 通知渠道 | 42 个 HTTP 渠道任意组合 (可多选) |
 | 重复事件 | 每天 / 每周 / 每月 / 每年 |
 | 通知模板 | 18 种预设模板 + 自定义模板 |
 | 收件人邮箱 | 支持多个收件人邮箱 |
@@ -330,10 +327,11 @@ Cron 每分钟提醒任务使用校正后的时间，在配置的提醒时刻 ±
 
 ---
 
-## 📢 通知渠道（云端可用 30+）
+## 📢 通知渠道（云端可用 42 个）
 
 TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插件、无长连接 IM）。所有渠道通过「通知账户」统一管理，支持同渠道多账户，创建事件时可选择发送目标。
 
+> 📋 **权威清单**（自动生成；含每个渠道的必填字段 → 数据库列映射与连接测试路径）：[docs/CHANNEL_MATRIX.md](docs/CHANNEL_MATRIX.md)。  
 > **云端不可用（已从前端与 API 移除）**：微信个人号、WhatsApp、QQ Bot、Signal、iMessage、Zalo、Clawbot、Nostr、浏览器 Web Push。  
 > 完整兼容性说明见 [docs/CHANNEL_COMPATIBILITY.md](docs/CHANNEL_COMPATIBILITY.md)。  
 > 通知配置与测试流程见 [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md)。
@@ -350,54 +348,57 @@ TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插�
 
 详见 [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)。
 
-### 💬 即时通讯
+### 🔗 Webhook 类（11 个）
 
 | 渠道 | 说明 |
 |------|------|
-| 📧 邮件 (Resend / SMTP) | 正式邮件通知；Resend 需 API Key + 收件人（或设置默认邮箱） |
-| 🔵 飞书 | 飞书群聊机器人 |
-| 🟢 企业微信 | 企业微信群聊机器人 |
-| 🔷 钉钉 | 钉钉群聊机器人 |
+| 🟣 Discord | Discord 频道消息推送 |
+| 💜 Slack | Slack 频道消息推送 |
+| 🔵 飞书 (Feishu) | 飞书群聊机器人 |
+| 🟢 企业微信 (WeCom) | 企业微信群聊机器人 |
+| 🔷 钉钉 (DingTalk) | 钉钉群聊机器人（支持加签） |
+| Google Chat | Google Chat 空间消息推送 |
+| IRC | IRC 桥接 Webhook（如 matterbridge） |
+| Synology Chat | 群晖 Chat 消息推送 |
+| Twitch | Twitch EventSub Webhook |
+| 通用 Webhook | 自定义 HTTP 回调（可选签名校验） |
+| Rocket.Chat | Rocket.Chat 频道传入 Webhook |
+
+### 🔑 Token 类（31 个）
+
+| 渠道 | 说明 |
+|------|------|
+| 📧 Resend | Resend 邮件 API 推送（支持 HTML 模板） |
+| 📧 SMTP 邮件 | QQ / 163 / Gmail / Outlook / 企业邮 SMTP 发信 |
 | ✈️ Telegram | Telegram Bot 推送 |
-| 💜 Slack | Slack 频道通知 |
-| 🟣 Discord | Discord Webhook |
+| LINE | LINE Messaging API 推送 |
+| Matrix | Matrix 消息推送 |
+| Mattermost | Mattermost 频道推送 |
+| Microsoft Teams | Teams 频道推送 |
+| Nextcloud Talk | Nextcloud 聊天推送 |
 | 📱 WxPusher | 微信公众号推送 |
 | 💬 Qmsg | QQ 消息推送 |
-| 📡 Server酱 | 微信推送服务（Turbo/V3） |
-
-### 🔗 Webhook 集成
-
-| 渠道 | 说明 |
-|------|------|
-| Google Chat | Google 工作区通知 |
-| IRC | IRC 频道消息 |
-| Synology Chat | 群晖 Chat 通知 |
-| Twitch | Twitch 频道通知 |
-| Mattermost | Mattermost 频道 |
-| Nextcloud Talk | Nextcloud 聊天 |
-| 通用 Webhook | 自定义 HTTP 回调 |
+| 📡 Server酱 (ServerChan) | 微信推送服务（Turbo） |
 | PushPlus | 多渠道推送服务 |
-| PushMe | 多平台统一推送 |
-| Apprise | 统一通知网关 |
-
-### 📱 移动推送
-
-| 渠道 | 说明 |
-|------|------|
 | Bark | iOS 自定义推送通知 |
 | Gotify | 自托管推送服务 |
-| 喵推送 (Meow) | 鸿蒙系统推送 |
-| 企业微信应用 | 企微应用消息推送 |
-| ntfy | 自托管/公共 ntfy 推送 |
-| Pushover | Pushover 移动推送 |
-
-### 🌐 协议集成
-
-| 渠道 | 说明 |
-|------|------|
-| Matrix | 去中心化通讯协议 |
-| LINE | LINE 消息推送 |
-| Microsoft Teams | Teams 频道通知 |
+| 喵推送 (Meow) | 喵推送消息 |
+| PushMe | 多平台统一推送 |
+| PushDeer | iOS / Android 跨平台推送 |
+| Twilio SMS | 通过 Twilio 发送短信提醒 |
+| 企业微信应用 (WeComApp) | 企微应用消息推送 |
+| ntfy | 自托管 / 公共 ntfy 推送 |
+| Pushover | Pushover 跨平台移动推送 |
+| Apprise | 统一通知网关（80+ 服务） |
+| 📡 Server酱³ (SC3) | Server酱³ 消息推送（sctp 开头的 SendKey） |
+| 息知 (XiZhi) | 息知微信推送 |
+| AnPush | AnPush 多渠道推送 |
+| Chanify | Chanify iOS 推送（可自建服务端） |
+| Pushback | Pushback 可回复通知 |
+| SimplePush | SimplePush 简单推送 |
+| Zulip | Zulip 流消息推送 |
+| 🔥 Firebase 推送 (FCM) | Firebase Cloud Messaging HTTP v1 |
+| 🟢 Twilio WhatsApp | 通过 Twilio 发送 WhatsApp 消息 |
 
 ---
 
@@ -527,8 +528,8 @@ Vercel 版使用 PostgreSQL（Neon），推荐通过应用内 **设置 → 数�
 ### 构建失败（pnpm）
 
 ```powershell
-npx pnpm install --config.blockExoticSubdeps=false
-npx pnpm build --config.blockExoticSubdeps=false
+npx pnpm install
+npx pnpm build
 ```
 
 ---
@@ -537,6 +538,7 @@ npx pnpm build --config.blockExoticSubdeps=false
 
 | 版本 | 日期 | 内容 |
 |:----:|:----:|------|
+| **v2.17.0** | 2026-09 | *占位（发布前由 todo 131 补全）* 依赖大版本升级（React 19 / Vite 8 / Tailwind 4 / Zod 4 / Vitest 5 / TypeScript 7 / Hono 4 等）；通知渠道扩充至 42 个（新增 10 个 HTTP 渠道）并生成渠道矩阵；Service Worker 安全化（不再缓存 HTML，激活即清空缓存）；i18n 资源加载器（zh/en）；文档校正（重试队列真实行为、优化计划收尾） |
 | **v2.16.0** | 2026-07 | 双历/农历修复、NTP 按时区校准、登录加速、单用户模式、提醒 Cron 修复、安全加固（零信任/Passkey Turnstile/SSRF/Webhook） |
 | **v2.15.0** | 2026-07 | 联系人多邮箱/手机、待办打勾与完成历史、日历年/月/日视图、安全加固（发信白名单/HSTS/密钥脱敏/SMTP TLS） |
 | **v2.14.x** | 2026-07 | Turnstile 修复、深浅色切换、Google OAuth 文档、收件箱全链路、Phase B/C 优化项 |

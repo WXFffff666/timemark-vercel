@@ -70,7 +70,7 @@ export function resolveNextGregorianOccurrence(
   }
 
   const todayParts = parseYmd(todayYmd);
-  let year = todayParts?.y ?? parts.y;
+  const year = todayParts?.y ?? parts.y;
   let candidate = formatYmd(year, parts.m, parts.d);
 
   if (diffCalendarDays(todayYmd, candidate) < 0) {

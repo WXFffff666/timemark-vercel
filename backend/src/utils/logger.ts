@@ -28,3 +28,16 @@ export function runWithRequestId<T>(requestId: string, fn: () => T): T {
 export function createLogger(module: string) {
   return logger.child({ module });
 }
+
+/**
+ * Build a `.catch()` handler for fire-and-forget promises so a rejection is
+ * routed into pino (carrying the request id via the AsyncLocalStorage mixin)
+ * with a STABLE `event` field instead of being silently swallowed.
+ *
+ * Usage: `somePromise().catch(logFireAndForget('notification.retry_enqueue_failed', 'Failed to enqueue retry'))`
+ */
+export function logFireAndForget(event: string, message?: string) {
+  return (error: unknown): void => {
+    logger.warn({ event, err: error }, message ?? event);
+  };
+}

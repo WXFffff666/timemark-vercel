@@ -6,7 +6,6 @@ export * from './schemas/event.schema.js';
 export * from './schemas/config.schema.js';
 export * from './schemas/contact.schema.js';
 export * from './schemas/broadcast.schema.js';
-export * from './channels.js';
 export * from './contact-channels.js';
 export * from './contact-methods.js';
 export * from './contact-relationship.js';

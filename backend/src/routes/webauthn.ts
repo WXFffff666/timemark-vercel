@@ -23,7 +23,7 @@ const registerOptionsSchema = z.object({
 });
 
 const registerVerifySchema = z.object({
-  response: z.record(z.unknown()),
+  response: z.record(z.string(), z.unknown()),
   deviceName: z.string().max(64).optional(),
 });
 
@@ -122,7 +122,7 @@ const loginOptionsSchema = z.object({
 });
 const loginVerifySchema = z.object({
   username: z.string().min(1),
-  response: z.record(z.unknown()),
+  response: z.record(z.string(), z.unknown()),
   rememberMe: z.boolean().optional(),
   totpCode: z.string().optional(),
   turnstileToken: z.string().optional(),

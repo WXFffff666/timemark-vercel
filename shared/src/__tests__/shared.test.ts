@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyRelationshipMapping, COMMON_RELATIONS } from '../relationship';
+import { applyRelationshipMapping } from '../relationship';
 import { renderTemplate, previewTemplate, getEventTypeLabel } from '../templates';
 import { getBlessing } from '../blessings';
 

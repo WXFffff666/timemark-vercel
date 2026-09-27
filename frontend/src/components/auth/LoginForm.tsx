@@ -33,7 +33,7 @@ declare global {
 }
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
-const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } };
+const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } as const } };
 
 function formatLockTime(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60);
@@ -55,7 +55,7 @@ export function LoginForm() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
   const [turnstileReady, setTurnstileReady] = useState(false);
-  const turnstileRef = useRef<HTMLDivElement>(null);
+  const turnstileRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const pendingSubmitRef = useRef(false);
   const credentialsRef = useRef({ username: '', password: '', rememberMe: false, totpCode: '' });

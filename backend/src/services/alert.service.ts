@@ -2,7 +2,7 @@ import { getUserConfig, getNotificationAccounts } from './config.service.js';
 import { sendNotifications } from './notifications/index.js';
 import { resolveEmailAccount, sendRawEmail } from './email-send.service.js';
 import { sendSecurityAlertEmail } from './notifications/email.service.js';
-import { EMAIL_CHANNEL_TYPES, parseChannelAccountIds } from '@timemark/shared';
+import { parseChannelAccountIds } from '@timemark/shared';
 
 export type AlertType = 'login_failure' | 'new_device' | 'password_change';
 

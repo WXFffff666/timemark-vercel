@@ -76,7 +76,7 @@ const itemVariants = {
     opacity: 1, 
     y: 0, 
     scale: 1, 
-    transition: { type: 'spring', stiffness: 300, damping: 24 } 
+    transition: { type: 'spring', stiffness: 300, damping: 24 } as const 
   } 
 };
 
@@ -97,7 +97,7 @@ export default function Channels() {
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [configForm, setConfigForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [testingConnection, setTestingConnection] = useState<number | null>(null);
+  const [testingConnection, setTestingConnection] = useState<string | null>(null);
   const [testingConfig, setTestingConfig] = useState(false);
   const [configTestMessage, setConfigTestMessage] = useState<string | null>(null);
 
@@ -107,7 +107,7 @@ export default function Channels() {
     message?: string;
     timestamp?: number;
   }
-  const [connectionStatus, setConnectionStatus] = useState<Record<number, ConnectionTestResult>>({});
+  const [connectionStatus, setConnectionStatus] = useState<Record<string, ConnectionTestResult>>({});
   const [testingAll, setTestingAll] = useState(false);
 
   useEffect(() => {
@@ -174,19 +174,12 @@ export default function Channels() {
 
 
   // Get status indicator for an account
-  const getStatusIndicator = (accountId: number) => {
+  const getStatusIndicator = (accountId: string) => {
     const result = connectionStatus[accountId];
     if (!result || result.status === 'untested') return { dot: '⚪', color: 'text-slate-400', label: '未测试' };
     if (result.status === 'testing') return { dot: '🟡', color: 'text-amber-500', label: '测试中...' };
     if (result.status === 'connected') return { dot: '🟢', color: 'text-green-500', label: '已连接' };
     return { dot: '🔴', color: 'text-red-500', label: '连接失败' };
-  };
-
-  const getMethodIcon = (method: ConfigMethod) => {
-    switch (method) {
-      case 'webhook': return Webhook;
-      case 'token': return Settings;
-    }
   };
 
   const getMethodLabel = (method: ConfigMethod) => {
@@ -625,7 +618,7 @@ export default function Channels() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
       <header className="sticky top-6 z-40 px-4 max-w-[90rem] mx-auto" role="banner">
-        <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
+        <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={() => navigate(-1)} aria-label="返回上一页">
               <ArrowLeft size={20} aria-hidden />

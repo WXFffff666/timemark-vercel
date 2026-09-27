@@ -143,25 +143,33 @@
 
 ---
 
+## 现状说明：通知发送与重试（2026-09 校正）
+
+- 渠道发送失败时，发送路径**立即写入重试队列**：`backend/src/services/notifications/index.ts` 调用 `enqueueNotificationRetry()`（`backend/src/services/notification-retry.service.ts`），向 `notification_queue` 插入一条 `pending` 记录。
+- 队列由外部 Cron **`/api/cron/retry-notifications`**（建议每 5–15 分钟调用一次）消费；退避节奏为 **5 分钟 → 30 分钟 → 2 小时 → 6 小时**，最多重试 4 次。4 次仍失败标记为 `dead`；`connection_status = unhealthy` 的账户直接跳过。
+- 发送成功才不写队列。`docs/NOTIFICATIONS.md` §5 与 `backend/src/services/notifications/README.md` 的描述与此一致。
+
+---
+
 ## 后续优化建议
 
 | 优先级 | 项目 | 说明 |
 |--------|------|------|
-| P0 | 外部 Cron | Hobby 计划需 [cron-job.org](https://cron-job.org) 每分钟调用 `/api/cron/reminder-check` |
-| P0 | 环境变量 | `DATABASE_URL`、`JWT_SECRET`、`MASTER_KEY`、`CRON_SECRET`、`CORS_ORIGIN` |
-| P1 | 渠道配置合并 | 将 `shared/channels.ts` 与 `channels.config.ts` 统一为单一数据源 |
-| P1 | HttpOnly Cookie | 长期可考虑将 Token 迁至 HttpOnly Cookie，降低 XSS 风险 |
-| P2 | E2E 测试 | Playwright 覆盖登录、事件 CRUD、提醒触发 |
-| P2 | 日历视图 | 月历热力图展示即将到来的事件 |
-| P2 | 冲突检测 UI | 接入已有 `/api/features/conflicts` |
-| P3 | Passkeys | ~~Better Auth 或 WebAuthn 无密码登录~~ **v2.10 已实现** |
+| P0 | 外部 Cron | **未完成（部署项）**：Hobby 计划需 [cron-job.org](https://cron-job.org) 每分钟调用 `/api/cron/reminder-check` |
+| P0 | 环境变量 | **未完成（部署项）**：`DATABASE_URL`、`JWT_SECRET`、`MASTER_KEY`、`CRON_SECRET`、`CORS_ORIGIN` |
+| P1 | 渠道配置合并 | ~~将 `shared/channels.ts` 与 `channels.config.ts` 统一为单一数据源~~ **已完成（todo 14 / R5.2）**：删除 `shared/src/channels.ts` 并合并官方链接/双语元数据，唯一权威目录为 `channels.config.ts`，清单由 `scripts/gen-channel-matrix.mjs` 生成到 `docs/CHANNEL_MATRIX.md` |
+| P1 | HttpOnly Cookie | ~~长期可考虑将 Token 迁至 HttpOnly Cookie，降低 XSS 风险~~ **已完成（v2.9.0）**：登录/刷新 Token 已写入 HttpOnly Cookie（见上文 v2.9.0「新功能」） |
+| P2 | E2E 测试 | Playwright 冒烟已覆盖登录页、鉴权重定向、路由/深链、Service Worker（Wave 4-5，**已完成**）；登录、事件 CRUD、提醒触发的完整 E2E **未完成** |
+| P2 | 日历视图 | 年/月/日日历视图已上线（v2.9.0，**已完成**）；月历热力图**未完成** |
+| P2 | 冲突检测 UI | ~~接入已有 `/api/features/conflicts`~~ **已完成（v2.9.0）**：首页展示同日期多事件冲突 |
+| P3 | Passkeys | ~~Better Auth 或 WebAuthn 无密码登录~~ **已完成（v2.10 实现）** |
 
 ---
 
 ## Vercel 部署清单
 
 1. 在 Vercel 导入 GitHub 仓库 `WXFffff666/timemark-vercel`
-2. 安装命令：`pnpm install --config.blockExoticSubdeps=false`
+2. 安装命令：`pnpm install`
 3. 构建命令：`pnpm build`
 4. 输出目录：`frontend/dist`
 5. 添加 Neon Postgres 并设置环境变量

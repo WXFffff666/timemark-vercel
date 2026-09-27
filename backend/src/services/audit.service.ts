@@ -1,4 +1,5 @@
 import { query } from '../db/index.js';
+import { logFireAndForget } from '../utils/logger.js';
 
 export async function logAudit(
   userId: number,
@@ -11,5 +12,7 @@ export async function logAudit(
     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
      VALUES ($1, $2, $3, $4, $5)`,
     [userId, action, entityType ?? null, entityId != null ? String(entityId) : null, details ? JSON.stringify(details) : null],
-  ).catch(() => {});
+  ).catch(
+    logFireAndForget('audit.log_write_failed', 'Failed to write audit log entry'),
+  );
 }
