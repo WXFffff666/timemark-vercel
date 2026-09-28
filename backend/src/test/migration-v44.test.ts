@@ -90,10 +90,10 @@ describe('migration v44 registration (todo 81)', () => {
     expect(callsMatching('CREATE TABLE IF NOT EXISTS goals')).toHaveLength(0);
     expect(callsMatching('CREATE TABLE IF NOT EXISTS milestones')).toHaveLength(0);
     expect(versionInserts()).not.toContain(44);
-    // v45 (todo 78), v46 (checkbox 80), v47 (checkbox 86) and v48 (checkbox 89, public
-    // ICS feeds) landed after v44 and DO run on a recorded 44; v44 itself is never
-    // re-applied (one insert each).
-    expect(versionInserts()).toEqual([45, 46, 47, 48]);
+    // v45 (todo 78), v46 (checkbox 80), v47 (checkbox 86), v48 (checkbox 89, public ICS
+    // feeds) and v49 (checkbox 91, Telegram bot dedup) landed after v44 and DO run on a
+    // recorded 44; v44 itself is never re-applied (one insert each).
+    expect(versionInserts()).toEqual([45, 46, 47, 48, 49]);
   });
 
   it('does not record v44 when its SQL fails, so a later cold start retries', async () => {
@@ -137,7 +137,9 @@ describe('migration v44 registration (todo 81)', () => {
     // continue the chain; 46 is no longer the tail.
     expect(versions.indexOf(47)).toBe(versions.indexOf(46) + 1);
     expect(versions.indexOf(48)).toBe(versions.indexOf(47) + 1);
-    expect(versions[versions.length - 1]).toBe(48);
+    // v49 (checkbox 91, Telegram bot update dedup) continues the chain; 48 is no longer the tail.
+    expect(versions.indexOf(49)).toBe(versions.indexOf(48) + 1);
+    expect(versions[versions.length - 1]).toBe(49);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

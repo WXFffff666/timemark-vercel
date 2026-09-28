@@ -64,6 +64,7 @@ import dosesRoutes from './routes/doses.js';
 import goalsRoutes from './routes/goals.js';
 import digestRoutes from './routes/digest.js';
 import ogRoutes from './routes/og.js';
+import botRoutes from './routes/bot.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -72,8 +73,18 @@ const log = createLogger('bootstrap');
 // --- App setup (shared between local Docker and Vercel serverless) ---
 const app = new Hono();
 
+/**
+ * The Telegram webhook is a machine-to-machine endpoint: Telegram sends no browser Origin,
+ * Referer or X-Requested-With, and authenticates every request with its own
+ * `X-Telegram-Bot-Api-Secret-Token` header (verified in routes/bot.ts). It therefore needs
+ * the same explicit exemption from the zero-trust and CSRF middleware that `/api/webhook/*`
+ * already has, and it must be mounted before those guards to keep the exemption in one place.
+ */
+const isTelegramWebhook = (c: { req: { method: string; path: string } }): boolean =>
+  c.req.method === 'POST' && c.req.path === '/api/bot/telegram';
+
 app.use('*', honoLogger());
-app.use('*', zeroTrustGuard);
+app.use('*', async (c, next) => (isTelegramWebhook(c) ? next() : zeroTrustGuard(c, next)));
 app.use('*', securityHeaders);
 app.use('/api/*', httpsEnforcement);
 
@@ -88,7 +99,8 @@ app.use('*', cors({
   credentials: true,
 }));
 app.use('*', requestIdMiddleware);
-app.use('*', csrfProtection());
+const csrf = csrfProtection();
+app.use('*', async (c, next) => (isTelegramWebhook(c) ? next() : csrf(c, next)));
 
 // Vercel serverless: ensure DB migrations on cold start (skip health probes)
 if (process.env.VERCEL) {
@@ -157,6 +169,8 @@ app.route('/api/doses', dosesRoutes);
 app.route('/api/goals', goalsRoutes);
 app.route('/api/digest', digestRoutes);
 app.route('/api/og', ogRoutes);
+// checkbox 91: Telegram bot webhook + webhook setup/status management.
+app.route('/api/bot', botRoutes);
 // todo 88: also expose the canonical `/share/:token` server-rendered meta document at the app
 // root so it resolves locally and in tests. On Vercel this path is owned by the SPA rewrite in
 // vercel.json (`/((?!api/|.*\\..*).*)` -> /index.html), so the OG image (`/api/og/image/:token`)

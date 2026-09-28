@@ -1255,6 +1255,20 @@ CREATE INDEX IF NOT EXISTS idx_caldav_writeback_objects_user ON caldav_writeback
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ics_feeds_token_hash ON ics_feeds(token_hash);
 CREATE INDEX IF NOT EXISTS idx_ics_feeds_user ON ics_feeds(user_id);`,
     },
+    {
+      // Checkbox 91 (D7 Telegram bot): `bot_updates` is the Telegram webhook dedup ledger.
+      // Telegram retries an update until it is ACKed, so we claim each `update_id` with an
+      // INSERT ... ON CONFLICT DO NOTHING before processing: a retry then ACKs 200 without
+      // re-executing the command. Purely additive and idempotent (CREATE TABLE / CREATE INDEX
+      // IF NOT EXISTS only, no ALTER of existing tables, no backfill, table starts empty).
+      version: 49,
+      name: 'bot_updates_v49',
+      sql: `CREATE TABLE IF NOT EXISTS bot_updates (
+  update_id BIGINT PRIMARY KEY,
+  received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_bot_updates_received_at ON bot_updates(received_at);`,
+    },
   ];
 
   for (const migration of migrations) {
