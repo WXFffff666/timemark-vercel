@@ -9,19 +9,35 @@
  * `new Date(y, m, d)`），因此对 Date 输入必须用本地 getter 取回同一公历日 ——
  * 这是该构造的精确逆运算。getUTC* / toISOString 在东八区（生产 TZ=Asia/Shanghai）
  * 会把日期回退一天（DATE 2026-10-03 → "2026-10-02"）。
- * `YYYY-MM-DD` 字符串走下面的分支，不受此影响。
+ * 字符串分支区分两种形态：纯 `YYYY-MM-DD` 直接切片；完整 ISO 瞬时按 LOCAL
+ * getter 取回本地日（见下方注释）。这样无论缓存写读是否同一时区，日历日都不漂移。
  */
+/** 用 LOCAL getter 取回 YYYY-MM-DD（pg DATE 为本地午夜；UTC getter / toISOString 会错位）。 */
+function ymdFromLocalDate(value: Date): string {
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, '0');
+  const d = String(value.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export function toYmdString(value: unknown): string | null {
   if (value == null || value === '') return null;
   if (value instanceof Date) {
     if (isNaN(value.getTime())) return null;
-    const y = value.getFullYear();
-    const m = String(value.getMonth() + 1).padStart(2, '0');
-    const d = String(value.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return ymdFromLocalDate(value);
   }
   const s = String(value);
-  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+  // 纯日历日 `YYYY-MM-DD`（无时间）原样返回。若对其 parse 再取本地 getter，负偏移
+  // 时区会把日期前移一天（`new Date('2026-09-29')` 是 UTC 午夜 → 纽约为 09-28）。
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // 完整 ISO 瞬时（含时间）：解析为时间点后用 LOCAL getter 取本地日历日。这正是
+  // `Date` → `toISOString()` 的逆运算：pg DATE 是本地午夜，缓存 JSON 瞬时能来回还原。
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    const parsed = new Date(s);
+    if (isNaN(parsed.getTime())) return null;
+    return ymdFromLocalDate(parsed);
+  }
+  return null;
 }
 
 export function parseYmd(dateStr: string): { y: number; m: number; d: number } | null {

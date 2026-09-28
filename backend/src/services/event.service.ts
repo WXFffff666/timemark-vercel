@@ -498,9 +498,13 @@ export async function updateEvent(id: string, userId: string, data: UpdateEventD
     
     // Clear today's trigger log when reminder config changes
     // This allows the scheduler to re-trigger with the new configuration
+    // 10-char prefix invariant (migration 51): trigger_date is TEXT whose first 10 chars are
+    // ALWAYS the calendar day YYYY-MM-DD (legacy rows are 10 chars; tokens append #d<n>#tHH:mm).
+    // Casting the column to DATE raises 22007 as soon as one token row exists - compare the
+    // prefix against CURRENT_DATE's ymd instead.
     try {
       await query(
-        `DELETE FROM event_trigger_logs WHERE event_id = $1 AND trigger_date::date = CURRENT_DATE`,
+        `DELETE FROM event_trigger_logs WHERE event_id = $1 AND LEFT(trigger_date, 10) = CURRENT_DATE::text`,
         [id]
       );
       console.log(`[updateEvent] Cleared trigger logs for event ${id} due to config change`);

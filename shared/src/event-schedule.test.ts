@@ -103,10 +103,39 @@ describe('toYmdString (pg DATE → local midnight)', () => {
     expect(toYmdString(new Date(2026, 9, 3, 25))).toBe('2026-10-04');
   });
 
-  it('passes YYYY-MM-DD strings through unchanged (date part only)', () => {
+  it('passes a plain YYYY-MM-DD string through unchanged (no parse → local-getter shift)', () => {
+    // A plain calendar day MUST NOT be re-parsed: `new Date('2026-09-29')` is UTC
+    // midnight, which slides to 2026-09-28 under a negative UTC offset (America/New_York).
+    expect(toYmdString('2026-09-29')).toBe('2026-09-29');
     expect(toYmdString('2026-10-03')).toBe('2026-10-03');
-    expect(toYmdString('2026-10-03T00:00:00Z')).toBe('2026-10-03');
-    expect(toYmdString('2026-10-03T23:59:59+08:00')).toBe('2026-10-03');
+  });
+
+  it('round-trips a local-midnight Date through toISOString() (warm-cache round-trip)', () => {
+    // The exact shape the cache persisted: pg DATE → local midnight → JSON.stringify
+    // (= toISOString). Local-midnight ISO decodes back to the same calendar day in
+    // EVERY timezone — this is what the write-side normalisation replaces.
+    const cases: ReadonlyArray<readonly [number, number, number]> = [
+      [2026, 8, 29],
+      [2026, 9, 3],
+      [2026, 0, 1],
+      [2024, 1, 29],
+    ];
+    for (const [y, m, d] of cases) {
+      const expected = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      expect(toYmdString(new Date(y, m, d).toISOString())).toBe(expected);
+    }
+  });
+
+  it('reads a full ISO instant with LOCAL getters', () => {
+    // Expected = the instant's local calendar day, so the assertion is timezone-
+    // invariant (holds under Asia/Shanghai +08 AND America/New_York -04/-05).
+    const toLocal = (iso: string) => {
+      const d = new Date(iso);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    for (const iso of ['2026-09-29T00:00:00.000Z', '2026-10-03T23:59:59+08:00']) {
+      expect(toYmdString(iso)).toBe(toLocal(iso));
+    }
   });
 
   it('returns null for empty / missing / invalid values', () => {
@@ -114,6 +143,7 @@ describe('toYmdString (pg DATE → local midnight)', () => {
     expect(toYmdString(undefined)).toBeNull();
     expect(toYmdString('')).toBeNull();
     expect(toYmdString(new Date('nope'))).toBeNull();
+    expect(toYmdString('2026-09-29T25:99:99Z')).toBeNull();
   });
 
   it('shape-normalises but does not validate malformed strings', () => {

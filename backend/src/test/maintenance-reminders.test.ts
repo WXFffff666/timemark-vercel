@@ -107,8 +107,13 @@ describe('sendMaintenanceReminders (date interval)', () => {
     await sendMaintenanceReminders(NOW);
     const q = captured.find((c) => c.sql.includes('FROM maintenance_plans'));
     expect(q).toBeDefined();
-    expect(q!.sql).toContain('p.next_due_at IS NOT NULL');
-    expect(q!.sql).toContain('p.is_active = TRUE');
+    expect(q!.sql).toContain('mp.next_due_at IS NOT NULL');
+    expect(q!.sql).toContain('mp.is_active = TRUE');
+    // Regression (wave 12 lane B): the plan alias must NOT be `p` — the same SELECT
+    // LEFT JOINs `profiles p`, and Postgres rejects the duplicate alias (42712),
+    // silently swallowing every maintenance evaluation.
+    expect(q!.sql).toContain('FROM maintenance_plans mp');
+    expect(q!.sql).not.toMatch(/FROM maintenance_plans p\b/);
   });
 
   it('sends once per channel with the maintenance_<asset_kind> template and an isolated claim key', async () => {

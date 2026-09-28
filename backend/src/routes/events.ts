@@ -95,8 +95,11 @@ events.get('/reminder-logs', async (c) => {
   const userId = Number(user.id);
   const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 200);
 
+  // Display contract: expose the 10-char YYYY-MM-DD prefix of trigger_date (TEXT since
+  // migration 51; tokens append #d<n>#tHH:mm) so no UI consumer can ever parse a token
+  // into an Invalid Date. Raw dedup keys stay available via /trigger-logs + its CSV export.
   const result = await query(
-    `SELECT tl.id, tl.event_id, tl.trigger_type, tl.trigger_date, tl.status,
+    `SELECT tl.id, tl.event_id, tl.trigger_type, LEFT(tl.trigger_date, 10) AS trigger_date, tl.status,
             tl.error_message, tl.channel_results, tl.created_at,
             e.name AS event_name, e.type AS event_type
      FROM event_trigger_logs tl

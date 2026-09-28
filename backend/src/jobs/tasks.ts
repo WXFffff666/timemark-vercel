@@ -294,13 +294,15 @@ const INVENTORY_SOURCE: DatedReminderSource = {
 
 const MAINTENANCE_SOURCE: DatedReminderSource = {
   table: 'maintenance_plans',
-  alias: 'p',
+  // 唯一别名：runDatedReminderIterator 的 SELECT 同时 LEFT JOIN profiles p，
+  // 用 `p` 会触发 Postgres `table name "p" specified more than once`。
+  alias: 'mp',
   dueColumn: 'next_due_at',
   titleColumn: 'asset_name',
   kindColumn: 'asset_kind',
   defaultKind: 'other',
   // 仅按用量保养的计划没有日期提醒（next_due_at IS NULL）
-  extraWhere: 'AND p.next_due_at IS NOT NULL',
+  extraWhere: 'AND mp.next_due_at IS NOT NULL',
   label: 'maintenance',
   defaultLeadDays: () => DEFAULT_EXPIRY_LEAD_DAYS,
   buildSendKey: buildMaintenanceSendKey,
