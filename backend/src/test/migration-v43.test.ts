@@ -80,7 +80,7 @@ describe('migration v43 registration (todo 70)', () => {
     // (checkbox 89, public ICS feeds), v49 (checkbox 91, Telegram bot dedup) and v50
     // (checkbox 94, chat linking) are newer and do run on top of a recorded 43; v43 itself
     // is never re-applied.
-    expect(versionInserts()).toEqual([44, 45, 46, 47, 48, 49, 50]);
+    expect(versionInserts()).toEqual([44, 45, 46, 47, 48, 49, 50, 51]);
   });
 
   it('does not record v43 when its SQL fails, so a later cold start retries', async () => {
@@ -131,7 +131,8 @@ describe('migration v43 registration (todo 70)', () => {
     // v49 (checkbox 91, Telegram bot update dedup) and v50 (checkbox 94, chat linking)
     // continue the chain; 49 is no longer the tail.
     expect(versions.indexOf(49)).toBe(versions.indexOf(48) + 1);
-    expect(versions[versions.length - 1]).toBe(50);
+    // v51 (checkbox 97, /snooze persistence) is the new tail; 1-50 stay untouched.
+    expect(versions[versions.length - 1]).toBe(51);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Checkbox 96 acceptance: hardening the bot against untrusted content and abuse.
@@ -147,7 +147,7 @@ function makeProvider(): { provider: BotDataProvider; calls: ProviderCalls } {
       return { eventId: 99, title: input.title, date: input.date, time: input.time };
     },
     completeTodo: async () => undefined,
-    snoozeTodo: async () => undefined,
+    snoozeTodo: async () => ({ status: 'ok', snoozedUntil: '2026-10-05T02:10:00.000Z', localTime: '10:10' }),
     listTodayDoses: async () => [],
     listExpiring: async () => [],
     listHabits: async () => [],
@@ -159,7 +159,7 @@ function makeProvider(): { provider: BotDataProvider; calls: ProviderCalls } {
       remindersEnabled: true,
       digestEnabled: true,
     }),
-    setActiveProfile: async () => undefined,
+    setActiveProfile: async () => 'ok',
   };
   return { provider, calls };
 }
@@ -670,9 +670,9 @@ function makeDirtyProvider(): BotDataProvider {
       time: input.time,
     }),
     completeTodo: async () => undefined,
-    snoozeTodo: async () => undefined,
+    snoozeTodo: async () => ({ status: 'ok', snoozedUntil: '2026-10-05T02:10:00.000Z', localTime: '10:10' }),
     listTodayDoses: async () => [
-      { id: 1, medicationName: `药 ${WEBHOOK_SECRET}`, scheduledFor: '2026-10-05T08:00:00.000Z', status: 'pending' },
+      { id: 1, medicationName: `药 ${WEBHOOK_SECRET}`, scheduledFor: '2026-10-05T08:00:00.000Z', localTime: '16:00', status: 'pending' },
     ],
     listExpiring: async () => [{ id: 1, title: `域名 ${BOT_TOKEN}`, expiresOn: '2026-10-10', daysUntil: 5 }],
     listHabits: async () => [{ id: 1, name: `跑步 ${DOC_NUMBER}`, currentStreak: 3, targetMet: true }],
@@ -684,7 +684,7 @@ function makeDirtyProvider(): BotDataProvider {
       remindersEnabled: true,
       digestEnabled: true,
     }),
-    setActiveProfile: async () => undefined,
+    setActiveProfile: async () => 'ok',
   };
 }
 
@@ -807,7 +807,7 @@ describe('outbound redaction across the command table (acceptance)', () => {
             completed: false,
           }),
           completeTodo,
-          snoozeTodo: async () => undefined,
+          snoozeTodo: async () => ({ status: 'ok', snoozedUntil: '2026-10-05T02:10:00.000Z', localTime: '10:10' }),
         },
         answer,
         editText,

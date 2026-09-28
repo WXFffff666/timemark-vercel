@@ -66,9 +66,14 @@ function makeProvider(): { provider: BotDataProvider; calls: ProviderCalls } {
     },
     snoozeTodo: async (userId, eventId, minutes) => {
       calls.snoozeTodo.push([userId, eventId, minutes]);
+      return {
+        status: 'ok',
+        snoozedUntil: '2026-10-05T02:10:00.000Z',
+        localTime: '10:10',
+      };
     },
     listTodayDoses: async () => [
-      { id: 1, medicationName: '维生素D', scheduledFor: '2026-10-05T08:00:00.000Z', status: 'pending' },
+      { id: 1, medicationName: '维生素D', scheduledFor: '2026-10-05T08:00:00.000Z', localTime: '16:00', status: 'pending' },
     ],
     listExpiring: async () => [{ id: 1, title: '域名续费', expiresOn: '2026-10-10', daysUntil: 5 }],
     listHabits: async () => [{ id: 1, name: '晨跑', currentStreak: 3, targetMet: true }],
@@ -85,6 +90,7 @@ function makeProvider(): { provider: BotDataProvider; calls: ProviderCalls } {
     }),
     setActiveProfile: async (userId, profileId) => {
       calls.setActiveProfile.push([userId, profileId]);
+      return 'ok';
     },
   };
   return { provider, calls };

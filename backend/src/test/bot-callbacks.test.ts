@@ -159,9 +159,11 @@ function installDb(): void {
       callbackState.completed = true;
       return { rows: [], rowCount: 1 };
     }
-    if (s.startsWith('UPDATE events')) {
-      callbackState.snoozes.push({ eventId: Number(params[0]), minutes: Number(params[1]) });
-      return { rows: [], rowCount: 1 };
+    if (s.startsWith('UPDATE events') && s.includes('snoozed_until')) {
+      // Checkbox 97: params are (eventId, userId, minutes) and the write is the explicit
+      // snooze deadline; the canonical next_occurrence is deliberately not touched.
+      callbackState.snoozes.push({ eventId: Number(params[0]), minutes: Number(params[2]) });
+      return { rows: [{ snoozed_until: new Date('2026-10-05T02:10:00.000Z') }], rowCount: 1 };
     }
     return { rows: [], rowCount: 0 };
   });
@@ -179,6 +181,11 @@ function makeCallbackProvider(): BotCallbackProvider {
     },
     snoozeTodo: async (_userId, eventId, minutes) => {
       callbackState.snoozes.push({ eventId, minutes });
+      return {
+        status: 'ok',
+        snoozedUntil: '2026-10-05T02:10:00.000Z',
+        localTime: '10:10',
+      };
     },
   };
 }
@@ -202,7 +209,11 @@ function stubDispatcherProvider(): BotDataProvider {
       time: input.time,
     }),
     completeTodo: async () => undefined,
-    snoozeTodo: async () => undefined,
+    snoozeTodo: async () => ({
+      status: 'ok',
+      snoozedUntil: '2026-10-05T02:10:00.000Z',
+      localTime: '10:10',
+    }),
     listTodayDoses: async () => [],
     listExpiring: async () => [],
     listHabits: async () => [],
@@ -214,7 +225,7 @@ function stubDispatcherProvider(): BotDataProvider {
       remindersEnabled: true,
       digestEnabled: true,
     }),
-    setActiveProfile: async () => undefined,
+    setActiveProfile: async () => 'ok',
   };
 }
 

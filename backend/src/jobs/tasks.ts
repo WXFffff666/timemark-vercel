@@ -154,6 +154,50 @@ function getCurrentHHmm(now: Date, timeZone: string): string {
   return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
 }
 
+/** ±2 分钟提醒窗口（与 matchesReminderTimeWindow 的默认值一致，checkbox 97）。 */
+export const SNOOZE_WINDOW_MS = 2 * 60_000;
+
+/**
+ * Checkbox 97 (D2): decide what `events.snoozed_until` means for this cron tick.
+ *
+ * `/snooze` persists an explicit deadline (`NOW() + N minutes`). The canonical
+ * `date` / `next_occurrence` are never modified, so this window evaluation is the ONLY
+ * place the deadline is honoured:
+ *  - `pending` - the deadline is still more than the ±2-minute window away: the event must
+ *    NOT fire now (this replaces the old implicit `next_occurrence += minutes`).
+ *  - `due`     - `now` is inside the ±2-minute window of the deadline: fire once through
+ *    the same reminder machinery (claim key `snooze:event#…`), so the window can still
+ *    deliver it even if a tick was missed.
+ *  - `none`    - no usable deadline, or the window already passed: the normal day-based
+ *    schedule resumes untouched (a stale snooze can never suppress a reminder forever).
+ */
+export function evaluateSnoozeWindow(
+  rawSnoozedUntil: unknown,
+  nowMs: number,
+  windowMs: number = SNOOZE_WINDOW_MS,
+): { state: 'none' | 'pending' | 'due'; atMs?: number } {
+  if (rawSnoozedUntil == null) return { state: 'none' };
+  const atMs =
+    rawSnoozedUntil instanceof Date
+      ? rawSnoozedUntil.getTime()
+      : Date.parse(String(rawSnoozedUntil));
+  if (!Number.isFinite(atMs)) return { state: 'none' };
+  const diff = atMs - nowMs;
+  if (diff > windowMs) return { state: 'pending', atMs };
+  if (diff < -windowMs) return { state: 'none' };
+  return { state: 'due', atMs };
+}
+
+/**
+ * Dedup key for one snooze fire. Stable across every tick of the same ±2-minute window
+ * (minute-truncated deadline) yet distinct per snooze instance, and namespaced so it can
+ * never collide with a normal `YYYY-MM-DD#d<n>#tHH:mm` claim or a medication key.
+ */
+export function buildSnoozeSendKey(eventId: number, snoozedUntilMs: number): string {
+  const minute = new Date(Math.floor(snoozedUntilMs / 60_000) * 60_000).toISOString();
+  return `snooze:event#${eventId}#${minute}`;
+}
+
 /**
  * 「带到期日」提醒的通用迭代器（D1/D12/D2）。
  *
@@ -1422,6 +1466,8 @@ export async function sendReminders() {
     matchedReminderTime: string;
     /** checkbox 78: 节假日/顺延文案（非节假日为 undefined） */
     holidayLabel?: string;
+    /** checkbox 97: snooze fire - claim/trigger-log key for the persisted deadline. */
+    snoozeSendKey?: string;
   }> = [];
   
   for (const event of allEventRows) {
@@ -1446,6 +1492,28 @@ export async function sendReminders() {
       reminderTimes?: string[];
     }>(event.reminder_config);
     if (reminderConfig?.enabled === false) continue;
+
+    // Checkbox 97 (D2): `events.snoozed_until` (migration v51) overrides this event's
+    // schedule. One mechanism, reusing the existing reminder machinery:
+    //  - pending -> do not fire at all (the deadline is still beyond the ±2-min window);
+    //  - due     -> push ONE reminder for the deadline, carried by a `snooze:event#…`
+    //               claim key so `reminder_send_claims` / `event_trigger_logs` dedup it
+    //               exactly like a normal reminder;
+    //  - none    -> the deadline is absent or already past the window -> the normal
+    //               day-based schedule below resumes untouched.
+    const snooze = evaluateSnoozeWindow(event.snoozed_until, now.getTime());
+    if (snooze.state === 'pending') continue;
+    if (snooze.state === 'due' && snooze.atMs !== undefined) {
+      eventsToRemind.push({
+        ...event,
+        targetDate: new Date(snooze.atMs),
+        daysUntil: 0,
+        matchedReminderTime: getCurrentHHmm(new Date(snooze.atMs), timeZone),
+        snoozeSendKey: buildSnoozeSendKey(event.id, snooze.atMs),
+      });
+      continue;
+    }
+
     if (reminderConfig?.daysBeforeList && reminderConfig.daysBeforeList.length > 0) {
       daysBeforeList = reminderConfig.daysBeforeList;
     }
@@ -1582,7 +1650,11 @@ export async function sendReminders() {
       const timeZone = getEventTimezone(event.user_id, event.profile_id);
       const today = getTodayString(now, timeZone);
 
-      const sendKey = buildReminderSendKey(today, event.daysUntil ?? 0, event.matchedReminderTime);
+      // A snooze fire carries its own `snooze:event#…` key; everything else keeps the
+      // canonical `YYYY-MM-DD#d<n>#tHH:mm` key. Both go through the SAME
+      // reminder_send_claims INSERT / event_trigger_logs check below.
+      const sendKey = event.snoozeSendKey
+        ?? buildReminderSendKey(today, event.daysUntil ?? 0, event.matchedReminderTime);
 
       const claim = await query(
         `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)

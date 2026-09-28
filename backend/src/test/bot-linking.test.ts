@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Checkbox 94 acceptance: chat <-> user/profile linking with an audit trail.
@@ -283,7 +283,7 @@ function stubProvider(): BotDataProvider {
       time: input.time,
     }),
     completeTodo: async () => undefined,
-    snoozeTodo: async () => undefined,
+    snoozeTodo: async () => ({ status: 'ok', snoozedUntil: '2026-10-05T02:10:00.000Z', localTime: '10:10' }),
     listTodayDoses: async () => [],
     listExpiring: async () => [],
     listHabits: async () => [],
@@ -295,7 +295,7 @@ function stubProvider(): BotDataProvider {
       remindersEnabled: true,
       digestEnabled: true,
     }),
-    setActiveProfile: async () => undefined,
+    setActiveProfile: async () => 'ok',
   };
 }
 

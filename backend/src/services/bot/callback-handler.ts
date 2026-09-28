@@ -2,6 +2,7 @@ import { createLogger } from '../../utils/logger.js';
 import { answerCallbackQuery, editMessageText, type EditMessageTextParams } from './telegram-api.js';
 import { defaultBotCallbackProvider } from './bot-data.service.js';
 import { decodeCallbackData, formatSnoozeLabel } from './callback-data.js';
+import type { BotSnoozeResult } from './dispatcher.js';
 import { defaultBotReplyRedactor, type BotReplyRedactor } from './redaction.js';
 import {
   BOT_SECURITY_EVENTS,
@@ -25,11 +26,13 @@ import type { TelegramCallbackQuery } from './telegram-webhook.js';
  *    `provider.findTodo`). A second tap on an already-completed todo is a no-op: no second
  *    completion row and no repeated side effect - just the "已处理" toast and an idempotent
  *    edit of the message to its completed state.
- *  - `snooze`: each ACCEPTED tap extends the reminder's next fire time by exactly the
- *    button's own duration once (`next_occurrence += minutes`); two taps of "延后 10 分钟"
- *    therefore extend by 20 minutes total. A redelivery of the same update_id never reaches
- *    this handler (checkbox 91 claims it), and a snooze on a completed/removed todo is
- *    refused before any mutation. No accidental double-application exists per tap.
+ *  - `snooze`: each ACCEPTED tap persists `events.snoozed_until = now + minutes` once via
+ *    `provider.snoozeTodo` (migration v51; the DATE `next_occurrence` cannot hold minutes).
+ *    A repeated tap re-arms the deadline from its own request instant - it does NOT
+ *    compound - and the reminder job fires the event once when the deadline enters its
+ *    ±2-minute window, deduped through `reminder_send_claims`. A redelivery of the same
+ *    update_id never reaches this handler (checkbox 91 claims it), and a snooze on a
+ *    completed/removed todo is refused before any mutation.
  *  - `open`: no mutation at all; it only answers with a hint to open the app.
  */
 
@@ -60,7 +63,7 @@ export interface BotTodoLookup {
 export interface BotCallbackProvider {
   findTodo(userId: number, eventId: number): Promise<BotTodoLookup | null>;
   completeTodo(userId: number, eventId: number, occurrenceDate: string): Promise<void>;
-  snoozeTodo(userId: number, eventId: number, minutes: number): Promise<void>;
+  snoozeTodo(userId: number, eventId: number, minutes: number): Promise<BotSnoozeResult>;
 }
 
 export type AnswerCallbackQueryFn = (
@@ -231,7 +234,13 @@ export async function handleTelegramCallbackQuery(
 
     // snooze: decode guarantees a bounded positive `minutes`.
     const minutes = parsed.minutes ?? 0;
-    await provider.snoozeTodo(userId, todo.eventId, minutes);
+    const snooze = await provider.snoozeTodo(userId, todo.eventId, minutes);
+    if (snooze.status === 'not_found') {
+      // Deleted between the lookup and the write: honest missing toast, never a fake success.
+      await toast(ANSWER_MISSING);
+      await edit(`⚠️ ${ANSWER_MISSING}`, REMOVE_KEYBOARD);
+      return { handled: true, outcome: 'missing' };
+    }
     const label = formatSnoozeLabel(minutes);
     await toast(`⏰ 已延后 ${label}`);
     // Preserve the inline keyboard from the tapped message so the user can extend again.

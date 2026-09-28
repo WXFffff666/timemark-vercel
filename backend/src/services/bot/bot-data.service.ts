@@ -2,11 +2,13 @@ import { query } from '../../db/index.js';
 import { dateStringInTimeZone } from '@timemark/shared/habit-schedule';
 import { createEvent } from '../event.service.js';
 import { markTodoComplete } from '../todo.service.js';
-import { getTodayDoses } from '../medication.service.js';
+import { getMedicationTimezone, getTodayDoses } from '../medication.service.js';
 import { listUpcomingExpiryItems } from '../expiry.service.js';
 import { listHabits } from '../habit.service.js';
 import { listProfiles } from '../profile.service.js';
 import { getUserConfig, saveUserConfig } from '../config.service.js';
+import { refreshUserEventCache } from '../event-cache.service.js';
+import { setBotLinkActiveProfile } from './linking.service.js';
 import type {
   BotAddInput,
   BotAddResult,
@@ -18,8 +20,33 @@ import type {
   BotProfileItem,
   BotQuietHoursWriter,
   BotSettings,
+  BotSnoozeResult,
 } from './dispatcher.js';
 import type { BotCallbackProvider, BotTodoLookup } from './callback-handler.js';
+
+/**
+ * Local `HH:mm` of an absolute instant in an IANA timezone ('' when unparseable).
+ *
+ * Exists because `medication.service.ts` serialises `scheduled_for` with `toISOString()`
+ * (UTC), so slicing the ISO string would render the UTC clock, not the user's clock
+ * (defect D4). Kept local to this file: `shared/` is frozen for the D1 date-helper lane.
+ */
+function hhmmInTimeZone(iso: string, timeZone: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(ms));
+}
+
+/** User timezone (with the same default fallback the reminder job uses). */
+async function resolveUserTimezone(userId: number): Promise<string> {
+  const config = (await getUserConfig(userId)) as Record<string, unknown> | null;
+  return typeof config?.timezone === 'string' && config.timezone ? config.timezone : 'Asia/Shanghai';
+}
 
 /**
  * Default BotDataProvider implementation backed by the real services (checkbox 92).
@@ -108,23 +135,50 @@ export const defaultBotDataProvider: BotDataProvider = {
     await markTodoComplete(userId, eventId, occurrenceDate);
   },
 
-  async snoozeTodo(userId: number, eventId: number, minutes: number): Promise<void> {
-    // Shift the next fire time forward; the canonical event date is left untouched so the
-    // snooze is reversible and never corrupts the schedule.
-    await query(
+  async snoozeTodo(userId: number, eventId: number, minutes: number): Promise<BotSnoozeResult> {
+    // Checkbox 97 (defect D2). `events.next_occurrence` is a DATE column, so a minute-level
+    // increment is truncated on write and the old UPDATE silently stored the same day.
+    // The explicit deadline therefore lives in `events.snoozed_until` (migration v51):
+    //
+    //   semantics: snoozed_until = NOW() + N minutes - i.e. N minutes FROM THE REQUEST
+    //   INSTANT, not from the original target time. A repeated tap re-arms the deadline
+    //   from its own request time instead of compounding; the reminder job fires once when
+    //   the deadline enters its ±2-minute window and suppresses the event until then.
+    //
+    // `date` / `next_occurrence` are deliberately NOT touched: they stay canonical, the
+    // snooze stays reversible, and the schedule can never be corrupted by it.
+    const result = await query(
       `UPDATE events
-       SET next_occurrence = COALESCE(next_occurrence, date::timestamp) + ($2::int * INTERVAL '1 minute')
-       WHERE id = $1 AND user_id = $3`,
-      [eventId, minutes, userId],
+          SET snoozed_until = NOW() + ($3::int * INTERVAL '1 minute')
+        WHERE id = $1 AND user_id = $2
+        RETURNING snoozed_until`,
+      [eventId, userId, minutes],
     );
+    const raw = result.rows[0]?.snoozed_until;
+    const snoozedUntil = raw instanceof Date ? raw.toISOString() : typeof raw === 'string' ? raw : null;
+    if (!snoozedUntil) return { status: 'not_found' };
+    // Refresh the cron's cached payload so the deadline is honoured on the very next tick
+    // (the cache is what `sendReminders` reads for a warm user). Best-effort: a failed
+    // refresh must never turn a persisted snooze into a failed command.
+    await refreshUserEventCache(userId).catch(() => undefined);
+    return {
+      status: 'ok',
+      snoozedUntil,
+      localTime: hhmmInTimeZone(snoozedUntil, await resolveUserTimezone(userId)),
+    };
   },
 
   async listTodayDoses(userId: number, profileId: number | null): Promise<BotDoseItem[]> {
     const doses = await getTodayDoses(userId, { profileId });
+    // Doses are materialised in the profile-or-user timezone (medication.service
+    // `getMedicationTimezone`), so render the local clock in that SAME timezone - the
+    // previous `slice(11, 16)` on the UTC ISO string showed 01:00 for a 09:00 (+08) dose.
+    const timezone = await getMedicationTimezone(userId, profileId);
     return doses.map((dose) => ({
       id: dose.id,
       medicationName: dose.medication.name,
       scheduledFor: dose.scheduled_for,
+      localTime: hhmmInTimeZone(dose.scheduled_for, timezone),
       status: dose.status,
     }));
   },
@@ -177,9 +231,19 @@ export const defaultBotDataProvider: BotDataProvider = {
     };
   },
 
-  async setActiveProfile(_userId: number, _profileId: number | null): Promise<void> {
-    // Checkbox 94 seam: once `bot_links` exists, persist `active_profile_id` there.
-    // Until then switching is a no-op (the chat has no link row to update).
+  async setActiveProfile(userId: number, profileId: number | null, chat) {
+    // Checkbox 97 (defect D3): checkbox 94 DID create `bot_links`, so the switch must
+    // persist on the caller's link row - the empty seam is gone. The target profile is
+    // validated (belongs to the user AND is active) inside the same atomic statement that
+    // writes the row, and a missing/revoked link is reported distinctly instead of claiming
+    // success. The next message's `resolveActingChatContext` then scopes /list & friends.
+    if (profileId == null || !Number.isInteger(profileId) || profileId <= 0) return 'invalid_profile';
+    return setBotLinkActiveProfile({
+      platform: chat.platform,
+      chatId: chat.chatId,
+      userId,
+      profileId,
+    });
   },
 };
 

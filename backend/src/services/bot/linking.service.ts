@@ -213,6 +213,60 @@ export async function getActiveBotLink(platform: string, chatId: string): Promis
   return row ? toLink(row) : null;
 }
 
+/** Outcome of a `/profile <name>` switch against the caller's link row (checkbox 97). */
+export type BotProfileSwitchStatus = 'ok' | 'invalid_profile' | 'not_linked';
+
+export interface SetBotLinkActiveProfileInput {
+  platform: BotPlatform;
+  chatId: string;
+  userId: number;
+  profileId: number;
+}
+
+/**
+ * Persist `bot_links.active_profile_id` for a chat (checkbox 97 / defect D3).
+ *
+ * One atomic statement: the link must be ACTIVE (`revoked_at IS NULL`) and belong to the
+ * acting user, AND the target profile must belong to that same user and be active. Doing
+ * the profile check inside the same `UPDATE ... WHERE` means a deleted/deactivated (or
+ * another user's) profile can never be written, and the three outcomes stay
+ * distinguishable so the dispatcher can render an honest reply instead of a fake success:
+ *  - `invalid_profile` - the profile does not exist for this user or is inactive,
+ *  - `not_linked`      - no active link row for `(platform, chat_id)` / not this user,
+ *  - `ok`              - the row now points at `profileId`.
+ */
+export async function setBotLinkActiveProfile(
+  input: SetBotLinkActiveProfileInput,
+): Promise<BotProfileSwitchStatus> {
+  if (
+    typeof input.chatId !== 'string' ||
+    !input.chatId ||
+    input.chatId.length > MAX_CHAT_ID_LENGTH ||
+    !Number.isInteger(input.profileId) ||
+    input.profileId <= 0
+  ) {
+    return 'invalid_profile';
+  }
+  const result = await query(
+    `WITH target AS (
+       SELECT 1 FROM profiles WHERE id = $3 AND user_id = $4 AND is_active = TRUE
+     ), updated AS (
+       UPDATE bot_links
+          SET active_profile_id = $3
+        WHERE platform = $1 AND chat_id = $2 AND revoked_at IS NULL AND user_id = $4
+          AND EXISTS (SELECT 1 FROM target)
+        RETURNING id
+     )
+     SELECT (SELECT COUNT(*)::int FROM target) AS has_profile,
+            (SELECT COUNT(*)::int FROM updated) AS updated`,
+    [input.platform, input.chatId, input.profileId, input.userId],
+  );
+  const row = result.rows[0] as { has_profile?: unknown; updated?: unknown } | undefined;
+  if (Number(row?.has_profile ?? 0) === 0) return 'invalid_profile';
+  if (Number(row?.updated ?? 0) === 0) return 'not_linked';
+  return 'ok';
+}
+
 /** `/unlink`: soft-revoke. Returns false when the chat had no active link. */
 export async function revokeBotLink(platform: string, chatId: string): Promise<boolean> {
   const result = await query(

@@ -78,9 +78,18 @@ export async function applyIncrementalMigrations(currentVersion: number): Promis
       sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS recurring_config TEXT;`
     },
     {
+      // D5 (checkbox 97): this statement used to say `next_occurrence TEXT`, but the
+      // `events` table is created by `shared/src/schema.pg.sql` (the full schema applied by
+      // scripts/migrate-db.ts BEFORE runMigrations) with `next_occurrence DATE`, and the
+      // incremental chain starts at v2 - no migration ever created `events`. So the TEXT
+      // intent never took effect anywhere: on every real database the column already exists
+      // with DATE and `ADD COLUMN IF NOT EXISTS` is a no-op. `event.service.ts` passes
+      // JS date strings, `digest.service.ts` compares it as a date and `og.ts` types it
+      // `Date | string | null` - all DATE-compatible. Aligned to DATE so the two sources
+      // of truth agree; no live column type is altered (a real DB is already DATE).
       version: 5,
       name: 'add_next_occurrence',
-      sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS next_occurrence TEXT;`
+      sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS next_occurrence DATE;`
     },
     {
       version: 6,
@@ -1323,6 +1332,44 @@ CREATE TABLE IF NOT EXISTS bot_audit_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_bot_audit_logs_user ON bot_audit_logs(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_bot_audit_logs_chat ON bot_audit_logs(platform, chat_id, created_at);`,
+    },
+    {
+      // v51 (checkbox 97, defects D2/D5): `/snooze` persistence.
+      //
+      // `events.next_occurrence` is a DATE column (schema.pg.sql) so a minute-granularity
+      // snooze cannot live there - Postgres truncates the sub-day result back to a date and
+      // the UPDATE silently stored the same day (delta 0 ms). The explicit snooze deadline
+      // therefore gets its OWN timestamptz column; `date` / `next_occurrence` stay canonical
+      // and untouched, which is what keeps a snooze reversible.
+      //
+      // `snoozed_until` semantics (reminder loop in jobs/tasks.ts): the deadline is the
+      // instant the user requested (`NOW() + N minutes` FROM THE REQUEST TIME, not from the
+      // original target time), and the existing ±2-minute reminder window fires the event
+      // once when the deadline enters it (deduped through `reminder_send_claims` with a
+      // `snooze:event#` key). Before the deadline the event is suppressed; after the window
+      // has passed the normal day-based schedule resumes untouched.
+      //
+      // This migration ALSO aligns `event_trigger_logs.trigger_date` with the value the
+      // reminder machinery actually writes there: `buildReminderSendKey()` returns a dedup
+      // TOKEN (`YYYY-MM-DD#d<n>#tHH:mm`), the paired store `reminder_send_claims.trigger_date`
+      // is TEXT, and `tasks.ts` compares that same token against this column before sending.
+      // `shared/src/schema.pg.sql` declared it DATE, so on a real engine the pre-check raised
+      // `invalid input syntax for type date: "...#d0#t..."` and `recordEventTrigger` silently
+      // dropped every event-reminder log - meaning NO event reminder (snoozed or normal) could
+      // be delivered on a fresh database. Proven live (PGlite, schema + migrations):
+      //   SELECT ... WHERE trigger_date = '2026-09-28#d0#t09:00' -> 22007 invalid input syntax
+      //   INSERT INTO event_trigger_logs (..., trigger_date, ...) VALUES (...,?,...) -> 22007
+      // The `USING trigger_date::text` cast is lossless for existing DATE rows
+      // ('2026-09-28' -> '2026-09-28') and re-running is a no-op for a TEXT column.
+      // Consumers of the year (routes/features.ts annual report) read the first 4 chars, so
+      // both legacy dates and new tokens keep working.
+      //
+      // Everything here is idempotent; no backfill. Fresh installs get snoozed_until here
+      // because schema.pg.sql is not modified by this lane (shared/ is frozen for the D1 fix).
+      version: 51,
+      name: 'event_snoozed_until_v51',
+      sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS snoozed_until TIMESTAMPTZ;
+ALTER TABLE event_trigger_logs ALTER COLUMN trigger_date TYPE TEXT USING trigger_date::text;`,
     },
   ];
 

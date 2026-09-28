@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Checkbox 95 acceptance: rich MarkdownV2 replies, deep links, the 本周 digest and the
@@ -56,9 +56,9 @@ function makeProvider(): BotDataProvider {
       time: input.time,
     }),
     completeTodo: async () => undefined,
-    snoozeTodo: async () => undefined,
+    snoozeTodo: async () => ({ status: 'ok', snoozedUntil: '2026-10-05T02:10:00.000Z', localTime: '10:10' }),
     listTodayDoses: async () => [
-      { id: 1, medicationName: '维生素_D', scheduledFor: '2026-10-05T08:00:00.000Z', status: 'pending' },
+      { id: 1, medicationName: '维生素_D', scheduledFor: '2026-10-05T08:00:00.000Z', localTime: '16:00', status: 'pending' },
     ],
     listExpiring: async () => [
       { id: 7, title: '域名_续费', expiresOn: '2026-10-10', daysUntil: 5 },
@@ -72,7 +72,7 @@ function makeProvider(): BotDataProvider {
       remindersEnabled: true,
       digestEnabled: true,
     }),
-    setActiveProfile: async () => undefined,
+    setActiveProfile: async () => 'ok',
   };
 }
 

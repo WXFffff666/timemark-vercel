@@ -1,6 +1,10 @@
 import { dateStringInTimeZone, shiftCalendarDays } from '@timemark/shared/habit-schedule';
 import { defaultBotDataProvider, defaultBotQuietHoursWriter } from './bot-data.service.js';
-import { encodeCallbackData } from './callback-data.js';
+import {
+  CALLBACK_SNOOZE_MAX_MINUTES,
+  CALLBACK_SNOOZE_MIN_MINUTES,
+  encodeCallbackData,
+} from './callback-data.js';
 import { escapeMarkdownV2, markdownLink } from './markdown.js';
 import { expiryDeepLink, medicationsDeepLink, todoDeepLink } from './deep-links.js';
 import {
@@ -105,7 +109,10 @@ export interface BotPendingItem {
 export interface BotDoseItem {
   id: number;
   medicationName: string;
+  /** Absolute instant (UTC ISO) as stored by `medication.service`. */
   scheduledFor: string;
+  /** Local `HH:mm` in the profile-or-user timezone ('' when unparseable). */
+  localTime: string;
   status: string;
 }
 
@@ -152,18 +159,40 @@ export interface BotAddResult {
   time: string | null;
 }
 
+/** Chat identity needed to persist per-chat state (the active profile lives on `bot_links`). */
+export interface BotChatRef {
+  platform: BotPlatform;
+  chatId: string;
+}
+
+/**
+ * Result of a snooze request. `not_found` means the UPDATE matched no event of the acting
+ * user (deleted/foreign id): the caller must NOT claim success (defect D2 was a silent
+ * no-op with a success reply).
+ */
+export type BotSnoozeResult =
+  | { status: 'ok'; snoozedUntil: string; localTime: string }
+  | { status: 'not_found' };
+
+/** Result of a `/profile` switch against the caller's `bot_links` row (defect D3). */
+export type BotProfileSwitchResult = 'ok' | 'invalid_profile' | 'not_linked';
+
 /** Data-access seam so the dispatcher is testable without a database. */
 export interface BotDataProvider {
   listPending(userId: number, profileId: number | null): Promise<BotPendingItem[]>;
   addItem(userId: number, profileId: number | null, input: BotAddInput): Promise<BotAddResult>;
   completeTodo(userId: number, eventId: number, occurrenceDate: string): Promise<void>;
-  snoozeTodo(userId: number, eventId: number, minutes: number): Promise<void>;
+  snoozeTodo(userId: number, eventId: number, minutes: number): Promise<BotSnoozeResult>;
   listTodayDoses(userId: number, profileId: number | null): Promise<BotDoseItem[]>;
   listExpiring(userId: number, days: number, profileId: number | null): Promise<BotExpiryItem[]>;
   listHabits(userId: number, profileId: number | null): Promise<BotHabitItem[]>;
   listProfiles(userId: number): Promise<BotProfileItem[]>;
   getSettings(userId: number): Promise<BotSettings>;
-  setActiveProfile(userId: number, profileId: number | null): Promise<void>;
+  setActiveProfile(
+    userId: number,
+    profileId: number | null,
+    chat: BotChatRef,
+  ): Promise<BotProfileSwitchResult>;
 }
 
 export type BotLinkCheck = (platform: BotPlatform, chatId: string) => Promise<boolean>;
@@ -888,8 +917,12 @@ async function handleSnooze(
     return errorReply('用法：/snooze <序号> <时长>，例如 /snooze 1 10m。', { reason: 'bad_index' });
   }
   const duration = parseDurationToMinutes(parts.slice(1).join(''));
-  if (duration === null || duration <= 0) {
-    return errorReply('无法识别时长，请使用 10m / 1h / 2d / 30分钟 / 2小时 等格式。', { reason: 'bad_duration' });
+  // Same 1-minute..7-day bound as the inline-button path (callback-data), so a huge
+  // `/snooze 1 999999d` can never pushed the deadline to an overflow/absurd instant.
+  if (duration === null || duration < CALLBACK_SNOOZE_MIN_MINUTES || duration > CALLBACK_SNOOZE_MAX_MINUTES) {
+    return errorReply('无法识别时长，请使用 10m / 1h / 2d / 30分钟 / 2小时 等格式（最长 7 天）。', {
+      reason: 'bad_duration',
+    });
   }
   const items = await provider.listPending(ctx.userId, ctx.profileId);
   if (index > items.length) {
@@ -899,10 +932,20 @@ async function handleSnooze(
     });
   }
   const item = items[index - 1];
-  await provider.snoozeTodo(ctx.userId, item.eventId, duration);
+  const result = await provider.snoozeTodo(ctx.userId, item.eventId, duration);
+  if (result.status === 'not_found') {
+    // Defect D2: never claim success when nothing was persisted.
+    return errorReply(`该事项已不存在：${item.title}`, { reason: 'not_found', eventId: item.eventId });
+  }
+  // The reply names the persisted deadline (local HH:mm) so it matches the stored state.
+  const until = result.localTime || result.snoozedUntil;
   return withMarkdown(
-    message(`⏰ 已延后 ${duration} 分钟：${item.title}`, { eventId: item.eventId, minutes: duration }),
-    `⏰ 已延后 ${duration} 分钟：${escapeMarkdownV2(item.title)}`,
+    message(`⏰ 已延后 ${duration} 分钟，将于 ${until} 提醒：${item.title}`, {
+      eventId: item.eventId,
+      minutes: duration,
+      snoozedUntil: result.snoozedUntil,
+    }),
+    `⏰ 已延后 ${duration} 分钟，将于 ${escapeMarkdownV2(until)} 提醒：${escapeMarkdownV2(item.title)}`,
   );
 }
 
@@ -946,7 +989,9 @@ async function handleMed(ctx: BotCommandContext, provider: BotDataProvider): Pro
   if (doses.length === 0) return message('💊 今天没有用药安排', { count: 0 });
   const rows = doses.map((dose) => {
     const icon = dose.status === 'taken' ? '✅' : dose.status === 'skipped' ? '⏭️' : '⏳';
-    const time = dose.scheduledFor.slice(11, 16) || dose.scheduledFor;
+    // Defect D4: render the LOCAL clock the data layer computed (`localTime`), never a
+    // slice of the UTC ISO string. The raw value remains only as a defensive fallback.
+    const time = dose.localTime || dose.scheduledFor;
     return { icon, time, name: dose.medicationName };
   });
   const lines = rows.map((row) => `${row.icon} ${row.time} ${row.name}`);
@@ -1055,8 +1100,23 @@ async function handleProfile(
       reason: 'not_found',
     });
   }
-  await provider.setActiveProfile(ctx.userId, target.id);
-  return message(`✅ 已切换到档案：${target.name}`, { profileId: target.id });
+  const outcome = await provider.setActiveProfile(ctx.userId, target.id, {
+    platform: ctx.platform,
+    chatId: ctx.chatId,
+  });
+  if (outcome === 'not_linked') {
+    // A copy: the shared constant must never be mutated by the redaction pass.
+    return { ...LINK_REQUIRED_REPLY };
+  }
+  if (outcome === 'invalid_profile') {
+    return errorReply(`档案「${target.name}」不可用（可能已停用），请发送 /profile 查看可用档案。`, {
+      reason: 'invalid_profile',
+    });
+  }
+  const reply = message(`✅ 已切换到档案：${target.name}`, { profileId: target.id });
+  // The profile name is user data: escape it for the MarkdownV2 rendering so a name with
+  // reserved characters cannot break the message (prompt-injection hardening).
+  return withMarkdown(reply, `✅ 已切换到档案：${escapeMarkdownV2(target.name)}`);
 }
 
 async function handleSettings(ctx: BotCommandContext, provider: BotDataProvider): Promise<BotReply> {

@@ -34,7 +34,7 @@ features.get('/annual-report', async (c) => {
       `SELECT COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE status = 'success')::int AS success,
               COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
-       FROM event_trigger_logs WHERE user_id = $1 AND EXTRACT(YEAR FROM trigger_date) = $2`,
+       FROM event_trigger_logs WHERE user_id = $1 AND LEFT(trigger_date, 4) = $2::text`,
       [userId, year],
     ),
     query('SELECT COUNT(*)::int AS total FROM notification_accounts WHERE user_id = $1 AND is_active = TRUE', [userId]),
@@ -49,7 +49,7 @@ features.get('/annual-report', async (c) => {
               COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE status = 'success')::int AS success
        FROM event_trigger_logs
-       WHERE user_id = $1 AND EXTRACT(YEAR FROM trigger_date) = $2 AND channel_type IS NOT NULL
+       WHERE user_id = $1 AND LEFT(trigger_date, 4) = $2::text AND channel_type IS NOT NULL
        GROUP BY channel_type`,
       [userId, year],
     ),
