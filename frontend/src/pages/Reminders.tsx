@@ -15,7 +15,7 @@ interface ReminderLog {
   event_name: string;
   status: 'success' | 'failed';
   error_message: string | null;
-  channel_results: string | null;
+  channel_results: object | string | null;
   created_at: string;
 }
 
@@ -68,10 +68,12 @@ export default function Reminders() {
     return channelMap[channel] || channel;
   };
 
-  const formatChannels = (channelResults: string | null) => {
+  const formatChannels = (channelResults?: object | string | null) => {
     if (!channelResults) return '';
     try {
-      const parsed = JSON.parse(channelResults);
+      // JSONB columns arrive as a parsed object on the wire; legacy TEXT columns arrive
+      // as a JSON string. Tolerate both (same shape as TriggerLogs.parseChannelResults).
+      const parsed = typeof channelResults === 'string' ? JSON.parse(channelResults) : channelResults;
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         return Object.keys(parsed).map(getChannelName).join('、');
       }
