@@ -72,9 +72,10 @@ describe('migration v47 registration (checkbox 86)', () => {
     await applyIncrementalMigrations(47);
 
     expect(callsMatching('CREATE TABLE IF NOT EXISTS caldav_writeback_objects')).toHaveLength(0);
-    // v48 (checkbox 89, public ICS feeds) and v49 (checkbox 91, Telegram bot dedup) are
-    // newer and still run on top of a recorded 47; v47 itself is never re-applied.
-    expect(versionInserts()).toEqual([48, 49]);
+    // v48 (checkbox 89, public ICS feeds), v49 (checkbox 91, Telegram bot dedup) and v50
+    // (checkbox 94, chat linking) are newer and still run on top of a recorded 47; v47
+    // itself is never re-applied.
+    expect(versionInserts()).toEqual([48, 49, 50]);
   });
 
   it('does not record v47 when its SQL fails, so a later cold start retries', async () => {
@@ -114,9 +115,10 @@ describe('migration v47 registration (checkbox 86)', () => {
     expect(versions.indexOf(47)).toBe(versions.indexOf(46) + 1);
     // v48 (checkbox 89, public ICS feeds) continues the chain; 47 is no longer the tail.
     expect(versions.indexOf(48)).toBe(versions.indexOf(47) + 1);
-    // v49 (checkbox 91, Telegram bot update dedup) continues the chain; 48 is no longer the tail.
+    // v49 (checkbox 91, Telegram bot update dedup) and v50 (checkbox 94, chat linking)
+    // continue the chain; 49 is no longer the tail.
     expect(versions.indexOf(49)).toBe(versions.indexOf(48) + 1);
-    expect(versions[versions.length - 1]).toBe(49);
+    expect(versions[versions.length - 1]).toBe(50);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

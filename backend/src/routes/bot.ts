@@ -9,6 +9,7 @@ import {
   processTelegramUpdate,
   type TelegramUpdate,
 } from '../services/bot/telegram-webhook.js';
+import { createBotLinkCode } from '../services/bot/linking.service.js';
 import {
   getTelegramWebhookInfo,
   setTelegramWebhook,
@@ -208,6 +209,25 @@ botRoutes.get('/telegram/status', authMiddleware, async (c) => {
     const message = error instanceof TelegramApiError ? error.message : 'getWebhookInfo 失败';
     return c.json({ success: false, error: message }, 502);
   }
+});
+
+/**
+ * `POST /telegram/link-code`（checkbox 94）：为当前登录用户生成一次性绑定码。
+ *
+ * 放在 `routes/bot.ts`（而不是 `routes/security.ts`）：这是 Telegram 机器人管理面的一部分，
+ * 与 `/telegram/setup`、`/telegram/status` 同属一个入口；`security.ts` 管的是登录锁定、
+ * Passkey、2FA 等通用安全设置，绑定码只在机器人场景下有意义。
+ *
+ * 原始绑定码仅在本次响应中返回一次；数据库只保存 SHA-256 哈希，服务端日志不记录原始码。
+ * 绑定码 10 分钟过期、且只能使用一次（原子 UPDATE 消费，见 linking.service.ts）。
+ */
+botRoutes.post('/telegram/link-code', authMiddleware, async (c) => {
+  const userId = Number(c.get('user').id);
+  const { code, expiresAt } = await createBotLinkCode(userId);
+  return c.json({
+    success: true,
+    data: { code, expires_at: expiresAt.toISOString(), expires_in_seconds: Math.round((expiresAt.getTime() - Date.now()) / 1000) },
+  });
 });
 
 export default botRoutes;

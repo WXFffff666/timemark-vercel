@@ -1,9 +1,20 @@
 import { dateStringInTimeZone, shiftCalendarDays } from '@timemark/shared/habit-schedule';
 import { defaultBotDataProvider } from './bot-data.service.js';
 import { encodeCallbackData } from './callback-data.js';
+import {
+  consumeBotLinkCode,
+  getActiveBotLink,
+  revokeBotLink,
+  redactCommandArgs,
+  sanitizeAuditText,
+  writeBotAuditLog,
+  type BotAuditEntry,
+  type BotLinkCodeConsumeResult,
+  type BotPlatform,
+} from './linking.service.js';
 
 /**
- * TimeMark bot command dispatcher (checkbox 92).
+ * TimeMark bot command dispatcher (checkbox 92; linking + audit added by checkbox 94).
  *
  * Parses `/command args` (with a Chinese/English alias table) and returns a STRUCTURED
  * reply that the transport layer renders. Handlers never mutate data on their own: only an
@@ -12,14 +23,15 @@ import { encodeCallbackData } from './callback-data.js';
  *
  * Injected seams (each one is the single place a later checkbox plugs in):
  *  - `provider`  - data access (defaults to the real services in bot-data.service.ts).
- *  - `isLinked`  - chat link check. Default treats every chat as linked because the
- *                  `bot_links` table only lands in checkbox 94; 94 REPLACES the default
- *                  with a real DB lookup. See `defaultBotLinkCheck`.
+ *  - `isLinked`  - chat link check. The default NOW performs the real `bot_links` lookup
+ *                  (checkbox 94): only a non-revoked link lets a chat run commands.
+ *  - `linking`   - link-code consumption / revocation used by `/link` and `/unlink`.
+ *  - `audit`     - one redacted audit row per executed command.
  *  - `parseAdd`  - NL parser for `/add`. Default is the deterministic `标题 @ 日期 时间`
  *                  grammar; checkbox 99 REPLACES it with the AI/typed-decision parser.
  */
 
-export type BotPlatform = 'telegram';
+export type { BotPlatform } from './linking.service.js';
 
 export interface BotCommandContext {
   platform: BotPlatform;
@@ -29,6 +41,8 @@ export interface BotCommandContext {
   profileId: number | null;
   /** Full original message text. Treated strictly as data. */
   text: string;
+  /** Telegram chat type when known (private / group / ...); stored with the link. */
+  chatType?: string | null;
 }
 
 export type BotReplyKind = 'message' | 'ask' | 'help' | 'error';
@@ -122,13 +136,39 @@ export interface BotDataProvider {
 export type BotLinkCheck = (platform: BotPlatform, chatId: string) => Promise<boolean>;
 
 /**
- * Default link check, used until checkbox 94 creates the `bot_links` table.
+ * Real link check (checkbox 94): a chat may run commands only while an active
+ * (non-revoked) `bot_links` row exists for `(platform, chat_id)`.
  *
- * The app is single-user by design, so while no link store exists every chat is treated as
- * linked (otherwise every command would be rejected before 94 lands). Checkbox 94 REPLACES
- * this default with a real `bot_links` lookup - this constant is the ONLY place that changes.
+ * Linking happens ONLY by consuming a code generated from Settings (`/link <code>`) -
+ * never automatically on the first message - so an unlinked chat is refused with
+ * `LINK_REQUIRED_REPLY` before any handler or data access runs.
  */
-export const defaultBotLinkCheck: BotLinkCheck = async () => true;
+export const defaultBotLinkCheck: BotLinkCheck = async (platform, chatId) => {
+  const link = await getActiveBotLink(platform, chatId);
+  return link !== null;
+};
+
+/** Linking operations `/link` and `/unlink` depend on (injectable seam for tests). */
+export interface BotLinkingProvider {
+  consumeLinkCode(input: {
+    code: unknown;
+    platform: BotPlatform;
+    chatId: string;
+    chatType?: string | null;
+  }): Promise<BotLinkCodeConsumeResult>;
+  revokeLink(platform: BotPlatform, chatId: string): Promise<boolean>;
+}
+
+/** Default linking provider wired to `linking.service.ts` (kept behind a seam for tests). */
+export const defaultBotLinkingProvider: BotLinkingProvider = {
+  consumeLinkCode: consumeBotLinkCode,
+  revokeLink: revokeBotLink,
+};
+
+/** Audit sink seam: one redacted row per executed command. */
+export type BotAuditSink = (entry: BotAuditEntry) => Promise<void>;
+
+export const defaultBotAuditSink: BotAuditSink = writeBotAuditLog;
 
 export interface ParsedAdd {
   title: string;
@@ -144,6 +184,8 @@ export type NlAddParser = (
 export interface DispatcherDeps {
   provider?: BotDataProvider;
   isLinked?: BotLinkCheck;
+  linking?: BotLinkingProvider;
+  audit?: BotAuditSink;
   parseAdd?: NlAddParser;
   now?: () => Date;
 }
@@ -167,6 +209,8 @@ export const COMMAND_ALIASES: Record<string, string> = {
   habits: 'habits', habit: 'habits', 习惯: 'habits', 打卡: 'habits',
   profile: 'profile', 档案: 'profile', 切换档案: 'profile', 身份: 'profile',
   settings: 'settings', 设置: 'settings', 配置: 'settings',
+  link: 'link', 绑定: 'link', 关联: 'link',
+  unlink: 'unlink', 解绑: 'unlink', 取消绑定: 'unlink',
 };
 
 export interface ParsedCommand {
@@ -202,6 +246,8 @@ export const HELP_TEXT = [
   '/habits - 习惯打卡',
   '/profile <名称> - 切换档案',
   '/settings - 查看设置',
+  '/link <绑定码> - 绑定此聊天',
+  '/unlink - 解除绑定',
 ].join('\n');
 
 /** Reply shown to any command from a chat that is not linked yet (checkbox 94 flow). */
@@ -209,6 +255,20 @@ export const LINK_REQUIRED_REPLY: BotReply = {
   kind: 'ask',
   text: '🔗 此聊天尚未绑定账号。请在应用「设置 → Telegram 机器人」生成绑定码，然后发送 /link <绑定码> 完成绑定。',
 };
+
+/**
+ * `/link` + `/unlink` replies. Deliberately DISTINCT per outcome so a user can tell an
+ * expired code from an already-used one, and a wrong code from both.
+ */
+export const LINK_REPLIES = {
+  missingCode: '用法：/link <绑定码>。请在应用「设置 → Telegram 机器人」生成绑定码。',
+  invalidCode: '❌ 绑定码无效，请在应用「设置 → Telegram 机器人」重新生成。',
+  usedCode: '⚠️ 绑定码已被使用过，请在应用「设置 → Telegram 机器人」重新生成。',
+  expiredCode: '⌛ 绑定码已过期，请在应用「设置 → Telegram 机器人」重新生成。',
+  linked: '✅ 绑定成功，现在可以发送 /help 查看可用命令。',
+  unlinked: '✅ 已解除绑定，后续命令将被拒绝。发送 /link <绑定码> 可重新绑定。',
+  notLinked: 'ℹ️ 当前聊天尚未绑定账号。',
+} as const;
 
 // ---------------------------------------------------------------------------
 // /add grammar + duration parsing (pure, exported for tests)
@@ -353,6 +413,10 @@ export function buildTodoInlineKeyboard(items: BotPendingItem[]): BotInlineButto
 /**
  * Dispatch one message. Returns null when the text is not a command (it is data, not an
  * instruction) so the transport sends nothing.
+ *
+ * `/link` is the ONLY command an unlinked chat may run (it is how a chat becomes linked);
+ * `/unlink` is always accepted and reports whether there was a link to revoke. Every other
+ * command - known or unknown - requires an active link first.
  */
 export async function dispatchCommand(
   ctx: BotCommandContext,
@@ -361,44 +425,147 @@ export async function dispatchCommand(
   const parsed = parseCommand(ctx.text);
   if (!parsed) return null;
 
-  const isLinked = deps.isLinked ?? defaultBotLinkCheck;
-  if (!(await isLinked(ctx.platform, ctx.chatId))) return LINK_REQUIRED_REPLY;
+  const linking = deps.linking ?? defaultBotLinkingProvider;
+  let reply: BotReply;
+  let auditUserId = ctx.userId;
 
-  if (!parsed.known) return helpReply();
+  if (parsed.command === 'link') {
+    const outcome = await handleLink(ctx, linking, parsed.args);
+    reply = outcome.reply;
+    if (outcome.linkedUserId != null) auditUserId = outcome.linkedUserId;
+  } else if (parsed.command === 'unlink') {
+    reply = await handleUnlink(ctx, linking);
+  } else {
+    const isLinked = deps.isLinked ?? defaultBotLinkCheck;
+    if (!(await isLinked(ctx.platform, ctx.chatId))) return LINK_REQUIRED_REPLY;
 
-  const provider = deps.provider ?? defaultBotDataProvider;
-  const now = (deps.now ?? (() => new Date()))();
-  const parseAdd = deps.parseAdd ?? defaultNlAddParser;
+    if (!parsed.known) {
+      reply = helpReply();
+    } else {
+      const provider = deps.provider ?? defaultBotDataProvider;
+      const now = (deps.now ?? (() => new Date()))();
+      const parseAdd = deps.parseAdd ?? defaultNlAddParser;
 
-  switch (parsed.command) {
-    case 'start':
-      return message(`👋 欢迎使用 TimeMark 机器人！\n\n${HELP_TEXT}`);
-    case 'help':
-      return helpReply();
-    case 'today':
-      return handleRange(ctx, provider, now, 0, 0, '📅 今日待办', '今天没有待办');
-    case 'week':
-      return handleRange(ctx, provider, now, 0, 6, '🗓 本周待办', '本周没有待办');
-    case 'list':
-      return handleList(ctx, provider);
-    case 'done':
-      return handleDone(ctx, provider, parsed.args);
-    case 'snooze':
-      return handleSnooze(ctx, provider, parsed.args);
-    case 'add':
-      return handleAdd(ctx, provider, parseAdd, now, parsed.args);
-    case 'med':
-      return handleMed(ctx, provider);
-    case 'expiry':
-      return handleExpiry(ctx, provider);
-    case 'habits':
-      return handleHabits(ctx, provider);
-    case 'profile':
-      return handleProfile(ctx, provider, parsed.args);
-    case 'settings':
-      return handleSettings(ctx, provider);
-    default:
-      return helpReply();
+      switch (parsed.command) {
+        case 'start':
+          reply = message(`👋 欢迎使用 TimeMark 机器人！\n\n${HELP_TEXT}`);
+          break;
+        case 'help':
+          reply = helpReply();
+          break;
+        case 'today':
+          reply = await handleRange(ctx, provider, now, 0, 0, '📅 今日待办', '今天没有待办');
+          break;
+        case 'week':
+          reply = await handleRange(ctx, provider, now, 0, 6, '🗓 本周待办', '本周没有待办');
+          break;
+        case 'list':
+          reply = await handleList(ctx, provider);
+          break;
+        case 'done':
+          reply = await handleDone(ctx, provider, parsed.args);
+          break;
+        case 'snooze':
+          reply = await handleSnooze(ctx, provider, parsed.args);
+          break;
+        case 'add':
+          reply = await handleAdd(ctx, provider, parseAdd, now, parsed.args);
+          break;
+        case 'med':
+          reply = await handleMed(ctx, provider);
+          break;
+        case 'expiry':
+          reply = await handleExpiry(ctx, provider);
+          break;
+        case 'habits':
+          reply = await handleHabits(ctx, provider);
+          break;
+        case 'profile':
+          reply = await handleProfile(ctx, provider, parsed.args);
+          break;
+        case 'settings':
+          reply = await handleSettings(ctx, provider);
+          break;
+        default:
+          reply = helpReply();
+          break;
+      }
+    }
+  }
+
+  await auditCommand(deps, ctx, parsed.command, parsed.args, reply, auditUserId);
+  return reply;
+}
+
+async function handleLink(
+  ctx: BotCommandContext,
+  linking: BotLinkingProvider,
+  args: string,
+): Promise<{ reply: BotReply; linkedUserId: number | null }> {
+  const code = args.trim();
+  if (!code) {
+    return { reply: errorReply(LINK_REPLIES.missingCode, { reason: 'missing_code' }), linkedUserId: null };
+  }
+
+  const result = await linking.consumeLinkCode({
+    code,
+    platform: ctx.platform,
+    chatId: ctx.chatId,
+    chatType: ctx.chatType ?? null,
+  });
+
+  if (result.status === 'linked' && result.userId != null) {
+    return {
+      reply: message(LINK_REPLIES.linked, { userId: result.userId }),
+      linkedUserId: result.userId,
+    };
+  }
+  if (result.status === 'used') {
+    return { reply: errorReply(LINK_REPLIES.usedCode, { reason: 'used_code' }), linkedUserId: null };
+  }
+  if (result.status === 'expired') {
+    return { reply: errorReply(LINK_REPLIES.expiredCode, { reason: 'expired_code' }), linkedUserId: null };
+  }
+  return { reply: errorReply(LINK_REPLIES.invalidCode, { reason: 'invalid_code' }), linkedUserId: null };
+}
+
+async function handleUnlink(ctx: BotCommandContext, linking: BotLinkingProvider): Promise<BotReply> {
+  const revoked = await linking.revokeLink(ctx.platform, ctx.chatId);
+  if (!revoked) return message(LINK_REPLIES.notLinked, { reason: 'not_linked' });
+  return message(LINK_REPLIES.unlinked, { reason: 'unlinked' });
+}
+
+/** Short, bounded result summary for the audit row (`kind` or `kind:reason`). */
+function summarizeReply(reply: BotReply): string {
+  const reason = typeof reply.data?.reason === 'string' ? reply.data.reason : '';
+  return (reason ? `${reply.kind}:${reason}` : reply.kind).slice(0, 64);
+}
+
+/**
+ * Write exactly one audit row per executed command. The row contains a whitelist-built
+ * `args_redacted` shape (see `redactCommandArgs`) - never an argument value, code or token.
+ * An audit failure must never break command delivery, so it is swallowed after logging.
+ */
+async function auditCommand(
+  deps: DispatcherDeps,
+  ctx: BotCommandContext,
+  command: string,
+  rawArgs: string,
+  reply: BotReply,
+  userId: number,
+): Promise<void> {
+  const sink = deps.audit ?? defaultBotAuditSink;
+  try {
+    await sink({
+      userId,
+      platform: ctx.platform,
+      chatId: sanitizeAuditText(ctx.chatId, 64),
+      command: sanitizeAuditText(command, 64),
+      argsRedacted: redactCommandArgs(command, rawArgs),
+      result: summarizeReply(reply),
+    });
+  } catch {
+    // The reply is already computed; a failed audit write is not a command failure.
   }
 }
 

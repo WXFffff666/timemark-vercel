@@ -98,7 +98,15 @@ let provider: BotDataProvider;
 let calls: ProviderCalls;
 
 function dispatch(text: string, overrides: { isLinked?: () => Promise<boolean> } = {}): Promise<BotReply | null> {
-  return dispatchCommand(ctx(text), { provider, isLinked: overrides.isLinked, now: () => NOW });
+  // Checkbox 94: the default link check now performs a real `bot_links` lookup, and this
+  // suite has no link store. Command-table tests therefore inject a linked stub; the
+  // unlinked-chat tests below still inject their own `isLinked` (and the real default is
+  // exercised against a link store in bot-linking.test.ts).
+  return dispatchCommand(ctx(text), {
+    provider,
+    isLinked: overrides.isLinked ?? (async () => true),
+    now: () => NOW,
+  });
 }
 
 beforeEach(() => {

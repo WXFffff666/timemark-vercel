@@ -67,7 +67,9 @@ describe('migration v49 registration (checkbox 91)', () => {
     await applyIncrementalMigrations(49);
 
     expect(callsMatching('CREATE TABLE IF NOT EXISTS bot_updates')).toHaveLength(0);
-    expect(versionInserts()).toEqual([]);
+    // v50 (checkbox 94, chat linking) is newer and still runs on top of a recorded 49;
+    // v49 itself is never re-applied.
+    expect(versionInserts()).toEqual([50]);
   });
 
   it('does not record v49 when its SQL fails, so a later cold start retries', async () => {
@@ -115,7 +117,9 @@ describe('migration v49 registration (checkbox 91)', () => {
     expect(versions).toContain(49);
     expect(versions.filter((v) => v === 49)).toHaveLength(1);
     expect(versions.indexOf(49)).toBe(versions.indexOf(48) + 1);
-    expect(versions[versions.length - 1]).toBe(49);
+    // v50 (checkbox 94, chat linking) continues the chain; 49 is no longer the tail.
+    expect(versions.indexOf(50)).toBe(versions.indexOf(49) + 1);
+    expect(versions[versions.length - 1]).toBe(50);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

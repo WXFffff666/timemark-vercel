@@ -77,9 +77,10 @@ describe('migration v43 registration (todo 70)', () => {
     expect(callsMatching('CREATE TABLE IF NOT EXISTS profile_channel_accounts')).toHaveLength(0);
     expect(versionInserts()).not.toContain(43);
     // v44 (todo 81), v45 (todo 78), v46 (checkbox 80), v47 (checkbox 86), v48
-    // (checkbox 89, public ICS feeds) and v49 (checkbox 91, Telegram bot dedup) are
-    // newer and do run on top of a recorded 43; v43 itself is never re-applied.
-    expect(versionInserts()).toEqual([44, 45, 46, 47, 48, 49]);
+    // (checkbox 89, public ICS feeds), v49 (checkbox 91, Telegram bot dedup) and v50
+    // (checkbox 94, chat linking) are newer and do run on top of a recorded 43; v43 itself
+    // is never re-applied.
+    expect(versionInserts()).toEqual([44, 45, 46, 47, 48, 49, 50]);
   });
 
   it('does not record v43 when its SQL fails, so a later cold start retries', async () => {
@@ -127,9 +128,10 @@ describe('migration v43 registration (todo 70)', () => {
     // continue the chain; 46 is no longer the tail.
     expect(versions.indexOf(47)).toBe(versions.indexOf(46) + 1);
     expect(versions.indexOf(48)).toBe(versions.indexOf(47) + 1);
-    // v49 (checkbox 91, Telegram bot update dedup) continues the chain; 48 is no longer the tail.
+    // v49 (checkbox 91, Telegram bot update dedup) and v50 (checkbox 94, chat linking)
+    // continue the chain; 49 is no longer the tail.
     expect(versions.indexOf(49)).toBe(versions.indexOf(48) + 1);
-    expect(versions[versions.length - 1]).toBe(49);
+    expect(versions[versions.length - 1]).toBe(50);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

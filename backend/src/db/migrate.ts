@@ -1269,6 +1269,61 @@ CREATE INDEX IF NOT EXISTS idx_ics_feeds_user ON ics_feeds(user_id);`,
 );
 CREATE INDEX IF NOT EXISTS idx_bot_updates_received_at ON bot_updates(received_at);`,
     },
+    {
+      // Checkbox 94 (D7 Telegram bot): chat <-> user/profile linking and the redacted
+      // command audit trail. Never auto-linked: a chat becomes linked only by consuming a
+      // code that was generated from Settings (`bot_link_codes`), and `/unlink` sets
+      // `revoked_at` (soft delete - an unlinked chat is refused by the dispatcher).
+      //
+      // `bot_link_codes` stores ONLY the SHA-256 hash of a short-lived (10 min), single-use
+      // code, so a database read can never reconstruct a valid code; consumption is an
+      // atomic UPDATE ... WHERE used_at IS NULL AND expires_at > CURRENT_TIMESTAMP, so a
+      // code can be redeemed at most once even under concurrent deliveries.
+      //
+      // `bot_audit_logs` records one row per command: the command name, a WHITELIST-built
+      // `args_redacted` shape (count/kind only - argument values, codes and tokens are
+      // never written) and a short `result` summary. `UNIQUE (platform, chat_id)` on
+      // `bot_links` makes a repeated `/link` from the same chat an UPDATE, never a
+      // duplicate row. Purely additive and idempotent: CREATE TABLE / CREATE INDEX
+      // IF NOT EXISTS only, no ALTER of existing tables, no backfill, tables start empty.
+      version: 50,
+      name: 'bot_links_v50',
+      sql: `CREATE TABLE IF NOT EXISTS bot_links (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL,
+  chat_id TEXT NOT NULL,
+  chat_type TEXT,
+  active_profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+  linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  revoked_at TIMESTAMP,
+  UNIQUE (platform, chat_id)
+);
+CREATE INDEX IF NOT EXISTS idx_bot_links_user ON bot_links(user_id);
+CREATE TABLE IF NOT EXISTS bot_link_codes (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bot_link_codes_code_hash ON bot_link_codes(code_hash);
+CREATE INDEX IF NOT EXISTS idx_bot_link_codes_user ON bot_link_codes(user_id);
+CREATE TABLE IF NOT EXISTS bot_audit_logs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL,
+  chat_id TEXT NOT NULL,
+  command TEXT NOT NULL,
+  args_redacted TEXT,
+  result TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_bot_audit_logs_user ON bot_audit_logs(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_bot_audit_logs_chat ON bot_audit_logs(platform, chat_id, created_at);`,
+    },
   ];
 
   for (const migration of migrations) {

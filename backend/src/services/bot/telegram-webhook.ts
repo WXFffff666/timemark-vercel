@@ -2,6 +2,7 @@ import { query } from '../../db/index.js';
 import { getUserConfig } from '../config.service.js';
 import { createLogger } from '../../utils/logger.js';
 import { dispatchCommand, type BotInlineButton } from './dispatcher.js';
+import { getActiveBotLink, touchBotLink, type BotPlatform } from './linking.service.js';
 import { sendTelegramMessage } from './telegram-api.js';
 import { handleTelegramCallbackQuery } from './callback-handler.js';
 
@@ -89,16 +90,53 @@ export async function acceptTelegramUpdate(
 }
 
 /**
- * Resolve the acting user for this chat.
+ * Single-user fallback: the sole owner account.
  *
- * Checkbox 94 seam: once `bot_links` exists, the (platform, chat_id) pair resolves to the
- * linked `user_id` here (and an unlinked chat is rejected by the dispatcher's link check).
- * Until then, the app is single-user by design, so the sole owner account is used.
+ * Used ONLY where a link genuinely does not apply (a chat with no `bot_links` row, e.g. an
+ * unlinked chat that must still receive the `/link` instruction, or a callback with no
+ * chat). A linked chat resolves its user from the link instead - see
+ * `resolveActingChatContext`.
  */
 async function resolveActingUserId(): Promise<number | null> {
   const result = await query('SELECT id FROM users ORDER BY id ASC LIMIT 1');
   const id = result.rows[0]?.id;
   return id == null ? null : Number(id);
+}
+
+export interface BotChatContext {
+  userId: number;
+  /** Link's `active_profile_id`, or null for the fallback / all-profiles. */
+  profileId: number | null;
+  /** True when the context came from an active `bot_links` row. */
+  linked: boolean;
+}
+
+/**
+ * Resolve the acting user/profile for a chat FROM THE LINK (checkbox 94): the link's
+ * `user_id` is the acting user and its `active_profile_id` is the default profile. The
+ * single-user fallback applies only when the chat has no active link (which the command
+ * dispatcher then refuses anyway, unless the command is `/link`).
+ */
+export async function resolveActingChatContext(
+  platform: BotPlatform,
+  chatId: string,
+): Promise<BotChatContext | null> {
+  const link = await getActiveBotLink(platform, chatId);
+  if (link) return { userId: link.userId, profileId: link.activeProfileId, linked: true };
+  const fallback = await resolveActingUserId();
+  return fallback === null ? null : { userId: fallback, profileId: null, linked: false };
+}
+
+/** Acting user for the callback path: link first, single-user fallback otherwise. */
+async function resolveLinkedActingUserId(
+  platform: BotPlatform,
+  chatId: string | null,
+): Promise<number | null> {
+  if (chatId) {
+    const link = await getActiveBotLink(platform, chatId);
+    if (link) return link.userId;
+  }
+  return resolveActingUserId();
 }
 
 async function resolveBotToken(userId: number): Promise<string | null> {
@@ -133,7 +171,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<unk
   // dispatcher even when the attached message text happens to start with a slash.
   if (update.callback_query) {
     return handleTelegramCallbackQuery(update.callback_query, {
-      resolveUserId: resolveActingUserId,
+      resolveUserId: (chatId) => resolveLinkedActingUserId('telegram', chatId),
       resolveBotToken,
     });
   }
@@ -145,19 +183,33 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<unk
     return { handled: false };
   }
 
-  const userId = await resolveActingUserId();
-  if (userId === null) return { handled: false };
+  const chatIdText = String(chatId);
+  const context = await resolveActingChatContext('telegram', chatIdText);
+  if (context === null) return { handled: false };
 
   const reply = await dispatchCommand({
     platform: 'telegram',
-    chatId: String(chatId),
-    userId,
-    profileId: null,
+    chatId: chatIdText,
+    userId: context.userId,
+    profileId: context.profileId,
     text,
+    chatType: message?.chat?.type ?? null,
   });
+
+  // Activity heartbeat for linked chats. A failed touch must not fail the webhook: the
+  // update is already claimed, so a throw here would leave the user without a reply.
+  if (context.linked) {
+    try {
+      await touchBotLink('telegram', chatIdText);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error.message : String(error);
+      log.warn({ event: 'bot.link_touch_failed', err }, 'Failed to update bot link last_seen_at');
+    }
+  }
+
   if (!reply) return { handled: false };
 
-  const token = await resolveBotToken(userId);
+  const token = await resolveBotToken(context.userId);
   if (!token) {
     log.warn({ event: 'bot.reply_token_missing' }, 'Cannot send bot reply: no Telegram token configured');
     return { handled: true, replied: false };

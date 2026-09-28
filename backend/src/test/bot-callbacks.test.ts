@@ -513,7 +513,9 @@ describe('dispatcher inline keyboards', () => {
     for (const text of ['/list', '/today', '/week']) {
       const reply = await dispatchCommand(
         { platform: 'telegram', chatId: '12345', userId: USER_ID, profileId: null, text },
-        { provider, now: () => NOW },
+        // Checkbox 94: the default link check is now a real `bot_links` lookup; this suite
+        // has no link store, so the keyboard assertions inject a linked stub.
+        { provider, isLinked: async () => true, now: () => NOW },
       );
       expect(reply?.inlineKeyboard, text).toBeDefined();
       const buttons = (reply?.inlineKeyboard ?? []).flat();
@@ -544,7 +546,7 @@ describe('dispatcher inline keyboards', () => {
     provider.listPending = async () => [];
     const reply = await dispatchCommand(
       { platform: 'telegram', chatId: '12345', userId: USER_ID, profileId: null, text: '/list' },
-      { provider, now: () => NOW },
+      { provider, isLinked: async () => true, now: () => NOW },
     );
     expect(reply?.inlineKeyboard).toBeUndefined();
   });

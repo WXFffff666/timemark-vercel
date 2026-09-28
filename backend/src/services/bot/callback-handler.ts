@@ -63,8 +63,12 @@ export type AnswerCallbackQueryFn = (
 export type EditMessageTextFn = (botToken: string, params: EditMessageTextParams) => Promise<unknown>;
 
 export interface CallbackHandlerDeps {
-  /** Resolve the acting user (checkbox 94 replaces the single-user default later). */
-  resolveUserId: () => Promise<number | null>;
+  /**
+   * Resolve the acting user for the chat the button lives in (checkbox 94): the default
+   * resolver reads `bot_links` first and only falls back to the single-user account when
+   * the chat is genuinely unlinked. `chatId` is null when the query carries no message.
+   */
+  resolveUserId: (chatId: string | null) => Promise<number | null>;
   resolveBotToken: (userId: number) => Promise<string | null>;
   provider?: BotCallbackProvider;
   answer?: AnswerCallbackQueryFn;
@@ -109,7 +113,10 @@ export async function handleTelegramCallbackQuery(
   const callbackId = typeof query.id === 'string' ? query.id.trim() : '';
   if (!callbackId) return { handled: false, outcome: 'invalid' };
 
-  const userId = await deps.resolveUserId();
+  const chatId = query.message?.chat?.id;
+  const messageId = query.message?.message_id;
+
+  const userId = await deps.resolveUserId(chatId == null ? null : String(chatId));
   if (userId === null) return { handled: false, outcome: 'no_user' };
 
   const token = await deps.resolveBotToken(userId);
@@ -117,9 +124,6 @@ export async function handleTelegramCallbackQuery(
     log.warn({ event: 'bot.callback_token_missing' }, 'Cannot answer callback query: no Telegram token configured');
     return { handled: false, outcome: 'no_token' };
   }
-
-  const chatId = query.message?.chat?.id;
-  const messageId = query.message?.message_id;
 
   /**
    * ALWAYS answer - even when the action is stale or malformed - so the client spinner stops.
