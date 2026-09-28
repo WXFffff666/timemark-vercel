@@ -1371,6 +1371,35 @@ CREATE INDEX IF NOT EXISTS idx_bot_audit_logs_chat ON bot_audit_logs(platform, c
       sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS snoozed_until TIMESTAMPTZ;
 ALTER TABLE event_trigger_logs ALTER COLUMN trigger_date TYPE TEXT USING trigger_date::text;`,
     },
+    {
+      // v52 (checkbox 105): deterministic behavioral-pattern store. One row per
+      // (user, kind, key) with a JSONB value, a confidence in [0,1] and the number of
+      // consistent observations behind it. Written ONLY by the nightly recompute in
+      // `services/patterns.service.ts` (daily-maintenance) from rows already present in
+      // the database - no LLM, no external call, nothing leaves the box.
+      //
+      // `key` is a plain TEXT bucket label (e.g. `08:00`, `d1`, `email`, weekday `3`,
+      // contact id) so a re-run UPSERTs the same row instead of appending history;
+      // `computed_at` records the last recompute. Rows with confidence < 0.5 are kept
+      // (they become meaningful as evidence accumulates) but the API filters them out.
+      //
+      // Purely additive and idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only,
+      // no ALTER of existing tables, no backfill, no data migration, table starts empty.
+      version: 52,
+      name: 'user_patterns_v52',
+      sql: `CREATE TABLE IF NOT EXISTS user_patterns (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value JSONB NOT NULL,
+  confidence NUMERIC(4,3) NOT NULL DEFAULT 0 CHECK (confidence >= 0 AND confidence <= 1),
+  evidence_count INTEGER NOT NULL DEFAULT 0 CHECK (evidence_count >= 0),
+  computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (user_id, kind, key)
+);
+CREATE INDEX IF NOT EXISTS idx_user_patterns_user ON user_patterns(user_id);`,
+    },
   ];
 
   for (const migration of migrations) {

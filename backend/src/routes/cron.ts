@@ -8,6 +8,7 @@ import { syncAllCalDavSubscriptions, syncCalDavWriteBack, type CalDavWriteBackSt
 import { syncAllGoogleCalendars } from '../services/google-calendar-sync.service.js';
 import { sendLunarPhaseReminders } from '../services/lunar-reminders.service.js';
 import { aggregateDailyStats } from '../services/stats-daily.service.js';
+import { recomputeAllUserPatterns } from '../services/patterns.service.js';
 import { purgeExpiredEventCache } from '../services/event-cache.service.js';
 import { purgeOldInboxMessages } from '../services/inbox.service.js';
 import { purgeOldTodoCompletions } from '../services/todo.service.js';
@@ -222,12 +223,15 @@ cronRoutes.get('/daily-maintenance', async (c) => {
       `DELETE FROM cron_execution_logs WHERE executed_at < NOW() - INTERVAL '90 days'`,
     );
     const aggregatedStats = await aggregateDailyStats();
+    // Checkbox 105: deterministic behavioural-pattern miner (no LLM, no external call).
+    // Replaces each user's prior rows, so a timezone change re-buckets on the next night.
+    const minedPatterns = await recomputeAllUserPatterns();
     const pluginResult = await query('DELETE FROM plugin_sessions WHERE expires_at < NOW()');
     await logCronRun(
       'daily-maintenance',
       'success',
       startedAt,
-      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged trigger logs: ${purged.triggerLogs}; purged emails: ${purged.emailLogs}; purged login attempts: ${purged.loginAttempts}; purged queue: ${purged.notificationQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged habit logs: ${purgedHabitLogs}; doses materialized: ${materializedDoses}; doses missed: ${missedDoses}; purged doses: ${purgedDoses}; purged orphan attachments: ${purgedAttachments.purged}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}`,
+      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged trigger logs: ${purged.triggerLogs}; purged emails: ${purged.emailLogs}; purged login attempts: ${purged.loginAttempts}; purged queue: ${purged.notificationQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged habit logs: ${purgedHabitLogs}; doses materialized: ${materializedDoses}; doses missed: ${missedDoses}; purged doses: ${purgedDoses}; purged orphan attachments: ${purgedAttachments.purged}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}; patterns: ${minedPatterns.patterns} for ${minedPatterns.users} user(s)`,
     );
     await pingHeartbeat('daily-maintenance');
     return c.json({

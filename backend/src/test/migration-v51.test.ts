@@ -63,7 +63,8 @@ describe('migration v51 registration (checkbox 97)', () => {
   it('is idempotent: a recorded v51 row makes the runner skip v51 entirely', async () => {
     await applyIncrementalMigrations(51);
     expect(callsMatching('snoozed_until')).toHaveLength(0);
-    expect(versionInserts()).toEqual([]);
+    // v52 (checkbox 105, behavioural patterns) is newer and still runs on a recorded 51.
+    expect(versionInserts()).toEqual([52]);
   });
 
   it('does not record v51 when its SQL fails, so a later cold start retries', async () => {
@@ -81,7 +82,7 @@ describe('migration v51 registration (checkbox 97)', () => {
     expect(versions).toContain(51);
     expect(versions.filter((v) => v === 51)).toHaveLength(1);
     expect(versions.indexOf(51)).toBe(versions.indexOf(50) + 1);
-    expect(versions[versions.length - 1]).toBe(51);
+    expect(versions[versions.length - 1]).toBe(52);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }
