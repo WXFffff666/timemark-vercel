@@ -2,14 +2,22 @@
  * 事件下次发生日期（公历）—— 与前端倒计时、Cron 提醒共用
  */
 
-/** 将 DB/API 的日期值规范为 YYYY-MM-DD（兼容 pg DATE → Date 对象） */
+/**
+ * 将 DB/API 的日期值规范为 YYYY-MM-DD（兼容 pg DATE → Date 对象）。
+ *
+ * 不变式：pg 驱动把 DATE 列解析为「本地午夜」的 Date（postgres-date 内部是
+ * `new Date(y, m, d)`），因此对 Date 输入必须用本地 getter 取回同一公历日 ——
+ * 这是该构造的精确逆运算。getUTC* / toISOString 在东八区（生产 TZ=Asia/Shanghai）
+ * 会把日期回退一天（DATE 2026-10-03 → "2026-10-02"）。
+ * `YYYY-MM-DD` 字符串走下面的分支，不受此影响。
+ */
 export function toYmdString(value: unknown): string | null {
   if (value == null || value === '') return null;
   if (value instanceof Date) {
     if (isNaN(value.getTime())) return null;
-    const y = value.getUTCFullYear();
-    const m = String(value.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(value.getUTCDate()).padStart(2, '0');
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
   const s = String(value);
