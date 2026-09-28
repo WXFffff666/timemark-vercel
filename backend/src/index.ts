@@ -63,8 +63,10 @@ import medicationsRoutes from './routes/medications.js';
 import dosesRoutes from './routes/doses.js';
 import goalsRoutes from './routes/goals.js';
 import digestRoutes from './routes/digest.js';
+import patternsRoutes from './routes/patterns.js';
 import ogRoutes from './routes/og.js';
 import botRoutes from './routes/bot.js';
+import aiRoutes from './routes/ai.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -168,9 +170,13 @@ app.route('/api/medications', medicationsRoutes);
 app.route('/api/doses', dosesRoutes);
 app.route('/api/goals', goalsRoutes);
 app.route('/api/digest', digestRoutes);
+// checkbox 105: deterministic behavioural patterns (nightly miner, no LLM).
+app.route('/api/patterns', patternsRoutes);
 app.route('/api/og', ogRoutes);
 // checkbox 91: Telegram bot webhook + webhook setup/status management.
 app.route('/api/bot', botRoutes);
+// checkbox 98: AI provider gateway status (disabled unless AI_* env vars are set).
+app.route('/api/ai', aiRoutes);
 // todo 88: also expose the canonical `/share/:token` server-rendered meta document at the app
 // root so it resolves locally and in tests. On Vercel this path is owned by the SPA rewrite in
 // vercel.json (`/((?!api/|.*\\..*).*)` -> /index.html), so the OG image (`/api/og/image/:token`)
