@@ -16,13 +16,15 @@ const RECOMMENDATIONS: Record<string, number[]> = {
 };
 
 /**
- * 10-char prefix invariant (migration 51): `event_trigger_logs.trigger_date` is TEXT whose
- * first 10 characters are ALWAYS the calendar day `YYYY-MM-DD` - legacy rows are exactly
- * 10 chars, new dedup tokens append `#d<n>#tHH:mm`. `new Date('...#d0#t09:00')` is an
- * Invalid Date, so parse the prefix explicitly.
- *
- * `pg` returns DATE columns as a Date at LOCAL midnight (postgres-date uses local getters);
- * normalise those with LOCAL getters as well. A `YYYY-MM-DD` string needs no TZ handling.
+ * 10-char prefix invariant (migration 51): `event_trigger_logs.trigger_date` is TEXT.
+ * A row's first 10 chars are a calendar day `YYYY-MM-DD` ONLY for legacy rows (exactly
+ * 10 chars) and for normal dedup tokens `YYYY-MM-DD#d<n>#tHH:mm`. Namespaced keys such as
+ * `snooze:event#<id>#<ISO>` (buildSnoozeSendKey -> recordEventTrigger) carry NO leading
+ * date, so they must be EXCLUDED by a guard, never truncated: `LEFT('snooze:event#...', 10)`
+ * is `snooze:eve`, and `new Date('...#d0#t09:00')` is an Invalid Date. `ymdPrefix` below is
+ * that guard - its regex returns null for any key that does not start with a real ymd, so
+ * namespaced rows contribute no history day. DATE values from `pg` (legacy rows only) are
+ * normalised with LOCAL getters, the exact inverse of how postgres-date builds them.
  */
 function ymdPrefix(value: unknown): string | null {
   if (value instanceof Date) {

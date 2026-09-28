@@ -95,11 +95,18 @@ events.get('/reminder-logs', async (c) => {
   const userId = Number(user.id);
   const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 200);
 
-  // Display contract: expose the 10-char YYYY-MM-DD prefix of trigger_date (TEXT since
-  // migration 51; tokens append #d<n>#tHH:mm) so no UI consumer can ever parse a token
-  // into an Invalid Date. Raw dedup keys stay available via /trigger-logs + its CSV export.
+  // Display contract: trigger_date is TEXT since migration 51 and holds two families of ids.
+  // A row's first 10 chars are a calendar day `YYYY-MM-DD` ONLY for legacy rows (exactly
+  // 10 chars) and for normal dedup tokens `YYYY-MM-DD#d<n>#tHH:mm`; namespaced keys such as
+  // `snooze:event#<id>#<ISO>` (buildSnoozeSendKey -> recordEventTrigger) carry NO leading
+  // date - `LEFT('snooze:event#...', 10)` is `snooze:eve`. An unguarded LEFT would mangle
+  // those rows, so expose the 10-char ymd only when the prefix really is one; otherwise
+  // return the raw key unchanged. Raw dedup keys stay available via /trigger-logs + its CSV
+  // export, and the UI never parses trigger_date into a Date.
   const result = await query(
-    `SELECT tl.id, tl.event_id, tl.trigger_type, LEFT(tl.trigger_date, 10) AS trigger_date, tl.status,
+    `SELECT tl.id, tl.event_id, tl.trigger_type,
+            CASE WHEN tl.trigger_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN LEFT(tl.trigger_date, 10) ELSE tl.trigger_date END AS trigger_date,
+            tl.status,
             tl.error_message, tl.channel_results, tl.created_at,
             e.name AS event_name, e.type AS event_type
      FROM event_trigger_logs tl

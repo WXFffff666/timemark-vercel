@@ -1,17 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { dateStringInTimeZone } from '@timemark/shared/habit-schedule';
 
 /**
  * Checkbox: trigger_date TEXT reader sweep (migration 51).
  *
- * Invariant: `event_trigger_logs.trigger_date` is TEXT; its first 10 characters are ALWAYS
- * the calendar day `YYYY-MM-DD` - legacy rows are exactly 10 chars, new dedup tokens append
- * `#d<n>#tHH:mm`. A DATE comparison raises `text = date` (42883) and a `::date` cast raises
- * 22007 on any token row, so every reader must use the 10-char prefix.
+ * Invariant: `event_trigger_logs.trigger_date` is TEXT. A row's first 10 characters are a
+ * calendar day `YYYY-MM-DD` ONLY for legacy rows (exactly 10 chars) and for normal dedup
+ * tokens `YYYY-MM-DD#d<n>#tHH:mm`. Namespaced keys such as `snooze:event#<id>#<ISO>`
+ * (`buildSnoozeSendKey` -> `recordEventTrigger`) carry NO leading date - `LEFT(..., 10)` is
+ * `snooze:eve` - so every reader must EXCLUDE them with a guard, never truncate them. A DATE
+ * comparison raises `text = date` (42883) and a `::date` cast raises 22007 on any token row.
  *
  * Engine-level proof (a mock cannot produce 42883/22007) lives in the PGlite harness
- * `%TEMP%/opencode/wave12-triggerdate-laneA/laneA-probe2.mts`; this file pins the SQL the
- * services generate and the date-diff math on both legacy and token rows.
+ * `%TEMP%/opencode/wave12-97r2-laneA/pglite-probe.mts`; this file pins the SQL the services
+ * generate and the date-diff math on legacy, token and namespaced rows.
  */
 const { mockQuery } = vi.hoisted(() => ({
   mockQuery: vi.fn<(text: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number }>>(),
@@ -42,54 +45,84 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('D-1 aggregateDailyStats compares the 10-char prefix of trigger_date', () => {
-  it('uses LEFT(trigger_date, 10) = $1::text against yesterday, never text = date', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0)); // local noon -> yesterday is 2026-06-14 in any TZ
-
+describe('D-1 aggregateDailyStats computes the day in SQL so host and DB clocks cannot diverge', () => {
+  it('uses one DB-local day for the INSERT target and the trigger_date prefix comparison', async () => {
     const inserted = await aggregateDailyStats();
     expect(inserted).toBe(1);
 
     const [sql, params] = mockQuery.mock.calls[0];
-    expect(sql).toContain('LEFT(trigger_date, 10) = $1::text');
-    expect(params).toEqual(['2026-06-14']);
-    // The old shape is a type error on TEXT columns; the cast is a 22007 trap.
-    expect(sql).not.toMatch(/trigger_date\s*=\s*\(CURRENT_DATE/);
-    expect(sql).not.toMatch(/trigger_date\s*::\s*date/);
-    // stat_date remains a DATE INSERT target (only its value source changed).
-    expect(sql).toContain('$1::date');
+    // Both the stat_date target and the comparison are DB-local: (CURRENT_DATE - 1 day).
+    expect(sql).toContain('(CURRENT_DATE - INTERVAL \'1 day\')::date');
+    expect(sql).toContain('LEFT(trigger_date, 10) = (CURRENT_DATE - INTERVAL \'1 day\')::date::text');
+    // No host-computed ymd may be passed in (that was the host/DB divergence defect).
+    expect(params ?? []).toEqual([]);
+    expect(sql).not.toContain('$1');
+    expect(SERVICES_SOURCE).not.toMatch(/function\s+yesterdayYmd/);
+    // The old shapes must not come back: text = date (42883) and ::date (22007 on tokens).
+    expect(sql).not.toMatch(/trigger_date\s*=\s*\(CURRENT_DATE(?!\s*-)/);
+    expect(sql).not.toMatch(/LEFT\(trigger_date, 10\)\s*::\s*date/);
+    expect(sql).not.toMatch(/trigger_date\s*::\s*date(?!\s*::)/);
+    // LEFT(trigger_date, 10) stays the documented 10-char-prefix rule for real ymd rows.
     expect(SERVICES_SOURCE).toContain('LEFT(trigger_date, 10)');
   });
 
-  it('matches legacy rows and token rows alike - one prefix equality covers both', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
-
+  it('matches legacy rows and token rows alike and can never match a namespaced key', async () => {
     await aggregateDailyStats();
 
-    const [sql, params] = mockQuery.mock.calls[0];
-    // A 10-char prefix equals '2026-06-14' for a legacy '2026-06-14' and for
-    // '2026-06-14#d0#t09:00', so both kinds are counted by the same predicate.
-    expect(sql).toContain('LEFT(trigger_date, 10) = $1::text');
-    expect(params).toEqual(['2026-06-14']);
+    const [sql] = mockQuery.mock.calls[0];
+    // Prefix equality covers a legacy '2026-09-27' and '2026-09-27#d0#t09:00' in one predicate.
+    expect(sql).toContain('LEFT(trigger_date, 10) = (CURRENT_DATE - INTERVAL \'1 day\')::date::text');
     expect(sql).not.toContain("LIKE '");
+    // A namespaced key can never satisfy the predicate: its prefix is 'snooze:eve', not a ymd.
+    expect('snooze:event#1#2026-09-28T09:30:00.000Z'.slice(0, 10)).toBe('snooze:eve');
+    expect(/^\d{4}-\d{2}-\d{2}$/.test('snooze:eve')).toBe(false);
   });
 });
 
-describe('D-2 updateEvent clears today using CURRENT_DATE ymd, not ::date', () => {
-  it('deletes today legacy + token rows with the 10-char prefix', async () => {
+describe('D-2 updateEvent clears the USER-local today using CURRENT_DATE-independent ymd', () => {
+  it('deletes today legacy + token rows with the 10-char prefix of the event-timezone day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // 2026-09-28T20:00Z = 2026-09-29 04:00 in Asia/Shanghai (user) but still 2026-09-28 in UTC (DB).
+    vi.setSystemTime(new Date(Date.UTC(2026, 8, 28, 20, 0, 0)));
+    mockQuery.mockImplementation((sql: string) =>
+      sql.includes('COALESCE(NULLIF(p.timezone')
+        ? Promise.resolve({ rows: [{ timezone: 'Asia/Shanghai' }], rowCount: 1 })
+        : Promise.resolve({ rows: [], rowCount: 1 }),
+    );
+
     const updated = await updateEvent('7', '1', {
       reminderConfig: { enabled: true, daysBeforeList: [1], emailRecipients: [] },
     });
     expect(updated).toBe(true);
 
+    const tzCall = mockQuery.mock.calls.find(([sql]) => /COALESCE\(NULLIF\(p\.timezone/.test(sql));
+    expect(tzCall).toBeDefined();
+    expect(tzCall![1]).toEqual(['7', 1]);
+
     const call = mockQuery.mock.calls.find(([sql]) => /DELETE FROM event_trigger_logs/.test(sql));
     expect(call).toBeDefined();
     const [sql, params] = call!;
-    expect(sql).toContain('LEFT(trigger_date, 10) = CURRENT_DATE::text');
-    expect(sql).not.toMatch(/trigger_date\s*::\s*date/);
-    expect(params).toEqual(['7']);
-    expect(EVENT_SERVICE_SOURCE).toContain('LEFT(trigger_date, 10) = CURRENT_DATE::text');
+    // User-local today (04:00 +08 on 09-29), NOT the DB-local UTC day (09-28).
+    expect(params).toEqual(['7', '2026-09-29']);
+    expect(dateStringInTimeZone(new Date(), 'UTC')).toBe('2026-09-28');
+    // The prefix equality excludes namespaced keys (LEFT -> 'snooze:eve') and needs no cast.
+    expect(sql).toContain('LEFT(trigger_date, 10) = $2');
+    expect(sql).not.toMatch(/CURRENT_DATE/);
+    expect(sql).not.toMatch(/trigger_date\s*::\s*date(?!\s*::)/);
+    expect(EVENT_SERVICE_SOURCE).toContain('LEFT(trigger_date, 10) = $2');
+    expect(EVENT_SERVICE_SOURCE).toContain('dateStringInTimeZone(new Date(), timeZone)');
+  });
+
+  it('falls back to Asia/Shanghai when the event has no profile/user timezone row', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.UTC(2026, 8, 28, 20, 0, 0)));
+
+    await updateEvent('7', '1', {
+      reminderConfig: { enabled: true, daysBeforeList: [1], emailRecipients: [] },
+    });
+
+    const call = mockQuery.mock.calls.find(([sql]) => /DELETE FROM event_trigger_logs/.test(sql));
+    expect(call![1]).toEqual(['7', '2026-09-29']);
   });
 });
 
@@ -151,8 +184,11 @@ describe('D-3 getRecommendedDaysFromHistory derives day diffs from trigger histo
 });
 
 describe('AUDIT: display endpoints never hand a token to a date parser', () => {
-  it('/events/reminder-logs exposes the 10-char ymd prefix', () => {
-    expect(EVENTS_ROUTE_SOURCE).toContain('LEFT(tl.trigger_date, 10) AS trigger_date');
+  it('/events/reminder-logs exposes the 10-char ymd prefix only behind the CASE guard', () => {
+    expect(EVENTS_ROUTE_SOURCE).toContain(
+      "CASE WHEN tl.trigger_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN LEFT(tl.trigger_date, 10) ELSE tl.trigger_date END AS trigger_date",
+    );
+    expect(EVENTS_ROUTE_SOURCE).not.toContain('LEFT(tl.trigger_date, 10) AS trigger_date');
   });
 
   it('the TriggerLogs page treats trigger_date as an opaque label (no new Date parse)', () => {

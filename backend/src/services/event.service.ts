@@ -1,5 +1,6 @@
 import { query } from '../db/index.js';
 import { Lunar, Solar } from 'lunar-javascript';
+import { dateStringInTimeZone } from '@timemark/shared/habit-schedule';
 import type { Event, CreateEventRequest, RecurringConfig, ReminderConfig, EventType, CalendarType } from '@timemark/shared';
 
 /**
@@ -498,14 +499,29 @@ export async function updateEvent(id: string, userId: string, data: UpdateEventD
     
     // Clear today's trigger log when reminder config changes
     // This allows the scheduler to re-trigger with the new configuration
-    // 10-char prefix invariant (migration 51): trigger_date is TEXT whose first 10 chars are
-    // ALWAYS the calendar day YYYY-MM-DD (legacy rows are 10 chars; tokens append #d<n>#tHH:mm).
-    // Casting the column to DATE raises 22007 as soon as one token row exists - compare the
-    // prefix against CURRENT_DATE's ymd instead.
+    // 10-char prefix invariant (migration 51): trigger_date is TEXT. A row's first 10 chars
+    // are a calendar day YYYY-MM-DD ONLY for legacy rows and normal `YYYY-MM-DD#d<n>#tHH:mm`
+    // tokens; namespaced keys (`snooze:event#<id>#<ISO>`) carry NO leading date
+    // (`LEFT(..., 10)` = `snooze:eve`) and are EXCLUDED by this prefix equality - never
+    // truncated, never cast (`::date` -> 22007 on any token row).
+    // "Today" must be the USER-local day because that is the day the reminder job dedups
+    // against (`getTodayString(now, getEventTimezone(userId, profileId))` -> sendKey
+    // `YYYY-MM-DD#d<n>#tHH:mm`). DB-local `CURRENT_DATE::text` misses the target during
+    // 00:00-08:00 +08 on a UTC DB, when the DB is still on the previous calendar day.
     try {
+      const tzResult = await query(
+        `SELECT COALESCE(NULLIF(p.timezone, ''), NULLIF(uc.timezone, ''), 'Asia/Shanghai') AS timezone
+           FROM events e
+           LEFT JOIN profiles p ON p.id = e.profile_id
+           LEFT JOIN user_configs uc ON uc.user_id = e.user_id
+          WHERE e.id = $1 AND e.user_id = $2`,
+        [id, numericUserId],
+      );
+      const timeZone = String(tzResult.rows[0]?.timezone ?? 'Asia/Shanghai');
+      const todayYmd = dateStringInTimeZone(new Date(), timeZone);
       await query(
-        `DELETE FROM event_trigger_logs WHERE event_id = $1 AND LEFT(trigger_date, 10) = CURRENT_DATE::text`,
-        [id]
+        `DELETE FROM event_trigger_logs WHERE event_id = $1 AND LEFT(trigger_date, 10) = $2`,
+        [id, todayYmd]
       );
       console.log(`[updateEvent] Cleared trigger logs for event ${id} due to config change`);
     } catch (e) {

@@ -13,10 +13,10 @@ interface ReminderLog {
   id: number;
   event_id: number;
   event_name: string;
-  channel: string;
   status: 'success' | 'failed';
-  message?: string;
-  sent_at: string;
+  error_message: string | null;
+  channel_results: string | null;
+  created_at: string;
 }
 
 export default function Reminders() {
@@ -66,6 +66,19 @@ export default function Reminders() {
       'webhook': 'Webhook',
     };
     return channelMap[channel] || channel;
+  };
+
+  const formatChannels = (channelResults: string | null) => {
+    if (!channelResults) return '';
+    try {
+      const parsed = JSON.parse(channelResults);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return Object.keys(parsed).map(getChannelName).join('、');
+      }
+    } catch {
+      // malformed channel_results → nothing to display
+    }
+    return '';
   };
 
   return (
@@ -121,12 +134,12 @@ export default function Reminders() {
                       </Badge>
                     </h3>
                     <div className="flex items-center gap-3 mt-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
-                      <span className="flex items-center gap-1.5"><Clock size={14} /> {formatTime(r.sent_at)}</span>
+                      <span className="flex items-center gap-1.5"><Clock size={14} /> {formatTime(r.created_at)}</span>
                       <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
-                      <span>渠道: {getChannelName(r.channel)}</span>
+                      <span>渠道: {formatChannels(r.channel_results)}</span>
                     </div>
-                    {r.message && r.status === 'failed' && (
-                      <div className="mt-2 text-sm text-red-500 dark:text-red-400">{r.message}</div>
+                    {r.error_message && r.status === 'failed' && (
+                      <div className="mt-2 text-sm text-red-500 dark:text-red-400">{r.error_message}</div>
                     )}
                   </div>
                 </div>
