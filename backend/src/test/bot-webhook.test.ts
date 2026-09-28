@@ -52,6 +52,7 @@ vi.mock('../services/bot/telegram-api.js', () => ({
   })),
   sendTelegramMessage: vi.fn(async () => ({})),
   answerCallbackQuery: vi.fn(async () => ({})),
+  editMessageText: vi.fn(async () => ({})),
   TelegramApiError: class TelegramApiError extends Error {},
 }));
 

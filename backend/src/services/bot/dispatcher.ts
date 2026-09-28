@@ -1,5 +1,6 @@
 import { dateStringInTimeZone, shiftCalendarDays } from '@timemark/shared/habit-schedule';
 import { defaultBotDataProvider } from './bot-data.service.js';
+import { encodeCallbackData } from './callback-data.js';
 
 /**
  * TimeMark bot command dispatcher (checkbox 92).
@@ -298,8 +299,10 @@ export function parseDurationToMinutes(raw: string): number | null {
 // Reply helpers
 // ---------------------------------------------------------------------------
 
-function message(text: string, data?: Record<string, unknown>): BotReply {
-  return data ? { kind: 'message', text, data } : { kind: 'message', text };
+function message(text: string, data?: Record<string, unknown>, inlineKeyboard?: BotInlineButton[][]): BotReply {
+  const reply: BotReply = data ? { kind: 'message', text, data } : { kind: 'message', text };
+  if (inlineKeyboard && inlineKeyboard.length > 0) reply.inlineKeyboard = inlineKeyboard;
+  return reply;
 }
 function errorReply(text: string, data?: Record<string, unknown>): BotReply {
   return data ? { kind: 'error', text, data } : { kind: 'error', text };
@@ -309,6 +312,38 @@ function ask(text: string, data?: Record<string, unknown>): BotReply {
 }
 function helpReply(): BotReply {
   return { kind: 'help', text: HELP_TEXT };
+}
+
+// ---------------------------------------------------------------------------
+// Inline keyboards (checkbox 93)
+// ---------------------------------------------------------------------------
+
+/**
+ * Inline keyboards are one row per action group and per pending item. Telegram renders the
+ * whole keyboard inline, so it is capped to the first `MAX_KEYBOARD_ITEMS` entries; the
+ * message body still lists every item.
+ */
+export const MAX_KEYBOARD_ITEMS = 10;
+
+/**
+ * Build the inline keyboard for list-style replies. Every button carries ONLY
+ * `{action}:{entity}:{id}[:{minutes}]` (see `callback-data.ts`), never user text, so the
+ * payload stays far under Telegram's 64-byte `callback_data` cap.
+ */
+export function buildTodoInlineKeyboard(items: BotPendingItem[]): BotInlineButton[][] {
+  const rows: BotInlineButton[][] = [];
+  for (const item of items.slice(0, MAX_KEYBOARD_ITEMS)) {
+    const id = item.eventId;
+    rows.push([
+      { text: '✅ 完成', callbackData: encodeCallbackData({ action: 'done', entity: 'todo', id }) },
+      { text: '📂 打开', callbackData: encodeCallbackData({ action: 'open', entity: 'todo', id }) },
+    ]);
+    rows.push([
+      { text: '⏰ 延后 10 分钟', callbackData: encodeCallbackData({ action: 'snooze', entity: 'todo', id, minutes: 10 }) },
+      { text: '⏰ 延后 1 小时', callbackData: encodeCallbackData({ action: 'snooze', entity: 'todo', id, minutes: 60 }) },
+    ]);
+  }
+  return rows;
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +414,11 @@ function formatPending(items: BotPendingItem[]): string {
 async function handleList(ctx: BotCommandContext, provider: BotDataProvider): Promise<BotReply> {
   const items = await provider.listPending(ctx.userId, ctx.profileId);
   if (items.length === 0) return message('📋 当前没有待办', { count: 0 });
-  return message(`📋 待办（${items.length}）：\n${formatPending(items)}`, { count: items.length });
+  return message(
+    `📋 待办（${items.length}）：\n${formatPending(items)}`,
+    { count: items.length },
+    buildTodoInlineKeyboard(items),
+  );
 }
 
 async function handleRange(
@@ -397,7 +436,11 @@ async function handleRange(
   const items = (await provider.listPending(ctx.userId, ctx.profileId))
     .filter((item) => item.date >= from && item.date <= to);
   if (items.length === 0) return message(emptyText, { count: 0 });
-  return message(`${title}（${items.length}）：\n${formatPending(items)}`, { count: items.length });
+  return message(
+    `${title}（${items.length}）：\n${formatPending(items)}`,
+    { count: items.length },
+    buildTodoInlineKeyboard(items),
+  );
 }
 
 async function handleDone(

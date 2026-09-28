@@ -124,3 +124,28 @@ export async function answerCallbackQuery(
   if (params.text) payload.text = params.text;
   return callTelegramApi<unknown>('answerCallbackQuery', botToken, payload);
 }
+
+export interface EditMessageTextParams {
+  chatId: string;
+  messageId: number;
+  text: string;
+  parseMode?: string;
+  /** Passed through verbatim; an empty inline keyboard removes the buttons. */
+  replyMarkup?: unknown;
+}
+
+/**
+ * Edit the text of a bot-sent message (checkbox 93 uses it to render the completed / snoozed
+ * state of the original reminder). An omitted `replyMarkup` is left out of the payload so the
+ * Bot API default applies; passing `{ inline_keyboard: [] }` explicitly drops the buttons.
+ */
+export async function editMessageText(botToken: string, params: EditMessageTextParams): Promise<unknown> {
+  const payload: Record<string, unknown> = {
+    chat_id: params.chatId,
+    message_id: params.messageId,
+    text: params.text,
+  };
+  if (params.parseMode) payload.parse_mode = params.parseMode;
+  if (params.replyMarkup !== undefined) payload.reply_markup = params.replyMarkup;
+  return callTelegramApi<unknown>('editMessageText', botToken, payload);
+}

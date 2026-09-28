@@ -1,8 +1,9 @@
 import { query } from '../../db/index.js';
 import { getUserConfig } from '../config.service.js';
 import { createLogger } from '../../utils/logger.js';
-import { dispatchCommand } from './dispatcher.js';
+import { dispatchCommand, type BotInlineButton } from './dispatcher.js';
 import { sendTelegramMessage } from './telegram-api.js';
+import { handleTelegramCallbackQuery } from './callback-handler.js';
 
 const log = createLogger('bot.webhook');
 
@@ -37,6 +38,8 @@ export interface TelegramMessage {
   date?: number;
   /** Present when the message was forwarded; the dispatcher must treat its text as data. */
   forward_origin?: unknown;
+  /** Inline keyboard attached to the message; echoed back on snooze edits (checkbox 93). */
+  reply_markup?: unknown;
 }
 
 export interface TelegramCallbackQuery {
@@ -107,10 +110,34 @@ async function resolveBotToken(userId: number): Promise<string | null> {
 }
 
 /**
- * Default update processor: dispatch the message text through the command dispatcher and
- * reply via `sendMessage`. Only explicit slash commands do anything; other text is data.
+ * Render the dispatcher's structured inline buttons into the Telegram wire shape.
+ * Only `text` + `callback_data` are sent; never any user-visible extra fields.
+ */
+function toReplyMarkup(
+  buttons: BotInlineButton[][],
+): { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> } {
+  return {
+    inline_keyboard: buttons.map((row) =>
+      row.map((button) => ({ text: button.text, callback_data: button.callbackData })),
+    ),
+  };
+}
+
+/**
+ * Default update processor: `callback_query` taps go to the inline-keyboard handler (93);
+ * message text is dispatched through the command dispatcher and replied to via `sendMessage`.
+ * Only explicit slash commands do anything; other text is data.
  */
 export async function processTelegramUpdate(update: TelegramUpdate): Promise<unknown> {
+  // A button tap carries no command text of its own; it must never fall through to the
+  // dispatcher even when the attached message text happens to start with a slash.
+  if (update.callback_query) {
+    return handleTelegramCallbackQuery(update.callback_query, {
+      resolveUserId: resolveActingUserId,
+      resolveBotToken,
+    });
+  }
+
   const message = update.message ?? update.edited_message;
   const chatId = message?.chat?.id;
   const text = message?.text;
@@ -135,6 +162,9 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<unk
     log.warn({ event: 'bot.reply_token_missing' }, 'Cannot send bot reply: no Telegram token configured');
     return { handled: true, replied: false };
   }
-  await sendTelegramMessage(token, { chatId: String(chatId), text: reply.text });
+  const replyMarkup = reply.inlineKeyboard && reply.inlineKeyboard.length > 0
+    ? toReplyMarkup(reply.inlineKeyboard)
+    : undefined;
+  await sendTelegramMessage(token, { chatId: String(chatId), text: reply.text, replyMarkup });
   return { handled: true, replied: true };
 }

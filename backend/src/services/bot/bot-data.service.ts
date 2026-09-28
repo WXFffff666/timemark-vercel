@@ -18,6 +18,7 @@ import type {
   BotProfileItem,
   BotSettings,
 } from './dispatcher.js';
+import type { BotCallbackProvider, BotTodoLookup } from './callback-handler.js';
 
 /**
  * Default BotDataProvider implementation backed by the real services (checkbox 92).
@@ -56,6 +57,30 @@ export async function listPendingItems(
     title: String(row.name ?? ''),
     date: String(row.date ?? '').slice(0, 10),
   }));
+}
+
+/** Look up a todo (event) by id for an inline-button callback, including its completion state. */
+export async function findTodoForCallback(userId: number, eventId: number): Promise<BotTodoLookup | null> {
+  // The completion flag is read from `todo_completions` (the same store `listPendingItems`
+  // filters on), which is what makes a repeated "done" tap a no-op instead of a second row.
+  const result = await query(
+    `SELECT e.id, e.name, e.date::text AS date,
+            EXISTS (
+              SELECT 1 FROM todo_completions tc
+              WHERE tc.user_id = e.user_id AND tc.event_id = e.id AND tc.occurrence_date = e.date::date
+            ) AS completed
+     FROM events e
+     WHERE e.user_id = $1 AND e.id = $2`,
+    [userId, eventId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    eventId: Number(row.id),
+    title: String(row.name ?? ''),
+    date: String(row.date ?? '').slice(0, 10),
+    completed: row.completed === true,
+  };
 }
 
 export const defaultBotDataProvider: BotDataProvider = {
@@ -155,4 +180,10 @@ export const defaultBotDataProvider: BotDataProvider = {
     // Checkbox 94 seam: once `bot_links` exists, persist `active_profile_id` there.
     // Until then switching is a no-op (the chat has no link row to update).
   },
+};
+
+/** Callback-action data seam (checkbox 93): reuses the same provider for complete/snooze. */
+export const defaultBotCallbackProvider: BotCallbackProvider = {
+  ...defaultBotDataProvider,
+  findTodo: findTodoForCallback,
 };
