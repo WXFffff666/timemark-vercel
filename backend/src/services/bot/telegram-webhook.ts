@@ -1,4 +1,10 @@
 import { query } from '../../db/index.js';
+import { getUserConfig } from '../config.service.js';
+import { createLogger } from '../../utils/logger.js';
+import { dispatchCommand } from './dispatcher.js';
+import { sendTelegramMessage } from './telegram-api.js';
+
+const log = createLogger('bot.webhook');
 
 /**
  * Telegram webhook intake (checkbox 91).
@@ -80,12 +86,55 @@ export async function acceptTelegramUpdate(
 }
 
 /**
- * Default update processor.
+ * Resolve the acting user for this chat.
  *
- * Checkbox 91 ships only the webhook transport, secret verification and dedup; checkbox 92
- * replaces this body with the command dispatcher. Kept as a single injectable seam so the
- * dedup test can substitute a spy and prove a retried `update_id` never runs twice.
+ * Checkbox 94 seam: once `bot_links` exists, the (platform, chat_id) pair resolves to the
+ * linked `user_id` here (and an unlinked chat is rejected by the dispatcher's link check).
+ * Until then, the app is single-user by design, so the sole owner account is used.
  */
-export async function processTelegramUpdate(): Promise<unknown> {
-  return { handled: false };
+async function resolveActingUserId(): Promise<number | null> {
+  const result = await query('SELECT id FROM users ORDER BY id ASC LIMIT 1');
+  const id = result.rows[0]?.id;
+  return id == null ? null : Number(id);
+}
+
+async function resolveBotToken(userId: number): Promise<string | null> {
+  const envToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (envToken && envToken.trim()) return envToken.trim();
+  const config = await getUserConfig(userId);
+  const token = config?.telegram_bot_token;
+  return typeof token === 'string' && token.trim() ? token.trim() : null;
+}
+
+/**
+ * Default update processor: dispatch the message text through the command dispatcher and
+ * reply via `sendMessage`. Only explicit slash commands do anything; other text is data.
+ */
+export async function processTelegramUpdate(update: TelegramUpdate): Promise<unknown> {
+  const message = update.message ?? update.edited_message;
+  const chatId = message?.chat?.id;
+  const text = message?.text;
+  if (chatId == null || typeof text !== 'string' || text.trim() === '') {
+    return { handled: false };
+  }
+
+  const userId = await resolveActingUserId();
+  if (userId === null) return { handled: false };
+
+  const reply = await dispatchCommand({
+    platform: 'telegram',
+    chatId: String(chatId),
+    userId,
+    profileId: null,
+    text,
+  });
+  if (!reply) return { handled: false };
+
+  const token = await resolveBotToken(userId);
+  if (!token) {
+    log.warn({ event: 'bot.reply_token_missing' }, 'Cannot send bot reply: no Telegram token configured');
+    return { handled: true, replied: false };
+  }
+  await sendTelegramMessage(token, { chatId: String(chatId), text: reply.text });
+  return { handled: true, replied: true };
 }
