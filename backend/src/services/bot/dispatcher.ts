@@ -1,6 +1,8 @@
 import { dateStringInTimeZone, shiftCalendarDays } from '@timemark/shared/habit-schedule';
-import { defaultBotDataProvider } from './bot-data.service.js';
+import { defaultBotDataProvider, defaultBotQuietHoursWriter } from './bot-data.service.js';
 import { encodeCallbackData } from './callback-data.js';
+import { escapeMarkdownV2, markdownLink } from './markdown.js';
+import { expiryDeepLink, medicationsDeepLink, todoDeepLink } from './deep-links.js';
 import {
   consumeBotLinkCode,
   getActiveBotLink,
@@ -56,6 +58,12 @@ export interface BotInlineButton {
 export interface BotReply {
   kind: BotReplyKind;
   text: string;
+  /**
+   * Optional MarkdownV2 rendering of the same reply (checkbox 95). The transport sends it
+   * with `parse_mode: MarkdownV2` when present, and falls back to `text` otherwise. Both
+   * fields are produced by the same handler so the rich form can never diverge silently.
+   */
+  markdownText?: string;
   /** Optional inline keyboard (checkbox 93 renders it). */
   inlineKeyboard?: BotInlineButton[][];
   /** Machine-readable payload for tests / future transports. */
@@ -187,8 +195,17 @@ export interface DispatcherDeps {
   linking?: BotLinkingProvider;
   audit?: BotAuditSink;
   parseAdd?: NlAddParser;
+  /** `/quiet` persistence; defaults to writing the existing user config setting. */
+  quietHours?: BotQuietHoursWriter;
   now?: () => Date;
 }
+
+/**
+ * `/quiet` writes through the SAME `quiet_hours_start` / `quiet_hours_end` user-config
+ * setting the notification dispatcher already reads (`sendNotifications` ->
+ * `isInQuietHours`). It is injected only so tests can observe the write without a database.
+ */
+export type BotQuietHoursWriter = (userId: number, start: string, end: string) => Promise<void>;
 
 // ---------------------------------------------------------------------------
 // Command parsing
@@ -209,6 +226,7 @@ export const COMMAND_ALIASES: Record<string, string> = {
   habits: 'habits', habit: 'habits', 习惯: 'habits', 打卡: 'habits',
   profile: 'profile', 档案: 'profile', 切换档案: 'profile', 身份: 'profile',
   settings: 'settings', 设置: 'settings', 配置: 'settings',
+  quiet: 'quiet', 静默: 'quiet', 免打扰: 'quiet', 静默时段: 'quiet',
   link: 'link', 绑定: 'link', 关联: 'link',
   unlink: 'unlink', 解绑: 'unlink', 取消绑定: 'unlink',
 };
@@ -246,6 +264,7 @@ export const HELP_TEXT = [
   '/habits - 习惯打卡',
   '/profile <名称> - 切换档案',
   '/settings - 查看设置',
+  '/quiet <开始> <结束> - 设置静默时段（如 22:00 07:00）',
   '/link <绑定码> - 绑定此聊天',
   '/unlink - 解除绑定',
 ].join('\n');
@@ -374,6 +393,12 @@ function helpReply(): BotReply {
   return { kind: 'help', text: HELP_TEXT };
 }
 
+/** Attach the MarkdownV2 rendering; the transport prefers it over `text`. */
+function withMarkdown(reply: BotReply, markdownText: string): BotReply {
+  reply.markdownText = markdownText;
+  return reply;
+}
+
 // ---------------------------------------------------------------------------
 // Inline keyboards (checkbox 93)
 // ---------------------------------------------------------------------------
@@ -404,6 +429,53 @@ export function buildTodoInlineKeyboard(items: BotPendingItem[]): BotInlineButto
     ]);
   }
   return rows;
+}
+
+// ---------------------------------------------------------------------------
+// MarkdownV2 rich rendering, deep links and the 本周 digest (checkbox 95)
+// ---------------------------------------------------------------------------
+
+/**
+ * `1\. [打开](url) · 2026\-10\-05` - numbering, title and date are escaped as TEXT; only
+ * the `[label](url)` pair is intentional markup. Without `APP_BASE_URL` the per-item link
+ * is omitted (no broken relative URL) and the line degrades to escaped plain text.
+ */
+export function formatPendingMarkdown(items: BotPendingItem[]): string {
+  return items
+    .map((item, index) => {
+      const url = todoDeepLink(item.eventId);
+      const title = url ? markdownLink(item.title, url) : escapeMarkdownV2(item.title);
+      return `${index + 1}\\. ${title} · ${escapeMarkdownV2(item.date)}`;
+    })
+    .join('\n');
+}
+
+/**
+ * Compact "本周" digest: one summary line with today / tomorrow / later counts. All
+ * characters are digits plus full-width punctuation, so the line is valid MarkdownV2 but
+ * is also useful verbatim in the plain-text fallback.
+ */
+export function buildWeekDigest(items: BotPendingItem[], today: string): string {
+  const tomorrow = shiftCalendarDays(today, 1) ?? today;
+  const todayCount = items.filter((item) => item.date === today).length;
+  const tomorrowCount = items.filter((item) => item.date === tomorrow).length;
+  const laterCount = items.length - todayCount - tomorrowCount;
+  return `📊 本周速览：共 ${items.length} 项（今天 ${todayCount} · 明天 ${tomorrowCount} · 随后 ${laterCount}）`;
+}
+
+/** `/quiet` usage hint. Returned verbatim for every malformed invocation. */
+export const QUIET_HOURS_USAGE =
+  '用法：/quiet <开始> <结束>，例如 /quiet 22:00 07:00（24 小时制 HH:mm）。';
+
+/**
+ * Parse one `/quiet` time token. Accepts `H:mm` / `HH:mm` in 24-hour form and normalises
+ * to `HH:mm`; anything else (`25:00`, `abc`, empty) returns null so the caller can refuse
+ * the write instead of corrupting the stored setting.
+ */
+export function parseQuietTime(raw: string): string | null {
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(raw.trim());
+  if (!match) return null;
+  return `${match[1].padStart(2, '0')}:${match[2]}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -457,7 +529,7 @@ export async function dispatchCommand(
           reply = await handleRange(ctx, provider, now, 0, 0, '📅 今日待办', '今天没有待办');
           break;
         case 'week':
-          reply = await handleRange(ctx, provider, now, 0, 6, '🗓 本周待办', '本周没有待办');
+          reply = await handleRange(ctx, provider, now, 0, 6, '🗓 本周待办', '本周没有待办', true);
           break;
         case 'list':
           reply = await handleList(ctx, provider);
@@ -485,6 +557,9 @@ export async function dispatchCommand(
           break;
         case 'settings':
           reply = await handleSettings(ctx, provider);
+          break;
+        case 'quiet':
+          reply = await handleQuiet(ctx, provider, deps.quietHours ?? defaultBotQuietHoursWriter, parsed.args);
           break;
         default:
           reply = helpReply();
@@ -581,11 +656,12 @@ function formatPending(items: BotPendingItem[]): string {
 async function handleList(ctx: BotCommandContext, provider: BotDataProvider): Promise<BotReply> {
   const items = await provider.listPending(ctx.userId, ctx.profileId);
   if (items.length === 0) return message('📋 当前没有待办', { count: 0 });
-  return message(
+  const reply = message(
     `📋 待办（${items.length}）：\n${formatPending(items)}`,
     { count: items.length },
     buildTodoInlineKeyboard(items),
   );
+  return withMarkdown(reply, `📋 待办（${items.length}）：\n${formatPendingMarkdown(items)}`);
 }
 
 async function handleRange(
@@ -596,6 +672,7 @@ async function handleRange(
   toOffset: number,
   title: string,
   emptyText: string,
+  withDigest = false,
 ): Promise<BotReply> {
   const today = await todayInUserTimezone(provider, ctx.userId, now);
   const from = (fromOffset === 0 ? today : shiftCalendarDays(today, fromOffset)) ?? today;
@@ -603,11 +680,15 @@ async function handleRange(
   const items = (await provider.listPending(ctx.userId, ctx.profileId))
     .filter((item) => item.date >= from && item.date <= to);
   if (items.length === 0) return message(emptyText, { count: 0 });
-  return message(
+  const reply = message(
     `${title}（${items.length}）：\n${formatPending(items)}`,
     { count: items.length },
     buildTodoInlineKeyboard(items),
   );
+  const head = withDigest
+    ? `${title}（${items.length}）：\n${buildWeekDigest(items, today)}\n\n`
+    : `${title}（${items.length}）：\n`;
+  return withMarkdown(reply, `${head}${formatPendingMarkdown(items)}`);
 }
 
 async function handleDone(
@@ -628,7 +709,10 @@ async function handleDone(
   }
   const item = items[index - 1];
   await provider.completeTodo(ctx.userId, item.eventId, item.date);
-  return message(`✅ 已完成：${item.title}`, { eventId: item.eventId, index });
+  return withMarkdown(
+    message(`✅ 已完成：${item.title}`, { eventId: item.eventId, index }),
+    `✅ 已完成：${escapeMarkdownV2(item.title)}`,
+  );
 }
 
 async function handleSnooze(
@@ -654,7 +738,10 @@ async function handleSnooze(
   }
   const item = items[index - 1];
   await provider.snoozeTodo(ctx.userId, item.eventId, duration);
-  return message(`⏰ 已延后 ${duration} 分钟：${item.title}`, { eventId: item.eventId, minutes: duration });
+  return withMarkdown(
+    message(`⏰ 已延后 ${duration} 分钟：${item.title}`, { eventId: item.eventId, minutes: duration }),
+    `⏰ 已延后 ${duration} 分钟：${escapeMarkdownV2(item.title)}`,
+  );
 }
 
 async function handleAdd(
@@ -684,18 +771,30 @@ async function handleAdd(
     raw: args,
   });
   const when = result.time ? `${result.date} ${result.time}` : result.date;
-  return message(`✅ 已添加：${result.title} · ${when}`, { eventId: result.eventId });
+  const url = todoDeepLink(result.eventId);
+  const linkLine = url ? `\n🔗 [打开待办](${url})` : '';
+  return withMarkdown(
+    message(`✅ 已添加：${result.title} · ${when}`, { eventId: result.eventId }),
+    `✅ 已添加：${escapeMarkdownV2(result.title)} · ${escapeMarkdownV2(when)}${linkLine}`,
+  );
 }
 
 async function handleMed(ctx: BotCommandContext, provider: BotDataProvider): Promise<BotReply> {
   const doses = await provider.listTodayDoses(ctx.userId, ctx.profileId);
   if (doses.length === 0) return message('💊 今天没有用药安排', { count: 0 });
-  const lines = doses.map((dose) => {
+  const rows = doses.map((dose) => {
     const icon = dose.status === 'taken' ? '✅' : dose.status === 'skipped' ? '⏭️' : '⏳';
     const time = dose.scheduledFor.slice(11, 16) || dose.scheduledFor;
-    return `${icon} ${time} ${dose.medicationName}`;
+    return { icon, time, name: dose.medicationName };
   });
-  return message(`💊 今日用药（${doses.length}）：\n${lines.join('\n')}`, { count: doses.length });
+  const lines = rows.map((row) => `${row.icon} ${row.time} ${row.name}`);
+  const mdLines = rows.map((row) => `${row.icon} ${escapeMarkdownV2(row.time)} ${escapeMarkdownV2(row.name)}`);
+  const url = medicationsDeepLink();
+  const footer = url ? `\n🔗 [打开用药页](${url})` : '';
+  return withMarkdown(
+    message(`💊 今日用药（${doses.length}）：\n${lines.join('\n')}`, { count: doses.length }),
+    `💊 今日用药（${doses.length}）：\n${mdLines.join('\n')}${footer}`,
+  );
 }
 
 async function handleExpiry(ctx: BotCommandContext, provider: BotDataProvider): Promise<BotReply> {
@@ -705,7 +804,16 @@ async function handleExpiry(ctx: BotCommandContext, provider: BotDataProvider): 
     const suffix = item.daysUntil === null ? '' : `（还有 ${item.daysUntil} 天）`;
     return `${item.title} · ${item.expiresOn ?? '未知'}${suffix}`;
   });
-  return message(`🧾 即将到期（${items.length}）：\n${lines.join('\n')}`, { count: items.length });
+  const mdLines = items.map((item) => {
+    const suffix = item.daysUntil === null ? '' : `（还有 ${item.daysUntil} 天）`;
+    const url = expiryDeepLink(item.id);
+    const title = url ? markdownLink(item.title, url) : escapeMarkdownV2(item.title);
+    return `${title} · ${escapeMarkdownV2(item.expiresOn ?? '未知')}${suffix}`;
+  });
+  return withMarkdown(
+    message(`🧾 即将到期（${items.length}）：\n${lines.join('\n')}`, { count: items.length }),
+    `🧾 即将到期（${items.length}）：\n${mdLines.join('\n')}`,
+  );
 }
 
 async function handleHabits(ctx: BotCommandContext, provider: BotDataProvider): Promise<BotReply> {
@@ -715,7 +823,54 @@ async function handleHabits(ctx: BotCommandContext, provider: BotDataProvider): 
     const mark = habit.targetMet ? '✅' : '⏳';
     return `${mark} ${habit.name} · 连续 ${habit.currentStreak} 天`;
   });
-  return message(`🌱 习惯打卡（${habits.length}）：\n${lines.join('\n')}`, { count: habits.length });
+  const mdLines = habits.map((habit) => {
+    const mark = habit.targetMet ? '✅' : '⏳';
+    return `${mark} ${escapeMarkdownV2(habit.name)} · 连续 ${habit.currentStreak} 天`;
+  });
+  return withMarkdown(
+    message(`🌱 习惯打卡（${habits.length}）：\n${lines.join('\n')}`, { count: habits.length }),
+    `🌱 习惯打卡（${habits.length}）：\n${mdLines.join('\n')}`,
+  );
+}
+
+/**
+ * `/quiet <start> <end>` - persists the EXISTING quiet-hours user setting (the same one
+ * `sendNotifications` reads via `isInQuietHours`). A malformed invocation returns the usage
+ * hint and performs NO write, so a typo can never clear or corrupt the stored window.
+ */
+async function handleQuiet(
+  ctx: BotCommandContext,
+  provider: BotDataProvider,
+  writer: BotQuietHoursWriter,
+  args: string,
+): Promise<BotReply> {
+  const parts = args.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    const settings = await provider.getSettings(ctx.userId);
+    const current = settings.quietHoursStart && settings.quietHoursEnd
+      ? `${settings.quietHoursStart} - ${settings.quietHoursEnd}`
+      : '未设置';
+    return ask(`当前静默时段：${current}\n${QUIET_HOURS_USAGE}`, { reason: 'quiet_hours_usage' });
+  }
+  if (parts.length !== 2) {
+    return errorReply(QUIET_HOURS_USAGE, { reason: 'bad_quiet_hours' });
+  }
+  const start = parseQuietTime(parts[0]);
+  const end = parseQuietTime(parts[1]);
+  if (!start || !end) {
+    return errorReply(
+      `无法识别时间：${parts[0]} / ${parts[1]}。${QUIET_HOURS_USAGE}`,
+      { reason: 'bad_quiet_hours' },
+    );
+  }
+  await writer(ctx.userId, start, end);
+  return withMarkdown(
+    message(`✅ 静默时段已更新：${start} - ${end}。此时段内将不发送提醒。`, {
+      quietHoursStart: start,
+      quietHoursEnd: end,
+    }),
+    `✅ 静默时段已更新：${start} \\- ${end}。此时段内将不发送提醒。`,
+  );
 }
 
 async function handleProfile(

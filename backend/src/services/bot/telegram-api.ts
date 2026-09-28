@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createLogger } from '../../utils/logger.js';
+import { enforceTelegramMessageLimit } from './markdown.js';
 
 /**
  * Minimal outbound Telegram Bot API client (checkbox 91/92).
@@ -109,8 +110,16 @@ export interface SendMessageParams {
   replyMarkup?: unknown;
 }
 
+/**
+ * Send one message. This is the single `sendMessage` call site, so the 4096-character
+ * Telegram limit is enforced HERE (checkbox 95): every handler goes through it, and a
+ * MarkdownV2 text is truncated only at an entity/escape-safe boundary (see `markdown.ts`).
+ */
 export async function sendTelegramMessage(botToken: string, params: SendMessageParams): Promise<unknown> {
-  const payload: Record<string, unknown> = { chat_id: params.chatId, text: params.text };
+  const payload: Record<string, unknown> = {
+    chat_id: params.chatId,
+    text: enforceTelegramMessageLimit(params.text, params.parseMode),
+  };
   if (params.parseMode) payload.parse_mode = params.parseMode;
   if (params.replyMarkup) payload.reply_markup = params.replyMarkup;
   return callTelegramApi<unknown>('sendMessage', botToken, payload);
@@ -143,7 +152,8 @@ export async function editMessageText(botToken: string, params: EditMessageTextP
   const payload: Record<string, unknown> = {
     chat_id: params.chatId,
     message_id: params.messageId,
-    text: params.text,
+    // Same 4096-char gate as sendMessage - an edit carries the same limit.
+    text: enforceTelegramMessageLimit(params.text, params.parseMode),
   };
   if (params.parseMode) payload.parse_mode = params.parseMode;
   if (params.replyMarkup !== undefined) payload.reply_markup = params.replyMarkup;

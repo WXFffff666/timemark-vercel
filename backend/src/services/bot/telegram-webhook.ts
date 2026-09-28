@@ -217,6 +217,14 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<unk
   const replyMarkup = reply.inlineKeyboard && reply.inlineKeyboard.length > 0
     ? toReplyMarkup(reply.inlineKeyboard)
     : undefined;
-  await sendTelegramMessage(token, { chatId: String(chatId), text: reply.text, replyMarkup });
+  // Checkbox 95: handlers may provide a MarkdownV2 rendering; prefer it and declare the
+  // parse mode explicitly. The plain `text` stays the representation for handlers that do
+  // not opt in (and for transports without MarkdownV2).
+  await sendTelegramMessage(token, {
+    chatId: String(chatId),
+    text: reply.markdownText ?? reply.text,
+    parseMode: reply.markdownText ? 'MarkdownV2' : undefined,
+    replyMarkup,
+  });
   return { handled: true, replied: true };
 }

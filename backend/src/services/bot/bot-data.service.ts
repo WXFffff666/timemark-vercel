@@ -6,7 +6,7 @@ import { getTodayDoses } from '../medication.service.js';
 import { listUpcomingExpiryItems } from '../expiry.service.js';
 import { listHabits } from '../habit.service.js';
 import { listProfiles } from '../profile.service.js';
-import { getUserConfig } from '../config.service.js';
+import { getUserConfig, saveUserConfig } from '../config.service.js';
 import type {
   BotAddInput,
   BotAddResult,
@@ -16,6 +16,7 @@ import type {
   BotHabitItem,
   BotPendingItem,
   BotProfileItem,
+  BotQuietHoursWriter,
   BotSettings,
 } from './dispatcher.js';
 import type { BotCallbackProvider, BotTodoLookup } from './callback-handler.js';
@@ -186,4 +187,13 @@ export const defaultBotDataProvider: BotDataProvider = {
 export const defaultBotCallbackProvider: BotCallbackProvider = {
   ...defaultBotDataProvider,
   findTodo: findTodoForCallback,
+};
+
+/**
+ * `/quiet` writer (checkbox 95): persists through the EXISTING `quiet_hours_start` /
+ * `quiet_hours_end` user-config columns - the same pair `sendNotifications` reads before
+ * dispatching (`isInQuietHours`). No parallel setting is introduced.
+ */
+export const defaultBotQuietHoursWriter: BotQuietHoursWriter = async (userId, start, end) => {
+  await saveUserConfig(userId, { quiet_hours_start: start, quiet_hours_end: end });
 };
