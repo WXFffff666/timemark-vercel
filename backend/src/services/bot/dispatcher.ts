@@ -14,14 +14,32 @@ import {
   type BotLinkCodeConsumeResult,
   type BotPlatform,
 } from './linking.service.js';
+import { containsSecretLike, defaultBotReplyRedactor, type BotReplyRedactor } from './redaction.js';
+import {
+  BOT_SECURITY_EVENTS,
+  defaultBotSecurityEmitter,
+  emitBotSecurityEvent,
+  sanitizeSecurityField,
+  type BotSecurityEmitter,
+  type BotSecurityEvent,
+  type BotSecurityEventName,
+} from './security-events.js';
 
 /**
- * TimeMark bot command dispatcher (checkbox 92; linking + audit added by checkbox 94).
+ * TimeMark bot command dispatcher (checkbox 92; linking + audit by 94; abuse hardening by 96).
  *
  * Parses `/command args` (with a Chinese/English alias table) and returns a STRUCTURED
  * reply that the transport layer renders. Handlers never mutate data on their own: only an
  * explicit, user-originated slash command reaches a mutating provider call, and any free
  * text (including quoted/forwarded text) is treated strictly as data.
+ *
+ * Checkbox 96 hardening lives here at the single command entry, so every caller is covered:
+ *  - a forwarded/quoted DESTRUCTIVE command is refused with a soft confirmation prompt,
+ *  - a command carrying credential-shaped material is refused before any handler runs,
+ *  - slash-looking but unparseable text is a logged refusal (free text stays a silent no-op),
+ *  - every refusal emits exactly ONE structured security event through the `security` seam,
+ *  - every outbound reply (text + MarkdownV2) passes the `redactor` before it is returned.
+ *  - `fenceUntrusted` (fencing.ts) is the exported helper AI prompts (99/102) must use.
  *
  * Injected seams (each one is the single place a later checkbox plugs in):
  *  - `provider`  - data access (defaults to the real services in bot-data.service.ts).
@@ -31,6 +49,8 @@ import {
  *  - `audit`     - one redacted audit row per executed command.
  *  - `parseAdd`  - NL parser for `/add`. Default is the deterministic `标题 @ 日期 时间`
  *                  grammar; checkbox 99 REPLACES it with the AI/typed-decision parser.
+ *  - `security`  - security-event sink (checkbox 96); defaults to the pino logger.
+ *  - `redactor`  - outbound secret scrubber (checkbox 96); defaults to the real one.
  */
 
 export type { BotPlatform } from './linking.service.js';
@@ -45,6 +65,11 @@ export interface BotCommandContext {
   text: string;
   /** Telegram chat type when known (private / group / ...); stored with the link. */
   chatType?: string | null;
+  /**
+   * True when this text arrived through a forward or a quote/reply (checkbox 96).
+   * Only DESTRUCTIVE commands care - see `DESTRUCTIVE_COMMANDS`.
+   */
+  fromForwardedOrQuoted?: boolean;
 }
 
 export type BotReplyKind = 'message' | 'ask' | 'help' | 'error';
@@ -198,6 +223,10 @@ export interface DispatcherDeps {
   /** `/quiet` persistence; defaults to writing the existing user config setting. */
   quietHours?: BotQuietHoursWriter;
   now?: () => Date;
+  /** Security-event sink (checkbox 96); defaults to the pino-based emitter. */
+  security?: BotSecurityEmitter;
+  /** Outbound secret scrubber (checkbox 96); defaults to the real redactor. */
+  redactor?: BotReplyRedactor;
 }
 
 /**
@@ -288,6 +317,30 @@ export const LINK_REPLIES = {
   unlinked: '✅ 已解除绑定，后续命令将被拒绝。发送 /link <绑定码> 可重新绑定。',
   notLinked: 'ℹ️ 当前聊天尚未绑定账号。',
 } as const;
+
+/**
+ * Commands that delete or revoke state (checkbox 96).
+ *
+ * A handler that deletes, revokes or otherwise destroys state MUST be added here: a
+ * forwarded/quoted copy of one of these commands is NEVER executed, because an attacker
+ * could otherwise talk a victim into forwarding a message that unlinks their own chat.
+ */
+export const DESTRUCTIVE_COMMANDS: ReadonlySet<string> = new Set(['unlink']);
+
+/** Soft confirmation prompt for a forwarded/quoted destructive command. */
+export const FORWARDED_DESTRUCTIVE_REPLY = [
+  '🔐 这条命令来自转发或引用的内容，出于安全考虑我没有执行。',
+  '如果确认是本人操作，请直接在本对话里重新输入 /unlink 并发送（不要转发或引用）。',
+].join('\n');
+
+/** Slash-looking text that cannot be parsed at all (e.g. `/`, `//x`). */
+export const MALFORMED_COMMAND_REPLY = '❓ 无法解析这条命令。发送 /help 查看可用命令。';
+
+/** A command whose text contains credential-shaped material is refused, never processed. */
+export const SECRET_IN_COMMAND_REPLY = [
+  '🔒 消息中似乎包含密钥、令牌或密码，为安全起见已拒绝处理。',
+  '请勿把密钥类内容发送给机器人；如需记录，请在应用内操作。',
+].join('\n');
 
 // ---------------------------------------------------------------------------
 // /add grammar + duration parsing (pure, exported for tests)
@@ -489,13 +542,59 @@ export function parseQuietTime(raw: string): string | null {
  * `/link` is the ONLY command an unlinked chat may run (it is how a chat becomes linked);
  * `/unlink` is always accepted and reports whether there was a link to revoke. Every other
  * command - known or unknown - requires an active link first.
+ *
+ * Refusal order (checkbox 96), first match wins and emits exactly one security event:
+ * malformed -> forwarded-destructive -> secret-bearing -> unlinked. Rate limiting happens
+ * one layer up, in the webhook ingress, before any data access.
  */
 export async function dispatchCommand(
   ctx: BotCommandContext,
   deps: DispatcherDeps = {},
 ): Promise<BotReply | null> {
+  const security = deps.security ?? defaultBotSecurityEmitter;
+  const redactor = deps.redactor ?? defaultBotReplyRedactor;
+
   const parsed = parseCommand(ctx.text);
-  if (!parsed) return null;
+  if (!parsed) {
+    // Free text is DATA: no command, no reply (checkbox 92). Text that LOOKS like a command
+    // but cannot be parsed (bare `/`, `//x`, `/ `) is a logged refusal (checkbox 96).
+    if (!looksLikeCommand(ctx.text)) return null;
+    emitRefusal(security, ctx, BOT_SECURITY_EVENTS.malformedCommand, { reason: 'unparseable' });
+    return guardReply(
+      errorReply(MALFORMED_COMMAND_REPLY, { reason: 'malformed_command' }),
+      ctx,
+      redactor,
+      security,
+    );
+  }
+
+  // A forwarded/quoted copy of a destructive command is never executed, whatever it says.
+  if (ctx.fromForwardedOrQuoted === true && DESTRUCTIVE_COMMANDS.has(parsed.command)) {
+    emitRefusal(security, ctx, BOT_SECURITY_EVENTS.forwardedDestructive, {
+      command: parsed.command,
+      reason: 'forwarded_or_quoted',
+    });
+    return guardReply(
+      ask(FORWARDED_DESTRUCTIVE_REPLY, { reason: 'forwarded_destructive' }),
+      ctx,
+      redactor,
+      security,
+    );
+  }
+
+  // Credential-shaped commands are refused BEFORE any handler runs: the confirmation reply
+  // would otherwise echo the secret back into the chat (checkbox 96 requirement (c)).
+  if (containsSecretLike(ctx.text)) {
+    emitRefusal(security, ctx, BOT_SECURITY_EVENTS.commandBlockedSecret, {
+      reason: 'secret_in_command',
+    });
+    return guardReply(
+      errorReply(SECRET_IN_COMMAND_REPLY, { reason: 'secret_blocked' }),
+      ctx,
+      redactor,
+      security,
+    );
+  }
 
   const linking = deps.linking ?? defaultBotLinkingProvider;
   let reply: BotReply;
@@ -509,7 +608,14 @@ export async function dispatchCommand(
     reply = await handleUnlink(ctx, linking);
   } else {
     const isLinked = deps.isLinked ?? defaultBotLinkCheck;
-    if (!(await isLinked(ctx.platform, ctx.chatId))) return LINK_REQUIRED_REPLY;
+    if (!(await isLinked(ctx.platform, ctx.chatId))) {
+      emitRefusal(security, ctx, BOT_SECURITY_EVENTS.unlinkedCommand, {
+        command: parsed.command,
+        reason: 'link_required',
+      });
+      // A copy: the shared constant must never be mutated by the redaction pass.
+      return guardReply({ ...LINK_REQUIRED_REPLY }, ctx, redactor, security);
+    }
 
     if (!parsed.known) {
       reply = helpReply();
@@ -569,6 +675,62 @@ export async function dispatchCommand(
   }
 
   await auditCommand(deps, ctx, parsed.command, parsed.args, reply, auditUserId);
+  return guardReply(reply, ctx, redactor, security);
+}
+
+/** Text that is not a slash command is data; only slash-looking text can be "malformed". */
+function looksLikeCommand(text: string): boolean {
+  return text.trim().startsWith('/');
+}
+
+/**
+ * Emit one structured security event for a refusal. Only bounded ASCII identifiers are
+ * logged (`command`, `reason`, chat id) - never an argument value or message text.
+ */
+function emitRefusal(
+  emitter: BotSecurityEmitter,
+  ctx: BotCommandContext,
+  event: BotSecurityEventName,
+  fields: { command?: string; reason?: string } = {},
+): void {
+  const payload: BotSecurityEvent = {
+    event,
+    platform: ctx.platform,
+    chatId: sanitizeSecurityField(ctx.chatId),
+  };
+  if (fields.command) payload.command = sanitizeSecurityField(fields.command);
+  if (fields.reason) payload.reason = sanitizeSecurityField(fields.reason);
+  emitBotSecurityEvent(emitter, payload);
+}
+
+/**
+ * The outbound redaction gate (checkbox 96): every reply - plain `text` AND the MarkdownV2
+ * rendering - passes through the redactor before being returned, so no handler can leak a
+ * configured secret or a full document number. One `bot.security.reply_redacted` event is
+ * emitted when anything was scrubbed.
+ */
+function guardReply(
+  reply: BotReply,
+  ctx: BotCommandContext,
+  redactor: BotReplyRedactor,
+  security: BotSecurityEmitter,
+): BotReply {
+  const kinds = new Set<string>();
+  const scrub = (value: string): string => {
+    const result = redactor(value);
+    for (const kind of result.kinds) kinds.add(kind);
+    return result.text;
+  };
+  reply.text = scrub(reply.text);
+  if (typeof reply.markdownText === 'string') reply.markdownText = scrub(reply.markdownText);
+  if (kinds.size > 0) {
+    emitBotSecurityEvent(security, {
+      event: BOT_SECURITY_EVENTS.replyRedacted,
+      platform: ctx.platform,
+      chatId: sanitizeSecurityField(ctx.chatId),
+      redactions: [...kinds],
+    });
+  }
   return reply;
 }
 

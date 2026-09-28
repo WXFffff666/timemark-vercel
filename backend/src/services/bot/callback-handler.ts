@@ -2,6 +2,14 @@ import { createLogger } from '../../utils/logger.js';
 import { answerCallbackQuery, editMessageText, type EditMessageTextParams } from './telegram-api.js';
 import { defaultBotCallbackProvider } from './bot-data.service.js';
 import { decodeCallbackData, formatSnoozeLabel } from './callback-data.js';
+import { defaultBotReplyRedactor, type BotReplyRedactor } from './redaction.js';
+import {
+  BOT_SECURITY_EVENTS,
+  defaultBotSecurityEmitter,
+  emitBotSecurityEvent,
+  sanitizeSecurityField,
+  type BotSecurityEmitter,
+} from './security-events.js';
 import type { TelegramCallbackQuery } from './telegram-webhook.js';
 
 /**
@@ -73,6 +81,10 @@ export interface CallbackHandlerDeps {
   provider?: BotCallbackProvider;
   answer?: AnswerCallbackQueryFn;
   editText?: EditMessageTextFn;
+  /** Outbound secret scrubber (checkbox 96); defaults to the real redactor. */
+  redactor?: BotReplyRedactor;
+  /** Security-event sink (checkbox 96); defaults to the pino-based emitter. */
+  security?: BotSecurityEmitter;
 }
 
 export type CallbackOutcome =
@@ -124,6 +136,27 @@ export async function handleTelegramCallbackQuery(
     log.warn({ event: 'bot.callback_token_missing' }, 'Cannot answer callback query: no Telegram token configured');
     return { handled: false, outcome: 'no_token' };
   }
+
+  const redactor = deps.redactor ?? defaultBotReplyRedactor;
+  const security = deps.security ?? defaultBotSecurityEmitter;
+
+  /**
+   * Checkbox 96: a stored title is external data too. The edit must never echo a configured
+   * secret or a full document number - the same outbound gate the dispatcher applies.
+   */
+  const safeTitle = (raw: string): string => {
+    const cleaned = plainTitle(raw);
+    const result = redactor(cleaned);
+    if (result.redacted) {
+      emitBotSecurityEvent(security, {
+        event: BOT_SECURITY_EVENTS.replyRedacted,
+        platform: 'telegram',
+        chatId: sanitizeSecurityField(chatId ?? ''),
+        redactions: result.kinds,
+      });
+    }
+    return result.text;
+  };
 
   /**
    * ALWAYS answer - even when the action is stale or malformed - so the client spinner stops.
@@ -184,7 +217,7 @@ export async function handleTelegramCallbackQuery(
     // Second tap (or a stale tap after completing elsewhere): a no-op with a friendly toast.
     // The edit is idempotent, so repeating it keeps the same completed state.
     await toast(ANSWER_ALREADY);
-    await edit(`✅ 已完成：${plainTitle(todo.title)}`, REMOVE_KEYBOARD);
+    await edit(`✅ 已完成：${safeTitle(todo.title)}`, REMOVE_KEYBOARD);
     return { handled: true, outcome: 'already_done' };
   }
 
@@ -192,7 +225,7 @@ export async function handleTelegramCallbackQuery(
     if (parsed.action === 'done') {
       await provider.completeTodo(userId, todo.eventId, todo.date);
       await toast('✅ 已完成');
-      await edit(`✅ 已完成：${plainTitle(todo.title)}`, REMOVE_KEYBOARD);
+      await edit(`✅ 已完成：${safeTitle(todo.title)}`, REMOVE_KEYBOARD);
       return { handled: true, outcome: 'done' };
     }
 
@@ -202,7 +235,7 @@ export async function handleTelegramCallbackQuery(
     const label = formatSnoozeLabel(minutes);
     await toast(`⏰ 已延后 ${label}`);
     // Preserve the inline keyboard from the tapped message so the user can extend again.
-    await edit(`⏰ 已延后 ${label}：${plainTitle(todo.title)}`, query.message?.reply_markup);
+    await edit(`⏰ 已延后 ${label}：${safeTitle(todo.title)}`, query.message?.reply_markup);
     return { handled: true, outcome: 'snoozed' };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
