@@ -1557,6 +1557,47 @@ CREATE TABLE IF NOT EXISTS agent_routines (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_routines_due ON agent_routines (enabled, next_run_at);`,
     },
+    {
+      // Checkbox 101: scoped, revocable agent tokens + their audit log. A token is minted
+      // once (raw value shown once), stored ONLY as a SHA-256 hex hash; the plaintext is
+      // never persisted. `scopes` is a coarse grant array ('read' | 'write' | 'admin') that
+      // the dispatcher maps onto each tool's fine-grained `requiredScope` from
+      // shared/src/agent-tools.ts. `agent_audit_logs` records every authorisation decision
+      // (allowed / denied / confirm_required) with the redacted args, the outcome and timing.
+      //
+      // Purely additive + idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only, no
+      // ALTER of existing tables, no backfill, no data migration, re-running is a no-op.
+      // Revocation is soft (`revoked_at`) so the audit trail keeps referring to the token.
+      version: 55,
+      name: 'agent_tokens_v55',
+      sql: `CREATE TABLE IF NOT EXISTS agent_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  scopes TEXT[] NOT NULL DEFAULT ARRAY['read']::text[],
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_agent_tokens_user ON agent_tokens (user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS agent_audit_logs (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  token_id UUID REFERENCES agent_tokens(id) ON DELETE SET NULL,
+  tool TEXT NOT NULL,
+  args_redacted JSONB NOT NULL DEFAULT '{}'::jsonb,
+  decision TEXT NOT NULL CONSTRAINT agent_audit_logs_decision_check CHECK (decision IN ('allowed', 'denied', 'confirm_required')),
+  result TEXT CONSTRAINT agent_audit_logs_result_check CHECK (result IN ('ok', 'error')),
+  error_code TEXT,
+  duration_ms INTEGER,
+  request_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_agent_audit_logs_user ON agent_audit_logs (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_audit_logs_token ON agent_audit_logs (token_id, created_at DESC);`,
+    },
   ];
 
   for (const migration of migrations) {

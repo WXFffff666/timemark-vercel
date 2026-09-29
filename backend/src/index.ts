@@ -68,6 +68,7 @@ import ogRoutes from './routes/og.js';
 import botRoutes from './routes/bot.js';
 import aiRoutes from './routes/ai.js';
 import searchRoutes from './routes/search.js';
+import agentTokensRoutes from './routes/agent-tokens.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -181,6 +182,8 @@ app.route('/api/ai', aiRoutes);
 // checkbox 106: search over the user's own data - pg_trgm by default (zero egress),
 // opt-in pgvector semantic ranking behind EMBEDDINGS_ENABLED.
 app.route('/api/search', searchRoutes);
+// checkbox 101: scoped, revocable agent tokens + audit log (settings CRUD; raw shown once).
+app.route('/api/agent-tokens', agentTokensRoutes);
 // todo 88: also expose the canonical `/share/:token` server-rendered meta document at the app
 // root so it resolves locally and in tests. On Vercel this path is owned by the SPA rewrite in
 // vercel.json (`/((?!api/|.*\\..*).*)` -> /index.html), so the OG image (`/api/og/image/:token`)

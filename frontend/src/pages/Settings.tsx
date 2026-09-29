@@ -16,6 +16,7 @@ import { ProfileSettings } from '@/components/ProfileSettings';
 import { DigestSettings } from '@/components/digest/DigestSettings';
 import { WebPushToggle } from '@/components/settings/WebPushToggle';
 import { AISettings } from '@/components/settings/AISettings';
+import { AgentTokensSettings } from '@/components/settings/AgentTokensSettings';
 
 function parseAlertChannels(raw: unknown): string[] {
   if (!raw) return [];
@@ -795,6 +796,9 @@ export default function Settings() {
 
           {/* AI 助手 / 本地模型（checkbox 107）：独立组件，选择供应商 + 测试连接 */}
           <AISettings />
+
+          {/* 智能体令牌（checkbox 101）：独立组件，创建 / 重命名 / 撤销受限令牌 */}
+          <AgentTokensSettings />
 
           {/* 通知默认邮箱 */}
           <section>

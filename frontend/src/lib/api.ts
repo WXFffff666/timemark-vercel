@@ -218,3 +218,43 @@ export function fetchAiStatus() {
 export function runAiConnectionTest(provider: AiProviderName) {
   return api.post<AiConnectionTestView>('/ai/test', { provider });
 }
+
+/** checkbox 101: coarse grant carried by an agent token. `read` is the default. */
+export type AgentTokenScope = 'read' | 'write' | 'admin';
+
+/** checkbox 101: a stored token as the API ever reveals it - never the raw value/hash. */
+export interface AgentTokenView {
+  id: string;
+  name: string;
+  scopes: AgentTokenScope[];
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  expiresAt: string | null;
+}
+
+/** The one-time POST response: the raw token is present here and NOWHERE else. */
+export interface CreatedAgentTokenView {
+  token: string;
+  record: AgentTokenView;
+}
+
+/** checkbox 101: list the caller's agent tokens (raw values are never included). */
+export function fetchAgentTokens() {
+  return api.get<{ tokens: AgentTokenView[] }>('/agent-tokens');
+}
+
+/** checkbox 101: mint a token. The raw value is returned exactly once. */
+export function createAgentToken(name: string, scopes: AgentTokenScope[]) {
+  return api.post<CreatedAgentTokenView>('/agent-tokens', { name, scopes });
+}
+
+/** checkbox 101: rename a token (returns no payload). */
+export function renameAgentToken(id: string, name: string) {
+  return api.patch<void>(`/agent-tokens/${id}`, { name });
+}
+
+/** checkbox 101: revoke a token (soft delete; returns no payload). */
+export function revokeAgentToken(id: string) {
+  return api.post<void>(`/agent-tokens/${id}/revoke`, {});
+}

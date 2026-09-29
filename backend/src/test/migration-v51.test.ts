@@ -64,7 +64,7 @@ describe('migration v51 registration (checkbox 97)', () => {
     await applyIncrementalMigrations(51);
     expect(callsMatching('snoozed_until')).toHaveLength(0);
     // v52 (checkbox 105, behavioural patterns) is newer and still runs on a recorded 51.
-    expect(versionInserts()).toEqual([52, 53, 54]);
+    expect(versionInserts()).toEqual([52, 53, 54, 55]);
   });
 
   it('does not record v51 when its SQL fails, so a later cold start retries', async () => {
@@ -82,7 +82,7 @@ describe('migration v51 registration (checkbox 97)', () => {
     expect(versions).toContain(51);
     expect(versions.filter((v) => v === 51)).toHaveLength(1);
     expect(versions.indexOf(51)).toBe(versions.indexOf(50) + 1);
-    expect(versions[versions.length - 1]).toBe(54);
+    expect(versions[versions.length - 1]).toBe(55);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }
