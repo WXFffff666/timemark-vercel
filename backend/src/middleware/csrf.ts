@@ -14,6 +14,15 @@ export function csrfProtection() {
       return next();
     }
 
+    // checkbox 103: the MCP Streamable-HTTP endpoint authenticates with a scoped Bearer agent
+    // token (`tmt_...`), which a browser never attaches automatically (it is not a cookie), so
+    // classic CSRF does not apply. Exempt ONLY this exact path and ONLY when such a Bearer
+    // credential is present; every other non-GET /api/* request still needs Origin/Referer or
+    // Bearer + X-Requested-With, so CSRF for the rest of the app is unchanged.
+    if (c.req.path === '/api/mcp' && /^Bearer\s+tmt_/i.test(c.req.header('Authorization') ?? '')) {
+      return next();
+    }
+
     const origin = c.req.header('Origin');
     const referer = c.req.header('Referer');
     const host = c.req.header('host') ?? c.req.header('x-forwarded-host');

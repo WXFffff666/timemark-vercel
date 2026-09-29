@@ -70,6 +70,9 @@ import aiRoutes from './routes/ai.js';
 import searchRoutes from './routes/search.js';
 import agentTokensRoutes from './routes/agent-tokens.js';
 import agentRoutes from './routes/agent.js';
+// checkbox 103: stateless MCP server over the Streamable HTTP transport (disabled unless
+// MCP_ENABLED=true); a single POST handler over the same scoped tokens + tool registry.
+import mcpRoutes from './routes/mcp.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -187,6 +190,8 @@ app.route('/api/search', searchRoutes);
 app.route('/api/agent-tokens', agentTokensRoutes);
 // checkbox 102: agent action API (registry, scoped execution, two-phase confirmation).
 app.route('/api/agent', agentRoutes);
+// checkbox 103: stateless MCP server (Streamable HTTP) over the same registry + scoped tokens.
+app.route('/api/mcp', mcpRoutes);
 // todo 88: also expose the canonical `/share/:token` server-rendered meta document at the app
 // root so it resolves locally and in tests. On Vercel this path is owned by the SPA rewrite in
 // vercel.json (`/((?!api/|.*\\..*).*)` -> /index.html), so the OG image (`/api/og/image/:token`)
