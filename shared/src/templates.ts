@@ -691,6 +691,24 @@ export function generateNotificationContent(
 }
 
 /**
+ * 模板正文里引用到的 `{{变量}}` 名称（按首次出现顺序去重）。
+ *
+ * 供 AI 翻译路径（checkbox 108）校验：译文必须原样保留源模板声明的每个占位符，
+ * 因此调用方用「源占位符集合 == 译文占位符集合」判定是否接受模型输出。
+ */
+export function templatePlaceholders(content: string): string[] {
+  const names: string[] = [];
+  const pattern = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
+  let match: RegExpExecArray | null = pattern.exec(content);
+  while (match !== null) {
+    const name = match[1];
+    if (!names.includes(name)) names.push(name);
+    match = pattern.exec(content);
+  }
+  return names;
+}
+
+/**
  * 预览模板
  */
 export function previewTemplate(template: string): string {

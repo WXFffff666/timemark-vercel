@@ -17,6 +17,7 @@ import {
   sanitizeDigestRecipients,
   type DigestSectionKey,
 } from './digest-sections.js';
+import { isDigestNarrativeEnabled, summarizeDigestNarrative } from './ai/summarize.js';
 
 /**
  * 周期性图文摘要（checkbox 79）。
@@ -36,6 +37,11 @@ const log = createLogger('digest');
 export type DigestPeriod = 'monthly' | 'yearly';
 
 const PERIOD_LABEL: Record<DigestPeriod, string> = { monthly: '月度', yearly: '年度' };
+
+/** 无 AI 叙述时逐字节复用的说明文案（task 79 原样）。 */
+const DETERMINISTIC_NOTE = '本摘要由 TimeMark 确定性生成，不含 AI 叙述。';
+/** 有 AI 叙述时的说明文案。 */
+const AI_NOTE = '本摘要的统计为确定性生成；上方叙述段由 AI 依据这些统计数字撰写，数字已做一致性校验。';
 
 /* ------------------------------------------------------------------ */
 /* 数据结构                                                            */
@@ -84,6 +90,11 @@ export interface DigestData {
   sections?: DigestSectionKey[];
   /** 所有区块都为空 → 渲染「本期无记录」。 */
   isEmpty: boolean;
+  /**
+   * 可选的 AI 叙述段（checkbox 108）。缺省 = 无 AI 叙述，渲染结果与 task 79 逐字节一致。
+   * 仅在 `AI_DIGEST_NARRATIVE=true` 且模型输出通过数字校验时才有值。
+   */
+  narrative?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -426,6 +437,10 @@ export function renderDigestHtml(data: DigestData): string {
   const banner = data.isEmpty
     ? '<section class="card banner"><strong>本期无记录</strong><p class="meta">该账户在本期没有任何事件、待办、订阅、习惯、用药、保养或目标数据。</p></section>'
     : '';
+  const narrative = data.narrative
+    ? `<section class="card banner"><strong>本期叙述</strong><p class="meta">${escapeHtml(data.narrative)}</p></section>`
+    : '';
+  const generationNote = data.narrative ? AI_NOTE : DETERMINISTIC_NOTE;
 
   const spendRows: Array<Array<string | number>> = Object.entries(data.spend.byCurrency)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -440,7 +455,8 @@ export function renderDigestHtml(data: DigestData): string {
 <body><main class="report">
 <section class="card"><h1>TimeMark ${escapeHtml(PERIOD_LABEL[data.period])}摘要</h1>
 <p class="meta">统计区间：<strong>${escapeHtml(data.from)}</strong> 至 <strong>${escapeHtml(data.to)}</strong></p>
-<p class="meta">生成日期：${escapeHtml(data.today)} · 本摘要由 TimeMark 确定性生成，不含 AI 叙述。</p></section>
+<p class="meta">生成日期：${escapeHtml(data.today)} · ${generationNote}</p></section>
+${narrative}
 ${banner}
 ${sectionIncluded(data, 'upcoming') ? htmlSection('未来 30 天', htmlRows(['事项', '类型', '日期'], data.upcoming.map((e) => [e.name, e.type, e.date]))) : ''}
 ${sectionIncluded(data, 'overdue') ? htmlSection('逾期事项', htmlRows(['类型', '事项', '到期', '逾期天数'], data.overdue.map((o) => [o.kind, o.title, o.due, o.daysOverdue]))) : ''}
@@ -489,6 +505,21 @@ function fitText(font: PDFFont, text: string, maxWidth: number, size: number): s
   return `${cut}…`;
 }
 
+/** 把 AI 叙述按固定字符数折行，避免单行溢出 PDF 版心。 */
+function wrapPdfText(text: string, maxChars = 46): string[] {
+  const lines: string[] = [];
+  let current = '';
+  for (const ch of text) {
+    current += ch;
+    if (current.length >= maxChars) {
+      lines.push(current);
+      current = '';
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 function drawRows(writer: PdfWriter, rows: string[][], columns: number[]): void {
   const rowHeight = 15;
   const totalWidth = columns.reduce((sum, w) => sum + w, 0);
@@ -530,7 +561,12 @@ export async function renderDigestPdf(data: DigestData): Promise<Uint8Array> {
   writeLine(writer, `TimeMark ${PERIOD_LABEL[data.period]}摘要`, { size: 18, gap: 10, color: BLUE });
   writeLine(writer, `统计区间：${data.from} 至 ${data.to}`, { size: 11, gap: 2 });
   writeLine(writer, `生成日期：${data.today}`, { size: 11, gap: 2 });
-  writeLine(writer, '本摘要由 TimeMark 确定性生成，不含 AI 叙述。', { size: 9, color: SLATE_500, gap: 14 });
+  writeLine(writer, data.narrative ? AI_NOTE : DETERMINISTIC_NOTE, { size: 9, color: SLATE_500, gap: data.narrative ? 4 : 14 });
+  if (data.narrative) {
+    writeLine(writer, '本期叙述', { size: 12, gap: 4, color: BLUE });
+    for (const line of wrapPdfText(data.narrative)) writeLine(writer, line, { size: 10, gap: 4 });
+    writer.y -= 6;
+  }
   if (data.isEmpty) writeLine(writer, '本期无记录', { size: 12, gap: 14, color: SLATE_500 });
 
   if (sectionIncluded(data, 'upcoming')) pdfSection(writer, '未来 30 天', ['事项', '类型', '日期'], data.upcoming.map((e) => [e.name, e.type, e.date]), [220, 130, 137]);
@@ -585,6 +621,17 @@ function plainSummary(data: DigestData): string {
 }
 
 /**
+ * 可选的 AI 叙述（checkbox 108），默认关闭。
+ *
+ * 绝不抛出：功能开关关闭、无 provider、超时、provider 报错、或输出未通过数字校验，
+ * 都返回 `null`，即渲染结果与 task 79 逐字节一致（确定性降级）。
+ */
+async function resolveDigestNarrative(data: DigestData): Promise<string | null> {
+  const { narrative } = await summarizeDigestNarrative(data, { enabled: isDigestNarrativeEnabled() });
+  return narrative;
+}
+
+/**
  * 为一个用户生成并投递摘要：写一条 Inbox 消息，并按解析出的收件人发一封带 PDF 附件的邮件。
  * 每次调用最多发 **一封** 邮件（收件人用逗号合并）；无邮件渠道/收件人时仍写 Inbox 并优雅返回。
  *
@@ -606,8 +653,10 @@ export async function sendDigestForUser(
 
   const fullData = await buildDigestData(userId, period, now);
   const data = selectDigestSections(fullData, prefs.sections);
-  const html = renderDigestHtml(data);
-  const pdf = await renderDigestPdf(data);
+  const narrative = await resolveDigestNarrative(data);
+  const dataWithNarrative: DigestData = narrative ? { ...data, narrative } : data;
+  const html = renderDigestHtml(dataWithNarrative);
+  const pdf = await renderDigestPdf(dataWithNarrative);
 
   const base: DigestSendResult = { userId, period, from: data.from, to: data.to, emailed: false, recipients: [], inbox: false };
 
@@ -616,7 +665,7 @@ export async function sendDigestForUser(
     const message = await createInboxMessage({
       userId,
       title: `TimeMark ${PERIOD_LABEL[period]}摘要 · ${data.to}`,
-      body: plainSummary(data),
+      body: narrative ? `${narrative}\n\n${plainSummary(data)}` : plainSummary(data),
       source: 'inbound',
       senderLabel: '定期摘要',
     });
