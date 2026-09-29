@@ -21,7 +21,8 @@
     "./lunar-calendar": "./dist/lunar-calendar.js",
     "./chinese-days": "./dist/chinese-days.js",
     "./email-compose": "./dist/email-compose.js",
-    "./nl-fallback": "./dist/nl-fallback.js"
+    "./nl-fallback": "./dist/nl-fallback.js",
+    "./agent-tools": "./dist/agent-tools.js"
   },
   "scripts": {
     "build": "tsc",

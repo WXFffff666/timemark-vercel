@@ -36,4 +36,5 @@ export * from './inventory-schedule.js';
 export * from './maintenance-schedule.js';
 export * from './sanitize-html.js';
 export * from './nl-fallback.js';
+export * from './agent-tools.js';
 export * from './utils/zod-errors.js';
