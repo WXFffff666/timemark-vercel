@@ -22,6 +22,8 @@ import { resolveNextGregorianOccurrence } from '@timemark/shared/event-schedule'
 import { contactHasAnyEmail, getContactEmailList } from '@/lib/contact-utils';
 import { channelToAccountTypeFor } from '@/lib/channel-account-type';
 import { api, fetchAvailableChannels, type AvailableChannel } from '@/lib/api';
+import { VoiceInputButton } from './VoiceInputButton';
+import type { VoiceDraft } from './voice-input';
 import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
 import { getBlessing } from '@timemark/shared/blessings';
 import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate, NotificationChannel } from '@timemark/shared';
@@ -231,6 +233,30 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   }, [formData.date, formData.type, formData.recurringConfig, formData.reminderConfig]);
 
   const [lunarInputValue, setLunarInputValue] = useState('');
+
+  // 语音输入（checkbox 145）：浏览器本地识别，规则解析后填入可编辑草稿，绝不自动保存。
+  const [voiceDraftNotice, setVoiceDraftNotice] = useState<string | null>(null);
+
+  const handleVoiceDraft = (draft: VoiceDraft) => {
+    setFormData((prev) => ({
+      ...prev,
+      name: draft.name,
+      // 解析结果是公历 YYYY-MM-DD（本地日历日，绝不是 UTC ISO 切片）。
+      ...(draft.date ? { date: draft.date, calendarType: 'gregorian' as const } : {}),
+      ...(draft.recurrence
+        ? {
+            recurringConfig: {
+              enabled: true,
+              frequency: draft.recurrence.frequency,
+              interval: draft.recurrence.interval,
+              endType: 'never' as const,
+            },
+          }
+        : {}),
+    }));
+    if (draft.date) setLunarInputValue('');
+    setVoiceDraftNotice('已根据语音填入草稿，请核对后再点击「确认保存」');
+  };
 
   const [customTime, setCustomTime] = useState('');
   const [customEmail, setCustomEmail] = useState('');
@@ -843,14 +869,22 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
               <Calendar size={16} className="text-primary-500" />
               事件名称
             </label>
-            <Input
-              required
-              placeholder="例如：妈妈生日 / 结婚纪念日"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="h-12"
-              aria-label="事件名称"
-            />
+            <div className="flex items-start gap-2">
+              <Input
+                required
+                placeholder="例如：妈妈生日 / 结婚纪念日"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="h-12 flex-1"
+                aria-label="事件名称"
+              />
+              <VoiceInputButton onDraft={handleVoiceDraft} />
+            </div>
+            {voiceDraftNotice && (
+              <p role="status" className="text-xs font-medium text-primary-600 dark:text-primary-400">
+                {voiceDraftNotice}
+              </p>
+            )}
           </motion.div>
 
           {/* 日历类型和日期选择 */}
