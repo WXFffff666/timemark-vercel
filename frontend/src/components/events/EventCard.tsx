@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Clock, Calendar, Edit2, Trash2, Send, CheckCircle2, Circle, Heart, GraduationCap, PartyPopper, Sparkles, CalendarDays } from 'lucide-react';
+import { Clock, Calendar, Edit2, Trash2, Send, CheckCircle2, Circle, Heart, GraduationCap, PartyPopper, Sparkles, CalendarDays, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useEffect, useState } from 'react';
@@ -10,6 +10,7 @@ import {
   isEventCountdownPast,
   resolveNextOccurrenceDate,
 } from '@/lib/calendar-utils';
+import { resolveEventLunarLabel } from '@/lib/lunar';
 import { useTimezone } from '@/components/RealtimeClock';
 
 interface EventCardProps {
@@ -69,6 +70,8 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
   const targetDate = safeParseDate(nextOccurrenceDate);
   const formattedDate = targetDate ? targetDate.toLocaleDateString('zh-CN') : '无效日期';
   const displayDate = formattedDate;
+  // checkbox 169: 双历事件同时展示农历（原样读持久化的 lunarDate；缺失时受支持年份保护）。
+  const lunarInfo = resolveEventLunarLabel(event);
 
   useEffect(() => {
     const calculateTimeLeft = () => {
@@ -123,6 +126,18 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
             <span>{displayDate}</span>
             <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">{event.calendarType === 'lunar' ? '农历' : event.calendarType === 'both' ? '双历' : '公历'}</Badge>
           </div>
+          {lunarInfo.label && (
+            <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400 relative z-10" data-testid="event-lunar-date">
+              <Moon size={12} className="text-primary-500" />
+              <span>{lunarInfo.label}</span>
+            </div>
+          )}
+          {lunarInfo.error && !lunarInfo.label && (
+            <div className="flex items-center gap-2 mt-1 text-xs text-amber-600 dark:text-amber-300 relative z-10" data-testid="event-lunar-error">
+              <Moon size={12} />
+              <span>{lunarInfo.error}</span>
+            </div>
+          )}
         </div>
       </div>
       

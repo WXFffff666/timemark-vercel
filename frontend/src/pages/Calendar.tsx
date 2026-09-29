@@ -15,6 +15,7 @@ import {
 import { getTodayDateKey } from '@/lib/timezone-utils';
 import { useTimezone } from '@/components/RealtimeClock';
 import { getHolidayCoverage, getHolidayMarker, isYearCovered } from '@/lib/chinese-holidays';
+import { resolveEventLunarLabel } from '@/lib/lunar';
 import { HolidayBadge } from '@/components/calendar/HolidayBadge';
 import { StaticSearchBox } from '@/components/StaticSearchBox';
 import { AlmanacCard } from '@/components/almanac/AlmanacCard';
@@ -429,20 +430,29 @@ function DayPanel({
 function EventListCompact({ events, showDate }: { events: Event[]; showDate?: boolean }) {
   return (
     <div className="space-y-2">
-      {events.map((e) => (
-        <div key={e.id} className="glass-panel rounded-2xl px-4 py-3 flex justify-between items-center gap-2">
-          <div className="min-w-0">
-            <p className="font-semibold truncate">{e.name}</p>
-            <p className="text-xs text-slate-500">
-              {showDate ? `${e.date.slice(0, 10)} · ` : ''}
-              {eventTypeLabel(e.type)}
-            </p>
+      {events.map((e) => {
+        const lunar = resolveEventLunarLabel(e);
+        return (
+          <div key={e.id} className="glass-panel rounded-2xl px-4 py-3 flex justify-between items-center gap-2">
+            <div className="min-w-0">
+              <p className="font-semibold truncate">{e.name}</p>
+              <p className="text-xs text-slate-500">
+                {showDate ? `${e.date.slice(0, 10)} · ` : ''}
+                {eventTypeLabel(e.type)}
+                {lunar.label ? ` · ${lunar.label}` : ''}
+              </p>
+              {lunar.error && !lunar.label && (
+                <p className="text-xs text-amber-600 dark:text-amber-300" data-testid="event-lunar-error">
+                  {lunar.error}
+                </p>
+              )}
+            </div>
+            <span className="text-xs text-slate-400 shrink-0">
+              {e.calendarType === 'lunar' ? '农历' : e.calendarType === 'both' ? '双历' : '公历'}
+            </span>
           </div>
-          <span className="text-xs text-slate-400 shrink-0">
-            {e.calendarType === 'lunar' ? '农历' : e.calendarType === 'both' ? '双历' : '公历'}
-          </span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

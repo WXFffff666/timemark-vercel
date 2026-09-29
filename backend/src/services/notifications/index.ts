@@ -52,22 +52,10 @@ import {
 import { filterSupportedChannels } from './supported-channels.js';
 import { resolveProfileRoutedAccountIds } from '../reminder-channel-resolver.service.js';
 
-function formatLunarLabel(lunarDateRaw: unknown): string {
-  if (!lunarDateRaw) return '';
-  try {
-    const d = typeof lunarDateRaw === 'string' ? JSON.parse(lunarDateRaw) : lunarDateRaw;
-    if (!d?.month || !d?.day) return '';
-    const prefix = d.isLeap ? '闰' : '';
-    return `农历${prefix}${d.month}月${d.day}日`;
-  } catch {
-    return '';
-  }
-}
-
 import { getUserConfig, getRelationshipMappings, getNotificationAccounts, getEventTemplate } from '../config.service.js';
 import { applyRelationshipMapping } from '@timemark/shared/relationship';
 import { getBlessing } from '@timemark/shared/blessings';
-import { generateNotificationContent } from '@timemark/shared/templates';
+import { generateNotificationContent, formatLunarDateLabel, formatLunarMonthDay } from '@timemark/shared/templates';
 import { query } from '../../db/index.js';
 import { logEmail } from '../email-log.service.js';
 import { enqueueNotificationRetry } from '../notification-retry.service.js';
@@ -709,7 +697,7 @@ export async function sendNotifications(
         date: event.date,
         type: event.type,
         personName: event.person_name || event.personName,
-        lunarDate: formatLunarLabel(event.lunar_date),
+        lunarDate: formatLunarMonthDay(event.lunar_date),
         calendarType: event.calendar_type,
       },
       daysUntil,
@@ -725,8 +713,10 @@ export async function sendNotifications(
     mappedEvent.customMessage = `${base}\n\n📅 ${conflictHint}`;
   }
 
-  // C34: 默认模板也追加农历标签
-  const lunarLabel = formatLunarLabel(event.lunar_date);
+  // C34 + 169: 默认模板也追加农历标签。仅农历/双历事件会携带 lunar_date；公历事件
+  // （无 lunar_date）逐字节不变。标签原样读自持久化的 lunar_date，绝不重算。
+  const isDualCalendar = event.calendar_type === 'lunar' || event.calendar_type === 'both';
+  const lunarLabel = isDualCalendar ? formatLunarDateLabel(event.lunar_date) : '';
   if (lunarLabel && !mappedEvent.customMessage) {
     mappedEvent.customMessage = `**日期:** ${event.date}（${lunarLabel}）\n**类型:** ${event.type}`;
   } else if (lunarLabel && mappedEvent.customMessage && !mappedEvent.customMessage.includes(lunarLabel)) {

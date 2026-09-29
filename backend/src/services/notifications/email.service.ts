@@ -4,6 +4,7 @@ import {
   buildNaturalReminderText,
   buildReminderEmailBodies,
   buildReminderSubject,
+  formatLunarDateLabel,
   htmlToPlainText,
   renderPlainMarkdownToHtml,
 } from '@timemark/shared';
@@ -40,8 +41,12 @@ export async function sendEmailNotification(
   const eventDate = String(event.date ?? '');
   const eventType = String(event.type ?? 'other');
   const customMessage = String(event.customMessage || rcCustom || '').trim();
+  // checkbox 169: 双历展示。农历标签原样读自持久化的 lunar_date（绝不重算），
+  // 仅 lunar/both 事件会带上；公历事件 calendarType='gregorian' → 输出逐字节不变。
+  const lunarLabel = formatLunarDateLabel(event.lunar_date);
+  const calendarType = String(event.calendar_type ?? event.calendarType ?? 'gregorian');
 
-  const subject = buildReminderSubject(eventName, eventType, eventDate);
+  const subject = buildReminderSubject(eventName, eventType, eventDate, lunarLabel, calendarType);
 
   let html: string;
   let text: string;
@@ -58,6 +63,8 @@ export async function sendEmailNotification(
         type: eventType,
         blessing,
         customMessage,
+        lunarDate: lunarLabel || undefined,
+        calendarType,
       }),
     };
     html = renderPlainMarkdownToHtml(options.markdownTemplate, vars);
@@ -69,6 +76,8 @@ export async function sendEmailNotification(
       type: eventType,
       blessing,
       customMessage: customMessage || undefined,
+      lunarDate: lunarLabel || undefined,
+      calendarType,
     });
     html = bodies.html;
     text = bodies.text;

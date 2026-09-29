@@ -24,33 +24,61 @@ export function daysUntilDate(dateStr: string): number | null {
   return Math.ceil((target.getTime() - today.getTime()) / 86400000);
 }
 
+/**
+ * 把「农历」标签并入公历日期（仅农历/双历事件）：`2026-10-05（农历八月十五）`。
+ *
+ * 公历事件（或没有可用农历标签）原样返回 `date` —— 这正是「公历输出逐字节不变」的
+ * 回归护栏。农历标签必须是**已持久化**的 `events.lunar_date`（调用方原样传入），
+ * 这里绝不重算，也绝不猜测。
+ */
+export function composeDualCalendarDate(
+  date: string,
+  lunarLabel?: string,
+  calendarType?: string,
+): string {
+  const day = String(date || '');
+  const lunar = String(lunarLabel || '').trim();
+  if (!lunar || (calendarType !== 'lunar' && calendarType !== 'both')) return day;
+  return day ? `${day}（${lunar}）` : lunar;
+}
+
 /** 像个人备忘一样的主题行，不含产品名 */
 export function buildReminderSubject(
   eventName: string,
   eventType?: string,
   eventDate?: string,
+  lunarLabel?: string,
+  calendarType?: string,
 ): string {
   const name = String(eventName || '这件事').trim().slice(0, 100);
-  const days = eventDate ? daysUntilDate(eventDate) : null;
+  const date = String(eventDate || '');
+  const days = date ? daysUntilDate(date) : null;
+  const lunar = String(lunarLabel || '').trim();
+  const isDual = (calendarType === 'lunar' || calendarType === 'both') && lunar.length > 0;
+  const dualText = isDual ? (date ? `${date}（${lunar}）` : lunar) : '';
+  const withDual = (base: string) => (dualText ? `${base} · ${dualText}` : base);
 
+  let base: string;
   if (eventType === 'birthday') {
-    if (days === 0) return `今天是${name}`;
-    if (days === 1) return `明天是${name}`;
-    if (days != null && days > 1 && days <= 7) return `快到了：${name}`;
-    return name;
+    if (days === 0) base = `今天是${name}`;
+    else if (days === 1) base = `明天是${name}`;
+    else if (days != null && days > 1 && days <= 7) base = `快到了：${name}`;
+    else base = name;
+  } else if (eventType === 'exam') {
+    if (days === 0) base = `今天：${name}`;
+    else if (days === 1) base = `明天：${name}`;
+    else base = `别忘了：${name}`;
+  } else if (eventType === 'anniversary' || eventType === 'holiday') {
+    if (days === 0) base = `今天：${name}`;
+    else base = name;
+  } else if (days === 0) {
+    base = `今天：${name}`;
+  } else if (days === 1) {
+    base = `明天：${name}`;
+  } else {
+    base = name.length <= 40 ? `提醒：${name}` : name.slice(0, 40);
   }
-  if (eventType === 'exam') {
-    if (days === 0) return `今天：${name}`;
-    if (days === 1) return `明天：${name}`;
-    return `别忘了：${name}`;
-  }
-  if (eventType === 'anniversary' || eventType === 'holiday') {
-    if (days === 0) return `今天：${name}`;
-    return name;
-  }
-  if (days === 0) return `今天：${name}`;
-  if (days === 1) return `明天：${name}`;
-  return name.length <= 40 ? `提醒：${name}` : name.slice(0, 40);
+  return withDual(base);
 }
 
 export function buildBroadcastSubject(subject: string): string {
@@ -87,6 +115,10 @@ export interface ReminderEmailInput {
   name: string;
   date: string;
   type: string;
+  /** 「农历」前缀标签（如 `农历八月十五`），农历/双历事件才有；由持久化的 lunar_date 得来。 */
+  lunarDate?: string;
+  /** `gregorian` | `lunar` | `both`。只有农历/双历才把农历并入正文。 */
+  calendarType?: string;
   blessing?: string;
   customMessage?: string;
   showManageLink?: boolean;
@@ -100,11 +132,14 @@ export function buildNaturalReminderText(input: ReminderEmailInput): string {
   const days = date ? daysUntilDate(date) : null;
   const custom = String(input.customMessage || '').trim();
   const blessing = softenBlessing(String(input.blessing || '').trim());
+  // 公历事件（或无农历标签）时 dateLabel === date —— 正文逐字节不变。
+  const dateLabel = composeDualCalendarDate(date, input.lunarDate, input.calendarType);
+  const dualNote = dateLabel === date ? '' : `（${dateLabel}）`;
 
   if (custom) {
     let body = custom.replace(/\*\*(.+?)\*\*/g, '$1');
     if (date && !body.includes(date.slice(0, 10)) && !body.includes(date)) {
-      body += `\n日期：${date}`;
+      body += `\n日期：${dateLabel}`;
     }
     return body.trim();
   }
@@ -112,20 +147,20 @@ export function buildNaturalReminderText(input: ReminderEmailInput): string {
   const lines: string[] = [];
 
   if (type === 'birthday') {
-    if (days === 0) lines.push(`${name}就是今天。`);
-    else if (days === 1) lines.push(`${name}是明天（${date}）。`);
-    else if (days != null && days > 0) lines.push(`${name}还有 ${days} 天，日期是 ${date}。`);
-    else lines.push(`${name}，日期 ${date}。`);
+    if (days === 0) lines.push(`${name}就是今天${dualNote}。`);
+    else if (days === 1) lines.push(`${name}是明天（${dateLabel}）。`);
+    else if (days != null && days > 0) lines.push(`${name}还有 ${days} 天，日期是 ${dateLabel}。`);
+    else lines.push(`${name}，日期 ${dateLabel}。`);
     if (blessing) lines.push(blessing);
   } else if (type === 'exam') {
-    if (days === 0) lines.push(`今天是 ${name}，加油。`);
-    else if (days === 1) lines.push(`明天是 ${name}，记得准备一下。`);
-    else if (days != null && days > 0) lines.push(`${name}还有 ${days} 天（${date}）。`);
-    else lines.push(`${name}，${date}。`);
+    if (days === 0) lines.push(`今天是 ${name}${dualNote}，加油。`);
+    else if (days === 1) lines.push(`明天是 ${name}${dualNote}，记得准备一下。`);
+    else if (days != null && days > 0) lines.push(`${name}还有 ${days} 天（${dateLabel}）。`);
+    else lines.push(`${name}，${dateLabel}。`);
   } else {
-    if (days === 0) lines.push(`今天是：${name}。`);
-    else if (days === 1) lines.push(`明天是：${name}。`);
-    else lines.push(`提醒你一下：${name}，${date}。`);
+    if (days === 0) lines.push(`今天是：${name}${dualNote}。`);
+    else if (days === 1) lines.push(`明天是：${name}${dualNote}。`);
+    else lines.push(`提醒你一下：${name}，${dateLabel}。`);
     if (blessing && blessing !== name) lines.push(blessing);
   }
 

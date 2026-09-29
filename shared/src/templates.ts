@@ -708,6 +708,83 @@ export function templatePlaceholders(content: string): string[] {
   return names;
 }
 
+// ============================================================
+// 农历双历展示（checkbox 169）
+// ============================================================
+
+/** 农历月份中文名（序号 1-12）。 */
+export const LUNAR_MONTH_NAMES = [
+  '正月', '二月', '三月', '四月', '五月', '六月',
+  '七月', '八月', '九月', '十月', '冬月', '腊月',
+] as const;
+
+/** 农历日期中文名（初一..三十）。 */
+export const LUNAR_DAY_NAMES = [
+  '初一', '初二', '初三', '初四', '初五', '初六', '初七', '初八', '初九', '初十',
+  '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
+  '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十',
+] as const;
+
+/** 归一化后的农历月日。 */
+export interface PersistedLunarDateParts {
+  /** 正数月份（闰月由 isLeap 表达）。 */
+  month: number;
+  day: number;
+  isLeap: boolean;
+}
+
+/**
+ * 解析持久化的 `events.lunar_date`（JSON 字符串或对象，`{year,month,day,isLeap}`）。
+ *
+ * 闰月既可能由 `isLeap:true` 标记，也可能由 lunar-javascript 约定的**负数月份**编码
+ * （如 `-2` 表示闰二月）；两者都归一化为 `{month: 正数, isLeap: true}`。缺失、格式畸形、
+ * 或月/日越界一律返回 `null` —— 调用方必须优雅降级，绝不猜一个日期（错的日期是最坏结果）。
+ */
+export function parseLunarDateParts(raw: unknown): PersistedLunarDateParts | null {
+  let data: unknown = raw;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+      data = JSON.parse(trimmed);
+    } catch {
+      return null;
+    }
+  }
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  const rawMonth = Number(record.month);
+  const day = Number(record.day);
+  if (!Number.isInteger(rawMonth) || rawMonth === 0 || Math.abs(rawMonth) > 12) return null;
+  if (!Number.isInteger(day) || day < 1 || day > LUNAR_DAY_NAMES.length) return null;
+  return {
+    month: Math.abs(rawMonth),
+    day,
+    isLeap: record.isLeap === true || rawMonth < 0,
+  };
+}
+
+/**
+ * 农历月日中文文本，如 `八月十五`、闰月 `闰二月廿一`（不含「农历」前缀，与
+ * `{{lunar_date}}` 变量的文档示例 `正月初一` 一致）。缺失/畸形返回 `''`。
+ */
+export function formatLunarMonthDay(raw: unknown): string {
+  const parts = parseLunarDateParts(raw);
+  if (!parts) return '';
+  const monthName = LUNAR_MONTH_NAMES[parts.month - 1];
+  const dayName = LUNAR_DAY_NAMES[parts.day - 1];
+  if (!monthName || !dayName) return '';
+  return `${parts.isLeap ? '闰' : ''}${monthName}${dayName}`;
+}
+
+/**
+ * 带「农历」前缀的展示标签，如 `农历八月十五`。缺失/畸形返回 `''`（优雅降级）。
+ */
+export function formatLunarDateLabel(raw: unknown): string {
+  const monthDay = formatLunarMonthDay(raw);
+  return monthDay ? `农历${monthDay}` : '';
+}
+
 /**
  * 预览模板
  */

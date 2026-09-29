@@ -52,4 +52,32 @@ describe('EventCard', () => {
     await userEvent.click(screen.getByRole('button', { name: /测试/ }))
     expect(onTestSend).toHaveBeenCalledWith('1')
   })
+
+  it('renders the actual lunar date text for a dual-calendar event and keeps the badge', () => {
+    const dual: Event = {
+      ...mockEvent,
+      calendarType: 'both',
+      date: '2026-10-05',
+      lunarDate: { year: 2026, month: 8, day: 15, isLeap: false },
+    }
+    render(<EventCard event={dual} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    expect(screen.getByTestId('event-lunar-date')).toHaveTextContent('农历八月十五')
+    expect(screen.getByText('双历')).toBeInTheDocument()
+  })
+
+  it('shows no lunar text for a Gregorian-only event', () => {
+    render(<EventCard event={mockEvent} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    expect(screen.queryByTestId('event-lunar-date')).toBeNull()
+  })
+
+  it('surfaces a clear error for an out-of-range lunar event without a lunar date', () => {
+    const outOfRange: Event = {
+      ...mockEvent,
+      calendarType: 'lunar',
+      date: '2027-01-01',
+      lunarDate: undefined,
+    }
+    render(<EventCard event={outOfRange} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    expect(screen.getByTestId('event-lunar-error')).toHaveTextContent('农历数据不可用')
+  })
 })
