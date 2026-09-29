@@ -20,7 +20,8 @@
     "./maintenance-schedule": "./dist/maintenance-schedule.js",
     "./lunar-calendar": "./dist/lunar-calendar.js",
     "./chinese-days": "./dist/chinese-days.js",
-    "./email-compose": "./dist/email-compose.js"
+    "./email-compose": "./dist/email-compose.js",
+    "./nl-fallback": "./dist/nl-fallback.js"
   },
   "scripts": {
     "build": "tsc",
