@@ -79,7 +79,8 @@ describe('migration v53 registration (checkbox 106)', () => {
     const [v53Sql] = callsMatching('CREATE EXTENSION IF NOT EXISTS pg_trgm');
     expect(v53Sql).toBeDefined();
     expect(v53Sql).toContain('CREATE EXTENSION IF NOT EXISTS pg_trgm');
-    expect(callsMatching('gin_trgm_ops')).toHaveLength(1);
+    // v53-specific marker (v57 also ships gin_trgm_ops index DDL; `idx_events_name_trgm` is v53-only).
+    expect(callsMatching('idx_events_name_trgm')).toHaveLength(1);
     expect(callsMatching('user_patterns')).toHaveLength(0);
     expect(versionInserts()).toContain(53);
     expect(versionInserts()).not.toContain(52);
@@ -87,9 +88,9 @@ describe('migration v53 registration (checkbox 106)', () => {
 
   it('is idempotent: a recorded v53 row makes the runner skip v53 entirely', async () => {
     await applyIncrementalMigrations(53);
-    expect(callsMatching('gin_trgm_ops')).toHaveLength(0);
+    expect(callsMatching('idx_events_name_trgm')).toHaveLength(0);
     expect(callsMatching('embeddings')).toHaveLength(0);
-    expect(versionInserts()).toEqual([54, 55, 56]);
+    expect(versionInserts()).toEqual([54, 55, 56, 57]);
   });
 
   it('does not record v53 when its SQL fails, so a later cold start retries', async () => {
@@ -105,7 +106,7 @@ describe('migration v53 registration (checkbox 106)', () => {
     const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
     expect(versions.filter((v) => v === 53)).toHaveLength(1);
     expect(versions.indexOf(53)).toBe(versions.indexOf(52) + 1);
-    expect(versions[versions.length - 1]).toBe(56);
+    expect(versions[versions.length - 1]).toBe(57);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }

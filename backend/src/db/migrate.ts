@@ -1636,6 +1636,39 @@ CREATE INDEX IF NOT EXISTS idx_agent_audit_logs_token ON agent_audit_logs (token
 CREATE INDEX IF NOT EXISTS idx_agent_confirmations_user ON agent_confirmations (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_confirmations_pending ON agent_confirmations (status, expires_at);`,
     },
+    {
+      // v57 (checkbox 132): complete the default trigram search path for the five entity
+      // types the earlier trigram landings did NOT cover.
+      //
+      // Existing coverage before this migration (verified by reading migrate.ts + schema.pg.sql
+      // immediately before appending): v33 created pg_trgm + events(name, person_name, tags) +
+      // fixed_contacts(name, nickname, notes) + expiry_items(title, vendor); v34 added
+      // expiry_items(title, vendor) again (the v33 block was forward-looking); v35 added
+      // inventory_items(name); v38/v53 added documents(title, issuer); v53 completed the set
+      // with fixed_contacts(relationship), interactions(summary), expiry_items(notes).
+      // So `inventory_items.name` ALREADY had a trigram index and is deliberately NOT re-issued
+      // here. Genuinely missing until v57: inventory location/notes, maintenance asset_name/notes,
+      // habits name, goals title/description, inbox title/body/sender_label.
+      //
+      // Additive + idempotent + re-runnable: CREATE EXTENSION/INDEX IF NOT EXISTS only, no ALTER
+      // of existing tables, no backfill, no data migration. `CREATE EXTENSION IF NOT EXISTS
+      // pg_trgm` is re-stated so v57 is self-contained even on a database whose v33 failed on the
+      // extension (the runner records a failed version as un-applied and continues walking).
+      version: 57,
+      name: 'search_trgm_remaining_v57',
+      sql: `-- CJK substring search for the remaining entity types; no external calls.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_inventory_items_location_trgm ON inventory_items USING GIN (location gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_notes_trgm ON inventory_items USING GIN (notes gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_maintenance_plans_asset_name_trgm ON maintenance_plans USING GIN (asset_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_maintenance_plans_notes_trgm ON maintenance_plans USING GIN (notes gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_habits_name_trgm ON habits USING GIN (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_goals_title_trgm ON goals USING GIN (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_goals_description_trgm ON goals USING GIN (description gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_inbox_messages_title_trgm ON inbox_messages USING GIN (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_inbox_messages_body_trgm ON inbox_messages USING GIN (body gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_inbox_messages_sender_label_trgm ON inbox_messages USING GIN (sender_label gin_trgm_ops);`,
+    },
   ];
 
   for (const migration of migrations) {

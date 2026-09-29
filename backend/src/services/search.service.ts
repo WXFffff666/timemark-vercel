@@ -36,17 +36,52 @@ import {
 export const SEARCH_OWNER_TYPES = ['event', 'contact', 'interaction', 'document', 'expiry'] as const;
 export type SearchOwnerType = (typeof SEARCH_OWNER_TYPES)[number];
 
+/**
+ * The ten result-entity types `GET /api/search` folds together (checkbox 132). The first five
+ * are the embeddable `SEARCH_OWNER_TYPES` (they also back the opt-in semantic path); the last
+ * five are trigram-only entity types added by migration v57. This is the SAME search stack -
+ * one `pg_trgm` GIN index set, one ranked `ILIKE`/`similarity` CTE - never a second engine.
+ */
+export const SEARCH_RESULT_TYPES = [
+  'event',
+  'contact',
+  'interaction',
+  'document',
+  'expiry',
+  'inventory',
+  'maintenance',
+  'habit',
+  'goal',
+  'inbox',
+] as const;
+export type SearchResultType = (typeof SEARCH_RESULT_TYPES)[number];
+
 export const SEARCH_MAX_LIMIT = 50;
 export const DEFAULT_SEARCH_LIMIT = 20;
 export const DEFAULT_EMBEDDINGS_BATCH_SIZE = 25;
 export const MAX_EMBEDDINGS_BATCH_SIZE = 200;
 
 export interface SearchHit {
-  owner_type: SearchOwnerType;
+  /** Widened to the ten result types; a superset of `SearchOwnerType`, so callers are unaffected. */
+  owner_type: SearchResultType;
   owner_id: number;
   title: string;
   subtitle: string | null;
   rank: number;
+}
+
+/** Facet counts per result type; every one of the ten keys is always present (0 when nothing matched). */
+export type SearchFacets = Record<SearchResultType, number>;
+
+export interface GlobalSearchResult {
+  results: SearchHit[];
+  facets: SearchFacets;
+  /** Total matches across every returned facet (NOT capped by `limit`). */
+  total: number;
+  /** The effective, clamped page size actually sent to the database. */
+  limit: number;
+  /** The effective type filter (canonically ordered); all ten when the caller passed none. */
+  types: SearchResultType[];
 }
 
 export interface SemanticHit {
@@ -57,62 +92,146 @@ export interface SemanticHit {
 }
 
 /**
- * The default search. `$1` user, `$2` raw query (ranking), `$3` escaped `%query%` pattern
- * (the only shape a GIN trigram index can serve), `$4` limit. Every `ILIKE` column below
- * has a matching `gin_trgm_ops` index in migration v53, including the `(tags::text)`
- * expression index - the expression must stay byte-identical to the index definition.
+ * The shared `hits` CTE body for the default search: one `ILIKE '%q%'` predicate per indexed
+ * column, ranked by `similarity()`. `$1` user, `$2` raw query (ranking), `$3` escaped `%query%`
+ * pattern (the only shape a GIN trigram index can serve). Every `ILIKE` column below has a
+ * matching `gin_trgm_ops` index - the first five entity types were completed by migration v53
+ * (including the `(tags::text)` expression index, which must stay byte-identical to the index
+ * definition) and inventory/maintenance/habits/goals/inbox by v57.
+ *
+ * The CTE is factored into ONE builder so the four result paths (untyped / typed / facet / ...)
+ * can never drift. `WITH hits AS` is the stable marker the tests key on.
+ */
+const TRIGRAM_HITS_SQL = `SELECT 'event' AS owner_type, id AS owner_id, name AS title, type AS subtitle,
+       COALESCE(GREATEST(
+         similarity(name, $2),
+         similarity(COALESCE(person_name, ''), $2),
+         similarity(COALESCE(tags::text, ''), $2)
+       ), 0) AS rank
+FROM events
+WHERE user_id = $1
+  AND (name ILIKE $3 OR person_name ILIKE $3 OR tags::text ILIKE $3)
+UNION ALL
+SELECT 'contact' AS owner_type, id AS owner_id, name AS title, relationship AS subtitle,
+       COALESCE(GREATEST(
+         similarity(name, $2),
+         similarity(COALESCE(nickname, ''), $2),
+         similarity(COALESCE(notes, ''), $2),
+         similarity(COALESCE(relationship, ''), $2)
+       ), 0) AS rank
+FROM fixed_contacts
+WHERE user_id = $1
+  AND (name ILIKE $3 OR nickname ILIKE $3 OR notes ILIKE $3 OR relationship ILIKE $3)
+UNION ALL
+SELECT 'interaction' AS owner_type, id AS owner_id, COALESCE(summary, '') AS title, kind AS subtitle,
+       similarity(COALESCE(summary, ''), $2) AS rank
+FROM interactions
+WHERE user_id = $1 AND summary ILIKE $3
+UNION ALL
+SELECT 'document' AS owner_type, id AS owner_id, title AS title, issuer AS subtitle,
+       COALESCE(GREATEST(
+         similarity(title, $2),
+         similarity(COALESCE(issuer, ''), $2)
+       ), 0) AS rank
+FROM documents
+WHERE user_id = $1
+  AND (title ILIKE $3 OR issuer ILIKE $3)
+UNION ALL
+SELECT 'expiry' AS owner_type, id AS owner_id, title AS title, vendor AS subtitle,
+       COALESCE(GREATEST(
+         similarity(title, $2),
+         similarity(COALESCE(vendor, ''), $2),
+         similarity(COALESCE(notes, ''), $2)
+       ), 0) AS rank
+FROM expiry_items
+WHERE user_id = $1
+  AND (title ILIKE $3 OR vendor ILIKE $3 OR notes ILIKE $3)
+UNION ALL
+SELECT 'inventory' AS owner_type, id AS owner_id, name AS title, category AS subtitle,
+       COALESCE(GREATEST(
+         similarity(name, $2),
+         similarity(COALESCE(location, ''), $2),
+         similarity(COALESCE(notes, ''), $2)
+       ), 0) AS rank
+FROM inventory_items
+WHERE user_id = $1
+  AND (name ILIKE $3 OR location ILIKE $3 OR notes ILIKE $3)
+UNION ALL
+SELECT 'maintenance' AS owner_type, id AS owner_id, asset_name AS title, asset_kind AS subtitle,
+       COALESCE(GREATEST(
+         similarity(asset_name, $2),
+         similarity(COALESCE(notes, ''), $2)
+       ), 0) AS rank
+FROM maintenance_plans
+WHERE user_id = $1
+  AND (asset_name ILIKE $3 OR notes ILIKE $3)
+UNION ALL
+SELECT 'habit' AS owner_type, id AS owner_id, name AS title, period AS subtitle,
+       similarity(name, $2) AS rank
+FROM habits
+WHERE user_id = $1 AND name ILIKE $3
+UNION ALL
+SELECT 'goal' AS owner_type, id AS owner_id, title AS title, status AS subtitle,
+       COALESCE(GREATEST(
+         similarity(title, $2),
+         similarity(COALESCE(description, ''), $2)
+       ), 0) AS rank
+FROM goals
+WHERE user_id = $1
+  AND (title ILIKE $3 OR description ILIKE $3)
+UNION ALL
+SELECT 'inbox' AS owner_type, id AS owner_id, title AS title, source AS subtitle,
+       COALESCE(GREATEST(
+         similarity(title, $2),
+         similarity(COALESCE(body, ''), $2),
+         similarity(COALESCE(sender_label, ''), $2)
+       ), 0) AS rank
+FROM inbox_messages
+WHERE user_id = $1
+  AND (title ILIKE $3 OR body ILIKE $3 OR sender_label ILIKE $3)`;
+
+/**
+ * Untyped default search: `$1` user, `$2` raw query, `$3` escaped pattern, `$4` limit. Kept at
+ * EXACTLY four parameters so the existing POST path and `tool-handlers.search` are unchanged.
  */
 export const TRIGRAM_SEARCH_SQL = `
 WITH hits AS (
-  SELECT 'event' AS owner_type, id AS owner_id, name AS title, type AS subtitle,
-         COALESCE(GREATEST(
-           similarity(name, $2),
-           similarity(COALESCE(person_name, ''), $2),
-           similarity(COALESCE(tags::text, ''), $2)
-         ), 0) AS rank
-  FROM events
-  WHERE user_id = $1
-    AND (name ILIKE $3 OR person_name ILIKE $3 OR tags::text ILIKE $3)
-  UNION ALL
-  SELECT 'contact' AS owner_type, id AS owner_id, name AS title, relationship AS subtitle,
-         COALESCE(GREATEST(
-           similarity(name, $2),
-           similarity(COALESCE(nickname, ''), $2),
-           similarity(COALESCE(notes, ''), $2),
-           similarity(COALESCE(relationship, ''), $2)
-         ), 0) AS rank
-  FROM fixed_contacts
-  WHERE user_id = $1
-    AND (name ILIKE $3 OR nickname ILIKE $3 OR notes ILIKE $3 OR relationship ILIKE $3)
-  UNION ALL
-  SELECT 'interaction' AS owner_type, id AS owner_id, COALESCE(summary, '') AS title, kind AS subtitle,
-         similarity(COALESCE(summary, ''), $2) AS rank
-  FROM interactions
-  WHERE user_id = $1 AND summary ILIKE $3
-  UNION ALL
-  SELECT 'document' AS owner_type, id AS owner_id, title AS title, issuer AS subtitle,
-         COALESCE(GREATEST(
-           similarity(title, $2),
-           similarity(COALESCE(issuer, ''), $2)
-         ), 0) AS rank
-  FROM documents
-  WHERE user_id = $1
-    AND (title ILIKE $3 OR issuer ILIKE $3)
-  UNION ALL
-  SELECT 'expiry' AS owner_type, id AS owner_id, title AS title, vendor AS subtitle,
-         COALESCE(GREATEST(
-           similarity(title, $2),
-           similarity(COALESCE(vendor, ''), $2),
-           similarity(COALESCE(notes, ''), $2)
-         ), 0) AS rank
-  FROM expiry_items
-  WHERE user_id = $1
-    AND (title ILIKE $3 OR vendor ILIKE $3 OR notes ILIKE $3)
+${TRIGRAM_HITS_SQL}
 )
 SELECT owner_type, owner_id, title, subtitle, rank
 FROM hits
 ORDER BY rank DESC, owner_id ASC
 LIMIT $4`;
+
+/**
+ * Type-filtered search for `GET /api/search`: `$5` is the concrete `text[]` of result types to
+ * keep (`owner_type = ANY($5::text[])`). `searchGlobal` always passes an explicit, non-empty
+ * type list - all ten when the caller specified none - so there is no NULL-array branch to get
+ * wrong. An empty list is a valid no-op that matches zero rows.
+ */
+export const TRIGRAM_SEARCH_TYPED_SQL = `
+WITH hits AS (
+${TRIGRAM_HITS_SQL}
+)
+SELECT owner_type, owner_id, title, subtitle, rank
+FROM hits
+WHERE owner_type = ANY($5::text[])
+ORDER BY rank DESC, owner_id ASC
+LIMIT $4`;
+
+/**
+ * Facet counts for `GET /api/search`: `$4` is the same concrete `text[]` type list. Counts are
+ * computed over ALL matches (before `LIMIT`), so the facet tells the caller how many hits each
+ * type has, not just how many fit on the page.
+ */
+export const TRIGRAM_FACET_SQL = `
+WITH hits AS (
+${TRIGRAM_HITS_SQL}
+)
+SELECT owner_type, COUNT(*)::int AS count
+FROM hits
+WHERE owner_type = ANY($4::text[])
+GROUP BY owner_type`;
 
 /** Cosine ranking is delegated to pgvector; `$2` is the query vector literal. */
 export const SEMANTIC_RANK_SQL = `
@@ -207,6 +326,27 @@ function isSearchOwnerType(value: unknown): value is SearchOwnerType {
   return typeof value === 'string' && (SEARCH_OWNER_TYPES as readonly string[]).includes(value);
 }
 
+/** Guards a row's `owner_type` against the ten trigram result types (never an unknown owner). */
+export function isSearchResultType(value: unknown): value is SearchResultType {
+  return typeof value === 'string' && (SEARCH_RESULT_TYPES as readonly string[]).includes(value);
+}
+
+/** Maps raw `hits` rows to `SearchHit`s, dropping any row whose owner_type is unknown. */
+function mapSearchRows(rows: Array<Record<string, unknown>>): SearchHit[] {
+  return rows.flatMap((row) => {
+    if (!isSearchResultType(row.owner_type)) return [];
+    return [
+      {
+        owner_type: row.owner_type,
+        owner_id: Number(row.owner_id),
+        title: String(row.title ?? ''),
+        subtitle: row.subtitle === null || row.subtitle === undefined ? null : String(row.subtitle),
+        rank: Number(row.rank ?? 0),
+      },
+    ];
+  });
+}
+
 function fieldText(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string') return value;
@@ -252,18 +392,57 @@ export async function searchLocal(
     `%${escapeLikePattern(trimmed)}%`,
     clampLimit(options.limit),
   ]);
-  return result.rows.flatMap((row) => {
-    if (!isSearchOwnerType(row.owner_type)) return [];
-    return [
-      {
-        owner_type: row.owner_type,
-        owner_id: Number(row.owner_id),
-        title: String(row.title ?? ''),
-        subtitle: row.subtitle === null || row.subtitle === undefined ? null : String(row.subtitle),
-        rank: Number(row.rank ?? 0),
-      },
-    ];
-  });
+  return mapSearchRows(result.rows);
+}
+
+/**
+ * Normalize a caller-supplied `types` filter into the canonical, de-duplicated type list.
+ * An absent filter means ALL ten types; an unknown value is IGNORED (dropped), never an error -
+ * so a filter made only of unknown values becomes the empty list (a valid "match nothing").
+ */
+export function normalizeSearchTypes(types: readonly string[] | undefined): SearchResultType[] {
+  if (types === undefined) return [...SEARCH_RESULT_TYPES];
+  return SEARCH_RESULT_TYPES.filter((type) => types.includes(type));
+}
+
+function emptyFacets(): SearchFacets {
+  return Object.fromEntries(SEARCH_RESULT_TYPES.map((type) => [type, 0])) as SearchFacets;
+}
+
+/**
+ * The `GET /api/search` path (checkbox 132): ranked results ACROSS all ten entity types plus
+ * per-type facet counts, over the same v53/v57 trigram indexes as `searchLocal`. Two queries run
+ * in parallel - the ranked page and the facet counts - and neither touches the network, so the
+ * default search path has zero egress. A blank query short-circuits without a database call.
+ */
+export async function searchGlobal(
+  userId: number,
+  searchQuery: string,
+  options: { limit?: number; types?: readonly string[] } = {},
+): Promise<GlobalSearchResult> {
+  const trimmed = searchQuery.trim();
+  const limit = clampLimit(options.limit);
+  const types = normalizeSearchTypes(options.types);
+  if (trimmed === '') {
+    return { results: [], facets: emptyFacets(), total: 0, limit, types };
+  }
+  const pattern = `%${escapeLikePattern(trimmed)}%`;
+  const [hitsResult, facetResult] = await Promise.all([
+    query(TRIGRAM_SEARCH_TYPED_SQL, [userId, trimmed, pattern, limit, types]),
+    query(TRIGRAM_FACET_SQL, [userId, trimmed, pattern, types]),
+  ]);
+  const results = mapSearchRows(hitsResult.rows);
+  const facets = emptyFacets();
+  for (const row of facetResult.rows) {
+    // Bind to a typed local BEFORE narrowing: `query()` returns `rows: any[]`, and a type guard
+    // on an `any` PROPERTY access does not narrow the property expression, only a local variable.
+    const ownerType: unknown = row?.owner_type;
+    if (isSearchResultType(ownerType)) {
+      facets[ownerType] = Number(row?.count ?? 0);
+    }
+  }
+  const total = SEARCH_RESULT_TYPES.reduce((sum, type) => sum + facets[type], 0);
+  return { results, facets, total, limit, types };
 }
 
 async function fetchSourceRows(

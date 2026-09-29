@@ -363,3 +363,61 @@ export async function confirmAgentAction(confirmationId: string): Promise<AgentC
     message: body?.message || raw || `HTTP ${response.status}`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// checkbox 132: global search across every entity (GET /api/search).
+//   GET /api/search?q=&types=&limit= -> ranked hits across all ten entity types
+//   plus per-type facet counts. The command palette (Ctrl/Cmd+K) is the consumer.
+// ---------------------------------------------------------------------------
+
+/** The ten result-entity types `GET /api/search` folds together. */
+export const GLOBAL_SEARCH_TYPES = [
+  'event',
+  'contact',
+  'interaction',
+  'document',
+  'expiry',
+  'inventory',
+  'maintenance',
+  'habit',
+  'goal',
+  'inbox',
+] as const;
+export type GlobalSearchType = (typeof GLOBAL_SEARCH_TYPES)[number];
+
+export interface GlobalSearchHit {
+  owner_type: GlobalSearchType;
+  owner_id: number;
+  title: string;
+  subtitle: string | null;
+  rank: number;
+}
+
+/** Per-type facet counts; every one of the ten keys is present (0 when nothing matched). */
+export type GlobalSearchFacets = Record<GlobalSearchType, number>;
+
+export interface GlobalSearchResponse {
+  mode: 'trigram';
+  query: string;
+  /** The effective type filter (all ten when the request specified none). */
+  types: GlobalSearchType[];
+  /** `types` values the server dropped because they are not known entity types. */
+  ignoredTypes: string[];
+  /** The effective, clamped page size. */
+  limit: number;
+  /** Total matches across every facet (NOT capped by `limit`). */
+  total: number;
+  facets: GlobalSearchFacets;
+  results: GlobalSearchHit[];
+}
+
+/** checkbox 132: ranked global search over the ten entity types + facets. Zero egress. */
+export function globalSearch(
+  query: string,
+  options: { types?: GlobalSearchType[]; limit?: number } = {},
+): Promise<GlobalSearchResponse> {
+  const params = new URLSearchParams({ q: query });
+  if (options.types && options.types.length > 0) params.set('types', options.types.join(','));
+  if (options.limit !== undefined) params.set('limit', String(options.limit));
+  return api.get<GlobalSearchResponse>(`/search?${params.toString()}`);
+}

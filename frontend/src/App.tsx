@@ -6,6 +6,7 @@ import ShareEvent from './pages/ShareEvent';
 import { TimezoneProvider } from './components/RealtimeClock';
 import { SkipLink } from './components/SkipLink';
 import { AssistantDock } from './components/assistant/AssistantDock';
+import { CommandPalette } from './components/CommandPalette';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -167,6 +168,7 @@ function App() {
         <div className="relative z-10 min-h-screen text-slate-900 dark:text-slate-100">
           <AnimatedRoutes />
           <AssistantDock />
+          <CommandPalette />
         </div>
       </TimezoneProvider>
     </BrowserRouter>

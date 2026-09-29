@@ -9,7 +9,8 @@
  *   - 节气 / 黄历 rules        (shared/src/data/almanac-rules.json)
  *   - notification templates  (shared/dist/templates.js, …/notification-presets.js)
  *   - relationship mappings   (shared/dist/relationship.js)
- *   - help/docs               (docs/*.md, section-level snippets)
+ *   - help/docs               (docs/*.md, section-level snippets; maintainer-only
+ *                              docs in DOCS_INDEX_EXCLUDED are skipped)
  *
  * The serialized index is asserted against a size budget:
  *   <= 200 KiB uncompressed AND <= 50 KiB gzipped (defaults).
@@ -38,6 +39,15 @@ const SHARED_DIST = path.join(ROOT, 'shared', 'dist');
 
 /** Section snippet length for help/docs (the full docs stay on disk; the index is discovery). */
 const DOC_SNIPPET_CHARS = 120;
+
+/**
+ * Maintainer-only docs deliberately kept OUT of the user-facing discovery index. Kept narrow and
+ * explicit - never a blanket rule - because the size budget in the header is a hard performance
+ * guard: an internal doc must be churned out here, not silently absorbed by raising the budget.
+ */
+const DOCS_INDEX_EXCLUDED = new Set([
+  'AGENT.md', // maintainer-only agent security threat model / hardening notes - not end-user help.
+]);
 
 const require = createRequire(path.join(FRONTEND, 'package.json'));
 const MiniSearch = require('minisearch');
@@ -166,7 +176,8 @@ function buildRelationDocs(relationship, documents) {
 }
 
 function buildDocDocs(documents) {
-  const files = readdirSync(DOCS_DIR).filter((f) => f.endsWith('.md'));
+  const files = readdirSync(DOCS_DIR)
+    .filter((f) => f.endsWith('.md') && !DOCS_INDEX_EXCLUDED.has(f));
   for (const file of files) {
     const text = readFileSync(path.join(DOCS_DIR, file), 'utf8');
     text.split(/^## /m).forEach((section, i) => {

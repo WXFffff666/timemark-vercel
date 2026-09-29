@@ -76,8 +76,9 @@ describe('migration v54 registration (checkbox 112)', () => {
     expect(v54Sql).toBeDefined();
     expect(v54Sql).toContain('CREATE TABLE IF NOT EXISTS agent_jobs');
     expect(v54Sql).toContain('CREATE TABLE IF NOT EXISTS agent_routines');
-    // v53 and earlier must not re-run on top of a recorded 53.
-    expect(callsMatching('gin_trgm_ops')).toHaveLength(0);
+    // v53 and earlier must not re-run on top of a recorded 53. (v57 also ships gin_trgm_ops,
+    // so key on the v53-only `idx_events_name_trgm` index name instead.)
+    expect(callsMatching('idx_events_name_trgm')).toHaveLength(0);
     expect(callsMatching('user_patterns')).toHaveLength(0);
     expect(versionInserts()).toContain(54);
     expect(versionInserts()).not.toContain(53);
@@ -88,7 +89,7 @@ describe('migration v54 registration (checkbox 112)', () => {
     expect(callsMatching('agent_jobs')).toHaveLength(0);
     expect(callsMatching('agent_routines')).toHaveLength(0);
     // v55 (checkbox 101) is the tail after v54; applying on a recorded 54 runs only v55.
-    expect(versionInserts()).toEqual([55, 56]);
+    expect(versionInserts()).toEqual([55, 56, 57]);
   });
 
   it('does not record v54 when its SQL fails, so a later cold start retries', async () => {
@@ -104,7 +105,7 @@ describe('migration v54 registration (checkbox 112)', () => {
     const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
     expect(versions.filter((v) => v === 54)).toHaveLength(1);
     expect(versions.indexOf(54)).toBe(versions.indexOf(53) + 1);
-    expect(versions[versions.length - 1]).toBe(56);
+    expect(versions[versions.length - 1]).toBe(57);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }
