@@ -73,6 +73,8 @@ import agentRoutes from './routes/agent.js';
 // checkbox 103: stateless MCP server over the Streamable HTTP transport (disabled unless
 // MCP_ENABLED=true); a single POST handler over the same scoped tokens + tool registry.
 import mcpRoutes from './routes/mcp.js';
+// checkbox 114: bounded worker drain (cron-job.org every minute; claim -> execute -> return).
+import agentWorkerRoutes from './routes/agent-worker.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -188,6 +190,9 @@ app.route('/api/ai', aiRoutes);
 app.route('/api/search', searchRoutes);
 // checkbox 101: scoped, revocable agent tokens + audit log (settings CRUD; raw shown once).
 app.route('/api/agent-tokens', agentTokensRoutes);
+// checkbox 114: the bounded worker drain. Mounted before `/api/agent` so its exact path is
+// matched by this handler (not the agent sub-app's wildcard rate-limit middleware).
+app.route('/api/agent/worker', agentWorkerRoutes);
 // checkbox 102: agent action API (registry, scoped execution, two-phase confirmation).
 app.route('/api/agent', agentRoutes);
 // checkbox 103: stateless MCP server (Streamable HTTP) over the same registry + scoped tokens.

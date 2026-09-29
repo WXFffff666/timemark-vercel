@@ -69,6 +69,8 @@ npx tsx scripts/migrate-db.ts
 Authorization: Bearer 你的CRON_SECRET
 ```
 
+> `POST /api/agent/worker/drain`（后台任务队列）还**必须**额外加一条 `X-Requested-With: XMLHttpRequest`——没有 Origin 的机器 POST 需要它才能通过应用的 CSRF 防护。
+
 | 端点 | Schedule | 说明 |
 |------|----------|------|
 | `/api/cron/reminder-check` | `* * * * *` | **必须** — 每分钟检查提醒（含数据库预热） |
@@ -79,6 +81,7 @@ Authorization: Bearer 你的CRON_SECRET
 | `/api/cron/channel-health` | `0 3 * * *` | 推荐 — 每天 1 次渠道健康检查（Vercel 内置 cron 亦可） |
 | `/api/cron/digest?period=monthly` | `0 9 1 * *` | 推荐 — 每月 1 日 09:00 发送上月摘要（Inbox + 邮件 PDF 附件）；年度摘要另建 `?period=yearly`（`0 9 1 1 *`） |
 | `/api/cron/warmup` | `* * * * *` | 可选 — 减少冷启动延迟（B28 起已并入 reminder-check） |
+| `/api/agent/worker/drain`（**POST**） | `* * * * *` | 后台 AI 任务队列的有界 drain（默认每次最多 3 个任务、响应预算 25 s；未完成任务保持 leased，由下一 tick 回收）。需额外 `X-Requested-With: XMLHttpRequest`；`GET` 同路径是不查库的存活探测 |
 
 完整 URL 示例：`https://你的域名/api/cron/reminder-check`
 

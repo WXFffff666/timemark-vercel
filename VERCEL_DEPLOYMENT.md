@@ -281,8 +281,11 @@ Configure these with `Authorization: Bearer <CRON_SECRET>`:
 | **Retry Notifications** | Every 5–15 min | `/api/cron/retry-notifications` | Retry failed `notification_queue` entries |
 | **Calendar Sync** | Every 15 min | `/api/cron/calendar-sync` | Pull external ICS calendar URLs |
 | **Channel Health** | Daily (optional) | `/api/cron/channel-health` | Re-test active notification accounts |
+| **Agent Worker Drain** | **Every minute (required once background AI is enabled)** | `POST /api/agent/worker/drain` | Drain the durable agent job queue in bounded batches (≤3 jobs per call) |
 
 Copy exact URLs from **Settings → Deploy Wizard** in the app.
+
+The drain endpoint (checkbox 114, `docs/CRON.md`) is bounded by construction: one invocation claims at most 3 jobs (configurable via `AGENT_DRAIN_LIMIT` / `?limit=`), every job execution races a hard work window of `min(AGENT_DRAIN_DEADLINE_MS=45 s, AGENT_DRAIN_RESPONSE_BUDGET_MS=25 s)`, and the response is always the five-key summary `{claimed, succeeded, failed, reclaimed, remaining}`. Unfinished jobs stay `leased` and are reclaimed on the next tick. Because it is a machine `POST` with no Origin, cron-job.org must send **two** headers: `Authorization: Bearer <CRON_SECRET>` (or `AGENT_WORKER_TOKEN`) **and** `X-Requested-With: XMLHttpRequest`. `GET /api/agent/worker/drain` is an unauthenticated liveness probe that never touches the queue or the database.
 
 Legacy routes (`daily-email-backup`, `hourly-cleanup`, `plugin-session-cleanup`, etc.) are **not used** on the Vercel edition.
 

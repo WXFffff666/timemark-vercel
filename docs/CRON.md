@@ -38,6 +38,7 @@ Authorization: Bearer $CRON_SECRET
 
 - **Vercel 内置 cron**：只要项目环境变量里配置了 `CRON_SECRET`，Vercel 会自动附带同样的 `Authorization` Header，无需额外配置。
 - **cron-job.org**：在任务的 Custom Headers 中手动填写该 Header。
+- **Agent worker drain（checkbox 114，`POST /api/agent/worker/drain`）**：除 `Authorization: Bearer $CRON_SECRET`（或可选的 `AGENT_WORKER_TOKEN`）外**还必须**带 `X-Requested-With: XMLHttpRequest`——应用的非 GET CSRF 防护要求「Bearer + 该标记」才放行没有 Origin/Referer 的机器请求，cron-job.org 的两条 Custom Header 都要填。
 - 仅携带 `x-vercel-cron-auth-token` **不足以**通过鉴权（见 `backend/src/routes/cron.ts` 中间件；缺失 `CRON_SECRET` 时返回 500，Header 不匹配返回 401）。
 - 可选：`CRON_ALLOWED_IPS`（逗号分隔）做来源 IP 白名单。
 
@@ -64,9 +65,9 @@ Authorization: Bearer $CRON_SECRET
 > 无法运行在 Vercel 内置 cron 上的任务（子日级）：`reminder-check`、`retry-notifications`、`calendar-sync`、`caldav-sync`、`lunar-phase-reminders`、`warmup`。
 > `channel-health`（每天一次）与 `digest`（每月一次）本身也满足「每天一次或更稀疏」，可以放进 Vercel 内置；本部署为保持**单一调度面板**（改频率无需重新部署）仍统一放在 cron-job.org。
 
-## 外部 cron-job.org 清单（7 条必配 + 1 条可选）
+## 外部 cron-job.org 清单（8 条必配 + 1 条可选）
 
-在 [console.cron-job.org](https://console.cron-job.org) 逐条创建，Header 见上文「认证」。以下 7 条是本部署要求配置的完整清单，另附可选 `warmup`。
+在 [console.cron-job.org](https://console.cron-job.org) 逐条创建，Header 见上文「认证」（`POST` 端点需再加 `X-Requested-With: XMLHttpRequest`）。以下 8 条是本部署要求配置的完整清单，另附可选 `warmup`。
 
 | # | 任务 | 完整 URL | 推荐 Schedule |
 |:--:|:---|:---|:---|
@@ -78,7 +79,8 @@ Authorization: Bearer $CRON_SECRET
 | 6 | `channel-health` | `https://你的域名/api/cron/channel-health` | `0 3 * * *`（每天 1 次） |
 | 7 | `digest`（月度） | `https://你的域名/api/cron/digest?period=monthly` | `0 9 1 * *`（每月 1 日 09:00） |
 | 7b | `digest`（年度，可选） | `https://你的域名/api/cron/digest?period=yearly` | `0 9 1 1 *`（每年 1 月 1 日 09:00） |
-| 8 | `warmup`（可选） | `https://你的域名/api/cron/warmup` | `* * * * *`（每分钟；已并入 1，可停用） |
+| 8 | `agent-worker-drain`（**POST**） | `https://你的域名/api/agent/worker/drain` | `* * * * *`（每分钟；见下节，后台任务启用后必配） |
+| 9 | `warmup`（可选） | `https://你的域名/api/cron/warmup` | `* * * * *`（每分钟；已并入 1，可停用） |
 
 快速核对某条任务是否可用：
 
@@ -93,6 +95,35 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://你的域名/api/cron/remin
 ```
 
 脚本会读取 Vercel 中的 `CRON_SECRET`，并在 cron-job.org 上创建 `reminder-check`（每分钟）与 `retry-notifications`（每 10 分钟）。
+
+## Agent worker drain（checkbox 114）
+
+后台 AI 任务队列（checkbox 112-113 的 `agent_jobs`）由 `backend/src/routes/agent-worker.ts` 的 worker 端点执行——它**不在** `routes/cron.ts` 里，因此不参与上面的「调度总览」护栏（`scripts/check-cron-docs.mjs` 只解析 cron.ts 的路由）。
+
+| 项目 | 值 |
+|:---|:---|
+| 触发 | cron-job.org，`* * * * *`（每分钟；分钟级调度**不能**写进 Vercel 内置 cron，见上文平台限制） |
+| 端点 | `POST https://你的域名/api/agent/worker/drain` |
+| Headers | `Authorization: Bearer $CRON_SECRET`（或 `AGENT_WORKER_TOKEN`）**+** `X-Requested-With: XMLHttpRequest` |
+| 响应 | 恰好 `{claimed, succeeded, failed, reclaimed, remaining}`（基础设施故障时同一响应体再带 `error`） |
+| 存活探测 | `GET https://你的域名/api/agent/worker/drain`——无鉴权、不查库、不领取任务 |
+
+有界机制（全部在路由循环内实现，不靠假设）：
+
+1. 单次调用只调用一次 `claimBatch(N, leaseSeconds)`，N 默认 **3**（`AGENT_DRAIN_LIMIT` 或 `?limit=` / JSON `{"limit":n}` 可调，硬上限 50）。
+2. 工作窗口 `cutAt = start + min(AGENT_DRAIN_DEADLINE_MS=45s, AGENT_DRAIN_RESPONSE_BUDGET_MS=25s)`：领取前检查剩余预算，逐任务执行前再检查；每个任务的执行与剩余预算赛跑（`Promise.race`）。
+3. 预算耗尽立刻跳出循环并返回（慢处理器最多拖住 `responseBudget`，默认 25 s，为 cron-job.org 的 30 s 超时留余量）；未完成的任务保持 `leased`，不记为失败。
+4. 下一次 tick 先执行 `reclaimExpiredLeases()`（租约到期后回到 `queued`），其回收数出现在 `reclaimed`；`remaining = 当前 queued 数 + 本次已领取但未完成数`。
+5. 因此响应必在 300 s 函数上限与 30 s 外部超时之内，且响应体远小于 cron-job.org 的 64 KB 读取上限。
+
+任务处理器尚未注册时（Wave 15 之前），默认执行器以 `NO_HANDLER` 失败任务而**不是**静默标记成功——不会把工作悄悄丢掉。后续 checkbox 注入真实执行器即可。
+
+核验命令：
+
+```bash
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" -H "X-Requested-With: XMLHttpRequest" https://你的域名/api/agent/worker/drain
+curl https://你的域名/api/agent/worker/drain   # 存活探测：{"status":"ok",...}
+```
 
 ## 分享 / 嵌入页面的服务端 OG 元数据（checkbox 88 遗留项）
 
