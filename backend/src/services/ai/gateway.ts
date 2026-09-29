@@ -12,9 +12,15 @@ const log = createLogger('ai-gateway');
  *
  *   primary   AI_BASE_URL / AI_API_KEY / AI_MODEL
  *   fallback  AI_FALLBACK_BASE_URL / AI_FALLBACK_API_KEY / AI_FALLBACK_MODEL
+ *   local     OLLAMA_BASE_URL (default http://localhost:11434/v1) / OLLAMA_MODEL
+ *             / OLLAMA_API_KEY (optional - Ollama and LM Studio need no key)
  *
- * The fallback is only consulted after the primary exhausts its retry, and only
- * for retryable failures (429 / 408 / 5xx / timeout / network).
+ * The local provider is OFF unless `OLLAMA_MODEL` is set: the base URL has a
+ * dev-time `localhost` default (the ONE allowed default) but a model name is
+ * required, so a bare `.env` still leaves AI disabled (plan criterion 14).
+ * Providers are tried in a fixed order primary -> fallback -> local; each one is
+ * only consulted after the previous exhausts its retry, and only for retryable
+ * failures (429 / 408 / 5xx / timeout / network).
  *
  * Provider chain (all free tiers, all OpenAI-compatible):
  *   - Groq        fast inference, contractually does NOT train on inputs.
@@ -48,7 +54,20 @@ export const AI_CACHE_MAX_ENTRIES = 100;
 /** Cached AI responses expire after 10 minutes even while under the size cap. */
 export const AI_CACHE_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Short ceiling for the `/status` reachability probe. It must never make
+ * `GET /api/ai/status` slow: any provider that has not answered within this
+ * window is reported `reachable:false` (`unreachable`) and the route returns.
+ */
+export const AI_PROBE_TIMEOUT_MS = 1_500;
+
+/** Dev-time default for the local provider; the only permitted default. */
+const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1';
+
 const ERROR_DETAIL_MAX_CHARS = 300;
+
+/** Named provider slots. `local` is the Ollama / LM Studio OpenAI-compatible endpoint. */
+export type AiProviderName = 'primary' | 'fallback' | 'local';
 
 /** Typed AI errors: no caller of this module should ever receive a bare `Error`. */
 export type AiErrorCode =
@@ -170,7 +189,7 @@ export interface AiChatOptions {
 export interface AiChatResult {
   content: string;
   model: string;
-  provider: 'primary' | 'fallback';
+  provider: AiProviderName;
   cached: boolean;
   toolCalls?: unknown[];
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
@@ -181,15 +200,32 @@ export interface AiProviderStatus {
   model: string | null;
   /** Hostname only - never the full base URL and never the key. */
   host: string | null;
+  /**
+   * Reachability of the ACTIVE provider: `true` when the host answered the
+   * short probe, `false` when it timed out / refused the connection, `null`
+   * when no probe ran (no provider, or the slot is not the active one).
+   */
+  reachable: boolean | null;
 }
 
 export interface AiStatus {
   enabled: boolean;
-  /** Which provider resolves today: primary wins when it is configured. */
-  provider: 'primary' | 'fallback' | null;
+  /** Which provider resolves today: primary wins, then fallback, then local. */
+  provider: AiProviderName | null;
   primary: AiProviderStatus;
   fallback: AiProviderStatus;
+  local: AiProviderStatus;
   cache: { entries: number; maxEntries: number; ttlMs: number };
+}
+
+/** Result of the one-shot "测试连接" probe: never throws, always typed. */
+export interface AiConnectionTest {
+  ok: boolean;
+  provider: AiProviderName | null;
+  model: string | null;
+  host: string | null;
+  latencyMs: number;
+  error?: { code: AiErrorCode; message: string };
 }
 
 export type AiEnv = Record<string, string | undefined>;
@@ -209,11 +245,15 @@ export interface AiGatewayDeps {
 export interface AiGateway {
   chat(messages: AiMessage[], options?: AiChatOptions): Promise<AiChatResult>;
   status(): AiStatus;
+  /** `status()` plus a short reachability probe of the resolved provider. */
+  statusWithProbe(): Promise<AiStatus>;
+  /** Send ONE tiny prompt to a provider (default: the resolved one) and report. */
+  testConnection(provider?: AiProviderName): Promise<AiConnectionTest>;
   clearCache(): void;
 }
 
 interface AiProvider {
-  label: 'primary' | 'fallback';
+  label: AiProviderName;
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -226,6 +266,7 @@ const FALLBACK_ENV = {
   apiKey: 'AI_FALLBACK_API_KEY',
   model: 'AI_FALLBACK_MODEL',
 } as const;
+const LOCAL_ENV = { baseUrl: 'OLLAMA_BASE_URL', apiKey: 'OLLAMA_API_KEY', model: 'OLLAMA_MODEL' } as const;
 
 /** Validate the operator-supplied base URL; malformed values disable the provider. */
 function safeHost(baseUrl: string): string | null {
@@ -241,7 +282,7 @@ function safeHost(baseUrl: string): string | null {
 function readProvider(
   env: AiEnv,
   keys: { baseUrl: string; apiKey: string; model: string },
-  label: 'primary' | 'fallback',
+  label: AiProviderName,
 ): AiProvider | null {
   const baseUrl = (env[keys.baseUrl] ?? '').trim();
   const apiKey = (env[keys.apiKey] ?? '').trim();
@@ -250,6 +291,27 @@ function readProvider(
   const host = safeHost(baseUrl);
   if (!host) return null;
   return { label, baseUrl: baseUrl.replace(/\/+$/, ''), apiKey, model, host };
+}
+
+/**
+ * The local provider (Ollama / LM Studio). The base URL defaults to the
+ * dev-time `localhost` endpoint, but a model name is REQUIRED: without
+ * `OLLAMA_MODEL` the slot stays OFF, so a bare `.env` never enables AI. No API
+ * key is required (Ollama and LM Studio accept anonymous requests).
+ */
+function readLocalProvider(env: AiEnv): AiProvider | null {
+  const baseUrl = (env[LOCAL_ENV.baseUrl] ?? '').trim() || DEFAULT_OLLAMA_BASE_URL;
+  const model = (env[LOCAL_ENV.model] ?? '').trim();
+  if (!model) return null;
+  const host = safeHost(baseUrl);
+  if (!host) return null;
+  return {
+    label: 'local',
+    baseUrl: baseUrl.replace(/\/+$/, ''),
+    apiKey: (env[LOCAL_ENV.apiKey] ?? '').trim(),
+    model,
+    host,
+  };
 }
 
 function jitterDelayMs(random: () => number): number {
@@ -324,7 +386,9 @@ async function requestOnce(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${provider.apiKey}`,
+            // Local providers (Ollama / LM Studio) need no key; only send the
+            // header when a key is actually configured.
+            ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}),
           },
           body: JSON.stringify(body),
           signal: controller.signal,
@@ -423,7 +487,9 @@ async function callProviderWithRetry(
  * singleton wrappers below.
  */
 export function createAiGateway(deps: AiGatewayDeps = {}): AiGateway {
-  const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
+  // Resolve the injected fetch, else defer to the CURRENT `globalThis.fetch`
+  // at call time (tests stub it per-case; production uses the platform fetch).
+  const fetchImpl: AiFetch = deps.fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
   const env = deps.env ?? process.env;
   const random = deps.random ?? Math.random;
   const now = deps.now ?? Date.now;
@@ -456,7 +522,8 @@ export function createAiGateway(deps: AiGatewayDeps = {}): AiGateway {
     const options = rawOptions ?? {};
     const primary = readProvider(env, PRIMARY_ENV, 'primary');
     const fallback = readProvider(env, FALLBACK_ENV, 'fallback');
-    const chain = primary ? (fallback ? [primary, fallback] : [primary]) : fallback ? [fallback] : [];
+    const local = readLocalProvider(env);
+    const chain = [primary, fallback, local].filter((entry): entry is AiProvider => entry !== null);
     if (chain.length === 0) {
       throw new AiDisabledError();
     }
@@ -494,32 +561,146 @@ export function createAiGateway(deps: AiGatewayDeps = {}): AiGateway {
     throw lastError ?? new AiDisabledError();
   }
 
-  function status(): AiStatus {
+  function buildStatus(reachability: {
+    primary: boolean | null;
+    fallback: boolean | null;
+    local: boolean | null;
+  }): AiStatus {
     const primary = readProvider(env, PRIMARY_ENV, 'primary');
     const fallback = readProvider(env, FALLBACK_ENV, 'fallback');
-    const resolved: 'primary' | 'fallback' | null = primary ? 'primary' : fallback ? 'fallback' : null;
+    const local = readLocalProvider(env);
+    const resolved: AiProviderName | null = primary?.label ?? fallback?.label ?? local?.label ?? null;
     return {
       enabled: resolved !== null,
       provider: resolved,
-      primary: describeProvider(env[PRIMARY_ENV.baseUrl], env[PRIMARY_ENV.model], primary),
-      fallback: describeProvider(env[FALLBACK_ENV.baseUrl], env[FALLBACK_ENV.model], fallback),
+      primary: describeProvider(env[PRIMARY_ENV.model], primary, reachability.primary),
+      fallback: describeProvider(env[FALLBACK_ENV.model], fallback, reachability.fallback),
+      local: describeProvider(env[LOCAL_ENV.model], local, reachability.local),
       cache: { entries: cache.size, maxEntries: AI_CACHE_MAX_ENTRIES, ttlMs: AI_CACHE_TTL_MS },
     };
   }
 
-  return { chat: runChat, status, clearCache: () => cache.clear() };
+  function status(): AiStatus {
+    return buildStatus({ primary: null, fallback: null, local: null });
+  }
+
+  /**
+   * `status()` plus a SHORT reachability probe of the resolved provider. Only
+   * the active provider is probed (never all three) so the route stays fast;
+   * `reachable` is `null` on the other slots. Never throws.
+   */
+  async function statusWithProbe(): Promise<AiStatus> {
+    const primary = readProvider(env, PRIMARY_ENV, 'primary');
+    const fallback = readProvider(env, FALLBACK_ENV, 'fallback');
+    const local = readLocalProvider(env);
+    const active = primary ?? fallback ?? local;
+    if (!active) return status();
+    const reachable = await probeProvider(active, fetchImpl);
+    return buildStatus({
+      primary: active.label === 'primary' ? reachable : null,
+      fallback: active.label === 'fallback' ? reachable : null,
+      local: active.label === 'local' ? reachable : null,
+    });
+  }
+
+  /**
+   * "测试连接": send ONE tiny prompt to a specific provider (default: whichever
+   * is active) and report success + latency, or the typed error. Never throws.
+   */
+  async function testConnection(selector?: AiProviderName): Promise<AiConnectionTest> {
+    const primary = readProvider(env, PRIMARY_ENV, 'primary');
+    const fallback = readProvider(env, FALLBACK_ENV, 'fallback');
+    const local = readLocalProvider(env);
+    const byName: Record<AiProviderName, AiProvider | null> = { primary, fallback, local };
+    const target = selector ? byName[selector] : primary ?? fallback ?? local;
+    if (!target) {
+      return {
+        ok: false,
+        provider: selector ?? null,
+        model: null,
+        host: null,
+        latencyMs: 0,
+        error: { code: 'AI_DISABLED', message: new AiDisabledError().message },
+      };
+    }
+    const started = now();
+    try {
+      const result = await requestOnce(
+        target,
+        fetchImpl,
+        buildRequestBody(target, TEST_PROMPT, { maxTokens: 8, useCache: false }),
+        AI_TIMEOUT_MS,
+      );
+      return {
+        ok: true,
+        provider: target.label,
+        model: result.model,
+        host: target.host,
+        latencyMs: Math.max(0, now() - started),
+      };
+    } catch (error) {
+      const aiError = error instanceof AiError ? error : new AiNetworkError(target.host, error);
+      return {
+        ok: false,
+        provider: target.label,
+        model: target.model,
+        host: target.host,
+        latencyMs: Math.max(0, now() - started),
+        error: { code: aiError.code, message: aiError.message },
+      };
+    }
+  }
+
+  return { chat: runChat, status, statusWithProbe, testConnection, clearCache: () => cache.clear() };
+}
+
+/** One tiny prompt for the "测试连接" button - deliberately cheap (8 tokens). */
+const TEST_PROMPT: AiMessage[] = [{ role: 'user', content: 'ping' }];
+
+/**
+ * Short reachability probe: `GET {baseUrl}/models`. Any HTTP answer means the
+ * host is reachable; a network error or the short timeout means it is not. It
+ * NEVER throws and NEVER waits longer than `AI_PROBE_TIMEOUT_MS`, so it cannot
+ * make `/api/ai/status` slow.
+ */
+async function probeProvider(provider: AiProvider, fetchImpl: AiFetch): Promise<boolean> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      // Settle the race first so the ceiling holds even if the fetch impl
+      // ignores the abort signal, then stop the network work.
+      reject(new Error('probe timed out'));
+      controller.abort();
+    }, AI_PROBE_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([
+      fetchImpl(`${provider.baseUrl}/models`, {
+        method: 'GET',
+        headers: provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {},
+        signal: controller.signal,
+      }),
+      timeout,
+    ]);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 function describeProvider(
-  _baseUrl: string | undefined,
   modelRaw: string | undefined,
   resolved: AiProvider | null,
+  reachable: boolean | null,
 ): AiProviderStatus {
   // Deliberately omits the base URL (and therefore any secret it could embed):
   // only the hostname and the model name are safe to report.
   const model =
     resolved?.model ?? (typeof modelRaw === 'string' && modelRaw.trim() ? modelRaw.trim() : null);
-  return { configured: resolved !== null, model, host: resolved?.host ?? null };
+  return { configured: resolved !== null, model, host: resolved?.host ?? null, reachable };
 }
 
 let defaultGateway: AiGateway | null = null;
@@ -540,4 +721,14 @@ export function chat(messages: AiMessage[], options?: AiChatOptions): Promise<Ai
 /** Safe payload for `GET /api/ai/status`: hosts and model names only, never keys. */
 export function getAiStatus(): AiStatus {
   return gateway().status();
+}
+
+/** `GET /api/ai/status` payload with the short reachability probe applied. */
+export function getAiStatusWithProbe(): Promise<AiStatus> {
+  return gateway().statusWithProbe();
+}
+
+/** `POST /api/ai/test` - one tiny prompt against a named provider. */
+export function testAiConnection(provider?: AiProviderName): Promise<AiConnectionTest> {
+  return gateway().testConnection(provider);
 }

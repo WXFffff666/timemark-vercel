@@ -111,6 +111,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe('AI gateway (checkbox 98)', () => {
@@ -334,10 +335,20 @@ describe('GET /api/ai/status (checkbox 98)', () => {
       'AI_FALLBACK_BASE_URL',
       'AI_FALLBACK_API_KEY',
       'AI_FALLBACK_MODEL',
+      'OLLAMA_BASE_URL',
+      'OLLAMA_API_KEY',
+      'OLLAMA_MODEL',
     ]) {
       vi.stubEnv(name, values[name] ?? '');
     }
   }
+
+  // checkbox 107: `/status` now runs a short reachability probe. Stub the global
+  // fetch so no test ever performs a real outbound request; the probe resolves
+  // immediately and reports the mocked host as reachable.
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ data: [] }, 200)));
+  });
 
   it('(d) reports enabled:false with no env, still 200 - no hard failure', async () => {
     stubAllAiEnv();

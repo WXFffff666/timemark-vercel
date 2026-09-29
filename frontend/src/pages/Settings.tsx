@@ -15,6 +15,7 @@ import { useTimezone } from '@/components/RealtimeClock';
 import { ProfileSettings } from '@/components/ProfileSettings';
 import { DigestSettings } from '@/components/digest/DigestSettings';
 import { WebPushToggle } from '@/components/settings/WebPushToggle';
+import { AISettings } from '@/components/settings/AISettings';
 
 function parseAlertChannels(raw: unknown): string[] {
   if (!raw) return [];
@@ -791,6 +792,9 @@ export default function Settings() {
 
           {/* 浏览器 Web Push（checkbox 84）：独立组件，勿与其它设置区块合并（其它 lane 可能新增区块） */}
           <WebPushToggle />
+
+          {/* AI 助手 / 本地模型（checkbox 107）：独立组件，选择供应商 + 测试连接 */}
+          <AISettings />
 
           {/* 通知默认邮箱 */}
           <section>

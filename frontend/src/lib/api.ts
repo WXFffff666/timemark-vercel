@@ -178,3 +178,43 @@ export interface AvailableChannel {
 export function fetchAvailableChannels() {
   return api.get<AvailableChannel[]>('/channels/available');
 }
+
+/** checkbox 107: named AI provider slots. `local` = Ollama / LM Studio. */
+export type AiProviderName = 'primary' | 'fallback' | 'local';
+
+export interface AiProviderStatusView {
+  configured: boolean;
+  model: string | null;
+  /** Hostname only - the API never returns a full base URL. */
+  host: string | null;
+  /** Reachability of the active provider; null when not probed. */
+  reachable: boolean | null;
+}
+
+export interface AiStatusView {
+  enabled: boolean;
+  provider: AiProviderName | null;
+  primary: AiProviderStatusView;
+  fallback: AiProviderStatusView;
+  local: AiProviderStatusView;
+  cache: { entries: number; maxEntries: number; ttlMs: number };
+}
+
+export interface AiConnectionTestView {
+  ok: boolean;
+  provider: AiProviderName | null;
+  model: string | null;
+  host: string | null;
+  latencyMs: number;
+  error?: { code: string; message: string };
+}
+
+/** checkbox 107: which AI provider is active (+ a short reachability probe). */
+export function fetchAiStatus() {
+  return api.get<AiStatusView>('/ai/status');
+}
+
+/** checkbox 107: send one tiny prompt to a named provider ("测试连接"). */
+export function runAiConnectionTest(provider: AiProviderName) {
+  return api.post<AiConnectionTestView>('/ai/test', { provider });
+}
