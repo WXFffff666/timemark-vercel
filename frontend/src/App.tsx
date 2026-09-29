@@ -5,6 +5,7 @@ import { LoginPage } from './pages/Login';
 import ShareEvent from './pages/ShareEvent';
 import { TimezoneProvider } from './components/RealtimeClock';
 import { SkipLink } from './components/SkipLink';
+import { AssistantDock } from './components/assistant/AssistantDock';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -35,6 +36,7 @@ const DocumentsPage = lazy(() => import('./pages/Documents'));
 const HabitsPage = lazy(() => import('./pages/Habits'));
 const MedicationsPage = lazy(() => import('./pages/Medications'));
 const GoalsPage = lazy(() => import('./pages/Goals'));
+const Assistant = lazy(() => import('./pages/Assistant'));
 
 function PageLoader() {
   return (
@@ -119,6 +121,7 @@ function AnimatedRoutes() {
           <Route path="/habits" element={<ProtectedRoute><HabitsPage /></ProtectedRoute>} />
           <Route path="/medications" element={<ProtectedRoute><MedicationsPage /></ProtectedRoute>} />
           <Route path="/goals" element={<ProtectedRoute><GoalsPage /></ProtectedRoute>} />
+          <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
           <Route path="/integrations-docs" element={<ProtectedRoute><IntegrationsDocs /></ProtectedRoute>} />
           <Route path="/cron-monitor" element={<ProtectedRoute><CronMonitor /></ProtectedRoute>} />
           <Route path="/docker-migration" element={<ProtectedRoute><DockerMigration /></ProtectedRoute>} />
@@ -163,6 +166,7 @@ function App() {
         <MeshBackground />
         <div className="relative z-10 min-h-screen text-slate-900 dark:text-slate-100">
           <AnimatedRoutes />
+          <AssistantDock />
         </div>
       </TimezoneProvider>
     </BrowserRouter>

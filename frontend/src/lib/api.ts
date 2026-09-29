@@ -258,3 +258,108 @@ export function renameAgentToken(id: string, name: string) {
 export function revokeAgentToken(id: string) {
   return api.post<void>(`/agent-tokens/${id}/revoke`, {});
 }
+
+// ---------------------------------------------------------------------------
+// checkbox 109: the in-app assistant client for the agent action surface.
+//   GET  /api/agent/tools            -> the registry (name + required scope + flags)
+//   POST /api/agent/actions/:tool    -> validate -> authorise -> (confirm | execute)
+//   POST /api/agent/confirm/:id      -> phase 2; consumes the confirmation (single-use, 2-min TTL)
+// The 202 `confirm_required` response is surfaced AS-IS: the action has NOT run.
+// ---------------------------------------------------------------------------
+
+/** checkbox 109: one registry entry as GET /api/agent/tools reveals it. */
+export interface AgentToolView {
+  name: string;
+  description: string;
+  requiredScope: string;
+  destructive: boolean;
+  requiresConfirmation: boolean;
+  inputSchema?: unknown;
+}
+
+/** checkbox 109: the backend's redacted, human-readable confirmation preview. Rendered verbatim. */
+export interface AgentToolPreview {
+  tool: string;
+  description: string;
+  args: unknown;
+  expiresAt: string;
+}
+
+export type AgentActionOutcome =
+  | { kind: 'executed'; data: unknown }
+  | { kind: 'confirm_required'; confirmationId: string; preview: AgentToolPreview };
+
+export type AgentConfirmFailureCode =
+  | 'confirmation_not_found'
+  | 'confirmation_already_used'
+  | 'confirmation_expired'
+  | 'invalid_confirmation_id'
+  | 'forbidden'
+  | 'unknown';
+
+export type AgentConfirmOutcome =
+  | { kind: 'executed'; data: unknown }
+  | { kind: 'failed'; status: number; code: AgentConfirmFailureCode; message: string };
+
+/**
+ * Map a failed confirm response onto the route's documented contract. 409 and 410 are the two
+ * distinct cases the UI must tell apart (`confirmation_already_used` vs `confirmation_expired`).
+ */
+function classifyConfirmFailure(status: number, raw: string): AgentConfirmFailureCode {
+  if (raw === 'confirmation_already_used' || status === 409) return 'confirmation_already_used';
+  if (raw === 'confirmation_expired' || status === 410) return 'confirmation_expired';
+  if (raw === 'invalid_confirmation_id' || status === 400) return 'invalid_confirmation_id';
+  if (raw === 'confirmation_not_found' || status === 404) return 'confirmation_not_found';
+  if (status === 401 || status === 403) return 'forbidden';
+  return 'unknown';
+}
+
+/** checkbox 109: the registry of tools the signed-in owner may invoke. */
+export function fetchAgentTools() {
+  return api.get<{ tools: AgentToolView[] }>('/agent/tools');
+}
+
+/**
+ * checkbox 109: invoke one registry tool with typed arguments.
+ * A 202 `confirm_required` outcome is returned unchanged - nothing has executed, and the caller
+ * must obtain explicit user consent before `confirmAgentAction`.
+ */
+export async function invokeAgentAction(tool: string, args: unknown): Promise<AgentActionOutcome> {
+  const data = await api.post<unknown>(`/agent/actions/${encodeURIComponent(tool)}`, { args });
+  if (data && typeof data === 'object' && (data as { status?: unknown }).status === 'confirm_required') {
+    const pending = data as { confirmationId: string; preview: AgentToolPreview };
+    return { kind: 'confirm_required', confirmationId: pending.confirmationId, preview: pending.preview };
+  }
+  return { kind: 'executed', data };
+}
+
+/**
+ * checkbox 109: phase 2. Consumes a pending confirmation and reports the distinct 404/409/410
+ * outcomes instead of collapsing them into one generic error.
+ */
+export async function confirmAgentAction(confirmationId: string): Promise<AgentConfirmOutcome> {
+  const { accessToken } = getTokens();
+  const response = await fetch(`${API_BASE}/agent/confirm/${encodeURIComponent(confirmationId)}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+      ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
+    },
+  });
+  let body: (ApiResponse<unknown> & { code?: string; message?: string }) | null = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  if (response.ok && body?.success) return { kind: 'executed', data: body.data };
+  const raw = body?.error || body?.code || '';
+  return {
+    kind: 'failed',
+    status: response.status,
+    code: classifyConfirmFailure(response.status, raw),
+    message: body?.message || raw || `HTTP ${response.status}`,
+  };
+}
