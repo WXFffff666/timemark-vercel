@@ -75,14 +75,16 @@ describe('migration v33 registration (todo 41)', () => {
     // With 33 recorded, only the later migrations are pending.
     await applyIncrementalMigrations(33);
     const sqls = mockQuery.mock.calls.map(([sql]) => sql);
-    expect(sqls.some((sql) => sql.includes('CREATE EXTENSION IF NOT EXISTS pg_trgm'))).toBe(false);
+    // A v33-UNIQUE marker: `CREATE EXTENSION IF NOT EXISTS pg_trgm` alone now also appears
+    // in v53 (checkbox 106 re-issues it idempotently), so it cannot identify v33's SQL.
+    expect(sqls.some((sql) => sql.includes('idx_trigger_logs_consecutive'))).toBe(false);
     expect(versionInserts()).not.toContain(33);
     expect(versionInserts()[0]).toBe(34);
   });
 
   it('does not record v33 when the migration SQL fails, so a later startup retries', async () => {
     mockQuery.mockImplementation(async (text: string) => {
-      if (text.includes('CREATE EXTENSION IF NOT EXISTS pg_trgm')) {
+      if (text.includes('idx_trigger_logs_consecutive')) {
         throw new Error('permission denied for extension pg_trgm');
       }
       return { rows: [], rowCount: 0 };

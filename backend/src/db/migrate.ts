@@ -1400,6 +1400,76 @@ ALTER TABLE event_trigger_logs ALTER COLUMN trigger_date TYPE TEXT USING trigger
 );
 CREATE INDEX IF NOT EXISTS idx_user_patterns_user ON user_patterns(user_id);`,
     },
+    {
+      // v53 (checkbox 106): full-text-ish search over the user's OWN data.
+      //
+      // DEFAULT PATH - trigram, ZERO egress. Neon supports `pg_trgm` but neither
+      // `zhparser` nor `pg_bigm`, and `to_tsvector` cannot tokenise Chinese: the default
+      // parser treats a whole CJK sentence as a single word, so a Chinese query never
+      // matches. Trigram GIN indexes give CJK substring matching plus fuzzy ranking with
+      // `ILIKE '%q%'` / `similarity()` and no external call of any kind - the free-tier
+      // default. The `events.tags` index is an EXPRESSION index on `(tags::text)` because
+      // JSONB itself has no trigram operator class; the query side must use the identical
+      // `tags::text` expression.
+      //
+      // OPT-IN ACCELERATOR - pgvector, guarded. `CREATE EXTENSION vector` is attempted
+      // inside an exception block: on a database that cannot provide it (older self-hosted
+      // Postgres, engines like PGlite that ship pg_trgm but not pgvector) the notice is
+      // logged, the embeddings table is simply not created, and the trigram path above is
+      // unaffected. When the extension IS available (Neon: every plan), `embeddings` stores
+      // one row per (owner_type, owner_id, model). `embedding` is an UNCONSTRAINED `vector`
+      // so 768-dim (nomic-embed-text) and 1536-dim (text-embedding-3-small) models can
+      // coexist; the `<= 2048` CHECK on both `dims` and `vector_dims(embedding)` is the
+      // column-level rejection of oversized model configs. No FK to the owner tables
+      // (owner_id is polymorphic) - the nightly cleaner removes orphans instead, and the
+      // users FK cascades on user deletion. Purely additive + idempotent.
+      version: 53,
+      name: 'search_trgm_embeddings_v53',
+      sql: `-- Default search path: CJK-capable trigram indexes, no external calls.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_events_name_trgm ON events USING GIN (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_events_person_name_trgm ON events USING GIN (person_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_events_tags_trgm ON events USING GIN ((tags::text) gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_name_trgm ON fixed_contacts USING GIN (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_nickname_trgm ON fixed_contacts USING GIN (nickname gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_notes_trgm ON fixed_contacts USING GIN (notes gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_fixed_contacts_relationship_trgm ON fixed_contacts USING GIN (relationship gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_interactions_summary_trgm ON interactions USING GIN (summary gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_documents_title_trgm ON documents USING GIN (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_documents_issuer_trgm ON documents USING GIN (issuer gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_expiry_items_title_trgm ON expiry_items USING GIN (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_expiry_items_vendor_trgm ON expiry_items USING GIN (vendor gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_expiry_items_notes_trgm ON expiry_items USING GIN (notes gin_trgm_ops);
+-- Opt-in semantic accelerator. Guarded: without pgvector this block degrades to a NOTICE
+-- and the trigram search path keeps working.
+DO $migration53$
+BEGIN
+  BEGIN
+    EXECUTE 'CREATE EXTENSION IF NOT EXISTS vector';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE '[migration v53] pgvector unavailable (%): semantic embeddings stay disabled, trigram search unaffected', SQLERRM;
+  END;
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+    CREATE TABLE IF NOT EXISTS embeddings (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      owner_type TEXT NOT NULL CHECK (owner_type IN ('event', 'contact', 'interaction', 'document', 'expiry')),
+      owner_id INTEGER NOT NULL,
+      model TEXT NOT NULL,
+      dims INTEGER NOT NULL CHECK (dims > 0 AND dims <= 2048),
+      embedding vector NOT NULL CHECK (vector_dims(embedding) <= 2048),
+      content_hash TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (owner_type, owner_id, model)
+    );
+    CREATE INDEX IF NOT EXISTS idx_embeddings_user ON embeddings(user_id);
+    CREATE INDEX IF NOT EXISTS idx_embeddings_content_hash ON embeddings(owner_type, owner_id, content_hash);
+  ELSE
+    RAISE NOTICE '[migration v53] vector extension not installed: embeddings table skipped';
+  END IF;
+END
+$migration53$;`,
+    },
   ];
 
   for (const migration of migrations) {

@@ -9,6 +9,8 @@ import { syncAllGoogleCalendars } from '../services/google-calendar-sync.service
 import { sendLunarPhaseReminders } from '../services/lunar-reminders.service.js';
 import { aggregateDailyStats } from '../services/stats-daily.service.js';
 import { recomputeAllUserPatterns } from '../services/patterns.service.js';
+import { cleanupOrphanEmbeddings, indexEmbeddingsBatch } from '../services/search.service.js';
+import { isEmbeddingsEnabled } from '../services/ai/embeddings.js';
 import { purgeExpiredEventCache } from '../services/event-cache.service.js';
 import { purgeOldInboxMessages } from '../services/inbox.service.js';
 import { purgeOldTodoCompletions } from '../services/todo.service.js';
@@ -226,12 +228,24 @@ cronRoutes.get('/daily-maintenance', async (c) => {
     // Checkbox 105: deterministic behavioural-pattern miner (no LLM, no external call).
     // Replaces each user's prior rows, so a timezone change re-buckets on the next night.
     const minedPatterns = await recomputeAllUserPatterns();
+    // Checkbox 106 (OPT-IN): bounded embedding refresh + orphan cleanup. With
+    // EMBEDDINGS_ENABLED unset (the default) this branch is skipped entirely - the nightly
+    // job issues no embeddings query and no provider call. The provider failure is
+    // reported in the cron summary instead of aborting the other maintenance steps.
+    let embeddingSummary = 'embeddings: disabled';
+    if (isEmbeddingsEnabled()) {
+      const indexed = await indexEmbeddingsBatch();
+      const orphans = await cleanupOrphanEmbeddings();
+      embeddingSummary = indexed.tableReady
+        ? `embeddings: ${indexed.embedded} embedded, ${indexed.skipped} unchanged, ${indexed.failed} failed, ${orphans.removed} orphaned removed${indexed.error ? ` (${indexed.error})` : ''}`
+        : 'embeddings: table not present (pgvector unavailable)';
+    }
     const pluginResult = await query('DELETE FROM plugin_sessions WHERE expires_at < NOW()');
     await logCronRun(
       'daily-maintenance',
       'success',
       startedAt,
-      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged trigger logs: ${purged.triggerLogs}; purged emails: ${purged.emailLogs}; purged login attempts: ${purged.loginAttempts}; purged queue: ${purged.notificationQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged habit logs: ${purgedHabitLogs}; doses materialized: ${materializedDoses}; doses missed: ${missedDoses}; purged doses: ${purgedDoses}; purged orphan attachments: ${purgedAttachments.purged}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}; patterns: ${minedPatterns.patterns} for ${minedPatterns.users} user(s)`,
+      `sessions cleaned; retries: ${retryStats.succeeded}/${retryStats.processed}; purged trigger logs: ${purged.triggerLogs}; purged emails: ${purged.emailLogs}; purged login attempts: ${purged.loginAttempts}; purged queue: ${purged.notificationQueue}; purged inbox: ${purgedInbox}; purged todos: ${purgedTodos}; purged habit logs: ${purgedHabitLogs}; doses materialized: ${materializedDoses}; doses missed: ${missedDoses}; purged doses: ${purgedDoses}; purged orphan attachments: ${purgedAttachments.purged}; purged cron logs: ${purgedCronLogs.rowCount ?? 0}; stats: ${aggregatedStats}; patterns: ${minedPatterns.patterns} for ${minedPatterns.users} user(s); ${embeddingSummary}`,
     );
     await pingHeartbeat('daily-maintenance');
     return c.json({

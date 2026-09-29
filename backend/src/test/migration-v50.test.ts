@@ -91,7 +91,7 @@ describe('migration v50 registration (checkbox 94)', () => {
     expect(callsMatching('CREATE TABLE IF NOT EXISTS bot_link_codes')).toHaveLength(0);
     expect(callsMatching('CREATE TABLE IF NOT EXISTS bot_audit_logs')).toHaveLength(0);
     // v50 itself is never re-applied; v51 (checkbox 97) and v52 (checkbox 105) still run.
-    expect(versionInserts()).toEqual([51, 52]);
+    expect(versionInserts()).toEqual([51, 52, 53]);
   });
 
   it('does not record v50 when its SQL fails, so a later cold start retries', async () => {
@@ -153,7 +153,7 @@ describe('migration v50 registration (checkbox 94)', () => {
     expect(versions.filter((v) => v === 50)).toHaveLength(1);
     expect(versions.indexOf(50)).toBe(versions.indexOf(49) + 1);
     // v51 (checkbox 97, /snooze persistence) is the new tail; 1-50 stay untouched.
-    expect(versions[versions.length - 1]).toBe(52);
+    expect(versions[versions.length - 1]).toBe(53);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
