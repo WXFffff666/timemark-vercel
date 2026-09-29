@@ -208,7 +208,12 @@ CREATE TABLE IF NOT EXISTS event_trigger_logs (
   event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   trigger_type TEXT NOT NULL,
-  trigger_date DATE NOT NULL,
+  -- TEXT, NOT DATE (migration v51): scheduled reminders store the dedup key here, which is a
+  -- compound token (`YYYY-MM-DD#d<n>#tHH:mm`, or `snooze:event#<id>#<ISO>`), unrepresentable
+  -- as DATE. The column was declared DATE here while v51 casts it to TEXT, so a fresh install
+  -- only became the migrated shape after runMigrations(); declaring TEXT directly makes a fresh
+  -- database end in exactly the same shape as a migrated one.
+  trigger_date TEXT NOT NULL,
   scheduled_date DATE,
   status TEXT NOT NULL,
   channels JSONB,
@@ -224,6 +229,8 @@ CREATE TABLE IF NOT EXISTS event_trigger_logs (
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_event ON event_trigger_logs(event_id);
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_user ON event_trigger_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_date ON event_trigger_logs(trigger_date);
+-- A plain btree index is still the right shape for the TEXT token: the lookup is exact
+-- equality (`WHERE trigger_date = $2`) on the full key, never a prefix/LIKE pattern.
 
 -- ============================================================
 -- push_subscriptions — browser push notification subscriptions

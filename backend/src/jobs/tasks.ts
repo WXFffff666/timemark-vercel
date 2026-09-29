@@ -1706,14 +1706,31 @@ export async function sendReminders() {
         } : undefined;
         
         // 记录事件触发日志 - use timezone-aware today string for dedup consistency
-        await recordEventTrigger(event.id, event.user_id, 'scheduled', sendKey, status, errorMessage, JSON.stringify(channelResults), errorDetails);
+        const triggerRecorded = await recordEventTrigger(event.id, event.user_id, 'scheduled', sendKey, status, errorMessage, JSON.stringify(channelResults), errorDetails);
+        if (!triggerRecorded) {
+          // The write failure is NOT swallowed. A persisted 'failed' row is the only signal
+          // the consecutive-failure counter (trackConsecutiveFailure) can count, so name the
+          // consequence explicitly instead of letting auto-disable go blind.
+          log.error(
+            { eventId: event.id, sendKey, accountId: errorDetails?.account_id ?? null, status },
+            status === 'failed'
+              ? 'Trigger log write failed: consecutive-failure counter will NOT observe this failed send (auto-disable stays blind)'
+              : 'Trigger log write failed: send result not recorded in 提醒日志',
+          );
+        }
         if (status === 'success') {
           refreshUserEventCache(event.user_id).catch((e) => log.warn({ userId: event.user_id, err: e }, 'Post-send cache refresh failed'));
         }
       } catch (error) {
         log.error({ eventId: event.id, err: error }, 'Failed to send notifications');
         await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [event.id, sendKey]);
-        await recordEventTrigger(event.id, event.user_id, 'scheduled', sendKey, 'failed', String(error));
+        const retryRecorded = await recordEventTrigger(event.id, event.user_id, 'scheduled', sendKey, 'failed', String(error));
+        if (!retryRecorded) {
+          log.error(
+            { eventId: event.id, sendKey },
+            'Trigger log write failed: consecutive-failure counter will NOT observe this failed send (auto-disable stays blind)',
+          );
+        }
       }
     }
   }
