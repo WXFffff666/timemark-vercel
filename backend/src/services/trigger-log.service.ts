@@ -14,9 +14,14 @@ const log = createLogger('trigger-log');
  *
  * It does NOT throw: the reminder itself has already been sent (or its failure already
  * handled) and must not be lost just because the audit row could not be written.
+ *
+ * `eventId` accepts NULL for dated reminder sources (expiry / inventory / maintenance /
+ * document items, checkbox 165): their ids are not `events.id`, and `event_trigger_logs.event_id`
+ * is FK-constrained to events(id) while remaining nullable - so a dated skip/failure row must
+ * pass NULL instead of throwing a FK violation.
  */
 export async function recordEventTrigger(
-  eventId: number,
+  eventId: number | null,
   userId: number,
   triggerType: string,
   triggerDate: string,

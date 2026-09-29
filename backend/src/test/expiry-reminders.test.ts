@@ -313,13 +313,28 @@ describe('sendExpiryReminders - UI-created item without reminder_config', () => 
     expect(claimInsert?.params[1]).toBe('expiry:2026-06-01#d7#t09:00');
   });
 
-  it('still skips the item when the user has no active channel account at all (nothing can be delivered)', async () => {
+  it('skips AND records the skip when the user has no active channel account at all (nothing can be delivered)', async () => {
     installDb([itemRow({ id: 62, reminder_config: null })], { accountTypes: [] });
 
     const result = await sendExpiryReminders(NOW);
 
     expect(result).toMatchObject({ candidates: 1, sent: 0, claimed: 0, skipped: 1 });
     expect(sendNotifications).not.toHaveBeenCalled();
-    expect(claimedKeys.size).toBe(0);
+    // checkbox 165: the skip is no longer silent. One claim holds the slot (dedup) and one
+    // skipped row records the machine-readable reason; the dated-item id is NOT an events.id,
+    // so the trigger row carries a NULL event_id (FK-safe).
+    expect(claimedKeys.size).toBe(1);
+    const skipInserts = captured.filter(
+      (q) => q.sql.includes('INSERT INTO event_trigger_logs') && q.params[4] === 'skipped',
+    );
+    expect(skipInserts).toHaveLength(1);
+    expect(skipInserts[0].params[0]).toBeNull();
+    expect(skipInserts[0].params[5]).toBe('no_channel_resolved');
+
+    // Second tick in the same window: the claim dedups the record (still exactly one).
+    await sendExpiryReminders(NOW);
+    expect(
+      captured.filter((q) => q.sql.includes('INSERT INTO event_trigger_logs') && q.params[4] === 'skipped'),
+    ).toHaveLength(1);
   });
 });

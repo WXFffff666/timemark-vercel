@@ -349,6 +349,66 @@ function deliveredToAnyChannel(results: unknown, channels: readonly string[]): b
 }
 
 /**
+ * 提醒槽位解析不到任何可送达渠道时写入的机器可读原因码。
+ */
+const NO_CHANNEL_RESOLVED_REASON = 'no_channel_resolved';
+
+/**
+ * checkbox 165：把「解析不到渠道而被跳过」的提醒写成一条 skipped 触发记录（提醒日志）。
+ *
+ * 去重与发送完全同机制：用同一个 `reminder_send_claims` INSERT ... ON CONFLICT DO NOTHING
+ * 抢槽位。同一槽位内第一个 tick 抢到 claim 才写记录/打日志；后续每分钟的 tick 看到
+ * claim 已存在直接返回 —— 每个事件每个槽位恰好一行、一条日志。
+ *
+ * `claimEventId` 是 claim 行里的 id（事件 id，或到期项 id）；`triggerEventId` 是
+ * `event_trigger_logs.event_id`（可空，FK 指向 events(id)）：到期项 id 不属于 events，
+ * 必须传 NULL，否则 INSERT 会因 FK 违约被 recordEventTrigger 记为失败。
+ * `trigger_type` 用 'scheduled'（读取方只把该列当标签展示；与发送路径一致）。
+ *
+ * 绝不抛出：被跳过不是错误，审计写入失败也不能中断整轮任务；失败会以显式 error 日志
+ * 暴露（沿用 task 164 的 Promise<boolean> 契约），不静默吞掉。
+ */
+async function recordSkippedTrigger(
+  claimEventId: number,
+  triggerEventId: number | null,
+  userId: number,
+  triggerDate: string,
+): Promise<void> {
+  try {
+    const claim = await query(
+      `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING RETURNING event_id`,
+      [claimEventId, triggerDate],
+    );
+    if (claim.rows.length === 0) {
+      log.debug({ eventId: claimEventId, triggerDate }, 'Skipped reminder already recorded for this slot');
+      return;
+    }
+    const recorded = await recordEventTrigger(
+      triggerEventId,
+      userId,
+      'scheduled',
+      triggerDate,
+      'skipped',
+      NO_CHANNEL_RESOLVED_REASON,
+    );
+    if (!recorded) {
+      log.error(
+        { eventId: claimEventId, triggerDate, reason: NO_CHANNEL_RESOLVED_REASON },
+        'Trigger log write failed: skipped reminder not recorded in 提醒日志',
+      );
+      return;
+    }
+    log.info(
+      { eventId: claimEventId, triggerDate, reason: NO_CHANNEL_RESOLVED_REASON },
+      'Reminder skipped: no channel resolved',
+    );
+  } catch (error) {
+    log.error({ eventId: claimEventId, triggerDate, err: error }, 'Failed to record skipped reminder');
+  }
+}
+
+/**
  * 提醒时区解析（checkbox 69）：行的 family profile（v41）若配置了 IANA 时区，
  * 优先于用户时区；两者都缺失时回退 Asia/Shanghai。这里只做时区，不做通知路由
  * （按档案路由通知账号是 checkbox 70）。
@@ -443,14 +503,21 @@ async function runDatedReminderIterator(
     const baseChannels = Array.isArray(config?.channels) ? config.channels : [];
     const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
     const channels = await resolveReminderChannels(userId, baseChannels, daysUntil);
-    if (channels.length === 0) {
-      skipped += 1;
-      continue;
-    }
 
+    // 先算 send key：空渠道分支要用与发送完全相同的槽位键写 skipped 记录并去重。
     const sendKey = isExpired
       ? (source.buildExpiredSendKey as (dueYmd: string) => string)(due)
       : source.buildSendKey(evalDay, daysUntil, matchedReminderTime);
+
+    if (channels.length === 0) {
+      skipped += 1;
+      // checkbox 165：解析不到任何渠道（条件规则/套餐/条目渠道都为空，且用户连一个启用
+      // 账户都没有）不再是静默丢弃 —— 写一条 skipped 触发记录说明原因，与发送路径用同一
+      // claim 去重（每槽位至多一条记录、一条日志）。到期项 id 不属于 events(id)，trigger
+      // 侧的 event_id 传 NULL（列可空且 FK 指向 events）。
+      await recordSkippedTrigger(Number(raw.id), null, userId, sendKey);
+      continue;
+    }
     const claim = await query(
       `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
        ON CONFLICT DO NOTHING RETURNING event_id`,
@@ -1732,6 +1799,16 @@ export async function sendReminders() {
           );
         }
       }
+    } else {
+      // checkbox 165：channels 解析为空（无条件规则 / 无套餐分级 / 无事件渠道，且用户连一个
+      // 启用账户都没有）时，事件过去在这里被直接丢弃 —— 无触发记录、无日志、无痕迹。现在写
+      // 一条 skipped 记录说明原因，send key 与 claim 去重与发送路径完全一致：同一槽位内
+      // 重复 tick 只写一行、只打一条日志。
+      const timeZone = getEventTimezone(event.user_id, event.profile_id);
+      const today = getTodayString(now, timeZone);
+      const skipKey = event.snoozeSendKey
+        ?? buildReminderSendKey(today, event.daysUntil ?? 0, event.matchedReminderTime);
+      await recordSkippedTrigger(event.id, event.id, event.user_id, skipKey);
     }
   }
 
