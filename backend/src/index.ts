@@ -75,6 +75,8 @@ import agentRoutes from './routes/agent.js';
 import mcpRoutes from './routes/mcp.js';
 // checkbox 114: bounded worker drain (cron-job.org every minute; claim -> execute -> return).
 import agentWorkerRoutes from './routes/agent-worker.js';
+// checkbox 119: read/write control plane for agent jobs, workers and routines (admin session auth).
+import adminAgentRoutes from './routes/admin/agent.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -197,6 +199,8 @@ app.route('/api/agent/worker', agentWorkerRoutes);
 app.route('/api/agent', agentRoutes);
 // checkbox 103: stateless MCP server (Streamable HTTP) over the same registry + scoped tokens.
 app.route('/api/mcp', mcpRoutes);
+// checkbox 119: the agent control-plane API (jobs, workers, routines; session/admin auth only).
+app.route('/api/admin/agent', adminAgentRoutes);
 // todo 88: also expose the canonical `/share/:token` server-rendered meta document at the app
 // root so it resolves locally and in tests. On Vercel this path is owned by the SPA rewrite in
 // vercel.json (`/((?!api/|.*\\..*).*)` -> /index.html), so the OG image (`/api/og/image/:token`)
