@@ -4,8 +4,10 @@ import {
   buildReminderSendKey,
   diffCalendarDays,
   matchesReminderTimeWindow,
+  reminderOffsetMinutes,
   resolveNextGregorianOccurrence,
   toYmdString,
+  REMINDER_CATCH_UP_MAX_MINUTES,
 } from '@timemark/shared/event-schedule';
 import {
   buildExpirySendKey,
@@ -156,6 +158,50 @@ function getCurrentHHmm(now: Date, timeZone: string): string {
 
 /** ±2 分钟提醒窗口（与 matchesReminderTimeWindow 的默认值一致，checkbox 97）。 */
 export const SNOOZE_WINDOW_MS = 2 * 60_000;
+
+/**
+ * 现有 B29 cron 间隔告警阈值（分钟）。checkbox 166 的补发路径复用同一信号：
+ * `routes/cron.ts` 的 `checkCronGapAlert` 与补发的 warn 分类共用这一个常量，
+ * 告警通道本身不新增、不替换。
+ */
+export const CRON_GAP_ALERT_MINUTES = 3;
+
+/**
+ * Checkbox 166：cron 漏跑后的有界补发窗口默认值（分钟）。
+ * 选 10 的理由：大于既有 >3 分钟间隔告警阈值（告警报告过的短间隔在槽位附近都可补发），
+ * 覆盖 QA 的 5 分钟漏跑用例，又远小于一天（补发绝不跨天，昨天的槽位不会在今天触发）。
+ * 上限 REMINDER_CATCH_UP_MAX_MINUTES = 60，由 shared 与解析函数双重夹取。
+ */
+export const REMINDER_CATCH_UP_DEFAULT_MINUTES = 10;
+
+/**
+ * 解析补发窗口（分钟）：环境变量 REMINDER_CATCHUP_GRACE_MINUTES。
+ * 缺失 / 非法 -> 默认 10；夹取到 [0, 60]（0 = 关闭补发，恢复旧的 ±2 分钟行为）。
+ */
+export function resolveReminderCatchUpMinutes(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.REMINDER_CATCHUP_GRACE_MINUTES;
+  if (raw === undefined || raw === '') return REMINDER_CATCH_UP_DEFAULT_MINUTES;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return REMINDER_CATCH_UP_DEFAULT_MINUTES;
+  return Math.min(Math.max(Math.trunc(parsed), 0), REMINDER_CATCH_UP_MAX_MINUTES);
+}
+
+/** 命中补发（迟到超过准时窗口）时返回迟到分钟数；准时命中 / 提前命中返回 null。 */
+function catchUpLateMinutes(currentTime: string, targetTime: string, windowMinutes = 2): number | null {
+  const offset = reminderOffsetMinutes(currentTime, targetTime);
+  return offset !== null && offset > windowMinutes ? offset : null;
+}
+
+/**
+ * Checkbox 166：补发投递可观测。与 >3 分钟间隔告警共用 CRON_GAP_ALERT_MINUTES 阈值，
+ * warn 级别一条结构化日志；告警本身仍由 routes/cron.ts 的 checkCronGapAlert 执行。
+ */
+function logReminderCatchUp(slot: Record<string, unknown>, lateMinutes: number): void {
+  log.warn(
+    { event: 'cron.reminder_catchup', lateMinutes, gapAlertMinutes: CRON_GAP_ALERT_MINUTES, ...slot },
+    'Reminder catch-up: missed slot delivered after a cron gap',
+  );
+}
 
 /**
  * Checkbox 97 (D2): decide what `events.snoozed_until` means for this cron tick.
@@ -435,6 +481,7 @@ async function runDatedReminderIterator(
   let sent = 0;
   let claimed = 0;
   let skipped = 0;
+  const catchUpMinutes = resolveReminderCatchUpMinutes();
 
   for (const raw of result.rows as Array<Record<string, unknown>>) {
     if (raw.is_active === false || raw.reminders_enabled === false) {
@@ -494,7 +541,9 @@ async function runDatedReminderIterator(
       ? config.reminderTimes
       : [...DEFAULT_EXPIRY_REMINDER_TIMES];
     const currentTime = getCurrentHHmm(now, timeZone);
-    const matchedReminderTime = reminderTimes.find((time) => matchesReminderTimeWindow(currentTime, time, 2));
+    const matchedReminderTime = reminderTimes.find((time) =>
+      matchesReminderTimeWindow(currentTime, time, 2, catchUpMinutes),
+    );
     if (!matchedReminderTime) {
       skipped += 1;
       continue;
@@ -529,6 +578,14 @@ async function runDatedReminderIterator(
       continue;
     }
     claimed += 1;
+
+    const lateMinutes = catchUpLateMinutes(currentTime, matchedReminderTime);
+    if (lateMinutes !== null) {
+      logReminderCatchUp(
+        { source: source.label, itemId: raw.id, daysUntil, sendKey, matchedReminderTime },
+        lateMinutes,
+      );
+    }
 
     try {
       const title = String(raw[source.titleColumn] ?? '');
@@ -830,6 +887,7 @@ export async function sendHabitReminders(
   let reminded = 0;
   let riskNudged = 0;
   let skipped = 0;
+  const catchUpMinutes = resolveReminderCatchUpMinutes();
 
   for (const raw of result.rows as Array<Record<string, unknown>>) {
     if (raw.reminders_enabled === false) {
@@ -862,7 +920,7 @@ export async function sendHabitReminders(
 
     // 1) 定时提醒（reminder_times）
     const matchedTime = normalizeReminderTimes(raw.reminder_times ?? null).find((time) =>
-      matchesReminderTimeWindow(currentTime, time, 2),
+      matchesReminderTimeWindow(currentTime, time, 2, catchUpMinutes),
     );
     if (matchedTime) {
       const sendKey = buildHabitReminderSendKey(habitId, today, matchedTime);
@@ -874,6 +932,10 @@ export async function sendHabitReminders(
       if (claim.rows.length === 0) {
         skipped += 1;
       } else {
+        const habitLateMinutes = catchUpLateMinutes(currentTime, matchedTime);
+        if (habitLateMinutes !== null) {
+          logReminderCatchUp({ habitId, sendKey, matchedTime }, habitLateMinutes);
+        }
         const channels = await resolveReminderChannels(userId, [], 0);
         if (channels.length === 0) {
           await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [habitId, sendKey]);
@@ -919,7 +981,7 @@ export async function sendHabitReminders(
     const nudgeHour = /^([01]\d|2[0-3]):[0-5]\d$/.test(rawNudgeHour)
       ? rawNudgeHour
       : DEFAULT_HABIT_STREAK_NUDGE_HOUR;
-    if (todayCount < target && matchesReminderTimeWindow(currentTime, nudgeHour, 2)) {
+    if (todayCount < target && matchesReminderTimeWindow(currentTime, nudgeHour, 2, catchUpMinutes)) {
       const riskKey = buildHabitRiskSendKey(habitId, today);
       const claim = await query(
         `INSERT INTO reminder_send_claims (event_id, trigger_date) VALUES ($1, $2)
@@ -929,6 +991,10 @@ export async function sendHabitReminders(
       if (claim.rows.length === 0) {
         skipped += 1;
       } else {
+        const riskLateMinutes = catchUpLateMinutes(currentTime, nudgeHour);
+        if (riskLateMinutes !== null) {
+          logReminderCatchUp({ habitId, sendKey: riskKey, nudgeHour }, riskLateMinutes);
+        }
         const channels = await resolveReminderChannels(userId, [], 0);
         if (channels.length === 0) {
           await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [habitId, riskKey]);
@@ -1283,6 +1349,7 @@ export async function sendJieqiReminders(
   const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
   let sent = 0;
   let skipped = 0;
+  const catchUpMinutes = resolveReminderCatchUpMinutes();
 
   for (const raw of result.rows as Array<Record<string, unknown>>) {
     if (raw.reminders_enabled === false) {
@@ -1305,7 +1372,7 @@ export async function sendJieqiReminders(
     const rawTime = typeof raw.daily_check_time === 'string' ? raw.daily_check_time.slice(0, 5) : '';
     const reminderTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(rawTime) ? rawTime : '09:00';
     const currentTime = getCurrentHHmm(now, timeZone);
-    if (!matchesReminderTimeWindow(currentTime, reminderTime, 2)) {
+    if (!matchesReminderTimeWindow(currentTime, reminderTime, 2, catchUpMinutes)) {
       skipped += 1;
       continue;
     }
@@ -1319,6 +1386,11 @@ export async function sendJieqiReminders(
     if (claim.rows.length === 0) {
       skipped += 1;
       continue;
+    }
+
+    const jieqiLateMinutes = catchUpLateMinutes(currentTime, reminderTime);
+    if (jieqiLateMinutes !== null) {
+      logReminderCatchUp({ userId, sendKey, reminderTime }, jieqiLateMinutes);
     }
 
     const channels = await resolveReminderChannels(userId, [], 0);
@@ -1369,6 +1441,7 @@ export async function sendReminders() {
 
   scheduleTimeSync(DEFAULT_SYNC_TIMEZONE);
   const now = getSyncedNow(DEFAULT_SYNC_TIMEZONE);
+  const catchUpMinutes = resolveReminderCatchUpMinutes();
 
   // Batch load ALL user configs upfront to avoid N+1 queries
   const allUserConfigs = await query(
@@ -1537,6 +1610,8 @@ export async function sendReminders() {
     holidayLabel?: string;
     /** checkbox 97: snooze fire - claim/trigger-log key for the persisted deadline. */
     snoozeSendKey?: string;
+    /** checkbox 166: 迟到命中（补发）的迟到分钟数；准时命中时为 undefined。 */
+    lateMinutes?: number;
   }> = [];
   
   for (const event of allEventRows) {
@@ -1687,9 +1762,13 @@ export async function sendReminders() {
       }, 'Event check');
       
       let matchedReminderTime: string | null = null;
+      let matchedLateMinutes: number | null = null;
       const shouldRemind = reminderTimes.some((time) => {
-        const match = matchesReminderTimeWindow(currentTime, time, 2);
-        if (match) matchedReminderTime = time;
+        const match = matchesReminderTimeWindow(currentTime, time, 2, catchUpMinutes);
+        if (match) {
+          matchedReminderTime = time;
+          matchedLateMinutes = catchUpLateMinutes(currentTime, time);
+        }
         return match;
       });
       
@@ -1703,6 +1782,7 @@ export async function sendReminders() {
         daysUntil: matchedDaysUntil ?? 0,
         matchedReminderTime,
         holidayLabel: holidayContextLabel(evalDay, today),
+        ...(matchedLateMinutes !== null ? { lateMinutes: matchedLateMinutes } : {}),
       });
       break;
     }
@@ -1745,6 +1825,13 @@ export async function sendReminders() {
         await query('DELETE FROM reminder_send_claims WHERE event_id = $1 AND trigger_date = $2', [event.id, sendKey]);
         log.debug({ eventId: event.id, sendKey }, 'Already sent for this slot, skipping');
         continue;
+      }
+      // checkbox 166：补发可观测（迟到命中超过 ±2 分钟准时窗口；已成功/已申领的槽位在上方直接跳过）。
+      if (event.lateMinutes !== undefined) {
+        logReminderCatchUp(
+          { eventId: event.id, sendKey, matchedReminderTime: event.matchedReminderTime, daysUntil: event.daysUntil },
+          event.lateMinutes,
+        );
       }
       try {
         // Relationship mapping is handled inside sendNotifications() per-recipient

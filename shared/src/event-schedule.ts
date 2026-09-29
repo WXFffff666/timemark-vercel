@@ -109,17 +109,38 @@ export function buildReminderSendKey(todayYmd: string, daysUntil: number, remind
   return `${todayYmd}#d${daysUntil}#t${reminderTime}`;
 }
 
-/** Cron 每分钟执行：当前时刻是否在提醒时刻 ±windowMinutes 内 */
+/**
+ * 补发窗口上限（分钟，checkbox 166）。给 catch-up 一个硬上界：无论调用方传入什么，
+ * 迟到方向都不会超过 1 小时，因此分钟差算术不可能把窗口卷到「昨天的槽位」。
+ */
+export const REMINDER_CATCH_UP_MAX_MINUTES = 60;
+
+/** 当前时刻相对提醒时刻的分钟差（迟到为正、提前为负）；任一时间无法解析时返回 null。 */
+export function reminderOffsetMinutes(currentHHmm: string, targetHHmm: string): number | null {
+  const [ch, cm] = currentHHmm.split(':').map(Number);
+  const [th, tm] = targetHHmm.split(':').map(Number);
+  if (![ch, cm, th, tm].every((n) => Number.isFinite(n))) return null;
+  return ch * 60 + cm - (th * 60 + tm);
+}
+
+/**
+ * Cron 每分钟执行：当前时刻是否在提醒窗口内。
+ *
+ * - 准时窗口对称且不缩水：|current - target| <= windowMinutes（默认 ±2 分钟，旧行为逐位等价）。
+ * - catchUpMinutes > 0 时只向「迟到」方向扩展 —— [target, target + catchUpMinutes]，用于 cron
+ *   漏跑数分钟后的有界补发；提前方向绝不扩展（提醒永不早于设定时刻）。
+ * - 上限 REMINDER_CATCH_UP_MAX_MINUTES；catchUpMinutes = 0（默认）时与旧实现完全一致。
+ */
 export function matchesReminderTimeWindow(
   currentHHmm: string,
   targetHHmm: string,
   windowMinutes = 2,
+  catchUpMinutes = 0,
 ): boolean {
-  const [ch, cm] = currentHHmm.split(':').map(Number);
-  const [th, tm] = targetHHmm.split(':').map(Number);
-  if ([ch, cm, th, tm].some((n) => Number.isNaN(n))) return false;
-  const diff = Math.abs(ch * 60 + cm - (th * 60 + tm));
-  return diff <= windowMinutes;
+  const diff = reminderOffsetMinutes(currentHHmm, targetHHmm);
+  if (diff === null) return false;
+  const boundedCatchUp = Math.min(Math.max(catchUpMinutes, 0), REMINDER_CATCH_UP_MAX_MINUTES);
+  return diff >= -windowMinutes && diff <= Math.max(windowMinutes, boundedCatchUp);
 }
 
 /** 在多个候选公历日中取「不早于 today」且最近的一天 */

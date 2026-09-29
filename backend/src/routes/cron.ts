@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { timingSafeEqual } from 'crypto';
-import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions } from '../jobs/tasks.js';
+import { sendReminders, githubBackup, archiveLoginHistory, cleanupSessions, CRON_GAP_ALERT_MINUTES } from '../jobs/tasks.js';
 import { processNotificationRetries } from '../services/notification-retry.service.js';
 import { purgeExpiredLogs } from '../services/retention.service.js';
 import { syncAllExternalCalendars } from '../services/calendar-sync.service.js';
@@ -116,8 +116,9 @@ cronRoutes.get('/reminder-check', async (c) => {
   }
 });
 
-/** B29: Cron 间隔 >3min 告警 */
-async function checkCronGapAlert(jobName: string): Promise<void> {
+/** B29: Cron 间隔 >3min 告警（阈值 = tasks.ts 的 CRON_GAP_ALERT_MINUTES；checkbox 166 的补发
+ *  日志复用同一常量，但告警通道本身保持不变）。导出供测试直接驱动。 */
+export async function checkCronGapAlert(jobName: string): Promise<void> {
   try {
     const prev = await query(
       `SELECT executed_at FROM cron_execution_logs
@@ -127,7 +128,7 @@ async function checkCronGapAlert(jobName: string): Promise<void> {
     );
     if (!prev.rows[0]?.executed_at) return;
     const gapMs = Date.now() - new Date(prev.rows[0].executed_at as string).getTime();
-    if (gapMs > 3 * 60 * 1000) {
+    if (gapMs > CRON_GAP_ALERT_MINUTES * 60 * 1000) {
       const admins = await query(`SELECT user_id FROM user_configs WHERE alert_channels IS NOT NULL LIMIT 1`);
       if (admins.rows[0]) {
         const { createInboxMessage } = await import('../services/inbox.service.js');
