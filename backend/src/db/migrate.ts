@@ -1470,6 +1470,93 @@ BEGIN
 END
 $migration53$;`,
     },
+    {
+      // v54 (checkbox 112): durable background-job schema for the always-on AI
+      // (Wave 14). These tables - NOT Vercel Workflow retention - are the source of
+      // truth: the runner is at-least-once, claims with `FOR UPDATE SKIP LOCKED`,
+      // holds a job under a renewable lease (`lease_token` + `lease_expires_at`) and
+      // reclaims it when the lease expires (attempts left -> queued, exhausted ->
+      // dead_letter). `agent_job_events` is the append-only audit trail, `agent_workers`
+      // the worker registry, `agent_routines` the per-user schedules.
+      //
+      // `agent_jobs.kind` is CHECK-constrained to every job kind the plan defines:
+      // `morning_brief` / `evening_review` / `weekly_review` / `hourly_triage` (Wave 15
+      // routines 122-125, the queue's consumers) plus `watchdog` (Wave 14 todo 121's
+      // self-watchdog / todo 130). An unknown kind is rejected by the database with a
+      // message naming `agent_jobs_kind_check`, never silently queued; adding a kind
+      // requires a new append-only migration. `status` is constrained to the seven
+      // lifecycle states the queue service implements (113).
+      //
+      // `user_id` stays nullable like `notification_queue` (v3): user-scoped jobs
+      // dominate but a future system-scope job must not need a schema change. The
+      // partial unique index enforces per-user idempotency exactly when an
+      // `idempotency_key` is present (NULL user_id rows never collide - Postgres
+      // unique-NULL semantics).
+      //
+      // Purely additive + idempotent: only CREATE TABLE / CREATE INDEX IF NOT EXISTS,
+      // no ALTER of existing tables, no backfill, no data migration, re-running is a
+      // no-op. Supersedes `notification_queue` retries for AI work only - notification
+      // retries keep their own table/service.
+      version: 54,
+      name: 'agent_jobs_v54',
+      sql: `CREATE TABLE IF NOT EXISTS agent_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CONSTRAINT agent_jobs_kind_check CHECK (kind IN ('evening_review', 'hourly_triage', 'morning_brief', 'watchdog', 'weekly_review')),
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'queued' CONSTRAINT agent_jobs_status_check CHECK (status IN ('queued', 'leased', 'running', 'succeeded', 'failed', 'dead_letter', 'cancelled')),
+  priority INTEGER NOT NULL DEFAULT 0,
+  attempt INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  idempotency_key TEXT,
+  lease_owner TEXT,
+  lease_token UUID,
+  lease_expires_at TIMESTAMPTZ,
+  last_heartbeat_at TIMESTAMPTZ,
+  run_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ,
+  error_code TEXT,
+  error_message TEXT,
+  result JSONB,
+  cost_tokens INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_jobs_idempotency ON agent_jobs (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_agent_jobs_claim ON agent_jobs (status, run_at);
+CREATE INDEX IF NOT EXISTS idx_agent_jobs_kind_status ON agent_jobs (kind, status);
+CREATE INDEX IF NOT EXISTS idx_agent_jobs_user_created ON agent_jobs (user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS agent_job_events (
+  id BIGSERIAL PRIMARY KEY,
+  job_id UUID NOT NULL REFERENCES agent_jobs(id) ON DELETE CASCADE,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  status TEXT,
+  detail JSONB
+);
+CREATE INDEX IF NOT EXISTS idx_agent_job_events_job ON agent_job_events (job_id, at);
+CREATE TABLE IF NOT EXISTS agent_workers (
+  id TEXT PRIMARY KEY,
+  kind TEXT,
+  last_seen_at TIMESTAMPTZ,
+  meta JSONB
+);
+CREATE TABLE IF NOT EXISTS agent_routines (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  cron_expr TEXT,
+  kind TEXT NOT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  next_run_at TIMESTAMPTZ,
+  last_run_at TIMESTAMPTZ,
+  tier TEXT,
+  budget_per_day INTEGER,
+  config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  UNIQUE (user_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_routines_due ON agent_routines (enabled, next_run_at);`,
+    },
   ];
 
   for (const migration of migrations) {

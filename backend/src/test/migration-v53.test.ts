@@ -89,7 +89,7 @@ describe('migration v53 registration (checkbox 106)', () => {
     await applyIncrementalMigrations(53);
     expect(callsMatching('gin_trgm_ops')).toHaveLength(0);
     expect(callsMatching('embeddings')).toHaveLength(0);
-    expect(versionInserts()).toEqual([]);
+    expect(versionInserts()).toEqual([54]);
   });
 
   it('does not record v53 when its SQL fails, so a later cold start retries', async () => {
@@ -105,7 +105,7 @@ describe('migration v53 registration (checkbox 106)', () => {
     const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
     expect(versions.filter((v) => v === 53)).toHaveLength(1);
     expect(versions.indexOf(53)).toBe(versions.indexOf(52) + 1);
-    expect(versions[versions.length - 1]).toBe(53);
+    expect(versions[versions.length - 1]).toBe(54);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }
