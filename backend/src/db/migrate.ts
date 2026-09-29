@@ -1598,6 +1598,44 @@ CREATE TABLE IF NOT EXISTS agent_audit_logs (
 CREATE INDEX IF NOT EXISTS idx_agent_audit_logs_user ON agent_audit_logs (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_audit_logs_token ON agent_audit_logs (token_id, created_at DESC);`,
     },
+    {
+      // Checkbox 102: durable two-phase confirmation store for the agent action API.
+      //
+      // A `requiresConfirmation` tool (delete_event, send_digest) is NOT executed by
+      // POST /api/agent/actions/:tool. Phase 1 validates + authorises the call, then records
+      // ONE pending row here and returns its id; phase 2 (POST /api/agent/confirm/:id)
+      // atomically claims the row and only then runs the handler:
+      //
+      //   UPDATE ... SET status='consumed', consumed_at=now()
+      //   WHERE id=$1 AND user_id=$2 AND status='pending' AND expires_at > now()
+      //
+      // The single-use guarantee AND the 2-minute TTL live in that one conditional UPDATE
+      // (the data layer), so a concurrent double-confirm matches at most one row and an
+      // expired confirmation can never be claimed - no JS-side check can race it.
+      //
+      // Persisted, not module state: Hono runs per-invocation on Vercel, so an in-memory
+      // store would silently lose every pending confirmation between the two HTTP calls.
+      // `args` holds the phase-1-validated arguments the handler needs (audit redaction is
+      // a separate concern); `expires_at` is compared in SQL, never by slicing an ISO string.
+      //
+      // Purely additive + idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only, no
+      // ALTER of existing tables, no backfill, re-running is a no-op.
+      version: 56,
+      name: 'agent_confirmations_v56',
+      sql: `CREATE TABLE IF NOT EXISTS agent_confirmations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_id UUID REFERENCES agent_tokens(id) ON DELETE SET NULL,
+  tool TEXT NOT NULL,
+  args JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'pending' CONSTRAINT agent_confirmations_status_check CHECK (status IN ('pending', 'consumed', 'expired')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_agent_confirmations_user ON agent_confirmations (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_confirmations_pending ON agent_confirmations (status, expires_at);`,
+    },
   ];
 
   for (const migration of migrations) {

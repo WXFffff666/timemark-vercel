@@ -69,6 +69,7 @@ import botRoutes from './routes/bot.js';
 import aiRoutes from './routes/ai.js';
 import searchRoutes from './routes/search.js';
 import agentTokensRoutes from './routes/agent-tokens.js';
+import agentRoutes from './routes/agent.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -184,6 +185,8 @@ app.route('/api/ai', aiRoutes);
 app.route('/api/search', searchRoutes);
 // checkbox 101: scoped, revocable agent tokens + audit log (settings CRUD; raw shown once).
 app.route('/api/agent-tokens', agentTokensRoutes);
+// checkbox 102: agent action API (registry, scoped execution, two-phase confirmation).
+app.route('/api/agent', agentRoutes);
 // todo 88: also expose the canonical `/share/:token` server-rendered meta document at the app
 // root so it resolves locally and in tests. On Vercel this path is owned by the SPA rewrite in
 // vercel.json (`/((?!api/|.*\\..*).*)` -> /index.html), so the OG image (`/api/og/image/:token`)
