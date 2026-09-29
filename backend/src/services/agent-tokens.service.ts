@@ -331,12 +331,14 @@ async function findTokenRowByHash(tokenHash: string): Promise<AgentTokenRow | nu
   return (result.rows[0] as AgentTokenRow | undefined) ?? null;
 }
 
-/** Epoch-ms expiry test - never a string slice of a UTC ISO value. */
-function isExpired(row: AgentTokenRow, nowMs: number): boolean {
-  if (row.expires_at === null || row.expires_at === undefined) return false;
-  const expiresMs = row.expires_at instanceof Date
-    ? row.expires_at.getTime()
-    : new Date(row.expires_at).getTime();
+/**
+ * Epoch-ms expiry test - never a string slice of a UTC ISO value. Exported so the
+ * credential resolver (and the route gates that re-check revocation/expiry) share ONE
+ * definition instead of forking the comparison.
+ */
+export function isAgentTokenExpired(value: unknown, nowMs: number = Date.now()): boolean {
+  if (value === null || value === undefined) return false;
+  const expiresMs = value instanceof Date ? value.getTime() : new Date(value as string | number).getTime();
   return Number.isFinite(expiresMs) && expiresMs <= nowMs;
 }
 
@@ -382,7 +384,7 @@ export async function authorizeAgentToolCall(
   if (row.revoked_at !== null && row.revoked_at !== undefined) {
     return denyWithAudit(base, 'token_revoked', 401);
   }
-  if (isExpired(row, Date.now())) {
+  if (isAgentTokenExpired(row.expires_at)) {
     return denyWithAudit(base, 'token_expired', 401);
   }
   if (!requiredScope) {
@@ -420,4 +422,38 @@ export async function authorizeAgentToolCall(
   }
 
   return { allowed: true, userId: Number(row.user_id), tokenId: row.id, auditId, requiredScope };
+}
+
+// --- Credential resolution for the read-only gates -----------------------------------------
+
+/**
+ * Task 110, closing the recorded 103/104 gaps: the dispatcher re-validates revocation/expiry
+ * on every `tools/call`, but the read-only gates (`GET /api/agent/tools`, MCP `tools/list` /
+ * `resources/list` / `resources/read`) previously resolved only scopes - so a revoked or
+ * expired token could still enumerate tools and inline whole resource payloads. This resolver
+ * returns the SAME credential verdict the dispatcher would, so every gate answers revoked and
+ * expired distinctly (`token_revoked` / `token_expired`) instead of silently serving data.
+ *
+ * `tools/call` deliberately keeps its dispatcher path rather than being short-circuited here:
+ * there the denial is ALSO written to `agent_audit_logs` (fail-closed audit), and a
+ * pre-dispatch gate must not duplicate or replace that row.
+ */
+const AGENT_TOKEN_CREDENTIAL_SQL =
+  'SELECT id, user_id, scopes, revoked_at, expires_at FROM agent_tokens WHERE token_hash = $1';
+
+export type AgentTokenCredential =
+  | { status: 'ok'; userId: number; tokenId: string; scopes: AgentTokenScope[] }
+  | { status: 'unknown' | 'revoked' | 'expired' };
+
+export async function resolveAgentTokenCredential(token: string): Promise<AgentTokenCredential> {
+  const raw = typeof token === 'string' ? token.trim() : '';
+  if (!raw) return { status: 'unknown' };
+  const result = await query(AGENT_TOKEN_CREDENTIAL_SQL, [hashAgentToken(raw)]);
+  const row = result.rows[0] as
+    | { id: string; user_id: number; scopes: unknown; revoked_at?: unknown; expires_at?: unknown }
+    | undefined;
+  if (!row) return { status: 'unknown' };
+  if (row.revoked_at !== null && row.revoked_at !== undefined) return { status: 'revoked' };
+  if (isAgentTokenExpired(row.expires_at)) return { status: 'expired' };
+  return { status: 'ok', userId: Number(row.user_id), tokenId: row.id, scopes: parseStoredScopes(row.scopes) };
 }

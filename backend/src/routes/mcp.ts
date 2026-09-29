@@ -4,19 +4,20 @@ import { z } from 'zod';
 import type { AgentToolDefinition, AgentToolScope, User } from '@timemark/shared';
 import { dateStringInTimeZone, shiftCalendarDays } from '@timemark/shared/habit-schedule';
 import {
-  AGENT_TOKEN_IDENTITY_SQL,
+  AGENT_TOOLS_DISABLED_ERROR,
+  agentToolsEnabled,
   confirmTool,
   invokeTool,
   listAgentToolsForScopes,
-  resolveCallerScopes,
   type AgentCaller,
   type AgentInvocation,
 } from '../services/agent/dispatch.service.js';
 import {
-  hashAgentToken,
+  resolveAgentTokenCredential,
   tokenScopesAllow,
   type AgentTokenScope,
 } from '../services/agent-tokens.service.js';
+import { agentRateLimitKey, checkAgentRateLimit } from '../services/agent/rate-limit.service.js';
 import { fenceUntrusted } from '../services/bot/fencing.js';
 import { listPendingItems } from '../services/bot/bot-data.service.js';
 import { getMedicationTimezone, getTodayDoses } from '../services/medication.service.js';
@@ -409,18 +410,16 @@ export async function readResourcePayload(
 }
 
 /**
- * Owner of the bearer token, for a resource read. `resolveCallerScopes` (the shared credential
- * gate) returns scopes only and the dispatcher's identity lookup is private, so this reuses the
- * exported `AGENT_TOKEN_IDENTITY_SQL` instead of forking any authorisation logic.
+ * Resource reads resolve the owner through the shared credential resolver inside
+ * `resolveAuth` (the same one `GET /api/agent/tools` uses). Since task 110 that resolver
+ * re-checks revocation/expiry, so the gap recorded by checkboxes 103/104 ("resource reads /
+ * tools/list do not re-check revocation") is closed with no forked token lookup.
  */
-async function resolveResourceOwner(token: string): Promise<number | null> {
-  const result = await query(AGENT_TOKEN_IDENTITY_SQL, [hashAgentToken(token)]);
-  const userId = Number((result.rows[0] as { user_id?: unknown } | undefined)?.user_id);
-  return Number.isFinite(userId) ? userId : null;
-}
 
 // --- JSON-RPC ---------------------------------------------------------------------------
 
+// Task 110: `RATE_LIMITED` carries a refusal from the shared per-token limiter. Like every
+// other server-defined code it rides the JSON-RPC error object with HTTP 429.
 type RpcId = string | number | null;
 
 const RPC = {
@@ -434,6 +433,7 @@ const RPC = {
   RESOURCE_NOT_FOUND: -32002,
   FORBIDDEN: -32003,
   CONFLICT: -32004,
+  RATE_LIMITED: -32005,
 } as const;
 
 interface JsonRpcErrorShape {
@@ -483,7 +483,13 @@ function httpStatusForError(code: number): 200 | 401 {
 
 // --- credential gate ----------------------------------------------------------------------
 
-type McpAuth = { token: string; scopes: readonly AgentTokenScope[] };
+type McpAuth = {
+  token: string;
+  userId: number | null;
+  scopes: readonly AgentTokenScope[];
+  /** `ok` unless the token is revoked/expired (`unknown` never reaches a caller). */
+  credential: 'ok' | 'revoked' | 'expired';
+};
 
 function bearerToken(c: Context): string | null {
   const raw = c.req.header('Authorization')?.replace(/^Bearer\s+/i, '').trim();
@@ -491,20 +497,29 @@ function bearerToken(c: Context): string | null {
 }
 
 /**
- * Resolve a token's owner + scopes, or the 401 Response to short-circuit with. This mirrors the
- * credential resolution of checkbox 102's `GET /api/agent/tools`; the execution path additionally
- * re-validates revocation/expiry inside the dispatcher for every `tools/call`.
+ * Resolve a token's owner + scopes, or the 401 Response to short-circuit with.
+ *
+ * Task 110: this now goes through the shared credential resolver, so `initialize`,
+ * `tools/list`, `resources/list` and `resources/read` refuse a revoked/expired token exactly
+ * like the dispatcher refuses it on `tools/call` (closing the gaps recorded by 103/104). The
+ * token stays in the result for `tools/call`, which keeps its dispatcher path so the denial
+ * is ALSO written to `agent_audit_logs` and the error vocabulary stays identical.
  */
 async function resolveAuth(c: Context): Promise<McpAuth | Response> {
   const token = bearerToken(c);
   if (!token) {
     return c.json(rpcError(null, { code: RPC.UNAUTHORIZED, message: 'missing_token' }), 401);
   }
-  const scopes = await resolveCallerScopes({ kind: 'token', token });
-  if (!scopes) {
+  const credential = await resolveAgentTokenCredential(token);
+  if (credential.status === 'unknown') {
     return c.json(rpcError(null, { code: RPC.UNAUTHORIZED, message: 'invalid_token' }), 401);
   }
-  return { token, scopes };
+  return {
+    token,
+    userId: credential.status === 'ok' ? credential.userId : null,
+    scopes: credential.status === 'ok' ? credential.scopes : [],
+    credential: credential.status,
+  };
 }
 
 // --- audit correlation --------------------------------------------------------------------
@@ -628,6 +643,13 @@ mcp.post('/', async (c) => {
     return c.json(rpcError(null, { code: RPC.DISABLED, message: 'mcp_disabled' }), 503);
   }
 
+  // Task 110 (b): the global kill switch. `AGENT_TOOLS_ENABLED=false` disables the whole MCP
+  // surface with the SAME error the action API returns, so `tools/list` and `GET /tools`
+  // stay consistent (both refuse).
+  if (!agentToolsEnabled()) {
+    return c.json(rpcError(null, { code: RPC.DISABLED, message: AGENT_TOOLS_DISABLED_ERROR }), 503);
+  }
+
   let body: unknown;
   try {
     body = await c.req.json();
@@ -655,8 +677,28 @@ mcp.post('/', async (c) => {
     return c.body(null, 202);
   }
 
+  // Task 110 (b): the SAME per-token limiter the action API uses (minute + daily windows),
+  // keyed by the shared `agentRateLimitKey` derivation. A refused call is a top-level
+  // JSON-RPC error with HTTP 429 + Retry-After.
+  const limit = await checkAgentRateLimit(agentRateLimitKey(c));
+  if (!limit.allowed) {
+    const error = limit.scope === 'daily' ? 'rate_limited_daily' : 'rate_limited_minute';
+    c.header('Retry-After', String(limit.retryAfterSeconds ?? 1));
+    return c.json(
+      rpcError(id, { code: RPC.RATE_LIMITED, message: error, data: { scope: limit.scope, retryAfterSeconds: limit.retryAfterSeconds } }),
+      429,
+    );
+  }
+
   const auth = await resolveAuth(c);
   if (auth instanceof Response) return auth;
+
+  // Task 110: a revoked/expired credential is refused at the gate for every method EXCEPT
+  // `tools/call` - that one deliberately keeps the dispatcher path where the denial is also
+  // written to `agent_audit_logs` and returns the identical `token_revoked`/`token_expired`.
+  if (method !== 'tools/call' && auth.credential !== 'ok') {
+    return c.json(rpcError(id, { code: RPC.UNAUTHORIZED, message: `token_${auth.credential}` }), 401);
+  }
 
   if (method === 'initialize') {
     const requested = (req.params as Record<string, unknown> | undefined)?.protocolVersion;
@@ -745,7 +787,9 @@ mcp.post('/', async (c) => {
         200,
       );
     }
-    const userId = await resolveResourceOwner(auth.token);
+    // The credential gate above already refused revoked/expired tokens for this method, so
+    // the owner is simply the one `resolveAuth` resolved - no second token lookup.
+    const userId = auth.userId;
     if (userId === null) {
       return c.json(rpcError(null, { code: RPC.UNAUTHORIZED, message: 'invalid_token' }), 401);
     }

@@ -1221,9 +1221,16 @@ describe('104 exclusion + read-only sweep', () => {
     expect(state.sqlLog.every((sql) => !/^\s*(UPDATE|DELETE)/i.test(sql))).toBe(true);
     expect(state.deleteAttempts).toBe(0);
     expect(state.audits).toHaveLength(0);
-    // The only INSERT is getTodayDoses()'s documented idempotent dose materialisation.
+    // The only INSERTs are non-payload bookkeeping: getTodayDoses()'s documented idempotent
+    // dose materialisation, plus (task 110) the shared per-token rate limiter's fixed-window
+    // counter, which every POST incurs before dispatch. Anything else - most importantly an
+    // `agent_audit_logs` row (a tools/call always audits) - still fails this guard.
     const inserts = state.sqlLog.filter((sql) => /^\s*INSERT/i.test(sql));
-    expect(inserts.every((sql) => sql.startsWith('INSERT INTO medication_doses'))).toBe(true);
+    expect(
+      inserts.every(
+        (sql) => sql.startsWith('INSERT INTO medication_doses') || sql.startsWith('INSERT INTO rate_limits'),
+      ),
+    ).toBe(true);
   });
 });
 

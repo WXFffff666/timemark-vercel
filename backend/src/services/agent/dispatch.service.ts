@@ -20,9 +20,68 @@ import {
 import { createLogger } from '../../utils/logger.js';
 import { query } from '../../db/index.js';
 import { claimConfirmation, createConfirmation } from './confirmations.service.js';
+import { verifyAgentToolRegistry } from './registry-integrity.service.js';
 import { AGENT_TOOL_HANDLERS, type AgentToolResult } from './tool-handlers.js';
 
 const log = createLogger('agent-dispatch');
+
+/**
+ * Task 110 (a): rug-pull defence. Runs ONCE per process/module load - serverless: once per
+ * cold start - and logs an error if the live registry no longer matches the pinned digest.
+ * DECISION: drift is logged/alerted, never a request-time hard failure (see
+ * registry-integrity.service.ts for the full rationale).
+ */
+verifyAgentToolRegistry();
+
+/**
+ * Task 110 (b): the global kill switch. `AGENT_TOOLS_ENABLED=false` (exact value, case
+ * insensitive) disables BOTH the action API (`/api/agent/*` -> 503) and MCP (`/api/mcp` POST
+ * -> 503 `agent_tools_disabled`). Unset - or any other value - keeps the surface enabled, so
+ * this is a kill switch, not an opt-in flag; the plan's separate "AI tier off by default"
+ * task (checkbox 162) owns flipping the default. Both surfaces read this ONE function, so
+ * they can never disagree.
+ */
+export const AGENT_TOOLS_DISABLED_ERROR = 'agent_tools_disabled';
+
+export function agentToolsEnabled(): boolean {
+  return (process.env.AGENT_TOOLS_ENABLED ?? '').trim().toLowerCase() !== 'false';
+}
+
+/**
+ * Task 110 (d): no tool may fetch a user-supplied URL. Handlers never perform outbound HTTP
+ * (enforced by the source guard in agent-hardening.test.ts), and this guard removes the
+ * smuggled-URL input class entirely: an argument whose entire trimmed value is an absolute
+ * `http(s)://` URL is refused BEFORE schema validation, so the refusal is uniform across
+ * every tool (including enum fields like `send_digest.period`). A string that merely
+ * CONTAINS a URL (ordinary prose) stays valid - the rule targets URL-valued arguments.
+ */
+const HTTP_URL_ARGUMENT_RE = /^https?:\/\/\S+$/i;
+
+/** First offending argument path, or null. Bounded depth/width so hostile shapes stay cheap. */
+export function findHttpUrlArgument(value: unknown, path = '', depth = 0): string | null {
+  if (depth > 6) return null;
+  if (typeof value === 'string') {
+    return HTTP_URL_ARGUMENT_RE.test(value.trim()) ? path || '$' : null;
+  }
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length && index < 100; index += 1) {
+      const hit = findHttpUrlArgument(value[index], `${path}[${index}]`, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (value !== null && typeof value === 'object') {
+    let seen = 0;
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (seen >= 100) break;
+      seen += 1;
+      const hit = findHttpUrlArgument(entry, path ? `${path}.${key}` : key, depth + 1);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
 
 /**
  * Checkbox 102: the dispatcher for the agent action API. It performs the mandated order
@@ -83,13 +142,6 @@ async function resolveTokenIdentity(token: string): Promise<TokenIdentity | null
   const row = result.rows[0] as { id: string; user_id: number; scopes: unknown } | undefined;
   if (!row) return null;
   return { userId: Number(row.user_id), tokenId: row.id, scopes: normaliseScopes(row.scopes) };
-}
-
-/** Scopes of the caller, or null when a token is unknown. Session = full owner grant. */
-export async function resolveCallerScopes(caller: AgentCaller): Promise<AgentTokenScope[] | null> {
-  if (caller.kind === 'session') return ['admin'];
-  const identity = await resolveTokenIdentity(caller.token);
-  return identity ? identity.scopes : null;
 }
 
 function buildPreview(definition: AgentToolDefinition, args: Record<string, unknown>): AgentToolPreview {
@@ -157,6 +209,15 @@ export async function invokeTool(input: {
 }): Promise<AgentInvocation> {
   const definition = AGENT_TOOLS_BY_NAME.get(input.tool as AgentToolName);
   if (!definition) return { status: 'denied', httpStatus: 404, error: 'unknown_tool' };
+
+  // Task 110 (d): URL-valued arguments are refused before schema validation so the refusal is
+  // uniform across every tool (an enum field like send_digest.period included) and no handler
+  // can ever be reached with a caller-supplied URL.
+  const urlPath = findHttpUrlArgument(input.rawArgs);
+  if (urlPath) {
+    log.warn({ tool: definition.name, path: urlPath }, 'agent tool argument rejected: http(s) URL value');
+    return { status: 'denied', httpStatus: 400, error: 'url_argument_rejected' };
+  }
 
   const parsed = definition.inputSchema.safeParse(input.rawArgs ?? {});
   if (!parsed.success) return { status: 'denied', httpStatus: 400, error: 'invalid_args' };
@@ -252,6 +313,13 @@ export async function confirmTool(input: {
   const definition = AGENT_TOOLS_BY_NAME.get(claim.tool);
   if (!definition) return { status: 'denied', httpStatus: 404, error: 'unknown_tool' };
   const args = (claim.args ?? {}) as Record<string, unknown>;
+
+  // A confirmation is a stored intent, so the URL ban (110d) is re-checked at execution time
+  // too. Fail closed: the row is already consumed and nothing runs.
+  if (findHttpUrlArgument(args)) {
+    log.warn({ tool: definition.name }, 'agent confirmation rejected: http(s) URL argument');
+    return { status: 'denied', httpStatus: 400, error: 'url_argument_rejected' };
+  }
 
   // Re-validate a token credential at confirm time (it may have been revoked/expired between
   // the phases). A confirmation-required tool still reports `confirm_required`, which is the

@@ -3,11 +3,13 @@ import { z } from 'zod';
 import { AGENT_TOOLS, type AgentToolDefinition, type User } from '@timemark/shared';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { agentRateLimit } from '../services/agent/rate-limit.service.js';
+import { resolveAgentTokenCredential, type AgentTokenScope } from '../services/agent-tokens.service.js';
 import {
+  AGENT_TOOLS_DISABLED_ERROR,
+  agentToolsEnabled,
   confirmTool,
   invokeTool,
   listAgentToolsForScopes,
-  resolveCallerScopes,
   type AgentCaller,
   type AgentInvocation,
 } from '../services/agent/dispatch.service.js';
@@ -25,6 +27,19 @@ import {
  * typed arguments; an unknown name is a 404 and never reaches a handler.
  */
 const agent = new Hono<{ Variables: { user: User } }>();
+
+/**
+ * Task 110 (b): the global kill switch runs before the rate limiter and EVERY route, so
+ * `AGENT_TOOLS_ENABLED=false` disables the whole action API (tools/actions/confirm) with one
+ * documented 503. MCP reads the same `agentToolsEnabled()` flag, so the two surfaces cannot
+ * disagree.
+ */
+agent.use('*', async (c, next) => {
+  if (!agentToolsEnabled()) {
+    return c.json({ success: false, error: AGENT_TOOLS_DISABLED_ERROR }, 503);
+  }
+  await next();
+});
 
 agent.use('*', agentRateLimit());
 
@@ -64,8 +79,20 @@ agent.get('/tools', async (c) => {
   const caller = await resolveCaller(c);
   if (caller instanceof Response) return caller;
 
-  const scopes = await resolveCallerScopes(caller);
-  if (!scopes) return c.json({ success: false, error: 'invalid_token' }, 401);
+  // Task 110: a read-only gate re-validates the credential itself (revoked / expired), not
+  // just the scope grant. A session is the authenticated owner; a token goes through the
+  // shared credential resolver, so a revoked token can no longer enumerate the registry.
+  let scopes: readonly AgentTokenScope[];
+  if (caller.kind === 'session') {
+    scopes = ['admin'];
+  } else {
+    const credential = await resolveAgentTokenCredential(caller.token);
+    if (credential.status !== 'ok') {
+      const error = credential.status === 'unknown' ? 'invalid_token' : `token_${credential.status}`;
+      return c.json({ success: false, error }, 401);
+    }
+    scopes = credential.scopes;
+  }
 
   // A session is the owner: full registry. A token only sees tools its grant permits.
   const tools = caller.kind === 'session' ? AGENT_TOOLS : listAgentToolsForScopes(scopes);
