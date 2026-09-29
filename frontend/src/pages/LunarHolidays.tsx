@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { api } from '@/lib/api';
+import { AlmanacAdvancedPanel } from '@/components/almanac/AlmanacAdvancedPanel';
 
 const PRESETS = ['春节', '端午', '中秋', '元旦', '国庆'];
 
@@ -32,6 +33,7 @@ export default function LunarHolidays() {
       <ul className="mb-4 list-disc list-inside text-sm">{PRESETS.map((p) => <li key={p}>{p}</li>)}</ul>
       <Button onClick={importPresets} disabled={loading}>{loading ? '导入中…' : '导入预设'}</Button>
       {msg && <p className="mt-3 text-sm text-green-600">{msg}</p>}
+      <AlmanacAdvancedPanel />
     </div>
   );
 }
