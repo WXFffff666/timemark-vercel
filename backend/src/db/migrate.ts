@@ -1669,6 +1669,51 @@ CREATE INDEX IF NOT EXISTS idx_inbox_messages_title_trgm ON inbox_messages USING
 CREATE INDEX IF NOT EXISTS idx_inbox_messages_body_trgm ON inbox_messages USING GIN (body gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_inbox_messages_sender_label_trgm ON inbox_messages USING GIN (sender_label gin_trgm_ops);`,
     },
+    {
+      // v58 (checkbox 134): cross-entity tag system.
+      //
+      // `tags` is the per-user tag vocabulary; `tag_links` is the many-to-many join against
+      // the eight supported entity kinds (events, contacts, documents, expiry, inventory,
+      // maintenance, habits, goals). Tags are ORTHOGONAL to the pre-existing `events.tags`
+      // JSONB / `events.type` columns - this table is a separate, shared vocabulary.
+      //
+      // `tag_links.user_id` is denormalised on purpose: the list-filter predicate runs a
+      // per-row EXISTS against `(user_id, entity_type, entity_id)`, so the index below keeps
+      // the filter index-usable without joining `tags` first; the link row's owner is also
+      // checked directly, so one user can never observe another user's links.
+      //
+      // `ON DELETE CASCADE` on `tag_links.tag_id` is what makes "delete a tag" remove its
+      // links (but never the linked entities): the entities live in their own tables and are
+      // never touched by this migration or by tag deletion. The `entity_id` INTEGER is a
+      // deliberate plain column (not a polymorphic FK) because it spans eight tables; the
+      // service layer validates that `(entity_type, entity_id)` belongs to the caller BEFORE
+      // every insert, so an orphan link cannot be created through the API.
+      //
+      // Purely additive + idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only, no ALTER
+      // of existing tables, no backfill, no data migration; re-running is a no-op.
+      version: 58,
+      name: 'tags_tag_links_v58',
+      sql: `CREATE TABLE IF NOT EXISTS tags (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  color TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_tags_user ON tags (user_id, name);
+CREATE TABLE IF NOT EXISTS tag_links (
+  id SERIAL PRIMARY KEY,
+  tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL CONSTRAINT tag_links_entity_type_check CHECK (entity_type IN ('event', 'contact', 'document', 'expiry', 'inventory', 'maintenance', 'habit', 'goal')),
+  entity_id INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tag_id, entity_type, entity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tag_links_entity ON tag_links (user_id, entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_tag_links_tag ON tag_links (tag_id, entity_type);`,
+    },
   ];
 
   for (const migration of migrations) {

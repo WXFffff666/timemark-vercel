@@ -421,3 +421,89 @@ export function globalSearch(
   if (options.limit !== undefined) params.set('limit', String(options.limit));
   return api.get<GlobalSearchResponse>(`/search?${params.toString()}`);
 }
+
+// ---------------------------------------------------------------------------
+// checkbox 134: cross-entity tags (vocabulary, links, and the AND/OR smart filter)
+// ---------------------------------------------------------------------------
+
+export const TAG_ENTITY_TYPES = [
+  'event',
+  'contact',
+  'document',
+  'expiry',
+  'inventory',
+  'maintenance',
+  'habit',
+  'goal',
+] as const;
+export type TagEntityType = (typeof TAG_ENTITY_TYPES)[number];
+export type TagFilterMode = 'and' | 'or';
+
+export interface TagRecord {
+  id: number;
+  name: string;
+  color: string | null;
+  created_at: string;
+  /** Present on the vocabulary list; 0 when the tag is unused. */
+  link_count?: number;
+}
+
+export interface TaggedEntity {
+  entity_type: TagEntityType;
+  entity_id: number;
+  tag_ids: number[];
+}
+
+/** The caller's tag vocabulary, name-ordered, with link counts. */
+export function listTags(): Promise<TagRecord[]> {
+  return api.get<TagRecord[]>('/tags');
+}
+
+export function createTag(input: { name: string; color?: string | null }): Promise<TagRecord> {
+  return api.post<TagRecord>('/tags', input);
+}
+
+export function updateTag(id: number, patch: { name?: string; color?: string | null }): Promise<TagRecord> {
+  return api.patch<TagRecord>(`/tags/${id}`, patch);
+}
+
+/** Deletes the tag AND its links; the linked entities are never touched by this call. */
+export function deleteTag(id: number): Promise<void> {
+  return api.delete<void>(`/tags/${id}`);
+}
+
+export interface TagLinkRecord {
+  tag_id: number;
+  entity_type: TagEntityType;
+  entity_id: number;
+  created_at: string;
+}
+
+/** Idempotent: linking the same pair twice succeeds (the second call recreates nothing). */
+export function linkTag(tagId: number, entityType: TagEntityType, entityId: number): Promise<TagLinkRecord> {
+  return api.post<TagLinkRecord>(`/tags/${tagId}/links`, { entityType, entityId });
+}
+
+export function unlinkTag(tagId: number, entityType: TagEntityType, entityId: number): Promise<void> {
+  return api.delete<void>(`/tags/${tagId}/links`, { entityType, entityId });
+}
+
+/**
+ * Smart filter: entities carrying the requested tags. ALL tags by default (`mode: 'and'`),
+ * ANY with `mode: 'or'`; composes with the entity-type filter and the limit.
+ */
+export function listTaggedEntities(options: {
+  tagIds: number[];
+  mode?: TagFilterMode;
+  entityTypes?: TagEntityType[];
+  limit?: number;
+}): Promise<TaggedEntity[]> {
+  const params = new URLSearchParams();
+  if (options.tagIds.length > 0) params.set('tagIds', options.tagIds.join(','));
+  if (options.mode) params.set('mode', options.mode);
+  if (options.entityTypes && options.entityTypes.length > 0) {
+    params.set('entityTypes', options.entityTypes.join(','));
+  }
+  if (options.limit !== undefined) params.set('limit', String(options.limit));
+  return api.get<TaggedEntity[]>(`/tags/entities?${params.toString()}`);
+}

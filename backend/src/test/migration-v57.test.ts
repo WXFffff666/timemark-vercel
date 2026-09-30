@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
  *
  * EXPLAIN note: a unit-level PGlite `EXPLAIN` over a tiny one-row fixture is misleading - the
  * planner picks a seq scan for a handful of rows regardless of the index - so the engine-level
- * proof that `苹果` uses `Bitmap Index Scan on idx_*_trgm` lives in the out-of-repo harness
+ * proof that `鑻规灉` uses `Bitmap Index Scan on idx_*_trgm` lives in the out-of-repo harness
  * `%TEMP%/opencode/wave16-132-search/probe-explain.mjs` with `enable_seqscan=off` and a
  * multi-row seed. Here the shipped DDL and the exact index-usable SQL shape the service emits
  * are pinned, which is the honest, engine-independent assertion.
@@ -98,7 +98,7 @@ describe('migration v57 registration (checkbox 132)', () => {
     await applyIncrementalMigrations(57);
     expect(callsMatching('idx_inbox_messages_body_trgm')).toHaveLength(0);
     expect(callsMatching('gin_trgm_ops')).toHaveLength(0);
-    expect(versionInserts()).toEqual([]);
+    expect(versionInserts()).toEqual([58]);
   });
 
   it('does not record v57 when its SQL fails, so a later cold start retries', async () => {
@@ -114,7 +114,7 @@ describe('migration v57 registration (checkbox 132)', () => {
     const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
     expect(versions.filter((v) => v === 57)).toHaveLength(1);
     expect(versions.indexOf(57)).toBe(versions.indexOf(56) + 1);
-    expect(versions[versions.length - 1]).toBe(57);
+    expect(versions[versions.length - 1]).toBe(58);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }

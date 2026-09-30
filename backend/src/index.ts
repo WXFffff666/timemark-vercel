@@ -77,6 +77,8 @@ import mcpRoutes from './routes/mcp.js';
 import agentWorkerRoutes from './routes/agent-worker.js';
 // checkbox 119: read/write control plane for agent jobs, workers and routines (admin session auth).
 import adminAgentRoutes from './routes/admin/agent.js';
+// checkbox 134: cross-entity tag vocabulary + links + the AND/OR smart filter (migration v58).
+import tagsRoutes from './routes/tags.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -201,6 +203,8 @@ app.route('/api/agent', agentRoutes);
 app.route('/api/mcp', mcpRoutes);
 // checkbox 119: the agent control-plane API (jobs, workers, routines; session/admin auth only).
 app.route('/api/admin/agent', adminAgentRoutes);
+// checkbox 134: tags across events/contacts/documents/expiry/inventory/maintenance/habits/goals.
+app.route('/api/tags', tagsRoutes);
 // todo 88: also expose the canonical `/share/:token` server-rendered meta document at the app
 // root so it resolves locally and in tests. On Vercel this path is owned by the SPA rewrite in
 // vercel.json (`/((?!api/|.*\\..*).*)` -> /index.html), so the OG image (`/api/og/image/:token`)

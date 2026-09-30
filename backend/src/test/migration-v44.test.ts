@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 /**
  * Todo 81 acceptance (plan checkbox 81): the personal goals + milestones
- * migration is registered at version 44 â€?NOT 42 as the plan text claimed,
+ * migration is registered at version 44 éˆ¥?NOT 42 as the plan text claimed,
  * because 42 (medications) and 43 (per-profile notification routing) were
  * already taken when this landed (43 is the previous max in the source list).
  * It is appended after 43, picked up by the runner in order, idempotent (every
@@ -14,8 +14,8 @@ import { readFileSync } from 'node:fs';
  * - current_value is the RAW value (may exceed target_value); only the derived
  *   percentage is clamped (service level, proven in the route tests);
  * - target_value is NULLable but never 0 (CHECK);
- * - milestones.goal_id is ON DELETE CASCADE â€?deleting a goal drops its checklist;
- * - milestones.event_id is an OPTIONAL FK with ON DELETE SET NULL â€?deleting the
+ * - milestones.goal_id is ON DELETE CASCADE éˆ¥?deleting a goal drops its checklist;
+ * - milestones.event_id is an OPTIONAL FK with ON DELETE SET NULL éˆ¥?deleting the
  *   event only unlinks the milestone, and deleting the goal never touches events
  *   (proven on a live PGlite engine in `.omo/evidence/task-81-*`).
  */
@@ -94,7 +94,7 @@ describe('migration v44 registration (todo 81)', () => {
     // feeds), v49 (checkbox 91, Telegram bot dedup) and v50 (checkbox 94, chat linking)
     // landed after v44 and DO run on a recorded 44; v44 itself is never re-applied
     // (one insert each).
-    expect(versionInserts()).toEqual([45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57]);
+    expect(versionInserts()).toEqual([45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
   });
 
   it('does not record v44 when its SQL fails, so a later cold start retries', async () => {
@@ -142,7 +142,7 @@ describe('migration v44 registration (todo 81)', () => {
     // continue the chain; 49 is no longer the tail.
     expect(versions.indexOf(49)).toBe(versions.indexOf(48) + 1);
     // v51 (checkbox 97, /snooze persistence) is the new tail; 1-50 stay untouched.
-    expect(versions[versions.length - 1]).toBe(57);
+    expect(versions[versions.length - 1]).toBe(58);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
