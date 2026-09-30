@@ -69,6 +69,42 @@ const ERROR_DETAIL_MAX_CHARS = 300;
 /** Named provider slots. `local` is the Ollama / LM Studio OpenAI-compatible endpoint. */
 export type AiProviderName = 'primary' | 'fallback' | 'local';
 
+/**
+ * Model tiers (checkbox 117). A tier is a quality class for a call site - NOT a model
+ * name: every tier resolves to an ORDERED list of the configured provider slots above
+ * (see `resolveTierProviderOrder`). The plan's mapping of processes to tiers:
+ *
+ *   lite    triage, classification, habit naming
+ *   medium  NL parsing, brief assembly, digest narrative
+ *   high    weekly review, complex reasoning
+ *
+ * Because a tier only re-orders the EXISTING slots, all three user classes work with
+ * no extra machinery: a local-only operator (only `OLLAMA_MODEL` set) runs every tier
+ * on Ollama, and a cloud-only operator runs every tier on the free cloud slots.
+ */
+export const AI_MODEL_TIERS = ['lite', 'medium', 'high'] as const;
+export type AiModelTier = (typeof AI_MODEL_TIERS)[number];
+
+/**
+ * The tier used when a call does not name one. `medium` resolves to the natural
+ * `primary -> fallback -> local` order, so pre-tier callers keep their exact behaviour.
+ */
+export const DEFAULT_AI_MODEL_TIER: AiModelTier = 'medium';
+
+/** Per-tier, comma-separated provider preference order (e.g. `local,primary,fallback`). */
+export const TIER_PROVIDER_ENV: Record<AiModelTier, string> = {
+  lite: 'AI_TIER_LITE_PROVIDERS',
+  medium: 'AI_TIER_MEDIUM_PROVIDERS',
+  high: 'AI_TIER_HIGH_PROVIDERS',
+};
+
+/** Natural provider order; also the fallback when a tier list resolves to nothing usable. */
+export const DEFAULT_PROVIDER_ORDER: readonly AiProviderName[] = ['primary', 'fallback', 'local'];
+
+export function isAiModelTier(value: unknown): value is AiModelTier {
+  return typeof value === 'string' && (AI_MODEL_TIERS as readonly string[]).includes(value);
+}
+
 /** Typed AI errors: no caller of this module should ever receive a bare `Error`. */
 export type AiErrorCode =
   | 'AI_DISABLED'
@@ -184,6 +220,13 @@ export interface AiChatOptions {
    * other deterministic prompts are served from the in-memory cache.
    */
   useCache?: boolean;
+  /**
+   * Model tier for this call (checkbox 117). Defaults to `medium`, which resolves to
+   * the natural `primary -> fallback -> local` order and therefore preserves the
+   * pre-tier behaviour. A tier only re-orders the configured slots; it never makes an
+   * unconfigured provider reachable.
+   */
+  tier?: AiModelTier;
 }
 
 export interface AiChatResult {
@@ -312,6 +355,60 @@ function readLocalProvider(env: AiEnv): AiProvider | null {
     model,
     host,
   };
+}
+
+/** Read the configured providers in the gateway's natural order (unconfigured slots are dropped). */
+export function listConfiguredProviders(env: AiEnv): AiProviderName[] {
+  const configured: AiProviderName[] = [];
+  if (readProvider(env, PRIMARY_ENV, 'primary')) configured.push('primary');
+  if (readProvider(env, FALLBACK_ENV, 'fallback')) configured.push('fallback');
+  if (readLocalProvider(env)) configured.push('local');
+  return configured;
+}
+
+/** True when at least one provider slot is configured (the AI feature ships OFF). */
+export function isAiConfigured(env: AiEnv): boolean {
+  return listConfiguredProviders(env).length > 0;
+}
+
+/** Parse a tier's comma-separated provider names; unknown names and duplicates are dropped. */
+function parseProviderList(raw: string): AiProviderName[] {
+  const names: AiProviderName[] = [];
+  for (const part of raw.split(',')) {
+    const name = part.trim().toLowerCase();
+    if (!(DEFAULT_PROVIDER_ORDER as readonly string[]).includes(name)) continue;
+    if (!names.includes(name as AiProviderName)) names.push(name as AiProviderName);
+  }
+  return names;
+}
+
+/**
+ * The provider order a tier actually uses, resolved from config. Deterministic rules:
+ *
+ *  1. `AI_TIER_<TIER>_PROVIDERS` names the preference order; only CONFIGURED slots are
+ *     kept (naming an unconfigured provider can never produce a call to it - e.g. a
+ *     local-only deployment whose tier list mentions the cloud slots still runs locally).
+ *  2. A non-empty kept list is used strictly: the gateway fails over inside it and never
+ *     escalates to a slot the operator left out.
+ *  3. Otherwise (unset, empty, or every named slot unconfigured) the full configured
+ *     chain in the natural order is used, so a stale tier list can never strand a job.
+ */
+export function resolveTierProviderOrder(tier: AiModelTier, env: AiEnv): AiProviderName[] {
+  const configured = listConfiguredProviders(env);
+  const raw = (env[TIER_PROVIDER_ENV[tier]] ?? '').trim();
+  if (raw) {
+    const configuredSet = new Set(configured);
+    const listed = parseProviderList(raw).filter((name) => configuredSet.has(name));
+    if (listed.length > 0) return listed;
+  }
+  return configured;
+}
+
+/** Resolve one named slot; `null` when that provider is not configured. */
+function providerForName(env: AiEnv, name: AiProviderName): AiProvider | null {
+  if (name === 'primary') return readProvider(env, PRIMARY_ENV, 'primary');
+  if (name === 'fallback') return readProvider(env, FALLBACK_ENV, 'fallback');
+  return readLocalProvider(env);
 }
 
 function jitterDelayMs(random: () => number): number {
@@ -520,10 +617,11 @@ export function createAiGateway(deps: AiGatewayDeps = {}): AiGateway {
       throw new AiRequestError('messages must be a non-empty array');
     }
     const options = rawOptions ?? {};
-    const primary = readProvider(env, PRIMARY_ENV, 'primary');
-    const fallback = readProvider(env, FALLBACK_ENV, 'fallback');
-    const local = readLocalProvider(env);
-    const chain = [primary, fallback, local].filter((entry): entry is AiProvider => entry !== null);
+    // The tier chooses the ordered provider list; the default (`medium`) resolves to
+    // the natural primary -> fallback -> local order.
+    const chain = resolveTierProviderOrder(options.tier ?? DEFAULT_AI_MODEL_TIER, env)
+      .map((name) => providerForName(env, name))
+      .filter((entry): entry is AiProvider => entry !== null);
     if (chain.length === 0) {
       throw new AiDisabledError();
     }
