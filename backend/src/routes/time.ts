@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { normalizeTimezone } from '../utils/timezone.js';
 import {
   DEFAULT_SYNC_TIMEZONE,
   formatLocalHHmm,
@@ -16,7 +17,7 @@ const timeRoutes = new Hono();
 
 /** 公开：时间/NTP/双历自检（不阻塞，默认读缓存） */
 timeRoutes.get('/status', async (c) => {
-  const requestedTz = c.req.query('timezone')?.trim() || DEFAULT_SYNC_TIMEZONE;
+  const requestedTz = normalizeTimezone(c.req.query('timezone') || DEFAULT_SYNC_TIMEZONE);
   const force = c.req.query('refresh') === '1';
 
   let sync;

@@ -12,6 +12,11 @@ import {
   type BotSecurityEmitter,
 } from './security-events.js';
 import type { TelegramCallbackQuery } from './telegram-webhook.js';
+import {
+  DECISION_CALLBACK_PREFIX,
+  handleDecisionCallbackQuery,
+  type DecisionCallbackContext,
+} from '../agent/decision-card.service.js';
 
 /**
  * Telegram inline-keyboard callback handler (checkbox 93).
@@ -84,6 +89,11 @@ export interface CallbackHandlerDeps {
   provider?: BotCallbackProvider;
   answer?: AnswerCallbackQueryFn;
   editText?: EditMessageTextFn;
+  /**
+   * Decision-card seam (task 126): receives `dc:` payloads. Defaults to the real
+   * decision-card handler, which owns the approve-once semantics and the `dc:` codec.
+   */
+  decisions?: (ctx: DecisionCallbackContext) => Promise<CallbackHandleResult>;
   /** Outbound secret scrubber (checkbox 96); defaults to the real redactor. */
   redactor?: BotReplyRedactor;
   /** Security-event sink (checkbox 96); defaults to the pino-based emitter. */
@@ -187,6 +197,20 @@ export async function handleTelegramCallbackQuery(
       );
     }
   };
+
+  // Decision cards (task 126): `dc:` payloads bypass the generic todo codec
+  // (which would reject them as invalid) and go straight to the decision service.
+  if (typeof query.data === 'string' && query.data.startsWith(DECISION_CALLBACK_PREFIX)) {
+    const handleDecision = deps.decisions ?? handleDecisionCallbackQuery;
+    return handleDecision({
+      data: query.data,
+      userId,
+      chatId: chatId == null ? null : String(chatId),
+      messageId: typeof messageId === 'number' ? messageId : null,
+      toast,
+      edit,
+    });
+  }
 
   const parsed = decodeCallbackData(query.data);
   if (!parsed) {

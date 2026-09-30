@@ -38,6 +38,11 @@ const HabitsPage = lazy(() => import('./pages/Habits'));
 const MedicationsPage = lazy(() => import('./pages/Medications'));
 const GoalsPage = lazy(() => import('./pages/Goals'));
 const Assistant = lazy(() => import('./pages/Assistant'));
+const AgentConsole = lazy(() => import('./pages/AgentConsole'));
+const AskPage = lazy(() => import('./pages/Ask'));
+const TodayPage = lazy(() => import('./pages/Today'));
+const DataHealthPage = lazy(() => import('./pages/DataHealth'));
+const SharedView = lazy(() => import('./pages/SharedView'));
 
 function PageLoader() {
   return (
@@ -123,6 +128,11 @@ function AnimatedRoutes() {
           <Route path="/medications" element={<ProtectedRoute><MedicationsPage /></ProtectedRoute>} />
           <Route path="/goals" element={<ProtectedRoute><GoalsPage /></ProtectedRoute>} />
           <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
+          <Route path="/agent-console" element={<ProtectedRoute><AgentConsole /></ProtectedRoute>} />
+          <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
+          <Route path="/today" element={<ProtectedRoute><TodayPage /></ProtectedRoute>} />
+          <Route path="/data-health" element={<ProtectedRoute><DataHealthPage /></ProtectedRoute>} />
+          <Route path="/shared/:token" element={<SharedView />} />
           <Route path="/integrations-docs" element={<ProtectedRoute><IntegrationsDocs /></ProtectedRoute>} />
           <Route path="/cron-monitor" element={<ProtectedRoute><CronMonitor /></ProtectedRoute>} />
           <Route path="/docker-migration" element={<ProtectedRoute><DockerMigration /></ProtectedRoute>} />

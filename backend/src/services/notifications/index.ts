@@ -62,7 +62,8 @@ import { enqueueNotificationRetry } from '../notification-retry.service.js';
 import { getConflictHint } from '../conflict-hint.service.js';
 import { mapWithConcurrency } from '../../utils/concurrency.js';
 import { classifyErrorForRetry } from '../../utils/retry-classifier.js';
-import { createLogger, logFireAndForget } from '../../utils/logger.js';
+import { createLogger } from '../../utils/logger.js';
+import { writeAfterResponse } from '../../utils/write-after-response.js';
 
 const log = createLogger('notifications');
 
@@ -1131,20 +1132,25 @@ export async function sendNotifications(
         await trackConsecutiveFailure(task.accountId, ch, errMsg);
       }
       if (event.id) {
-        // Fire-and-forget: the send result map is returned regardless of whether
-        // the retry row can be persisted; a failure is logged, never rethrown.
-        enqueueNotificationRetry({
-          eventId: Number(event.id),
-          userId,
-          channel: ch,
-          accountId: task.accountId,
-          errorMessage: errMsg,
-        }).catch(
-          logFireAndForget(
-            'notification.retry_enqueue_failed',
+        // Durable write (checkbox 116): the retry row must survive the response, so
+        // it is awaited here — never routed through writeAfterResponse(), which is a
+        // bounded best-effort slot for non-durable work only. A failure is logged,
+        // never rethrown: the send result map is returned regardless of whether the
+        // retry row can be persisted.
+        try {
+          await enqueueNotificationRetry({
+            eventId: Number(event.id),
+            userId,
+            channel: ch,
+            accountId: task.accountId,
+            errorMessage: errMsg,
+          });
+        } catch (retryError) {
+          log.warn(
+            { event: 'notification.retry_enqueue_failed', channel: ch, err: retryError },
             `Failed to enqueue retry for ${ch}`,
-          ),
-        );
+          );
+        }
       }
     }
   }
@@ -1213,17 +1219,17 @@ export async function sendNotifications(
   if (successfulChannels.length > 0) {
     // C13: 出站 webhook
     if (config?.outbound_webhook_url) {
-      // Fire-and-forget: outbound webhook delivery is best-effort and must not
-      // affect the channel result map returned to the caller.
-      sendGenericWebhookNotification(
-        { ...mappedEvent, triggerChannels: successfulChannels },
-        config.outbound_webhook_url,
-        'outbound',
-      ).catch(
-        logFireAndForget(
-          'notification.outbound_webhook_failed',
-          'Failed to deliver outbound webhook',
-        ),
+      // Best-effort egress (checkbox 116): outbound webhook delivery is non-durable,
+      // so it rides writeAfterResponse's bounded, logged budget instead of holding
+      // the response open — and must not affect the returned channel result map.
+      writeAfterResponse(
+        () =>
+          sendGenericWebhookNotification(
+            { ...mappedEvent, triggerChannels: successfulChannels },
+            config.outbound_webhook_url,
+            'outbound',
+          ),
+        { label: 'notification.outbound_webhook', mutatesDurableState: false },
       );
     }
   }

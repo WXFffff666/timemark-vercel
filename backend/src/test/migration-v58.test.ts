@@ -71,7 +71,7 @@ describe('migration v58 registration (checkbox 134)', () => {
     await applyIncrementalMigrations(58);
     expect(callsMatching('CREATE TABLE IF NOT EXISTS tags')).toHaveLength(0);
     expect(callsMatching('tag_links')).toHaveLength(0);
-    expect(versionInserts()).toEqual([]);
+    expect(versionInserts()).toEqual([59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71]);
   });
 
   it('does not record v58 when its SQL fails, so a later cold start retries', async () => {
@@ -87,7 +87,7 @@ describe('migration v58 registration (checkbox 134)', () => {
     const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
     expect(versions.filter((v) => v === 58)).toHaveLength(1);
     expect(versions.indexOf(58)).toBe(versions.indexOf(57) + 1);
-    expect(versions[versions.length - 1]).toBe(58);
+    expect(versions[versions.length - 1]).toBe(71);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }

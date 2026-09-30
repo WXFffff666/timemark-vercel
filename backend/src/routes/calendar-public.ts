@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { createHash } from 'crypto';
+import { normalizeTimezone } from '../utils/timezone.js';
 import { query } from '../db/index.js';
 import { getEventsByUserId } from '../services/event.service.js';
 import { getUserConfig } from '../services/config.service.js';
@@ -68,7 +69,7 @@ calendarPublic.get('/feed/:token.ics', async (c) => {
 
   const config = await getUserConfig(userId);
   const events = await getEventsByUserId(String(userId));
-  const tz = config?.timezone || 'Asia/Shanghai';
+  const tz = normalizeTimezone(config?.timezone || 'Asia/Shanghai');
   const ics = generateICS(events as unknown as Array<Record<string, unknown>>, tz);
   const etag = `"${createHash('sha256').update(ics).digest('hex').slice(0, 16)}"`;
 

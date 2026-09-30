@@ -1,6 +1,7 @@
 import { query } from '../db/index.js';
 import { Lunar, Solar } from 'lunar-javascript';
 import { dateStringInTimeZone } from '@timemark/shared/habit-schedule';
+import { normalizeTimezone } from '../utils/timezone.js';
 import type { Event, CreateEventRequest, RecurringConfig, ReminderConfig, EventType, CalendarType } from '@timemark/shared';
 
 /**
@@ -517,7 +518,7 @@ export async function updateEvent(id: string, userId: string, data: UpdateEventD
           WHERE e.id = $1 AND e.user_id = $2`,
         [id, numericUserId],
       );
-      const timeZone = String(tzResult.rows[0]?.timezone ?? 'Asia/Shanghai');
+      const timeZone = normalizeTimezone(tzResult.rows[0]?.timezone ?? 'Asia/Shanghai');
       const todayYmd = dateStringInTimeZone(new Date(), timeZone);
       await query(
         `DELETE FROM event_trigger_logs WHERE event_id = $1 AND LEFT(trigger_date, 10) = $2`,

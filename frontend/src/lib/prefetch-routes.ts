@@ -22,6 +22,10 @@ const loaders: Record<string, () => Promise<unknown>> = {
   '/notification-rules': () => import('../pages/NotificationRules'),
   '/trigger-logs': () => import('../pages/TriggerLogs'),
   '/templates': () => import('../pages/Templates'),
+  '/agent-console': () => import('../pages/AgentConsole'),
+  '/ask': () => import('../pages/Ask'),
+  '/today': () => import('../pages/Today'),
+  '/data-health': () => import('../pages/DataHealth'),
 };
 
 const prefetched = new Set<string>();

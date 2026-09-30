@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import type { User } from '@timemark/shared';
 import { createProfileSchema, formatZodError, updateProfileSchema, setProfileAccountsSchema } from '@timemark/shared';
+import { isValidIanaTimezone } from '../utils/timezone.js';
 import {
   createProfile,
   deleteProfile,
@@ -51,7 +52,11 @@ profiles.get('/', async (c) => {
 profiles.post('/', async (c) => {
   const userId = Number(c.get('user').id);
   const body = await c.req.json().catch(() => ({}));
-  const parsed = createProfileSchema.safeParse(body);
+    const timezoneInput = (body as { timezone?: unknown }).timezone;
+    if (timezoneInput != null && timezoneInput !== '' && !isValidIanaTimezone(timezoneInput)) {
+      return c.json({ success: false, error: 'Invalid IANA timezone' }, 400);
+    }
+    const parsed = createProfileSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({
       success: false,
@@ -80,7 +85,11 @@ profiles.patch('/:id', async (c) => {
   if (id === null) return c.json({ success: false, error: '无效的 ID' }, 400);
 
   const body = await c.req.json().catch(() => ({}));
-  const parsed = updateProfileSchema.safeParse(body);
+    const timezoneInput = (body as { timezone?: unknown }).timezone;
+    if (timezoneInput != null && timezoneInput !== '' && !isValidIanaTimezone(timezoneInput)) {
+      return c.json({ success: false, error: 'Invalid IANA timezone' }, 400);
+    }
+    const parsed = updateProfileSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({
       success: false,

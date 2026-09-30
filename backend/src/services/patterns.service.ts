@@ -648,7 +648,10 @@ export async function recomputePatterns(
     ...mineContactCadence(contactResult.rows as ContactRow[], interactionResult.rows as InteractionRow[]),
   ];
 
-  await query('DELETE FROM user_patterns WHERE user_id = $1', [userId]);
+  // Feedback-derived rows (kind = 'decision_feedback', owned by
+  // agent/feedback.service.ts) are durable user memory, not miner output: the
+  // recompute replaces only the miner's own kinds and leaves feedback intact.
+  await query(`DELETE FROM user_patterns WHERE user_id = $1 AND kind <> 'decision_feedback'`, [userId]);
   for (const pattern of computed) {
     await insertPattern(userId, pattern);
   }

@@ -47,6 +47,7 @@ const DOC_SNIPPET_CHARS = 120;
  */
 const DOCS_INDEX_EXCLUDED = new Set([
   'AGENT.md', // maintainer-only agent security threat model / hardening notes - not end-user help.
+  'WORKER.md', // maintainer-only outbound-worker contract / service install (NSSM/systemd) - not end-user help.
 ]);
 
 const require = createRequire(path.join(FRONTEND, 'package.json'));

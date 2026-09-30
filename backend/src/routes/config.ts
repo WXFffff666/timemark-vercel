@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { isValidIanaTimezone } from '../utils/timezone.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import {
   saveUserConfig,
@@ -58,7 +59,11 @@ config.get('/', async (c) => {
 config.post('/', async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
-  const parsed = saveUserConfigSchema.safeParse(body);
+    const timezoneInput = (body as { timezone?: unknown }).timezone;
+    if (timezoneInput != null && timezoneInput !== '' && !isValidIanaTimezone(timezoneInput)) {
+      return c.json({ success: false, error: 'Invalid IANA timezone' }, 400);
+    }
+    const parsed = saveUserConfigSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: formatZodError(parsed.error), details: z.flattenError(parsed.error) }, 400);
   }

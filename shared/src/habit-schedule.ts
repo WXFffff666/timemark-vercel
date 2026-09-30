@@ -100,12 +100,24 @@ export function shiftCalendarDays(ymd: string, days: number): string | null {
 
 /** 按时区把时刻换算成 YYYY-MM-DD（与 tasks.ts 的 getTodayString 同构） */
 export function dateStringInTimeZone(instant: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(instant);
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(instant);
+  } catch {
+    // Task 171: an already-stored invalid IANA name must never crash a render
+    // or a send - degrade to Asia/Shanghai with a logged warning.
+    console.warn(`[time] invalid IANA timezone "${timeZone}"; falling back to Asia/Shanghai`);
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(instant);
+  }
 }
 
 /** 单次习惯提醒去重键：`habit#h<id>#d<YYYY-MM-DD>#t<HH:mm>` */

@@ -1,4 +1,5 @@
 import { dateStringInTimeZone, shiftCalendarDays } from '@timemark/shared/habit-schedule';
+import { normalizeTimezone } from '../../utils/timezone.js';
 import { defaultBotDataProvider, defaultBotQuietHoursWriter } from './bot-data.service.js';
 import {
   CALLBACK_SNOOZE_MAX_MINUTES,
@@ -837,7 +838,7 @@ async function auditCommand(
 
 async function todayInUserTimezone(provider: BotDataProvider, userId: number, now: Date): Promise<string> {
   const settings = await provider.getSettings(userId);
-  return dateStringInTimeZone(now, settings.timezone || 'Asia/Shanghai');
+  return dateStringInTimeZone(now, normalizeTimezone(settings.timezone || 'Asia/Shanghai'));
 }
 
 function formatPending(items: BotPendingItem[]): string {

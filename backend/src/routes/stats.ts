@@ -3,6 +3,7 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
 import { sendReminders } from '../jobs/tasks.js';
 import { getExpiryCosts, getExpirySummary } from '../services/expiry.service.js';
+import { getAgentObservabilitySummary } from '../services/agent/run-observability.service.js';
 import type { User } from '@timemark/shared';
 
 const stats = new Hono<{ Variables: { user: User } }>();
@@ -75,7 +76,7 @@ stats.get('/', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);
   
-  const [events, triggers, accounts, monthlyTriggers, eventsByType, upcoming, expirySummary, expiryCosts] = await Promise.all([
+  const [events, triggers, accounts, monthlyTriggers, eventsByType, upcoming, expirySummary, expiryCosts, agentObservability] = await Promise.all([
     query('SELECT COUNT(*) as count FROM events WHERE user_id = $1', [userId]),
     query(`SELECT status, COUNT(*) as count FROM event_trigger_logs 
            WHERE user_id = $1 AND created_at > NOW() - INTERVAL '30 days' 
@@ -91,6 +92,8 @@ stats.get('/', async (c) => {
     // 到期中心（D1）：计数 + 周期成本（按货币分组，绝不跨货币求和）
     getExpirySummary(userId),
     getExpiryCosts(userId, { granularity: 'month' }),
+    // checkbox 130: per-run records + rolling cost ledger + projection for the background AI.
+    getAgentObservabilitySummary(userId),
   ]);
   
   return c.json({
@@ -106,6 +109,9 @@ stats.get('/', async (c) => {
         ...expirySummary,
         costs: expiryCosts,
       },
+      // checkbox 130: recent background-AI runs, rolling day/month cost ledger with a
+      // month-to-date projection, and the 24h degraded count. Reads never throw.
+      agent: agentObservability,
     },
   });
 });

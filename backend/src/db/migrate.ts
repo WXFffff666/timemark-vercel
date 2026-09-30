@@ -1714,6 +1714,915 @@ CREATE TABLE IF NOT EXISTS tag_links (
 CREATE INDEX IF NOT EXISTS idx_tag_links_entity ON tag_links (user_id, entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_tag_links_tag ON tag_links (tag_id, entity_type);`,
     },
+    {
+      // v59 (checkbox 115-116): scheduler egress ledger for the self-perpetuating chain -
+      // scheduler_runs (one live run per chain via the partial unique index) + scheduler_ticks.
+      // Folded from backend/src/db/pending/59-scheduler-egress.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 59,
+      name: 'scheduler_egress_v59',
+      sql: `-- ============================================================================
+-- Pending migration 59 — scheduler_runs / scheduler_ticks (checkbox 115-116)
+-- ============================================================================
+-- MERGED AS VERSION 59 into backend/src/db/migrate.ts at release. This is the
+-- scheduler egress ledger for the self-perpetuating chain: Vercel Workflow DevKit
+-- is NOT used, Postgres is the source of truth (see
+-- backend/src/services/agent/scheduler.workflow.ts). The orchestrator merges
+-- pending files in numeric order; this file follows the landed max (58).
+--
+-- scheduler_runs  — one row per chain run (status: running -> handed_off when the
+--   event threshold is reached, or running -> stalled when the watchdog sees no
+--   tick for 3 x tick_interval_ms). The UNIQUE PARTIAL index over
+--   (chain_id) WHERE status = 'running' is the concurrency arbiter: both
+--   bootstrap and handoff use
+--     INSERT ... ON CONFLICT (chain_id) WHERE status = 'running' DO NOTHING
+--   + re-select, so concurrent callbacks converge on exactly ONE live run, while
+--   history (parents, successors) stays queryable via parent_run_id.
+-- scheduler_ticks — one ledger row per executed tick (at most 50 routines per
+--   tick), with due/ran/skipped/error counters and a detail jsonb payload.
+--
+-- Purely additive + idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only,
+-- no ALTER of existing tables, no backfill, re-running is a no-op.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS scheduler_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  chain_id TEXT NOT NULL DEFAULT 'default',
+  parent_run_id UUID REFERENCES scheduler_runs(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'running'
+    CHECK (status IN ('running', 'handed_off', 'stalled', 'stopped')),
+  tick_interval_ms INTEGER NOT NULL DEFAULT 600000,
+  step_count INTEGER NOT NULL DEFAULT 0,
+  event_count INTEGER NOT NULL DEFAULT 0,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_tick_at TIMESTAMPTZ,
+  handed_off_at TIMESTAMPTZ,
+  ended_at TIMESTAMPTZ,
+  meta JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+-- Exactly one live run per chain: the arbiter for concurrent bootstrap / handoff
+-- (\`ON CONFLICT (chain_id) WHERE status = 'running'\` infers this partial index).
+CREATE UNIQUE INDEX IF NOT EXISTS scheduler_runs_one_live_per_chain
+  ON scheduler_runs (chain_id) WHERE status = 'running';
+
+-- Chain history / status reads.
+CREATE INDEX IF NOT EXISTS idx_scheduler_runs_chain
+  ON scheduler_runs (chain_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS scheduler_ticks (
+  id BIGSERIAL PRIMARY KEY,
+  run_id UUID NOT NULL REFERENCES scheduler_runs(id) ON DELETE CASCADE,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  due_count INTEGER NOT NULL DEFAULT 0,
+  ran_count INTEGER NOT NULL DEFAULT 0,
+  skipped_count INTEGER NOT NULL DEFAULT 0,
+  error_count INTEGER NOT NULL DEFAULT 0,
+  detail JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+-- Last-tick lookup for GET /api/agent/scheduler/status and the heartbeat trail.
+CREATE INDEX IF NOT EXISTS idx_scheduler_ticks_run_at
+  ON scheduler_ticks (run_id, at DESC);`,
+    },
+    {
+      // v60 (checkbox 118 + 121): proactive notification budget / suppression / folded content +
+      // the Neon CU-hour guard alert ledger.
+      // Folded from backend/src/db/pending/60-notification-budget.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 60,
+      name: 'notification_budget_v60',
+      sql: `-- 60-notification-budget.sql (checkbox 118 + 121 supporting DDL)
+--
+-- PENDING DDL: this directory is merged into backend/src/db/migrate.ts by the
+-- integrator (append-only, next free version = 60 at the time of writing; the
+-- integrator re-checks the tail immediately before appending, per repo convention).
+-- Do NOT edit migrate.ts from a lane; this file is the lane's DDL handoff.
+--
+-- Idempotent + additive: CREATE TABLE / CREATE INDEX IF NOT EXISTS only, no ALTER,
+-- no backfill, no data migration; re-running is a no-op.
+
+-- (118) Per-user per-LOCAL-day proactive notification budget and suppression ledger.
+-- \`day\` is the user's local calendar day (YYYY-MM-DD), resolved timezone-aware via
+-- Intl.DateTimeFormat in notification-budget.service.ts, so the counters reset at the
+-- user's local midnight. \`sent_count\` counts proactive sends only; user-initiated
+-- replies and the critical class (e.g. medication critical reminders) are excluded
+-- from BOTH counters by the service, never written here as sends.
+CREATE TABLE IF NOT EXISTS agent_budget_usage (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day DATE NOT NULL,
+  sent_count INTEGER NOT NULL DEFAULT 0,
+  suppressed_count INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_budget_usage_day ON agent_budget_usage (day);
+
+-- (118) Send-claim ledger, the agent-queue analogue of \`reminder_send_claims\`:
+-- a claim is won with \`INSERT ... ON CONFLICT DO NOTHING RETURNING id\`, so a
+-- duplicate claim matches zero rows and the caller skips. \`window_bucket\` is
+-- floor(epochMs / windowMs); a new bucket = a fresh window. Two scopes:
+--   dedupe            - identical content within AGENT_NOTIFICATION_DEDUPE_WINDOW_MS
+--   routine_cooldown  - per-routine cooldown (AGENT_ROUTINE_COOLDOWN_MS)
+CREATE TABLE IF NOT EXISTS agent_notification_claims (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  scope TEXT NOT NULL CONSTRAINT agent_notification_claims_scope_check CHECK (scope IN ('dedupe', 'routine_cooldown')),
+  claim_key TEXT NOT NULL,
+  window_bucket BIGINT NOT NULL,
+  claimed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, scope, claim_key, window_bucket)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_notification_claims_user ON agent_notification_claims (user_id, claimed_at DESC);
+
+-- (118) Folded proactive content: when the daily budget is exhausted (or the user is
+-- inside quiet hours) a non-urgent routine's content is stored here instead of being
+-- sent; the next Inbox digest consumes pending rows (consumed_at IS NULL) and marks
+-- them consumed. Nothing in this table is ever delivered on its own.
+CREATE TABLE IF NOT EXISTS agent_digest_folds (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  routine_id TEXT,
+  notification_class TEXT NOT NULL DEFAULT 'routine',
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  consumed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_agent_digest_folds_pending ON agent_digest_folds (user_id, created_at ASC) WHERE consumed_at IS NULL;
+
+-- (121g) Neon Free CU-hour guard alert ledger: one row per (month, threshold) so the
+-- 70% and 90% alerts fire once per month across cold-started serverless instances.
+CREATE TABLE IF NOT EXISTS agent_neon_budget_alerts (
+  month TEXT NOT NULL,
+  threshold_percent INTEGER NOT NULL,
+  cu_hours DOUBLE PRECISION,
+  alerted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (month, threshold_percent)
+);`,
+    },
+    {
+      // v61 (tasks 122-123): routine delivery idempotency + audit store (agent_routine_artifacts).
+      // Folded from backend/src/db/pending/61-routine-artifacts.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 61,
+      name: 'routine_artifacts_v61',
+      sql: `-- 61-routine-artifacts.sql (tasks 122-123)
+-- Idempotency + audit store for agent routine deliveries (morning_brief,
+-- evening_review, and the later weekly_review / hourly_triage lanes).
+--
+-- NOT yet registered in backend/src/db/migrate.ts (coordinator-owned this wave).
+-- Register as: { version: 61, name: 'routine_artifacts_v61', sql: <this file> }
+-- (the migrate.ts chain ended at v58 when this file was written; 59/60 belong
+-- to sibling lanes). Additive and idempotent: every statement is
+-- IF NOT EXISTS-guarded; nothing existing is altered, dropped or rewritten.
+
+CREATE TABLE IF NOT EXISTS agent_routine_artifacts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- Routine kind ('morning_brief', 'evening_review', ...); no FK - kinds are code.
+  routine TEXT NOT NULL,
+  -- The user-local calendar day the artifact covers (YYYY-MM-DD).
+  local_date DATE NOT NULL,
+  -- '<routine>:<YYYY-MM-DD>' - unique per user, the once-per-day delivery guard.
+  idempotency_key TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  -- Structured facts behind the body + narration flag (fed back into later digests).
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  delivered BOOLEAN NOT NULL DEFAULT FALSE,
+  delivered_at TIMESTAMPTZ,
+  channel TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_routine_artifacts_user_date
+  ON agent_routine_artifacts (user_id, local_date DESC);
+
+-- Partial index for the stale-reclaim sweep (claimed but never delivered).
+CREATE INDEX IF NOT EXISTS idx_agent_routine_artifacts_pending
+  ON agent_routine_artifacts (created_at) WHERE delivered = FALSE;`,
+    },
+    {
+      // v62 (routines 122-125): hourly-triage / weekly-review dedupe memory (agent_triage_state).
+      // Folded from backend/src/db/pending/62-triage-state.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 62,
+      name: 'triage_state_v62',
+      sql: `-- ============================================================================
+-- Pending migration 62 — agent_triage_state (Wave 15 routines 122-125)
+-- ============================================================================
+-- NOT yet merged into backend/src/db/migrate.ts: that file is a shared file the
+-- routine lane must not edit. The orchestrator merges pending files in numeric
+-- order at release (62 follows the currently landed max, 58 at the time of
+-- writing). Until then the routines in
+--   backend/src/services/agent/routines/hourly-triage.ts
+--   backend/src/services/agent/routines/weekly-review.ts
+-- will fail their reads/writes with "relation agent_triage_state does not exist".
+--
+-- Why one table and not per-routine state: the hourly triage OBSERVES and the
+-- weekly review DIGESTS, and both must agree on what has already been shown to
+-- the user. One durable row per (user, item fingerprint) is the dedupe memory
+-- that survives serverless cold starts:
+--
+--   fingerprint          stable key, e.g. 'event:42'  (UNIQUE per user)
+--   last_seen_at         freshness: when the item last appeared in a scan
+--   last_surfaced_at     suppression anchor: hourly triage skips a fingerprint
+--                        surfaced within its dedupe window unless importance
+--                        escalated (see TRIAGE_DEDUPE_WINDOW_HOURS / _DELTA)
+--   surfaced_count       how many times it was actually shown
+--   last_surface_kind    'hourly_triage' | 'weekly_review'
+--   digest_week          ISO week ('2026-W40') the item was last included in a
+--                        weekly digest; NULL = never digested. Same-week re-runs
+--                        reproduce the same digest; earlier-week items repeat only
+--                        while importance stays at/above the urgent bar.
+--
+-- Purely additive + idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only,
+-- no ALTER of existing tables, no backfill, re-running is a no-op.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS agent_triage_state (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  fingerprint TEXT NOT NULL,
+  source_kind TEXT NOT NULL,
+  source_ref TEXT,
+  title TEXT NOT NULL DEFAULT '',
+  importance INTEGER NOT NULL DEFAULT 0,
+  band TEXT NOT NULL DEFAULT 'fyi',
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_surfaced_at TIMESTAMPTZ,
+  surfaced_count INTEGER NOT NULL DEFAULT 0,
+  last_surface_kind TEXT,
+  digest_week TEXT,
+  UNIQUE (user_id, fingerprint)
+);
+
+-- Scan/lookup support for the two routines (bounded, index-friendly reads).
+CREATE INDEX IF NOT EXISTS idx_agent_triage_state_recent
+  ON agent_triage_state (user_id, last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_triage_state_surfaced
+  ON agent_triage_state (user_id, last_surfaced_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_triage_state_week
+  ON agent_triage_state (user_id, digest_week);`,
+    },
+    {
+      // v63 (tasks 126/127): agent decision cards + durable feedback policy memory.
+      // Folded from backend/src/db/pending/63-agent-feedback.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 63,
+      name: 'agent_feedback_v63',
+      sql: `-- ============================================================================
+-- Pending migration 63 — agent decision cards + durable feedback memory
+-- (Wave 16 tasks 126 + 127)
+-- ============================================================================
+-- NOT yet merged into backend/src/db/migrate.ts: that file is owned by the
+-- integrator lane. The orchestrator merges pending files in numeric order at
+-- release (63 follows the currently landed max, 62 at the time of writing).
+-- Until then:
+--   backend/src/services/agent/decision-card.service.ts
+--   backend/src/services/agent/feedback.service.ts
+--   backend/src/routes/decisions.ts
+-- will fail their reads/writes with "relation agent_decision_cards/agent_feedback
+-- does not exist".
+--
+-- WHY TWO TABLES:
+--
+--   agent_decision_cards  The human-in-the-loop proposal (task 126). NOTHING
+--                         mutates user data until the card is approved. The
+--                         exactly-once guarantee is a single atomic claim:
+--                         \`UPDATE ... SET status='approved' WHERE status='pending'\`
+--                         - the loser of a race updates zero rows and the API
+--                         returns 409 already_decided. The card stores the full
+--                         typed payload so the resolver registry (subject kind ->
+--                         apply function) can re-validate it at approval time.
+--                         \`is_question\` marks question cards, whose daily cap is
+--                         enforced separately from the notification budget.
+--
+--   agent_feedback        The durable memory (task 127): every approve/edit/
+--                         reject (with its optional free-text "Why?") and every
+--                         correction lands here, plus a derived row in
+--                         user_patterns (kind='decision_feedback') so the miner's
+--                         confidence rises from REAL feedback. The most recent
+--                         row for a subject is the effective policy; a polarity
+--                         flip (approve then reject) is logged as a conflict
+--                         rather than oscillating.
+--
+-- The feedback memory NEVER overrides a hard setting (quiet hours, notification
+-- budget): those live in configuration and the feedback service refuses to turn
+-- feedback rows into config overrides (see HARD_SETTING_SUBJECTS in
+-- feedback.service.ts). Hard settings are excluded from the policy digest too.
+--
+-- Purely additive + idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only,
+-- no ALTER of existing tables, no backfill, re-running is a no-op.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS agent_decision_cards (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- Typed subject kind; only kinds present in DECISION_SUBJECT_KINDS have a
+  -- resolver, so an unknown kind can never be applied (injection guard).
+  subject_kind TEXT NOT NULL,
+  -- Stable human/machine subject, e.g. 'contact:12+34'. It is the key the
+  -- feedback memory and the policy digest use for suppression checks.
+  subject_ref TEXT,
+  -- 'propose' at creation time; kept as a column so future action kinds
+  -- (e.g. 'question') do not need an ALTER.
+  action TEXT NOT NULL DEFAULT 'propose',
+  summary TEXT NOT NULL DEFAULT '',
+  -- Full proposed change; validated against the resolver's allowlist at
+  -- approval time - never executed blindly.
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- Caller-provided idempotency key: re-proposing the same change returns the
+  -- EXISTING card instead of creating (and re-notifying) a second one.
+  idempotency_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'approved', 'rejected', 'target_missing', 'expired')),
+  -- Question cards (the agent asking the user something) have their own daily
+  -- cap, enforced separately from the notification budget.
+  is_question BOOLEAN NOT NULL DEFAULT FALSE,
+  -- The optional free-text "Why?" note captured at decide time.
+  rationale TEXT,
+  -- For an edit decision: the user-adjusted payload merged over \`payload\`.
+  edit_payload JSONB,
+  -- Outcome of the resolver run: { status, detail, applied_at }.
+  resolution JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at TIMESTAMPTZ,
+  UNIQUE (user_id, idempotency_key)
+);
+
+-- Pending-card lists (API + bot) and the question-card day counter.
+CREATE INDEX IF NOT EXISTS idx_agent_decision_cards_user_status
+  ON agent_decision_cards (user_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_decision_cards_user_question
+  ON agent_decision_cards (user_id, is_question, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS agent_feedback (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- 'decision' (approve/edit/reject of a card) | 'correction' (free correction).
+  kind TEXT NOT NULL,
+  -- Feedback subject; matches agent_decision_cards.subject_ref (or the subject
+  -- kind when no ref was supplied). This is the suppression key.
+  subject TEXT NOT NULL,
+  -- 'approve' | 'edit' | 'reject' | 'correct'.
+  action TEXT NOT NULL,
+  -- Optional free-text "Why?" note, persisted verbatim (bounded upstream).
+  rationale TEXT,
+  -- Card that produced this feedback, when applicable; audit only.
+  decision_card_id BIGINT REFERENCES agent_decision_cards(id) ON DELETE SET NULL,
+  -- Machine details (edited payload, target_missing flag, conflict_with, ...).
+  detail JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Latest-per-subject lookup (policy check, digest, conflict resolution).
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_user_subject
+  ON agent_feedback (user_id, subject, created_at DESC);
+-- Recency window scan for the bounded policy digest.
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_user_created
+  ON agent_feedback (user_id, created_at DESC);`,
+    },
+    {
+      // v64 (tasks 135/142): dedupe candidates + destructive-change audit trail with the
+      // TTL'd exactly-once undo (audit_events / audit_undo_snapshots).
+      // Folded from backend/src/db/pending/64-dedupe-audit.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 64,
+      name: 'dedupe_audit_v64',
+      sql: `-- ============================================================================
+-- Pending migration 64 — dedupe candidates + audit trail with TTL'd undo
+-- (Wave 17 tasks 135 + 142)
+-- ============================================================================
+-- NOT yet merged into backend/src/db/migrate.ts: that file is owned by the
+-- integrator lane. The orchestrator merges pending files in numeric order at
+-- release (64 follows the currently landed max, 63 at the time of writing).
+-- Until then:
+--   backend/src/services/agent/audit.service.ts
+--   backend/src/services/agent/dedupe.service.ts
+--   backend/src/routes/audit.ts
+--   backend/src/routes/dedupe.ts
+-- will fail their reads/writes with "relation audit_events/audit_undo_snapshots
+-- does not exist".
+--
+-- WHY TWO TABLES:
+--
+--   audit_events         One row per destructive change (delete / merge /
+--                        bulk_edit / archive) with the actor, the REDACTED
+--                        before/after payloads and the undo deadline. Written
+--                        only through audit.service.recordAudit(); payloads are
+--                        redacted by job-hardening's redactForAudit before they
+--                        reach this table (tokens/secrets never persist here).
+--
+--   audit_undo_snapshots The exactly-once undo. \`snapshot\` holds the restorable
+--                        row groups ({version, truncated, groups:[{table, mode,
+--                        rows}]}); \`undo_token\` is the TTL'd token exposed to
+--                        the user/bot; \`consumed_at\` is the atomic claim
+--                        (\`UPDATE ... SET consumed_at=now() WHERE consumed_at
+--                        IS NULL AND expires_at > now()\`) so a second undo
+--                        updates zero rows and the API returns 409. The undo
+--                        deadline is \`expires_at\` (AUDIT_UNDO_TTL_HOURS,
+--                        default 72h); once it passes the undo is refused.
+--
+-- Safety model: the task-135 dedupe scanner only PROPOSES merges (decision
+-- card, task 126); nothing in these tables triggers a delete. Undo only writes
+-- to an allowlisted set of tables (events, fixed_contacts, todo_completions,
+-- interactions), filtered against information_schema columns at restore time.
+--
+-- Purely additive + idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only,
+-- no ALTER of existing tables, no backfill, re-running is a no-op.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS audit_events (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- 'delete' | 'merge' | 'bulk_edit' | 'archive' (AUDIT_ACTIONS).
+  action TEXT NOT NULL,
+  -- Domain of the affected rows, e.g. 'event' | 'contact' | 'todo'.
+  entity_kind TEXT NOT NULL,
+  -- Stable ids of the affected entities (array of numbers/strings).
+  entity_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  summary TEXT NOT NULL DEFAULT '',
+  -- Human user the change is attributed to (agent/bot runs act on their behalf).
+  actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  -- 'api' | 'bot' | 'agent' | 'decision_card' | ...
+  actor_via TEXT NOT NULL DEFAULT 'api',
+  -- REDACTED payload snapshots; never raw secrets (see redactForAudit).
+  before_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+  after_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- Deadline copied from the snapshot row so the list view is a single scan.
+  undo_expires_at TIMESTAMPTZ,
+  undone_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_events_user_created
+  ON audit_events (user_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_events_user_action
+  ON audit_events (user_id, action, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_events_user_expiry
+  ON audit_events (user_id, undo_expires_at);
+
+CREATE TABLE IF NOT EXISTS audit_undo_snapshots (
+  id BIGSERIAL PRIMARY KEY,
+  audit_event_id BIGINT NOT NULL REFERENCES audit_events(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- {version, truncated, groups:[{table, mode:'reinsert'|'revert', rows:[...]}]}
+  snapshot JSONB NOT NULL DEFAULT '{"version":1,"truncated":false,"groups":[]}'::jsonb,
+  -- Opaque TTL'd token (32 random bytes, base64url). Unique per snapshot.
+  undo_token TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  -- Atomic exactly-once claim; NULL = undo still available.
+  consumed_at TIMESTAMPTZ,
+  -- Outcome detail of a successful restore: {restored, groups:[...]}.
+  restored JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (audit_event_id),
+  UNIQUE (undo_token)
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_undo_snapshots_user_expiry
+  ON audit_undo_snapshots (user_id, expires_at);`,
+    },
+    {
+      // v65 (task 137): data-health one-click repair ledger (data_health_repairs).
+      // Folded from backend/src/db/pending/65-data-health.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 65,
+      name: 'data_health_v65',
+      sql: `-- Task 137: audit ledger for data-health one-click repairs.
+--
+-- Every successful repair writes one row here (best-effort) in addition to the shipped
+-- \`audit_logs\` entry written via services/audit.service.ts. \`repaired_count\` is the number
+-- of rows the repair touched; \`confirmed\` records whether a destructive repair was
+-- explicitly confirmed by the caller. Repairs are idempotent, so re-running one over an
+-- already-clean dataset appends a row with repaired_count = 0.
+CREATE TABLE IF NOT EXISTS data_health_repairs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  repaired_count INTEGER NOT NULL DEFAULT 0,
+  confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+  details JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_data_health_repairs_user ON data_health_repairs (user_id, created_at DESC);`,
+    },
+    {
+      // v67 (tasks 140-141): recurring routine templates + steps + instantiation claims.
+      // Folded from backend/src/db/pending/67-templates.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 67,
+      name: 'routine_templates_v67',
+      sql: `-- 67-templates.sql (tasks 140-141)
+-- Recurring routine templates: a named set of steps (event + reminders + checklist
+-- todos + optional habit / maintenance linkage) that can be instantiated as a whole.
+--
+-- Storage:
+--   routine_templates        - the named routine (per user)
+--   routine_template_steps   - ordered steps; \`payload\` holds the per-kind options
+--   routine_template_instances - idempotency + audit: one row per (user, template, slot).
+--     UNIQUE (user_id, template_id, slot_key) is what makes a double-click a no-op:
+--     instantiate inserts this row first with ON CONFLICT DO NOTHING and only creates
+--     the items when the claim succeeds. The whole unit runs in one transaction.
+--
+-- NOT yet registered in backend/src/db/migrate.ts (integrator-owned this wave).
+-- Register as: { version: 67, name: 'routine_templates_v67', sql: <this file> }
+-- (sibling pending files 59-63 belong to other lanes). Additive and idempotent: every
+-- statement is IF NOT EXISTS-guarded; nothing existing is altered, dropped or rewritten.
+
+CREATE TABLE IF NOT EXISTS routine_templates (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  -- Built-in presets (每周大扫除 / 旅行准备 / 月度报表) are seeded with TRUE.
+  is_builtin BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_routine_templates_user
+  ON routine_templates (user_id, name);
+
+CREATE TABLE IF NOT EXISTS routine_template_steps (
+  id SERIAL PRIMARY KEY,
+  template_id INTEGER NOT NULL REFERENCES routine_templates(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  -- event | todo | habit | maintenance (todo steps are events under the hood:
+  -- this app's completable todo IS an event in its reminder window).
+  kind TEXT NOT NULL CONSTRAINT routine_template_steps_kind_check
+    CHECK (kind IN ('event', 'todo', 'habit', 'maintenance')),
+  title TEXT NOT NULL,
+  -- Per-kind options: dateOffsetDays, eventType, reminder, recurring, habitId/habit,
+  -- maintenancePlanId/maintenance, profileId.
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_routine_template_steps_template
+  ON routine_template_steps (template_id, position, id);
+
+CREATE TABLE IF NOT EXISTS routine_template_instances (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  template_id INTEGER NOT NULL REFERENCES routine_templates(id) ON DELETE CASCADE,
+  -- Slot identity: caller-supplied slot, else the anchor date (user-local today).
+  slot_key TEXT NOT NULL,
+  anchor_date DATE NOT NULL,
+  -- Per-item creation report (stepId -> created/linked entity), JSONB array.
+  report JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, template_id, slot_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_routine_template_instances_user_template
+  ON routine_template_instances (user_id, template_id, created_at DESC);`,
+    },
+    {
+      // v69 (tasks 144/147): inbound feed ingest sources / proposals / seen. The export lane needs no table.
+      // Folded from backend/src/db/pending/69-feeds-export.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 69,
+      name: 'feeds_export_v69',
+      sql: `-- ============================================================================
+-- Pending migration 69 — inbound feed ingest + print/export support
+-- (Tasks 144 + 147)
+-- ============================================================================
+-- NOT yet merged into backend/src/db/migrate.ts (integrator-owned). The
+-- orchestrator merges pending files in numeric order at release; the next free
+-- version at the time of writing is 64, but this lane was assigned the reserved
+-- slot 69. Register as:
+--   { version: 69, name: 'feeds_export_v69', sql: <this file> }
+--
+-- Until then:
+--   backend/src/services/agent/feed-ingest.service.ts
+--   backend/src/routes/feeds.ts
+-- will fail their reads/writes with "relation feed_sources ... does not exist".
+-- The export lane (147) needs NO table — it renders from existing events /
+-- fixed_contacts / event_trigger_logs.
+--
+-- WHY THREE TABLES (and why NOT the existing \`ics_feeds\`):
+--
+--   feed_sources        Task 144 inbound SOURCE registry. NOTE: the shipped
+--                       \`ics_feeds\` table (migration v48, ics-feed.service.ts) is
+--                       the OPPOSITE direction — it stores OUTBOUND public
+--                       subscription feeds keyed by token_hash + "filter".
+--                       Reusing it would require ALTERing a NOT-NULL token/filter
+--                       shape that has no meaning for an inbound url+poll source,
+--                       so a separate additive table is used instead. One row is
+--                       either kind='ics' (url + poll_interval_minutes) or
+--                       kind='mail' (mail_address). \`trusted\` is the per-source
+--                       switch: trusted sources may be applied immediately;
+--                       untrusted sources only ever produce proposals.
+--
+--   feed_ingest_proposals  Human-in-the-loop queue. Nothing creates an event or
+--                       contact until the row flips to 'accepted'; the accept
+--                       path is a single atomic claim
+--                       (\`UPDATE ... WHERE status='pending'\`, loser updates 0
+--                       rows -> 409). kind ('event_new' | 'event_changed' |
+--                       'contact_new') tells the resolver what to do. The unique
+--                       (user_id, source_kind, dedupe_key) is the idempotency
+--                       guard: re-syncing the same feed is a no-op.
+--
+--   feed_ingest_seen    The dedupe memory that survives serverless cold starts.
+--                       For ICS the contract is UID + DTSTART: a brand-new
+--                       (uid, dtstart_key) proposes 'event_new'; a known uid with
+--                       a DIFFERENT dtstart_key proposes 'event_changed'; every
+--                       other combination is a duplicate and is skipped. For
+--                       mail the key is Message-ID + candidate index. The unique
+--                       (source_id, dedupe_key) makes re-ingest idempotent.
+--
+-- Purely additive + idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only,
+-- no ALTER of existing tables, no backfill, re-running is a no-op.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS feed_sources (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- 'ics' = polled external calendar URL; 'mail' = inbound RFC822 mailbox.
+  kind TEXT NOT NULL CHECK (kind IN ('ics', 'mail')),
+  name TEXT NOT NULL DEFAULT '',
+  -- ICS only: the external feed URL (operator must add the host to
+  -- EGRESS_ALLOWED_HOSTS so services/agent/egress-guard.service.ts lets the fetch out).
+  url TEXT,
+  -- ICS only: how often the scheduler should re-poll (minutes).
+  poll_interval_minutes INTEGER NOT NULL DEFAULT 360,
+  -- Mail only: the address this mailbox expects mail for (informational).
+  mail_address TEXT,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  -- trusted = apply directly (still recorded as an accepted proposal);
+  -- untrusted (default) = propose only, never silently write user data.
+  trusted BOOLEAN NOT NULL DEFAULT FALSE,
+  last_synced_at TIMESTAMPTZ,
+  last_status TEXT,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_feed_sources_user
+  ON feed_sources (user_id, enabled, kind);
+
+CREATE TABLE IF NOT EXISTS feed_ingest_proposals (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_id BIGINT REFERENCES feed_sources(id) ON DELETE CASCADE,
+  source_kind TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('event_new', 'event_changed', 'contact_new')),
+  -- UID|<DTSTART> for ICS, Message-ID#<index> for mail.
+  dedupe_key TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  -- Typed payload re-validated at accept time (never executed blindly).
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reviewed_at TIMESTAMPTZ,
+  UNIQUE (user_id, source_kind, dedupe_key)
+);
+
+-- Pending queue listing (newest first) + status filters.
+CREATE INDEX IF NOT EXISTS idx_feed_ingest_proposals_user_status
+  ON feed_ingest_proposals (user_id, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS feed_ingest_seen (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_id BIGINT REFERENCES feed_sources(id) ON DELETE CASCADE,
+  source_kind TEXT NOT NULL,
+  dedupe_key TEXT NOT NULL,
+  -- ICS: the VEVENT UID (stable identity across re-syncs).
+  uid TEXT,
+  -- ICS: the DTSTART token (all-day 'YYYYMMDD' or 'YYYYMMDDTHHMMSSZ').
+  dtstart_key TEXT,
+  title TEXT NOT NULL DEFAULT '',
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (source_id, dedupe_key)
+);
+
+-- Change detection: find every DTSTART already known for a UID.
+CREATE INDEX IF NOT EXISTS idx_feed_ingest_seen_source_uid
+  ON feed_ingest_seen (source_id, uid);`,
+    },
+    {
+      // v70 (tasks 146/148/149): OCR results + family share tokens + remote backup config / records.
+      // Folded from backend/src/db/pending/70-ocr-share-backup.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 70,
+      name: 'ocr_share_remote_backup_v70',
+      sql: `-- ============================================================================
+-- Pending migration 70 - OCR results + family share tokens + remote backups
+-- (Wave tasks 146 + 148 + 149)
+-- ============================================================================
+-- NOT yet merged into backend/src/db/migrate.ts (integrator-owned). The
+-- orchestrator merges pending files in numeric order at release (70 follows the
+-- currently-landed max, 63 at the time of writing). Register as:
+--   { version: 70, name: 'ocr_share_remote_backup_v70', sql: <this file> }
+-- Until then the new services/routes fail their reads/writes with
+-- "relation ocr_results / share_tokens / remote_backup_configs /
+-- remote_backup_records does not exist".
+--
+-- WHY EACH TABLE:
+--
+--   ocr_results            Optional OCR (task 146). One row per extraction
+--                          attempt, linked to the owning document and/or the
+--                          source attachment. The raw text is stored bounded
+--                          (excerpt) plus a structured-fields JSON object
+--                          (issuer/date/total/currency). OCR is OFF by default:
+--                          rows only appear once an engine is configured.
+--
+--   share_tokens           Read-only family sharing (task 148). The raw token
+--                          is shown once and NEVER stored - only its SHA-256
+--                          hash (\`token_hash\`) is persisted. Scope is exactly
+--                          one of profile | tag; an optional passcode is stored
+--                          as its SHA-256 hash. \`expires_at\` / \`revoked_at\`
+--                          gate access; \`access_count\` / \`last_accessed_at\`
+--                          are usage counters (no IP, no user agent).
+--
+--   remote_backup_configs  WebDAV / S3-compatible target (task 149). One row
+--                          per user. Credentials are encrypted at rest with the
+--                          shared crypto util (MASTER_KEY); the plaintext is
+--                          never stored and never logged.
+--
+--   remote_backup_records  Append-only attempt log for every backup / restore /
+--                          list / prune action (task 149), so the UI can show
+--                          history without touching the remote target.
+--
+-- Purely additive + idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only,
+-- no ALTER of existing tables, no backfill; re-running is a no-op.
+-- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 146: optional OCR results
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ocr_results (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- Owning document (preferred) - null for a standalone extraction.
+  document_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+  -- Source attachment when the bytes came from the vault.
+  attachment_id INTEGER REFERENCES attachments(id) ON DELETE SET NULL,
+  -- Engine that produced the row (e.g. 'tesseract'); 'none' when disabled.
+  engine TEXT NOT NULL,
+  -- 'extracted' | 'disabled' | 'failed'
+  status TEXT NOT NULL,
+  content_type TEXT,
+  byte_size INTEGER,
+  -- Bounded text excerpt; never the full document body.
+  text_excerpt TEXT,
+  -- Structured fields: { issuer, date, total, currency } (any may be null).
+  fields JSONB NOT NULL DEFAULT '{}'::jsonb,
+  error_code TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ocr_results_user_document
+  ON ocr_results (user_id, document_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ocr_results_user_created
+  ON ocr_results (user_id, created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- 148: read-only family share tokens (profile / tag scoped)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS share_tokens (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- SHA-256 hex of the high-entropy raw token - the ONLY persisted form.
+  token_hash TEXT NOT NULL UNIQUE,
+  -- 'profile' | 'tag'
+  scope_type TEXT NOT NULL CHECK (scope_type IN ('profile', 'tag')),
+  -- Present when scope_type = 'profile' (ownership checked in the service).
+  scope_profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE,
+  -- Present when scope_type = 'tag' (a value in events.tags / contacts tags).
+  scope_tag TEXT,
+  label TEXT,
+  -- SHA-256 hex of the optional passcode; null = no passcode required.
+  passcode_hash TEXT,
+  expires_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  last_accessed_at TIMESTAMPTZ,
+  access_count INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_share_tokens_user_created
+  ON share_tokens (user_id, created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- 149: remote backup target config + attempt log
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS remote_backup_configs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  -- 'webdav' | 's3'
+  target_type TEXT NOT NULL CHECK (target_type IN ('webdav', 's3')),
+  -- WebDAV base URL / S3-compatible endpoint. Its host MUST be on the egress
+  -- allowlist before any call is attempted (see remote-backup.service.ts).
+  endpoint TEXT NOT NULL,
+  path_prefix TEXT NOT NULL DEFAULT '',
+  -- S3 only.
+  bucket TEXT,
+  region TEXT,
+  access_key_id TEXT,
+  -- WebDAV only.
+  username TEXT,
+  -- Encrypted (shared crypto util) WebDAV password / S3 secret access key.
+  -- Never serialized into a response, never logged.
+  secret_encrypted TEXT,
+  retention_count INTEGER NOT NULL DEFAULT 5,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS remote_backup_records (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- 'backup' | 'restore' | 'list' | 'prune'
+  kind TEXT NOT NULL,
+  -- 'success' | 'dry_run' | 'failure'
+  status TEXT NOT NULL,
+  target_type TEXT,
+  object_key TEXT,
+  byte_size BIGINT,
+  retention_deleted INTEGER NOT NULL DEFAULT 0,
+  dry_run BOOLEAN NOT NULL DEFAULT FALSE,
+  error_code TEXT,
+  detail JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_remote_backup_records_user_created
+  ON remote_backup_records (user_id, created_at DESC);`,
+    },
+    {
+      // v71 (tasks 151/152): weather settings / cross-instance cache + tracked parcels.
+      // Folded from backend/src/db/pending/71-weather-parcels.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 71,
+      name: 'weather_parcels_v71',
+      sql: `-- 71-weather-parcels.sql (tasks 151 + 152 supporting DDL)
+--
+-- PENDING DDL: this directory is merged into backend/src/db/migrate.ts by the
+-- integrator (append-only, next free version = 71 at the time of writing; the
+-- integrator re-checks the tail immediately before appending, per repo convention).
+-- Do NOT edit migrate.ts from a lane; this file is the lane's DDL handoff.
+--
+-- Idempotent + additive: CREATE TABLE / CREATE INDEX IF NOT EXISTS only, no ALTER,
+-- no backfill, no data migration; re-running is a no-op.
+
+-- (151) The user's stored weather location (opt-in). One row per user; an absent row
+-- means "unconfigured" and the service degrades to 天气不可用. \`latitude\`/\`longitude\`
+-- are WGS-84 decimal degrees keyed by the Open-Meteo forecast endpoints.
+CREATE TABLE IF NOT EXISTS user_weather_settings (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  location_label TEXT NOT NULL DEFAULT '',
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- (151) Shared, cross-instance upstream cache for Open-Meteo (free, no API key).
+-- \`fetched_at\` is the payload freshness clock; \`attempted_at\` is the 5-minute
+-- Postgres/egress floor: an instance never re-calls upstream while a previous
+-- attempt (success OR failure) is younger than WEATHER_MIN_REFRESH_MS, and a
+-- failed attempt serves the previous payload as \`stale\` instead of failing.
+CREATE TABLE IF NOT EXISTS weather_cache (
+  cache_key TEXT PRIMARY KEY,
+  payload JSONB NOT NULL,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  attempted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- (152) Tracked parcels (carrier, tracking number, label, status, last event, ETA).
+-- Manual status updates overwrite \`status\` + \`last_event\`; adapter polling (the
+-- injected CarrierAdapter seam) writes the same fields. The tracking number is a
+-- user secret: it is only ever logged through maskTrackingNumber().
+CREATE TABLE IF NOT EXISTS parcels (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  carrier TEXT NOT NULL,
+  tracking_number TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'registered'
+    CONSTRAINT parcels_status_check CHECK (status IN ('registered', 'in_transit', 'out_for_delivery', 'delivered', 'exception')),
+  last_event TEXT,
+  last_event_at TIMESTAMPTZ,
+  eta DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, carrier, tracking_number)
+);
+CREATE INDEX IF NOT EXISTS idx_parcels_user_status ON parcels (user_id, status);`,
+    },
   ];
 
   for (const migration of migrations) {

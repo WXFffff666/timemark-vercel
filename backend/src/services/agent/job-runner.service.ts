@@ -19,6 +19,11 @@ import {
   readMonthlyBudget,
   type MonthlyUsage,
 } from './budget.service.js';
+import {
+  degradedReasonForError,
+  recordAgentRun,
+  type AgentRunRecordInput,
+} from './run-observability.service.js';
 
 /**
  * Checkbox 117: the job executor that ENFORCES model tiering and the per-job cost
@@ -107,6 +112,44 @@ export interface AgentJobRunnerDeps {
   resolveRoutineTier?: (routineId: string, userId: number) => Promise<AiModelTier | null>;
   /** Job-event writer; defaults to the shipped INSERT. */
   recordEvent?: (jobId: string, status: string, detail: Record<string, unknown>) => Promise<void>;
+  /**
+   * Per-run observability writer (checkbox 130); defaults to the shipped recorder,
+   * which is skipped under the test runner. Recording NEVER fails a job.
+   */
+  recordRun?: (record: AgentRunRecordInput) => Promise<unknown> | unknown;
+}
+
+/** Run recorder default: skipped under the test runner, otherwise best-effort. */
+async function defaultRecordRun(record: AgentRunRecordInput): Promise<void> {
+  if (process.env.NODE_ENV === 'test') return;
+  await recordAgentRun(record);
+}
+
+/** First string-valued `key` in the handler result (outer object, then nested `result`). */
+function pickString(source: Record<string, unknown>, key: string): string | null {
+  const value = source[key];
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+/** Best-effort model/provider names for the run record; never required for correctness. */
+function extractRunMeta(value: AgentJobHandlerResult | void): { model: string | null; provider: string | null } {
+  const outer: Record<string, unknown> =
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  const inner: Record<string, unknown> =
+    typeof outer.result === 'object' && outer.result !== null ? (outer.result as Record<string, unknown>) : {};
+  return {
+    model: pickString(inner, 'model') ?? pickString(outer, 'model'),
+    provider: pickString(inner, 'provider') ?? pickString(outer, 'provider'),
+  };
+}
+
+/** The provider error code of a thrown value, or null for a non-provider failure. */
+function runnerErrorCode(error: unknown): string | null {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && code.trim() !== '') return code.slice(0, 64);
+  }
+  return null;
 }
 
 /** Raised when a claimed job has no registered handler - never silently completed. */
@@ -172,6 +215,7 @@ export function createAgentJobExecutor(
   const readUsage = deps.readUsage ?? getMonthlyUsage;
   const resolveRoutineTier = deps.resolveRoutineTier ?? defaultResolveRoutineTier;
   const recordEvent = deps.recordEvent ?? defaultRecordEvent;
+  const recordRun = deps.recordRun ?? defaultRecordRun;
 
   async function resolveJobTier(job: ClaimedJob): Promise<AiModelTier | null> {
     const payload = payloadOf(job);
@@ -193,6 +237,29 @@ export function createAgentJobExecutor(
     return (await handler(job, { tier })) ?? {};
   }
 
+  /** Best-effort run-record write; a recording failure never affects the job outcome. */
+  async function recordRunSafe(record: AgentRunRecordInput): Promise<void> {
+    try {
+      await recordRun(record);
+    } catch (error) {
+      log.warn(
+        { event: 'agent_job.run_record_failed', jobId: record.jobId, jobKind: record.kind, err: error },
+        'Recording the agent run failed; the job result is unaffected',
+      );
+    }
+  }
+
+  /** Shared run-record identity for one claimed job. */
+  function baseRecord(job: ClaimedJob): Pick<AgentRunRecordInput, 'jobId' | 'userId' | 'kind' | 'routineId'> {
+    const routineId = payloadOf(job).routine_id;
+    return {
+      jobId: job.id,
+      userId: job.userId,
+      kind: job.kind,
+      routineId: typeof routineId === 'string' && UUID_RE.test(routineId) ? routineId : null,
+    };
+  }
+
   /** Best-effort audit write: the job result already carries the reason on failure. */
   async function recordDecision(
     job: ClaimedJob,
@@ -210,10 +277,36 @@ export function createAgentJobExecutor(
   }
 
   return async function execute(job: ClaimedJob): Promise<AgentJobHandlerResult> {
+    const startedAt = now();
+    const base = baseRecord(job);
     const tier = await resolveJobTier(job);
     if (tier === null) {
       // Deterministic job: no AI spend and no budget gate.
-      return invokeHandler(job, null);
+      try {
+        const value = await invokeHandler(job, null);
+        const meta = extractRunMeta(value);
+        await recordRunSafe({
+          ...base,
+          tier: null,
+          model: meta.model,
+          provider: meta.provider,
+          tokens: value?.costTokens ?? 0,
+          durationMs: now() - startedAt,
+          outcome: 'succeeded',
+        });
+        return value;
+      } catch (error) {
+        const code = runnerErrorCode(error);
+        await recordRunSafe({
+          ...base,
+          tier: null,
+          durationMs: now() - startedAt,
+          outcome: 'failed',
+          errorCode: code,
+          degradedReason: degradedReasonForError(code),
+        });
+        throw error;
+      }
     }
 
     const budget = readMonthlyBudget(env);
@@ -226,7 +319,31 @@ export function createAgentJobExecutor(
     const decision = evaluateMonthlyBudget({ tier, aiConfigured, budget, usage });
 
     if (decision.action === 'allow') {
-      return invokeHandler(job, tier);
+      try {
+        const value = await invokeHandler(job, tier);
+        const meta = extractRunMeta(value);
+        await recordRunSafe({
+          ...base,
+          tier,
+          model: meta.model,
+          provider: meta.provider,
+          tokens: value?.costTokens ?? 0,
+          durationMs: now() - startedAt,
+          outcome: 'succeeded',
+        });
+        return value;
+      } catch (error) {
+        const code = runnerErrorCode(error);
+        await recordRunSafe({
+          ...base,
+          tier,
+          durationMs: now() - startedAt,
+          outcome: 'failed',
+          errorCode: code,
+          degradedReason: degradedReasonForError(code),
+        });
+        throw error;
+      }
     }
 
     if (decision.action === 'skip') {
@@ -250,6 +367,15 @@ export function createAgentJobExecutor(
         { event: 'agent_job.budget_skip', jobId: job.id, jobKind: job.kind, tier, reason: decision.reason },
         'Skipping a lite job: the monthly AI budget is exhausted',
       );
+      await recordRunSafe({
+        ...base,
+        tier,
+        tokens: 0,
+        durationMs: now() - startedAt,
+        outcome: 'degraded',
+        degradedReason: decision.reason,
+        degradedAction: 'skipped',
+      });
       return { result: marker, costTokens: 0 };
     }
 
@@ -286,6 +412,15 @@ export function createAgentJobExecutor(
       { event: 'agent_job.budget_defer', jobId: job.id, jobKind: job.kind, tier, reason: decision.reason },
       'Deferring a medium job: the monthly AI budget is exhausted',
     );
+    await recordRunSafe({
+      ...base,
+      tier,
+      tokens: 0,
+      durationMs: now() - startedAt,
+      outcome: 'degraded',
+      degradedReason: decision.reason,
+      degradedAction: 'deferred',
+    });
     return { result: marker, costTokens: 0 };
   };
 }

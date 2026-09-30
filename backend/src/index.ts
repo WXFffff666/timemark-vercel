@@ -74,11 +74,50 @@ import agentRoutes from './routes/agent.js';
 // MCP_ENABLED=true); a single POST handler over the same scoped tokens + tool registry.
 import mcpRoutes from './routes/mcp.js';
 // checkbox 114: bounded worker drain (cron-job.org every minute; claim -> execute -> return).
-import agentWorkerRoutes from './routes/agent-worker.js';
+import agentWorkerRoutes, { agentJobWorkerRoutes } from './routes/agent-worker.js';
+// checkbox 130: operational health snapshot of the background AI (consumed by the degraded-state hook).
+import agentHealthRoutes from './routes/agent-health.js';
+// checkbox 115: the scheduling-loop tick + status (CRON_SECRET Bearer, idempotent single tick).
+import agentSchedulerRoutes from './routes/agent-scheduler.js';
 // checkbox 119: read/write control plane for agent jobs, workers and routines (admin session auth).
 import adminAgentRoutes from './routes/admin/agent.js';
 // checkbox 134: cross-entity tag vocabulary + links + the AND/OR smart filter (migration v58).
 import tagsRoutes from './routes/tags.js';
+// task 133: deterministic Ask panel (offline templates, no AI; auth-scoped).
+import askRoutes from './routes/ask.js';
+// tasks 126/127: decision cards + durable feedback policy memory (migration v63).
+import decisionsRoutes from './routes/decisions.js';
+// tasks 135/142: dedupe candidate scans (propose-only) + audit trail with TTL'd undo (v64).
+import dedupeRoutes from './routes/dedupe.js';
+import auditRoutes from './routes/audit.js';
+// task 137: data-health report + one-click idempotent repairs (migration v65).
+import dataHealthRoutes from './routes/data-health.js';
+// task 139: notification-channel repair checks/actions.
+import channelRepairRoutes from './routes/channel-repair.js';
+// tasks 140/141: recurring routine templates (migration v67).
+import templatesRoutes from './routes/templates.js';
+// task 144: inbound feed ingest (ICS/mail -> proposals; never silent writes) (migration v69).
+import feedsRoutes from './routes/feeds.js';
+// task 146: optional OCR extraction (disabled unless an engine is configured) (migration v70).
+import ocrRoutes from './routes/ocr.js';
+// task 148: read-only family share links (public GET + session-scoped management) (migration v70).
+import shareRoutes from './routes/share.js';
+// task 151: weather + air quality for the stored location (migration v71).
+import weatherRoutes from './routes/weather.js';
+// task 152: tracked parcels (migration v71).
+import parcelsRoutes from './routes/parcels.js';
+// task 143: bounded bulk actions (batch approve/reject; per-item results).
+import bulkRoutes from './routes/bulk.js';
+// task 147: print & export views (renders from existing events/contacts/logs).
+import exportRoutes from './routes/export.js';
+// task 149: WebDAV / S3 remote backup config + runs (migration v70).
+import remoteBackupRoutes from './routes/remote-backup.js';
+// task 138: migration self-check: recorded schema version vs the migrate.ts tail (session auth).
+import migrationSelfcheckRoutes from './routes/migration-selfcheck.js';
+// task 162: AI-off verification extension point (proves the AI layer is disabled).
+import aiStatusRoutes from './routes/ai-status.js';
+// task 141: deterministic smart defaults derived from history (no model calls).
+import smartDefaultsRoutes from './routes/smart-defaults.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
 
@@ -197,14 +236,56 @@ app.route('/api/agent-tokens', agentTokensRoutes);
 // checkbox 114: the bounded worker drain. Mounted before `/api/agent` so its exact path is
 // matched by this handler (not the agent sub-app's wildcard rate-limit middleware).
 app.route('/api/agent/worker', agentWorkerRoutes);
+// task 129: job lifecycle (heartbeat / complete / fail) for outbound workers (docs/WORKER.md).
+// Same ordering rule as /api/agent/worker: registered before the /api/agent sub-app.
+app.route('/api/agent/jobs', agentJobWorkerRoutes);
+// checkbox 130: operational health snapshot (queue / worker / budget / degraded routines).
+app.route('/api/agent/health', agentHealthRoutes);
+// checkbox 115: the scheduling-loop tick + status (CRON_SECRET Bearer).
+app.route('/api/agent/scheduler', agentSchedulerRoutes);
 // checkbox 102: agent action API (registry, scoped execution, two-phase confirmation).
 app.route('/api/agent', agentRoutes);
 // checkbox 103: stateless MCP server (Streamable HTTP) over the same registry + scoped tokens.
 app.route('/api/mcp', mcpRoutes);
 // checkbox 119: the agent control-plane API (jobs, workers, routines; session/admin auth only).
 app.route('/api/admin/agent', adminAgentRoutes);
+// task 138: migration self-check (recorded schema version vs the migrate.ts tail).
+app.route('/api/admin/migration-selfcheck', migrationSelfcheckRoutes);
 // checkbox 134: tags across events/contacts/documents/expiry/inventory/maintenance/habits/goals.
 app.route('/api/tags', tagsRoutes);
+// task 133: the deterministic Ask panel (offline templates; auth-scoped).
+app.route('/api/ask', askRoutes);
+// tasks 126/127: decision cards + durable feedback memory.
+app.route('/api/decisions', decisionsRoutes);
+// tasks 135/142: dedupe candidate scans + destructive-change audit / TTL'd undo.
+app.route('/api/dedupe', dedupeRoutes);
+app.route('/api/audit', auditRoutes);
+// task 137: data-health report + one-click idempotent repairs.
+app.route('/api/data-health', dataHealthRoutes);
+// task 139: notification-channel repair checks / actions.
+app.route('/api/channel-repair', channelRepairRoutes);
+// tasks 140/141: recurring routine templates.
+app.route('/api/templates', templatesRoutes);
+// task 144: inbound feed ingest (ICS / mail -> proposals).
+app.route('/api/feeds', feedsRoutes);
+// task 146: optional OCR extraction (disabled unless an engine is configured).
+app.route('/api/ocr', ocrRoutes);
+// task 148: read-only family share links (public GET; management requires a session).
+app.route('/api/share', shareRoutes);
+// task 151: weather + air quality for the stored location.
+app.route('/api/weather', weatherRoutes);
+// task 152: tracked parcels.
+app.route('/api/parcels', parcelsRoutes);
+// task 143: bounded bulk actions.
+app.route('/api/bulk', bulkRoutes);
+// task 147: print & export.
+app.route('/api/export', exportRoutes);
+// task 149: remote backup target + runs.
+app.route('/api/remote-backup', remoteBackupRoutes);
+// task 162: AI-off verification.
+app.route('/api/ai-status', aiStatusRoutes);
+// task 141: smart defaults from history.
+app.route('/api/smart-defaults', smartDefaultsRoutes);
 // todo 88: also expose the canonical `/share/:token` server-rendered meta document at the app
 // root so it resolves locally and in tests. On Vercel this path is owned by the SPA rewrite in
 // vercel.json (`/((?!api/|.*\\..*).*)` -> /index.html), so the OG image (`/api/og/image/:token`)
