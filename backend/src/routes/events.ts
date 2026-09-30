@@ -5,7 +5,7 @@ import { createEvent, getEventsByUserIdPaginated, updateEvent, deleteEvent, dele
 import { createEventSchema, updateEventSchema, batchDeleteSchema, csvImportSchema, formatZodError } from '@timemark/shared';
 import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
-import { logFireAndForget } from '../utils/logger.js';
+import { createLogger, logFireAndForget } from '../utils/logger.js';
 import { parseProfileFilter } from './profile-filter.js';
 
 const events = new Hono<{ Variables: { user: User } }>();
@@ -120,6 +120,64 @@ events.get('/reminder-logs', async (c) => {
   return c.json({ success: true, data: result.rows });
 });
 
+const testSendLog = createLogger('events.test-send');
+
+/** 解析事件行上的通知账号绑定（JSONB 数组或 JSON 字符串；与 sendNotifications 的容错一致）。 */
+function parseBoundAccountIds(raw: unknown): number[] {
+  let value: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      // 损坏的绑定字段 -> 无绑定（与 sendNotifications 的解析一致，不放大成 500）。
+      return [];
+    }
+  }
+  return Array.isArray(value)
+    ? value.map((item) => Number(item)).filter((accountId) => Number.isInteger(accountId) && accountId > 0)
+    : [];
+}
+
+/**
+ * checkbox 167（QA 失败场景）：手动测试发送全部失败且事件显式绑定了通知账号时，
+ * 找出「已停用」且对应渠道 no_configuration 的账号并点名，而不是只返回通用错误。
+ * 查询失败只记日志并退回通用错误 —— 辅助信息绝不能让 400 变成 500。
+ */
+async function describeUnavailableBoundAccounts(
+  event: Record<string, unknown>,
+  channelResults: Record<string, { success: boolean; error?: string }>,
+  userId: number,
+): Promise<string | null> {
+  const boundIds = parseBoundAccountIds(event.notification_account_ids);
+  if (boundIds.length === 0) return null;
+  const failedChannels = new Set(
+    Object.entries(channelResults)
+      .filter(([, result]) => !result.success && result.error === 'no_configuration')
+      .map(([channel]) => channel),
+  );
+  if (failedChannels.size === 0) return null;
+  try {
+    const accounts = await query(
+      `SELECT id, name, type, is_active FROM notification_accounts
+       WHERE user_id = $1 AND id = ANY($2::int[])`,
+      [userId, boundIds],
+    );
+    const inactive = (accounts.rows as Array<Record<string, unknown>>).filter(
+      (row) => row.is_active === false && failedChannels.has(String(row.type)),
+    );
+    if (inactive.length === 0) return null;
+    return inactive
+      .map((row) => `账号「${String(row.name || row.type)}」(#${String(row.id)}, ${String(row.type)}) 已停用`)
+      .join('、');
+  } catch (error) {
+    testSendLog.error(
+      { event: 'manual_test_send.bound_accounts_lookup_failed', userId, err: error },
+      'Failed to describe unavailable bound notification accounts',
+    );
+    return null;
+  }
+}
+
 events.post('/:id/test-send', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
@@ -134,13 +192,27 @@ events.post('/:id/test-send', async (c) => {
   
   const event = result.rows[0];
   const rawChannels = event.notification_channels;
-  const channels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
+  const baseChannels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
+  const today = new Date().toISOString().slice(0, 10);
+
+  // checkbox 167：手动测试发送必须和定时路径使用同一套渠道解析
+  // （条件规则 > 套餐分级 > 事件渠道 > 用户自己的启用账号）。事件没有显式勾选渠道时，
+  // 单用户安装也应回退到 owner 已配置的账号；优先级不在这里重写 —— 一律调用 resolver。
+  const { resolveReminderChannels } = await import('../services/reminder-channel-resolver.service.js');
+  const channels = await resolveReminderChannels(Number(user.id), baseChannels, 0);
 
   if (channels.length === 0) {
-    return c.json({ success: false, error: '请先为事件配置通知渠道' }, 400);
+    // 与 checkbox 165 的定时路径一致：无渠道可用时绝不静默消失 —— 写入同款 skipped 记录
+    // （status='skipped' + 机器可读原因，同一 reminder_send_claims 去重），并返回点名设置
+    // 的可操作错误。recordSkippedTrigger 自身绝不抛出/growl，失败会打 error 日志。
+    const { recordSkippedTrigger, NO_CHANNEL_RESOLVED_REASON } = await import('../jobs/tasks.js');
+    await recordSkippedTrigger(Number(event.id), Number(event.id), Number(user.id), today, 'manual_test');
+    return c.json({
+      success: false,
+      error: '未找到可用的通知渠道：请先在「设置 → 通知渠道」启用至少一个通知账号，或在事件中勾选渠道后重试。',
+      data: { reason: NO_CHANNEL_RESOLVED_REASON },
+    }, 400);
   }
-
-  const today = new Date().toISOString().slice(0, 10);
 
   try {
     const channelResults = await sendNotifications(event, Number(user.id), channels, { skipQuietHours: true });
@@ -155,9 +227,15 @@ events.post('/:id/test-send', async (c) => {
     const hasFailure = values.some((r) => !r.success);
     const allFailed = values.length > 0 && values.every((r) => !r.success);
     const status = allFailed ? 'failed' : hasFailure ? 'partial' : 'success';
-    const errorMessage = hasFailure
-      ? Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => `${ch}: ${r.error}`).join('; ')
-      : undefined;
+    // checkbox 167（QA 失败场景）：绑定账号已停用时点名该账号；同时写进提醒日志的错误信息。
+    const boundAccountNote = allFailed
+      ? await describeUnavailableBoundAccounts(event, channelResults, Number(user.id))
+      : null;
+    const errorMessage = boundAccountNote
+      ? `绑定通知账号不可用：${boundAccountNote}。请在「设置 → 通知渠道」重新启用或改绑其他账号后重试。`
+      : hasFailure
+        ? Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => `${ch}: ${r.error}`).join('; ')
+        : undefined;
 
     await recordEventTrigger(
       Number(event.id),

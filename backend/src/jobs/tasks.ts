@@ -397,10 +397,13 @@ function deliveredToAnyChannel(results: unknown, channels: readonly string[]): b
 /**
  * 提醒槽位解析不到任何可送达渠道时写入的机器可读原因码。
  */
-const NO_CHANNEL_RESOLVED_REASON = 'no_channel_resolved';
+export const NO_CHANNEL_RESOLVED_REASON = 'no_channel_resolved';
 
 /**
  * checkbox 165：把「解析不到渠道而被跳过」的提醒写成一条 skipped 触发记录（提醒日志）。
+ *
+ * checkbox 167：手动测试发送（routes/events.ts）复用同一实现，`triggerType` 传
+ * 'manual_test'，用同一 claim 机制对同一事件同一天去重。
  *
  * 去重与发送完全同机制：用同一个 `reminder_send_claims` INSERT ... ON CONFLICT DO NOTHING
  * 抢槽位。同一槽位内第一个 tick 抢到 claim 才写记录/打日志；后续每分钟的 tick 看到
@@ -409,16 +412,18 @@ const NO_CHANNEL_RESOLVED_REASON = 'no_channel_resolved';
  * `claimEventId` 是 claim 行里的 id（事件 id，或到期项 id）；`triggerEventId` 是
  * `event_trigger_logs.event_id`（可空，FK 指向 events(id)）：到期项 id 不属于 events，
  * 必须传 NULL，否则 INSERT 会因 FK 违约被 recordEventTrigger 记为失败。
- * `trigger_type` 用 'scheduled'（读取方只把该列当标签展示；与发送路径一致）。
+ * `trigger_type` 默认 'scheduled'（读取方只把该列当标签展示；与发送路径一致）；
+ * checkbox 167 的手动测试发送复用本函数并把 `triggerType` 传成 'manual_test'。
  *
  * 绝不抛出：被跳过不是错误，审计写入失败也不能中断整轮任务；失败会以显式 error 日志
  * 暴露（沿用 task 164 的 Promise<boolean> 契约），不静默吞掉。
  */
-async function recordSkippedTrigger(
+export async function recordSkippedTrigger(
   claimEventId: number,
   triggerEventId: number | null,
   userId: number,
   triggerDate: string,
+  triggerType: string = 'scheduled',
 ): Promise<void> {
   try {
     const claim = await query(
@@ -433,7 +438,7 @@ async function recordSkippedTrigger(
     const recorded = await recordEventTrigger(
       triggerEventId,
       userId,
-      'scheduled',
+      triggerType,
       triggerDate,
       'skipped',
       NO_CHANNEL_RESOLVED_REASON,
