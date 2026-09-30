@@ -13,6 +13,7 @@ import {
   isSupportedExportVersion,
   validateImportEncryption,
 } from '../services/data-transfer.service.js';
+import { decryptRowFields } from '../services/field-encryption.service.js';
 
 const data = new Hono<{ Variables: { user: User } }>();
 const log = createLogger('data');
@@ -134,13 +135,13 @@ data.get('/export', async (c) => {
       relationshipMappings: mappings.rows,
       eventTemplates: templates.rows,
       triggerLogs: triggerLogs.rows,
-      attachments: attachments.rows,
+      attachments: attachments.rows.map((row) => decryptRowFields(row, 'attachments')),
       expiryItems: expiryItems.rows,
       expiryHistory: expiryHistory.rows,
       inventoryItems: inventoryItems.rows,
-      maintenancePlans: maintenancePlans.rows,
-      maintenanceLogs: maintenanceLogs.rows,
-      documents: documents.rows,
+      maintenancePlans: maintenancePlans.rows.map((row) => decryptRowFields(row, 'maintenance_plans')),
+      maintenanceLogs: maintenanceLogs.rows.map((row) => decryptRowFields(row, 'maintenance_logs')),
+      documents: documents.rows.map((row) => decryptRowFields(row, 'documents')),
     };
 
     c.header('Content-Disposition', `attachment; filename="timemark-export-${new Date().toISOString().split('T')[0]}.json"`);

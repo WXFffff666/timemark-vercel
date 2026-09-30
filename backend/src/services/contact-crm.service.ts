@@ -1,4 +1,5 @@
 import { query } from '../db/index.js';
+import { decryptFieldValue, encryptFieldValue } from './field-encryption.service.js';
 import type {
   CreateContactPromiseInput,
   CreateGiftRecordInput,
@@ -45,7 +46,7 @@ export async function createInteraction(
      FROM fixed_contacts fc
      WHERE fc.id = $2 AND fc.user_id = $1
      RETURNING *`,
-    [userId, contactId, input.kind, occurredAt, input.summary ?? null, input.mood ?? null],
+    [userId, contactId, input.kind, occurredAt, encryptFieldValue(input.summary ?? null), input.mood ?? null],
   );
   if (!result.rows[0]) return null;
 
@@ -55,7 +56,9 @@ export async function createInteraction(
        AND (last_contact_at IS NULL OR last_contact_at < $1)`,
     [occurredAt, contactId, userId],
   );
-  return result.rows[0] as InteractionRow;
+  // Task 161: summary is stored encrypted; the created-row response carries plaintext.
+  const created = result.rows[0] as InteractionRow;
+  return { ...created, summary: decryptFieldValue(created.summary) };
 }
 
 /** 合并时间线（interactions + promises + gifts），按时间倒序分页 */
@@ -100,7 +103,9 @@ export async function listContactTimeline(
   );
 
   return {
-    items: result.rows as TimelineEntry[],
+    items: (result.rows as TimelineEntry[]).map((entry) =>
+      entry.summary == null ? entry : { ...entry, summary: decryptFieldValue(entry.summary) },
+    ),
     total: Number(countResult.rows[0]?.count ?? 0),
   };
 }

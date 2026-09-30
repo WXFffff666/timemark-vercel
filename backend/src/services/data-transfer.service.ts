@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { decrypt } from '@timemark/shared/crypto';
 import { createLogger } from '../utils/logger.js';
+import { encryptFieldValue } from './field-encryption.service.js';
 
 /**
  * 数据导入/导出：D1/D12/D2 新实体（todo 58）。
@@ -13,7 +14,9 @@ import { createLogger } from '../utils/logger.js';
  *   `ON CONFLICT (id) DO UPDATE ... WHERE 现有行属于同一用户 AND 现有 updated_at < 新值`
  *   —— 第二次导入同一条数据不会产生重复行，也不会覆盖更新的行；无 `updated_at` 的
  *   记录表（历史/日志/附件）用 `ON CONFLICT (id) DO NOTHING`。
- * - **加密**：`document_number_encrypted` 原样搬运（导出不含明文）。导入前先比对导出
+ * - **加密**：`document_number_encrypted` 原样搬运（导出不含明文）。字段级加密列
+ *   （documents.notes、maintenance_*.notes、attachments.filename/content_type，任务 161）
+ *   在导出端解密、在导入端用当前 MASTER_KEY 重新加密（形状判定防止二次加密）。导入前先比对导出
  *   元数据里的 `masterKeyFingerprint`，并用当前 MASTER_KEY 逐条试解密；任一不符都
  *   在**写任何行之前**拒绝（镜像通知凭证的解密迁移失败语义，但导入不做 legacy 回退）。
  * - 用户归属：顶层表强制 `user_id = 当前用户`（忽略载荷中的 user_id）；子表
@@ -76,6 +79,8 @@ interface EntitySpec {
   jsonColumns?: readonly string[];
   /** TEXT[] 列 */
   arrayColumns?: readonly string[];
+  /** 字段级加密列（任务 161）：导入时用当前 MASTER_KEY 加密（幂等，绝不二次加密） */
+  encryptedColumns?: readonly string[];
   /** 子表：父行必须属于当前用户 */
   parent?: { column: string; table: string };
 }
@@ -123,12 +128,14 @@ export const ENTITY_SPECS: readonly EntitySpec[] = [
     updatedAtColumn: 'updated_at',
     timestampColumns: ['created_at', 'updated_at'],
     jsonColumns: ['reminder_config'],
+    encryptedColumns: ['notes'],
   },
   {
     key: 'maintenanceLogs',
     table: 'maintenance_logs',
     columns: ['plan_id', 'done_at', 'usage_at', 'cost_cents', 'notes', 'created_at'],
     timestampColumns: ['created_at'],
+    encryptedColumns: ['notes'],
     parent: { column: 'plan_id', table: 'maintenance_plans' },
   },
   {
@@ -141,6 +148,7 @@ export const ENTITY_SPECS: readonly EntitySpec[] = [
     updatedAtColumn: 'updated_at',
     timestampColumns: ['created_at', 'updated_at'],
     jsonColumns: ['reminder_config'],
+    encryptedColumns: ['notes'],
   },
   {
     key: 'attachments',
@@ -151,6 +159,7 @@ export const ENTITY_SPECS: readonly EntitySpec[] = [
     ],
     // 字节不进导出；storage_key 是内部对象引用，导入后指向对象存储中仍存在的对象。
     timestampColumns: ['created_at'],
+    encryptedColumns: ['filename', 'content_type'],
   },
 ];
 
@@ -250,6 +259,12 @@ function coerceValue(spec: EntitySpec, column: string, raw: Record<string, unkno
       }
     }
     return null;
+  }
+  if (spec.encryptedColumns?.includes(column)) {
+    if (value === null || value === '') return null;
+    // Export payloads carry decrypted values; re-encrypt on import. Idempotent: a value
+    // that already looks like current/legacy ciphertext is passed through untouched.
+    return encryptFieldValue(typeof value === 'string' ? value : String(value));
   }
   return value ?? null;
 }

@@ -4,7 +4,7 @@
 > 唯一数据源：`backend/src/services/notifications/channels.config.ts`（`getSupportedChannelTemplates()`）。
 > 连接测试列由 `test-connection.ts` 的真实分支解析得到；官方地址优先取模板 `officialUrl`，缺省回退 `docsUrl`。
 
-**云端可用渠道：42 个**（webhook 11 · token 31）· **Serverless 不可用：8 个** · **当前 schema：v32**
+**云端可用渠道：42 个**（webhook 11 · token 31）· **Serverless 不可用：8 个** · **当前 schema：v75**
 
 ## 1. 云端渠道总表（42）
 
@@ -168,4 +168,4 @@
 | token 渠道 | 31 |
 | 有 provider 专属连接测试 | 42 |
 | Serverless 不可用 | 8 |
-| schema 版本 | v32 |
+| schema 版本 | v75 |

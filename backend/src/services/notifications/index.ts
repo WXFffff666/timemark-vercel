@@ -617,11 +617,31 @@ export function appendHolidayLabel(
   return `${customMessage}\n🎉 ${label}`;
 }
 
+/**
+ * checkbox 168: append an optional owner-facing hint (e.g.「该联系人没有邮箱」) to the
+ * OWNER reminder. Same contract as appendHolidayLabel: never overwrites existing content,
+ * never duplicates the hint, and absent hint returns the input unchanged (existing callers
+ * are byte-identical).
+ */
+export function appendOwnerHint(
+  customMessage: string | undefined,
+  ownerHint: string | undefined,
+  event: { date?: unknown; type?: unknown },
+): string | undefined {
+  const hint = typeof ownerHint === 'string' ? ownerHint.trim() : '';
+  if (!hint) return customMessage;
+  if (!customMessage) {
+    return `**日期:** ${String(event.date ?? '')}\n**类型:** ${String(event.type ?? '')}\n💡 ${hint}`;
+  }
+  if (customMessage.includes(hint)) return customMessage;
+  return `${customMessage}\n💡 ${hint}`;
+}
+
 export async function sendNotifications(
   event: any,
   userId: number,
   channels: string[],
-  options?: { skipQuietHours?: boolean; profileId?: number | null; holidayLabel?: string },
+  options?: { skipQuietHours?: boolean; profileId?: number | null; holidayLabel?: string; ownerHint?: string },
 ): Promise<ChannelResultMap> {
   event = normalizeEventForNotification(event as Record<string, unknown>);
   const config = await getUserConfig(userId);
@@ -728,6 +748,13 @@ export async function sendNotifications(
   // holidayLabel 的调用方（事件提醒 + 到期/库存/保养迭代器）；medication 与
   // document 调用方从不传该选项 → 行为逐字节不变。
   mappedEvent.customMessage = appendHolidayLabel(mappedEvent.customMessage, options?.holidayLabel, event);
+
+  // checkbox 168: optional one-line hint on the OWNER reminder (e.g. the linked contact has
+  // no email). Appended after template/lunar/holiday rendering so a custom template cannot
+  // overwrite it; never passed by existing callers, so their output is byte-identical.
+  if (options?.ownerHint) {
+    mappedEvent.customMessage = appendOwnerHint(mappedEvent.customMessage, options.ownerHint, event);
+  }
   
   // 获取事件绑定的通知账户ID
   const boundAccountIds: number[] = (() => {

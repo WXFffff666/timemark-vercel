@@ -1,28 +1,125 @@
 # Changelog
 
-## v2.17.0 (2026-09-27) — 占位
+## v2.22.0 (2026-10-01) — 最终发布（Waves 16-19）
 
-> **占位条目**：Wave 0-5 已完成工作的阶段性记录；发布前由 todo 131 补全最终措辞与完整变更列表。
+> 标签计划：v2.22.0 为 Wave 18 之后的最终标签。
+> 发布说明：本条目如实列出**已接入**的能力与**尚未接入 / 尚未实现**的项，不把「已实现但未接线」或未开工的功能当作已发布。
 
-### 依赖与工具链
+### 30 项扩展功能（Wave 16-18，已接入）
 
-- React 19 + Vite 8 + Tailwind 4 + react-router-dom 7 前端升级
-- Zod 4、Vitest 5、TypeScript 7（原生编译器）、Hono 4、Recharts 3、Zustand 5 等运行时库升级
+- **搜索与问答**：全局 `pg_trgm` 搜索（中文可用、零出网、命令面板）、Ask 面板（零 AI 的意图匹配 + 模板回答）
+- **整理与治理**：跨实体标签（AND/OR 筛选）、去重助手（差异展示 + 显式合并 + 撤销）、批量操作（逐项结果）、撤销与审计轨迹、数据健康面板（安全一键修复）、迁移后结构自检
+- **日程与表单**：今日一览（可配置卡片）、例程模板（幂等实例化）、历史智能默认（确定性、最小样本 3）、渠道故障修复向导
+- **导入导出与本地能力**：外部 ICS / 只读 IMAP 订阅入库（含来源标签，不回写）、浏览器本地语音建事件（不上传音频）、可选 OCR（默认关闭）、打印 / 导出（本地渲染 HTML 再打印为 PDF，零出网）
+- **共享与备份**：家庭只读分享（profile / tag / 清单维度，可选口令与过期）、加密的 WebDAV / S3 兼容备份（含保留策略与恢复记录）
+- **中国日历与资讯**：进阶黄历（择日 / 八字 / 生肖配对，附免责声明）、天气与空气质量（Open-Meteo，无 key 静默降级）、包裹跟踪（承运商适配器 seam，默认桩）
+- **其它**：考勤 / 工时、儿童与长者照护、宠物照护、车辆油耗与保养台账、观影 / 阅读清单、家庭库存共享、双向日历同步（冲突记录）、单 owner 家庭协作（非多租户）
 
-### 通知渠道
+### 提醒链路修复（Wave 19）
 
-- 新增 10 个 HTTP 渠道（Server酱³、息知、AnPush、Chanify、Pushback、SimplePush、Zulip、Rocket.Chat、FCM、Twilio WhatsApp）；云端可用渠道 38 → 42
-- `docs/CHANNEL_MATRIX.md` 由 `scripts/gen-channel-matrix.mjs` 生成，渠道元数据合并为 `channels.config.ts` 单一数据源
+- 触发日志写入 `TEXT` 列，`提醒日志` 与失败计数真正生效；被跳过的提醒记录原因而非静默丢弃
+- 错过一次提醒窗口后按需补发；手动测试发送回退到本人已配置渠道；生日 / 双历提醒修正
+- 非法 IANA 时区在写入边界被拒绝，已存的非法值降级为 `Asia/Shanghai` 并告警
+
+### 尚未完成的项（如实记录）
+
+- **153-160 的后端模块已实现但尚未接入** `backend/src/index.ts`：考勤 / 照护 / 宠物 / 车辆 / 清单 / 家庭库存 / 双向日历 / 家庭协作的路由文件已存在，但未挂载，因此当前部署**不可达**。
+- **161 字段级加密**未实现。
+- **168 联系人生日祝福**未实现；**170 Wave 19 端到端验证**未执行。
+
+## v2.21.0 (2026-09-30) — 后台 AI 运行时（Waves 14-15）
+
+> 详见 [docs/BACKGROUND_AI.md](docs/BACKGROUND_AI.md)。
+
+### 持久化作业运行时（F5）
+
+- `agent_jobs` 持久化队列（迁移 `agent_jobs_v54`）：`SELECT ... FOR UPDATE SKIP LOCKED` + 租约 / 心跳 / 幂等键 / 30s 起、上限 6h 的指数退避 / 死信
+- 有界领取与执行端点 `POST /api/agent/worker/drain`（默认一次 3 个，硬上限 50，响应预算默认 25s）
+- 表驱动调度链：`scheduler_runs.next_run_at` + `POST /api/agent/scheduler/start`，默认 10 分钟一跳；不引入 Vercel Workflow 依赖，不需要常驻进程
+- 触发拓扑：Vercel 内置 cron 仅每日一次；子日级由外部 cron-job.org 驱动；**无触发即零消耗**
+- 模型分档 `lite` / `medium` / `high` 与逐作业成本护栏；每月 token / 调用预算按真实消耗评估
+- 每日提醒预算（默认 3 条）、静默时段、6 小时去重窗口、60 分钟例程冷却
+- 控制面 API 与「AI 后台」页面（作业 / Worker / 运行 / 成本 / 预算 / kill switch）与后台路径加固
+
+### 主动但安静（F6）
+
+- 早间简报、晚间复盘、周度复盘、每小时巡检例程（确定性优先，零模型调用）
+- 批准 / 改 / 拒绝决策卡与可选「为什么」理由，进入持久偏好记忆并影响后续行为
+- 无 AI 部署下的降级 / 离线 UX
+- 可选**只出站**本地 Worker 协议与参考实现 `scripts/agent-worker.mjs`，见 [docs/WORKER.md](docs/WORKER.md)
+- 运行观测（运行记录、成本账本、队列 / Worker 健康）与自看门狗（积压 / 连续失败 / 供应商错误，按窗口去重告警）
+
+## v2.20.0 (2026-09-29) — 机器人、AI 层与日历 / 报告 / 目标（Waves 10-13）
+
+### 日历与回顾（Wave 10-11）
+
+- 中国日历增强：法定节假日 / 调休数据、农历 / 干支 / 生肖 / 星座 / 宜忌 / 节气卡片、节日感知提醒
+- 周期性图文摘要（月 / 年）与设置页「立即发送」
+- 目标与里程碑（迁移 `goals`）与「N 年前的今天」记忆卡
+- 浏览器 Web Push 回归为一等渠道、PWA 可安装与离线安全
+- CalDAV 只读订阅与可选回写、公开 ICS 订阅增强、分享 / 嵌入的 OG 元数据服务端渲染
+
+### Telegram 双向机器人（Wave 12）
+
+- `POST /api/bot/telegram` webhook：`X-Telegram-Bot-Api-Secret-Token` 常量时间校验、64 KB 上限、`update_id` 去重
+- 命令调度器与中英别名表、内联键盘与幂等回调、chat/user/profile 链接与审计、MarkdownV2 转义与长度上限、不可信内容围栏与限流
+
+### AI 与 Agent 层（Wave 13）
+
+- OpenAI 兼容 AI 网关（primary / fallback / local、超时、重试、缓存、`decide()` 类型化决策、模型分档）
+- 自然语言到已校验操作的解析器，默认规则模式、生成式路径可选
+- Agent 工具注册表（单一事实来源 + 注册表哈希 pin）、scoped 可撤销令牌与调度时授权 + 审计、两阶段确认动作 API
+- 无状态 Streamable HTTP MCP 服务器与只读资源（不可信内容围栏）
+- 确定性行为模式挖掘（零 LLM）、`pg_trgm` 搜索（中文可用、零出网）与可选 embeddings（默认关闭）
+- 本地模型支持（Ollama / LM Studio）与 [docs/AI.md](docs/AI.md)
+- 可选 AI 摘要 / 事件打标 / 模板翻译（逐功能默认关闭，数字一致性护栏）
+- 应用内助手（工具调用透明与确认）与 [docs/AGENT.md](docs/AGENT.md)
+
+## v2.19.0 (2026-09-28) — 生活领域扩展（Waves 6-9）
+
+- **D1 到期与续费中心**：订阅 / 账单 / 保险 / 域名 / 保修，费用聚合进入统计，多级提前提醒
+- **D12 库存与保养**：库存数量 / 保质期 / 低库存阈值；按日期或用量计的保养计划
+- **D2 文档保险箱**：护照 / 证件 / 驾照 / 签证 / 证书 / 保单，对象存储附件（迁移 `attachments` / `documents`），硬性大小与类型上限、短时签名 URL
+- **D4 个人 CRM**：互动日志与联系节奏（迁移 `crm_interactions_cadence`），逾期联系人提醒
+- **D6 习惯**：打卡与连续天数（迁移 `habits`），周视图
+- **D5 家庭多档案**：profiles 模型并回填默认档案（迁移 `profiles`），列表与提醒按档案感知
+- **D3 家庭用药**：剂量排程物化、打卡、库存递减、依从性与可打印报告（迁移 `medications` / `doses`）
+- 数据导出 / 导入覆盖以上新实体
+
+## v2.18.0 (2026-09-27) — 依赖现代化与遗留修复（Waves 4-5）
+
+### 依赖大版本升级（一次一个 major，门禁全绿）
+
+- React 19.3、Vite 8.3、Tailwind CSS 4.3（CSS-first 配置）、Zod 4.6、Vitest 5.0、TypeScript 7.0
+- react-router-dom 7.18、zustand 5.0、recharts 3.10、framer-motion 13.4、resend 6.30、nodemailer 10.0、axios 1.20、hono 4.13
 
 ### 前端与 PWA
 
-- Service Worker 安全化：新增 `CACHE_VERSION`，激活时清空全部缓存并 `clients.claim()`，导航请求仅走网络——不再缓存 HTML，杜绝陈旧资源
+- Service Worker 安全化：新增 `CACHE_VERSION`，激活时清空全部缓存并 `clients.claim()`，导航请求仅走网络，不再缓存 HTML
 - i18n：以 zh/en 懒加载资源加载器（`t(key, vars?)` / `useI18n` / `LanguageToggle`）替换 8 键 stub
 
-### 文档
+### 稳定性与文档
 
-- 校正通知重试队列描述：发送失败即写入 `notification_queue`，按 5m/30m/2h/6h 退避，由 `/api/cron/retry-notifications` 处理
-- `docs/OPTIMIZATION_PLAN.md` 后续优化表标注已完成项
+- 修正会导致误判的文档 / 代码矛盾；校正通知重试队列描述（失败写入 `notification_queue`，5m/30m/2h/6h 退避，由 `/api/cron/retry-notifications` 处理）
+- 通知路径 fire-and-forget 承诺与错误面加固；日志表增长上限与缺失索引补齐
+- 请求关联的结构化日志与源头脱敏；既有页面的可访问性与响应式基线审计
+
+## v2.17.0 (2026-09-27) — 渠道真相与清理（Waves 0-3）
+
+### 工程门禁（Wave 0）
+
+- CI 真门禁：typecheck + 单元测试 + lint + build（+ Playwright e2e），根 `lint` 脚本，tsconfig / `@types/node` 跨工作区对齐
+- `.env.example` 补齐本计划引入的全部环境变量；Playwright 接入门禁并固定 base URL；记录改动前基线（测试数、构建体积、bundle 内容）
+
+### 通知渠道（Wave 1-2）
+
+- 修复渠道真相：`generic_webhook` 接入分发链；Pushover 连接测试不再把优先级当应用令牌；`twilio` / `wecomapp` / `apprise` 具备真实连接测试；每 provider 使用真实成功信号而非仅看 HTTP 状态；`channel-health` 复用同一测试路径；解析到无配置的渠道不再被静默吞掉；Synology Chat / Twitch 走专用 sender
+- 新增 10 个 HTTP 渠道：Server酱³ (SC3)、息知 (XiZhi)、AnPush、Chanify、Pushback、SimplePush、Zulip、Rocket.Chat、Firebase 推送 (FCM HTTP v1)、Twilio WhatsApp
+- **云端可用渠道 42 个（webhook 11 · token 31）**，由 `scripts/gen-channel-matrix.mjs` 生成 [docs/CHANNEL_MATRIX.md](docs/CHANNEL_MATRIX.md) 作为唯一权威清单；渠道元数据合并为 `channels.config.ts` 单一数据源，README / 兼容性文档的计数与生成值一致
+
+### 清理（Wave 3）
+
+- 删除 9 个死 IM 服务与 Vercel stub；移除 `baileys` / `oicq` / `wechaty` / `@tencent-weixin/openclaw-weixin` 等 exotic 依赖与 `blockExoticSubdeps=false` override；新增「无死渠道代码」仓库不变量测试
 
 ## v2.16.0 (2026-07-31)
 

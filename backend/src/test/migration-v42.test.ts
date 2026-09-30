@@ -153,7 +153,7 @@ describe('migration v42 registration (todo 71)', () => {
     // continue the chain; 49 is no longer the tail.
     expect(versions.indexOf(49)).toBe(versions.indexOf(48) + 1);
     // v51 (checkbox 97, /snooze persistence) is the new tail; 1-50 stay untouched.
-    expect(versions[versions.length - 1]).toBe(71);
+    expect(versions[versions.length - 1]).toBe(75);
 
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);

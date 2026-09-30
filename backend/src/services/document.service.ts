@@ -4,6 +4,7 @@ import { toYmdString } from '@timemark/shared';
 import type { CreateDocumentInput, UpdateDocumentInput } from '@timemark/shared';
 import { getAttachment, reassignAttachment, type AttachmentRecord } from './attachment.service.js';
 import { logFireAndForget } from '../utils/logger.js';
+import { decryptFieldValue, encryptFieldValue } from './field-encryption.service.js';
 
 /**
  * 证件保险箱数据访问层（todo 54）。
@@ -94,7 +95,8 @@ export function serializeDocumentRow(row: RawRow): DocumentRecord {
     issued_at: toYmdString(row.issued_at),
     expires_at: toYmdString(row.expires_at),
     country: row.country == null ? null : String(row.country),
-    notes: row.notes == null ? null : String(row.notes),
+    // Task 161: notes are encrypted at rest; a decrypt failure degrades to a placeholder.
+    notes: decryptFieldValue(row.notes),
     reminder_config:
       reminderConfig && typeof reminderConfig === 'object'
         ? (reminderConfig as Record<string, unknown>)
@@ -230,7 +232,7 @@ export async function createDocument(
       input.issuedAt ?? null,
       input.expiresAt ?? null,
       input.country ?? null,
-      input.notes ?? null,
+      encryptFieldValue(input.notes ?? null),
       input.reminderConfig ? JSON.stringify(input.reminderConfig) : null,
       input.isActive ?? true,
     ],
@@ -270,7 +272,10 @@ export async function updateDocument(
   };
 
   for (const [key, column] of FIELD_MAP) {
-    if (input[key] !== undefined) push(column, input[key] ?? null);
+    if (input[key] === undefined) continue;
+    // Task 161: notes are encrypted on every write (null clears, never double-encrypts).
+    if (key === 'notes') push(column, encryptFieldValue(input.notes ?? null));
+    else push(column, input[key] ?? null);
   }
   if (input.reminderConfig !== undefined) {
     push('reminder_config', input.reminderConfig === null ? null : JSON.stringify(input.reminderConfig));

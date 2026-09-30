@@ -49,7 +49,7 @@ vercel --prod
 
 ### 4. 数据库迁移
 
-**自动**：首次访问 API 时执行 v1–v32 增量迁移。  
+**自动**：首次访问 API 时执行 v1–v75 增量迁移。  
 **手动**（可选）：
 
 ```bash
@@ -57,7 +57,7 @@ vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-登录后打开 **设置 → 部署向导**，确认「数据库结构版本」为 **v32**。
+登录后打开 **设置 → 部署向导**，确认「数据库结构版本」为 **v75**。
 
 默认账号：`admin` / `TimeMark@2026`（首次登录会提示改密码）
 
@@ -133,7 +133,7 @@ GET https://你的域名/api/time/status?timezone=Asia/Shanghai
 
 **设置 → 部署向导 → 系统自检** 检查：
 
-- 数据库连接、结构版本（**v32**）
+- 数据库连接、结构版本（**v75**）
 - `JWT_SECRET`、`MASTER_KEY`、`CRON_SECRET`
 - Turnstile（可选）
 

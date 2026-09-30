@@ -24,7 +24,7 @@ export const SHARE_DEFAULT_EXPIRY_DAYS = 30;
 export const SHARE_MAX_EXPIRY_DAYS = 365;
 export const SHARE_VIEW_LIMIT = 500;
 
-export type ShareScopeType = 'profile' | 'tag';
+export type ShareScopeType = 'profile' | 'tag' | 'household_list';
 
 export class ShareScopeError extends Error {
   constructor(message: string) {
@@ -72,6 +72,8 @@ export interface CreateShareTokenInput {
   scopeType: ShareScopeType;
   profileId?: number | null;
   tag?: string | null;
+  /** Present when scopeType = 'household_list' (ownership checked in the service). */
+  listId?: number | null;
   label?: string | null;
   expiresInDays?: number | null;
   passcode?: string | null;
@@ -82,6 +84,7 @@ export interface ShareTokenView {
   scopeType: ShareScopeType;
   profileId: number | null;
   tag: string | null;
+  listId: number | null;
   label: string | null;
   hasPasscode: boolean;
   expiresAt: string | null;
@@ -98,6 +101,7 @@ interface ShareTokenRow {
   scope_type: ShareScopeType;
   scope_profile_id: number | null;
   scope_tag: string | null;
+  scope_list_id: number | string | null;
   label: string | null;
   passcode_hash: string | null;
   expires_at: string | Date | null;
@@ -119,6 +123,7 @@ function toView(row: ShareTokenRow): ShareTokenView {
     scopeType: row.scope_type,
     profileId: row.scope_profile_id,
     tag: row.scope_tag,
+    listId: row.scope_list_id == null ? null : Number(row.scope_list_id),
     label: row.label,
     hasPasscode: row.passcode_hash != null && row.passcode_hash !== '',
     expiresAt: toIso(row.expires_at),
@@ -134,6 +139,11 @@ async function profileBelongsToUser(userId: number, profileId: number): Promise<
   return result.rows.length > 0;
 }
 
+async function listBelongsToUser(userId: number, listId: number): Promise<boolean> {
+  const result = await query('SELECT 1 FROM household_lists WHERE id = $1 AND user_id = $2', [listId, userId]);
+  return result.rows.length > 0;
+}
+
 /** Create a scoped share token; returns the raw value exactly once. */
 export async function createShareToken(
   userId: number,
@@ -142,6 +152,7 @@ export async function createShareToken(
   const scopeType = input.scopeType;
   let profileId: number | null = null;
   let tag: string | null = null;
+  let listId: number | null = null;
 
   if (scopeType === 'profile') {
     if (input.profileId == null || !(await profileBelongsToUser(userId, input.profileId))) {
@@ -152,6 +163,11 @@ export async function createShareToken(
     const trimmed = (input.tag ?? '').trim();
     if (!trimmed) throw new ShareScopeError('标签不能为空');
     tag = trimmed.slice(0, 100);
+  } else if (scopeType === 'household_list') {
+    if (input.listId == null || !(await listBelongsToUser(userId, input.listId))) {
+      throw new ShareScopeError('清单不存在');
+    }
+    listId = input.listId;
   } else {
     throw new ShareScopeError('未知的分享范围');
   }
@@ -165,10 +181,10 @@ export async function createShareToken(
   const raw = generateShareTokenValue();
   const result = await query(
     `INSERT INTO share_tokens
-       (user_id, token_hash, scope_type, scope_profile_id, scope_tag, label, passcode_hash, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, now() + ($8 || ' days')::interval)
+       (user_id, token_hash, scope_type, scope_profile_id, scope_tag, scope_list_id, label, passcode_hash, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + ($9 || ' days')::interval)
      RETURNING *`,
-    [userId, hashShareToken(raw), scopeType, profileId, tag, input.label ?? null, passcodeHash, String(days)],
+    [userId, hashShareToken(raw), scopeType, profileId, tag, listId, input.label ?? null, passcodeHash, String(days)],
   );
   const row = result.rows[0] as ShareTokenRow;
   log.info({ event: 'share.created', userId, scopeType }, 'share token created');
@@ -209,11 +225,22 @@ export interface SharedContact {
   gender: string | null;
 }
 
+export interface SharedListItem {
+  id: number;
+  name: string;
+  quantity: string;
+  note: string;
+  assignee: string;
+  checked: boolean;
+}
+
 export interface ScopedShareView {
   scopeType: ShareScopeType;
   scopeLabel: string;
   events: SharedEvent[];
   contacts: SharedContact[];
+  /** household_list scope only; always present (empty array for profile/tag). */
+  listItems: SharedListItem[];
 }
 
 const EVENT_COLUMNS = 'id, name, type, date, calendar_type, person_name, tags';
@@ -226,6 +253,7 @@ export async function buildScopedView(
   profileId: number | null,
   tag: string | null,
   scopeLabel: string,
+  listId: number | null = null,
 ): Promise<ScopedShareView> {
   if (scopeType === 'profile') {
     const [events, contacts] = await Promise.all([
@@ -243,6 +271,22 @@ export async function buildScopedView(
       scopeLabel,
       events: events.rows as SharedEvent[],
       contacts: contacts.rows as SharedContact[],
+      listItems: [],
+    };
+  }
+
+  if (scopeType === 'household_list') {
+    const items = await query(
+      `SELECT id, name, quantity, note, assignee, checked FROM household_list_items
+       WHERE list_id = $1 ORDER BY checked ASC, created_at ASC, id ASC LIMIT ${SHARE_VIEW_LIMIT}`,
+      [listId],
+    );
+    return {
+      scopeType,
+      scopeLabel,
+      events: [],
+      contacts: [],
+      listItems: items.rows as SharedListItem[],
     };
   }
 
@@ -252,7 +296,7 @@ export async function buildScopedView(
     `SELECT ${EVENT_COLUMNS} FROM events WHERE user_id = $1 AND tags @> $2::jsonb ORDER BY date ASC, id ASC LIMIT ${SHARE_VIEW_LIMIT}`,
     [userId, JSON.stringify([tag])],
   );
-  return { scopeType, scopeLabel, events: events.rows as SharedEvent[], contacts: [] };
+  return { scopeType, scopeLabel, events: events.rows as SharedEvent[], contacts: [], listItems: [] };
 }
 
 export interface ResolvedShare {
@@ -291,9 +335,22 @@ export async function resolveShareToken(raw: string, passcode?: string | null): 
     if (profile.rows[0]?.name) scopeLabel = String(profile.rows[0].name);
   } else if (row.scope_type === 'tag' && row.scope_tag) {
     scopeLabel = row.scope_tag;
+  } else if (row.scope_type === 'household_list' && row.scope_list_id != null) {
+    const list = await query('SELECT name FROM household_lists WHERE id = $1 AND user_id = $2', [
+      row.scope_list_id,
+      row.user_id,
+    ]);
+    if (list.rows[0]?.name) scopeLabel = String(list.rows[0].name);
   }
 
-  const view = await buildScopedView(row.user_id, row.scope_type, row.scope_profile_id, row.scope_tag, scopeLabel);
+  const view = await buildScopedView(
+    row.user_id,
+    row.scope_type,
+    row.scope_profile_id,
+    row.scope_tag,
+    scopeLabel,
+    row.scope_list_id == null ? null : Number(row.scope_list_id),
+  );
 
   // Best-effort usage counters - never let a counter failure break a read.
   await query(

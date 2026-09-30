@@ -2623,6 +2623,479 @@ CREATE TABLE IF NOT EXISTS parcels (
 );
 CREATE INDEX IF NOT EXISTS idx_parcels_user_status ON parcels (user_id, status);`,
     },
+    {
+      // v72 (tasks 153/154/155): attendance/timesheet + child/elder care + pet care.
+      // Folded from backend/src/db/pending/72-timesheet-care-pets.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 72,
+      name: 'timesheet_care_pets_v72',
+      sql: `-- 72-timesheet-care-pets.sql (tasks 153 + 154 + 155 supporting DDL)
+--
+-- PENDING DDL: this directory is merged into backend/src/db/migrate.ts by the
+-- integrator (append-only, next free version after 71 at the time of writing; the
+-- integrator re-checks the tail immediately before appending, per repo convention).
+-- Do NOT edit migrate.ts from a lane; this file is the lane's DDL handoff.
+--
+-- Idempotent + additive: CREATE TABLE / CREATE INDEX IF NOT EXISTS only, no ALTER,
+-- no backfill, no data migration; re-running is a no-op.
+
+-- ---------------------------------------------------------------------------
+-- (153) Attendance / timesheet
+-- ---------------------------------------------------------------------------
+
+-- One row per work session. \`clock_out IS NULL\` marks the single open session.
+-- The partial unique index below is the hard guarantee against duplicate open
+-- sessions (a second clock-in hits 23505 and the route answers 409); the service
+-- also checks for a friendly error before inserting.
+CREATE TABLE IF NOT EXISTS timesheet_sessions (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  clock_in TIMESTAMPTZ NOT NULL DEFAULT now(),
+  clock_out TIMESTAMPTZ,
+  note TEXT NOT NULL DEFAULT '',
+  location TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT timesheet_sessions_range_check CHECK (clock_out IS NULL OR clock_out > clock_in)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_timesheet_open_session
+  ON timesheet_sessions (user_id) WHERE clock_out IS NULL;
+CREATE INDEX IF NOT EXISTS idx_timesheet_sessions_user_clock_in
+  ON timesheet_sessions (user_id, clock_in);
+
+-- Absence / leave records. \`kind\` is a coarse bucket; the note carries detail.
+CREATE TABLE IF NOT EXISTS timesheet_leaves (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'leave'
+    CONSTRAINT timesheet_leaves_kind_check CHECK (kind IN ('absence', 'leave', 'sick', 'holiday', 'other')),
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT timesheet_leaves_range_check CHECK (end_date >= start_date)
+);
+CREATE INDEX IF NOT EXISTS idx_timesheet_leaves_user_start
+  ON timesheet_leaves (user_id, start_date);
+
+-- ---------------------------------------------------------------------------
+-- (154) Child / elder care
+-- ---------------------------------------------------------------------------
+
+-- A care recipient (child, elder, ...). One user may keep several profiles.
+CREATE TABLE IF NOT EXISTS care_profiles (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  relationship TEXT NOT NULL DEFAULT '',
+  date_of_birth DATE,
+  allergies TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_care_profiles_user ON care_profiles (user_id);
+
+-- Care events: feeding / dose / vitals / mood / incident. Deliberately named
+-- \`care_logs\` so it cannot collide with the existing medications/doses domain.
+-- \`value\` + \`unit\` carry measurement history (e.g. temperature 36.8 C, weight
+-- 12.5 kg); \`label\` names the item (formula, drug, metric).
+CREATE TABLE IF NOT EXISTS care_logs (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id BIGINT NOT NULL REFERENCES care_profiles(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL
+    CONSTRAINT care_logs_kind_check CHECK (kind IN ('feeding', 'dose', 'vitals', 'mood', 'incident')),
+  logged_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  label TEXT NOT NULL DEFAULT '',
+  value NUMERIC,
+  unit TEXT NOT NULL DEFAULT '',
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_care_logs_profile_logged_at
+  ON care_logs (profile_id, logged_at DESC);
+CREATE INDEX IF NOT EXISTS idx_care_logs_user_kind_logged_at
+  ON care_logs (user_id, kind, logged_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- (155) Pet care
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS pets (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  species TEXT NOT NULL DEFAULT '',
+  breed TEXT NOT NULL DEFAULT '',
+  birth_date DATE,
+  weight_kg NUMERIC(6, 2),
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pets_user ON pets (user_id);
+
+-- Pet history: weight / feeding / vet. \`weight_kg\` is used by kind='weight'
+-- (and optionally by vet visits); \`detail\` carries feeding / vet notes.
+CREATE TABLE IF NOT EXISTS pet_logs (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  pet_id BIGINT NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL
+    CONSTRAINT pet_logs_kind_check CHECK (kind IN ('weight', 'feeding', 'vet')),
+  logged_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  weight_kg NUMERIC(6, 2),
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pet_logs_pet_kind_logged_at
+  ON pet_logs (pet_id, kind, logged_at DESC);
+
+-- Vaccination / deworming schedule with per-row lead time. A one-shot schedule
+-- is retired by setting \`completed_at\`; a recurring schedule (interval_days IS
+-- NOT NULL) rolls \`due_date\` forward on completion so the reminder scan keeps
+-- working off a single due date (see pet.service.ts completePetSchedule).
+CREATE TABLE IF NOT EXISTS pet_schedules (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  pet_id BIGINT NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL
+    CONSTRAINT pet_schedules_kind_check CHECK (kind IN ('vaccination', 'deworming')),
+  name TEXT NOT NULL,
+  due_date DATE NOT NULL,
+  interval_days INTEGER,
+  reminder_days_before INTEGER NOT NULL DEFAULT 14,
+  completed_at TIMESTAMPTZ,
+  last_completed_at TIMESTAMPTZ,
+  completion_count INTEGER NOT NULL DEFAULT 0,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT pet_schedules_interval_check CHECK (interval_days IS NULL OR interval_days > 0),
+  CONSTRAINT pet_schedules_reminder_check CHECK (reminder_days_before >= 0)
+);
+CREATE INDEX IF NOT EXISTS idx_pet_schedules_user_due
+  ON pet_schedules (user_id, due_date);
+CREATE INDEX IF NOT EXISTS idx_pet_schedules_pet_due
+  ON pet_schedules (pet_id, due_date);`,
+    },
+    {
+      // v73 (tasks 156/157/158): vehicle fuel/maintenance ledger + watch/read list + household collaborative lists.
+      // Folded from backend/src/db/pending/73-vehicle-watchlist-household.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 73,
+      name: 'vehicle_watchlist_household_v73',
+      sql: `-- Task 156/157/158: vehicle fuel & maintenance ledger, watch/read list, household lists.
+--
+-- Idempotent + additive. Folds into backend/src/db/migrate.ts by the integrator in
+-- numeric order after the landed max. No data migration: brand-new tables plus two
+-- additive share_tokens changes (new 'household_list' scope value + scope_list_id)
+-- guarded so re-runs are no-ops.
+
+-- ---------------------------------------------------------------------------
+-- 156: vehicles + fuel / maintenance ledger
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS vehicles (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  make TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  year INTEGER CHECK (year IS NULL OR (year >= 1886 AND year <= 2100)),
+  plate TEXT NOT NULL DEFAULT '',
+  odometer INTEGER NOT NULL DEFAULT 0 CHECK (odometer >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_vehicles_user ON vehicles (user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS vehicle_fuel_records (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  vehicle_id BIGINT NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+  recorded_on DATE NOT NULL,
+  energy_type TEXT NOT NULL DEFAULT 'fuel' CHECK (energy_type IN ('fuel', 'electric')),
+  quantity NUMERIC(10, 2) NOT NULL CHECK (quantity > 0),
+  unit_price NUMERIC(10, 3) NOT NULL DEFAULT 0 CHECK (unit_price >= 0),
+  total_cost NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (total_cost >= 0),
+  odometer INTEGER NOT NULL CHECK (odometer >= 0),
+  note TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_vehicle_fuel_vehicle ON vehicle_fuel_records (vehicle_id, odometer DESC);
+
+CREATE TABLE IF NOT EXISTS vehicle_maintenance_records (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  vehicle_id BIGINT NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+  item TEXT NOT NULL,
+  serviced_on DATE NOT NULL,
+  odometer INTEGER CHECK (odometer IS NULL OR odometer >= 0),
+  cost NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (cost >= 0),
+  next_due_date DATE,
+  next_due_odometer INTEGER CHECK (next_due_odometer IS NULL OR next_due_odometer >= 0),
+  note TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_vehicle_maintenance_vehicle
+  ON vehicle_maintenance_records (vehicle_id, serviced_on DESC);
+
+-- ---------------------------------------------------------------------------
+-- 157: watch / read list. Rows with a future release_date + status
+-- wanted/in_progress feed the shared minute-cron reminder iterator
+-- (jobs/tasks.ts WATCHLIST_SOURCE); no second scheduler.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS watchlist_items (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL DEFAULT 'other' CHECK (kind IN ('film', 'series', 'book', 'game', 'other')),
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'wanted' CHECK (status IN ('wanted', 'in_progress', 'done', 'dropped')),
+  release_date DATE,
+  source TEXT,
+  link TEXT,
+  rating INTEGER CHECK (rating IS NULL OR (rating >= 0 AND rating <= 10)),
+  note TEXT NOT NULL DEFAULT '',
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  reminder_config JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_watchlist_user_status ON watchlist_items (user_id, status);
+CREATE INDEX IF NOT EXISTS idx_watchlist_user_release ON watchlist_items (user_id, release_date);
+
+-- ---------------------------------------------------------------------------
+-- 158: household collaborative list. Deliberately separate from the existing
+-- inventory_items stock domain (different table names, different lifecycle).
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS household_lists (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_household_lists_user ON household_lists (user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS household_list_items (
+  id BIGSERIAL PRIMARY KEY,
+  list_id BIGINT NOT NULL REFERENCES household_lists(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  quantity TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  assignee TEXT NOT NULL DEFAULT '',
+  checked BOOLEAN NOT NULL DEFAULT FALSE,
+  checked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_household_list_items_list
+  ON household_list_items (list_id, checked, created_at);
+
+-- Per-list share links reuse share_tokens: widen the scope CHECK to accept
+-- 'household_list' and add the list reference column. Dropping the old CHECK is
+-- required (an ADD would otherwise be rejected); the loop handles any constraint
+-- name, and re-runs drop + re-add the same widened constraint.
+ALTER TABLE share_tokens ADD COLUMN IF NOT EXISTS scope_list_id BIGINT;
+
+DO $$
+DECLARE
+  constraint_row record;
+BEGIN
+  FOR constraint_row IN
+    SELECT conname
+    FROM pg_constraint
+    WHERE conrelid = 'share_tokens'::regclass
+      AND contype = 'c'
+      AND pg_get_constraintdef(oid) ILIKE '%scope_type%'
+  LOOP
+    EXECUTE format('ALTER TABLE share_tokens DROP CONSTRAINT %I', constraint_row.conname);
+  END LOOP;
+  ALTER TABLE share_tokens
+    ADD CONSTRAINT share_tokens_scope_type_check
+    CHECK (scope_type IN ('profile', 'tag', 'household_list'));
+END $$;`,
+    },
+    {
+      // v74 (tasks 159/160): two-way calendar sync accounts + single-owner collaboration invites.
+      // Folded from backend/src/db/pending/74-calendar-sync-collab.sql; SQL embedded verbatim.
+      // Idempotent: every statement is IF NOT EXISTS-guarded; no existing migration was touched.
+      version: 74,
+      name: 'calendar_sync_collaboration_v74',
+      sql: `-- ============================================================================
+-- Pending migration 74 - two-way calendar sync accounts + single-owner
+-- family collaboration invites (Wave tasks 159 + 160)
+-- ============================================================================
+-- NOT yet merged into backend/src/db/migrate.ts (integrator-owned). The
+-- orchestrator merges pending files in numeric order at release (74 follows the
+-- currently-landed max, 73 at the time of writing). Register as:
+--   { version: 74, name: 'calendar_sync_collaboration_v74', sql: <this file> }
+-- Until then the new services/routes fail their reads/writes with
+-- "relation calendar_sync_accounts / calendar_sync_events /
+--  collaboration_invites / collaboration_activity does not exist".
+--
+-- WHY EACH TABLE:
+--
+--   calendar_sync_accounts  A per-user external calendar target (task 159).
+--                           \`kind\` is 'caldav' | 'exchange'; the Exchange path
+--                           is an adapter seam that may report \`unsupported\`
+--                           instead of faking success. Credentials are encrypted
+--                           at rest with the shared crypto util (MASTER_KEY);
+--                           the ciphertext is never returned and never logged.
+--                           \`direction\` gates pull / push / both and \`enabled\`
+--                           lets the owner pause an account without deleting it.
+--
+--   calendar_sync_events    The idempotency + conflict ledger. UNIQUE
+--                           (account_id, calendar_id, external_uid) makes a
+--                           re-pull a no-op (dedupe on external UID + calendar
+--                           id). \`external_version\` (ETag / changeKey) and
+--                           \`local_version\` (content hash) are the per-side
+--                           versions recorded at the last sync; \`losing_version\`
+--                           records the version discarded by the conflict policy
+--                           (last-write-wins by default).
+--
+--   collaboration_invites   SINGLE-OWNER, invite-only guests (task 160). There
+--                           is exactly one owner (owner_user_id) and NO tenant
+--                           table, org table or membership table: a guest is an
+--                           email/link holding a token, not an account. The raw
+--                           token is shown once and never stored - only its
+--                           SHA-256 hash (\`token_hash\`) is persisted. \`role\` is
+--                           viewer | commenter | editor and \`scope_*\` bounds the
+--                           surface (profile and/or tag and/or entity types).
+--
+--   collaboration_activity  Append-only feed of collaborator changes (task 160)
+--                           so the owner sees what a guest did, scoped to the
+--                           invite. Never stores credentials or raw tokens.
+--
+-- Purely additive + idempotent: CREATE TABLE / CREATE INDEX IF NOT EXISTS only,
+-- no ALTER of existing tables, no backfill; re-running is a no-op.
+-- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 159: external calendar sync accounts (CalDAV / Exchange seam)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS calendar_sync_accounts (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- 'caldav' | 'exchange'
+  kind TEXT NOT NULL CHECK (kind IN ('caldav', 'exchange')),
+  -- External calendar collection / endpoint root. Its host MUST clear the
+  -- shipped egress guard before any outbound call (see calendar-sync.service.ts).
+  base_url TEXT NOT NULL,
+  -- Login name for HTTP basic / CalDAV. Not secret, but never echoed with creds.
+  username TEXT,
+  -- Encrypted (shared crypto util / MASTER_KEY) password, app-password or
+  -- bearer token. NULL when the target needs no credential.
+  credentials_encrypted TEXT,
+  -- Remote calendar / collection id (CalDAV collection path or Exchange folder).
+  calendar_id TEXT NOT NULL DEFAULT 'default',
+  -- 'pull' | 'push' | 'both'
+  direction TEXT NOT NULL DEFAULT 'both' CHECK (direction IN ('pull', 'push', 'both')),
+  -- 'last_write_wins' (default) | 'local_wins' | 'remote_wins'
+  conflict_policy TEXT NOT NULL DEFAULT 'last_write_wins'
+    CHECK (conflict_policy IN ('last_write_wins', 'local_wins', 'remote_wins')),
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  last_synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendar_sync_accounts_user
+  ON calendar_sync_accounts (user_id, created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- 159: per-event idempotency + conflict ledger
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS calendar_sync_events (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  account_id BIGINT NOT NULL REFERENCES calendar_sync_accounts(id) ON DELETE CASCADE,
+  -- Stable external identity. Re-pull dedupes on (account_id, calendar_id, external_uid).
+  external_uid TEXT NOT NULL,
+  calendar_id TEXT NOT NULL DEFAULT 'default',
+  -- Local event this external object maps to (NULL until imported).
+  local_event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+  -- Remote version at last sync: ETag / Exchange changeKey.
+  external_version TEXT,
+  -- Local content hash at last sync (name + date + type).
+  local_version TEXT,
+  -- The version the conflict policy discarded (audit trail); NULL when no conflict.
+  losing_version TEXT,
+  last_direction TEXT,
+  last_synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (account_id, calendar_id, external_uid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendar_sync_events_account
+  ON calendar_sync_events (account_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_calendar_sync_events_local
+  ON calendar_sync_events (user_id, local_event_id);
+
+-- ---------------------------------------------------------------------------
+-- 160: single-owner collaboration invites (invite-only guests, roles + scope)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS collaboration_invites (
+  id BIGSERIAL PRIMARY KEY,
+  -- The ONE owner of all data. Guests are never rows in \`users\`.
+  owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  guest_email TEXT,
+  -- 'viewer' | 'commenter' | 'editor'
+  role TEXT NOT NULL CHECK (role IN ('viewer', 'commenter', 'editor')),
+  -- Scope: any combination of profile, tag and entity types. An empty
+  -- \`scope_entity_types\` means "all supported entity types" for the chosen
+  -- profile/tag; with no profile AND no tag it is bounded by entity types only.
+  scope_profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE,
+  scope_tag TEXT,
+  scope_entity_types JSONB NOT NULL DEFAULT '[]'::jsonb,
+  -- SHA-256 hex of the high-entropy raw invite token - the ONLY persisted form.
+  token_hash TEXT NOT NULL UNIQUE,
+  label TEXT,
+  expires_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  accepted_at TIMESTAMPTZ,
+  last_accessed_at TIMESTAMPTZ,
+  access_count INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_collaboration_invites_owner
+  ON collaboration_invites (owner_user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS collaboration_activity (
+  id BIGSERIAL PRIMARY KEY,
+  owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- 'owner' | 'guest'
+  actor_kind TEXT NOT NULL CHECK (actor_kind IN ('owner', 'guest')),
+  actor_label TEXT,
+  invite_id BIGINT REFERENCES collaboration_invites(id) ON DELETE SET NULL,
+  -- 'invite_created' | 'invite_revoked' | 'guest_viewed' | 'guest_commented'
+  -- | 'guest_event_created' | 'guest_write_denied'
+  action TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id TEXT,
+  detail JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_collaboration_activity_owner
+  ON collaboration_activity (owner_user_id, created_at DESC, id DESC);`,
+    },
+    {
+      // v75 (task 168): birthday greeting link - events.contact_id + fixed_contacts.greeting_opt_out.
+      // Re-runnable: both ALTERs use ADD COLUMN IF NOT EXISTS (no existing migration was touched).
+      version: 75,
+      name: 'birthday_link_v75',
+      sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES fixed_contacts(id) ON DELETE SET NULL;
+ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS greeting_opt_out BOOLEAN NOT NULL DEFAULT FALSE;`,
+    },
   ];
 
   for (const migration of migrations) {

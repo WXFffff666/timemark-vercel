@@ -9,6 +9,7 @@ import {
   isEmbeddingsEnabled,
   type EmbeddingsEnv,
 } from './ai/embeddings.js';
+import { decryptFieldValue } from './field-encryption.service.js';
 
 /**
  * Search over the user's OWN data (checkbox 106).
@@ -357,8 +358,14 @@ function fieldText(value: unknown): string {
 
 /** Deterministic text for one owner row: only the whitelisted, non-secret fields. */
 export function extractSearchContent(ownerType: SearchOwnerType, row: Record<string, unknown>): string {
+  // Task 161: interaction summaries are encrypted at rest - embed the plaintext, never
+  // the ciphertext (a ciphertext-shaped undecryptable value becomes the placeholder).
+  const source =
+    ownerType === 'interaction' && row.summary != null
+      ? { ...row, summary: decryptFieldValue(row.summary) }
+      : row;
   return CONTENT_FIELDS[ownerType]
-    .map((field) => fieldText(row[field]).trim())
+    .map((field) => fieldText(source[field]).trim())
     .filter(Boolean)
     .join('\n');
 }
@@ -463,6 +470,10 @@ async function fetchSourceRows(
       [userId, uniqueIds],
     );
     for (const row of result.rows) {
+      // Task 161: hydrate the interaction summary decrypted (placeholder on failure).
+      if (ownerType === 'interaction' && row.summary != null) {
+        row.summary = decryptFieldValue(row.summary);
+      }
       found.set(`${ownerType}:${Number(row.id)}`, row);
     }
   }

@@ -10,7 +10,7 @@
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-2.16.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
+[![Version](https://img.shields.io/badge/Version-2.22.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
 [![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-vercel?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-vercel/stargazers)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat&logo=vercel)](https://vercel.com/new)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
@@ -23,6 +23,12 @@
 [🔗 集成功能](docs/INTEGRATIONS.md) · 
 [📋 可选功能说明](docs/OPTIONAL_FEATURES.md) · 
 [🛡️ 安全评估](docs/SECURITY_AUDIT.md) · 
+[⏰ Cron 拓扑](docs/CRON.md) · 
+[🤖 AI 助手](docs/AI.md) · 
+[🧠 后台 AI](docs/BACKGROUND_AI.md) · 
+[🔐 Agent / MCP](docs/AGENT.md) · 
+[🖥️ 本地 Worker](docs/WORKER.md) · 
+[📎 附件存储](docs/ATTACHMENTS.md) · 
 [🐛 问题反馈](https://github.com/WXFffff666/timemark-vercel/issues) · 
 [⭐ Star 支持](https://github.com/WXFffff666/timemark-vercel/stargazers)
 
@@ -75,14 +81,76 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 
 | 🗓️ 精准农历 | 📢 多渠道通知 | 👨‍👩‍👧‍👦 智能关系映射 | 🔒 安全防护 | 🌍 全球时区 |
 |:----------:|:----------:|:---------------:|:----------:|:--------:|
-| 闰月自动转换 | 42 个通知渠道 | 40+ 称呼映射 | 登录锁定 + 告警 | NTP 按用户时区校准 |
+| 闰月自动转换 | 42 个通知渠道 | 36 种称呼映射 | 登录锁定 + 告警 | NTP 按用户时区校准 |
 | 公历/农历/双历 | 同渠道多账户 | 家庭关系映射 | Turnstile + Passkey | 默认北京时间 |
 
 | 📝 通知模板 | 🔄 重复事件 | 📧 多邮箱支持 | 📅 日历导出 | 🎯 11 种事件类型 |
 |:----------:|:----------:|:------------:|:----------:|:---------------:|
-| 18 种预设模板 | 每天/每周/每月/每年 | 多收件人邮箱 | ICS 文件导出 | 生日/纪念日/节日等 |
+| 57 种预设模板 | 每天/每周/每月/每年 | 多收件人邮箱 | ICS 文件导出 | 生日/纪念日/节日等 |
 | 按事件类型分组 | 自动创建下次事件 | 联系人多邮箱/手机 | 年/月/日视图 | 会议/旅行/婚礼等 |
 | 批量邮件 6 类模板 | 近期待办打勾完成 | 快捷发信可选收件人 | 待办完成历史 | 固定联系人分组 |
+
+---
+
+## 🧩 v2.17–v2.22 新增能力
+
+> 下列能力逐项对应已落地的 checkbox。**默认关闭**或**尚未接线**的项均明确标注，不把未发布的能力当作已发布。
+
+### 生活领域（v2.19.0，Waves 6-9）
+
+| 能力 | 说明 |
+|------|------|
+| 📅 到期与续费中心 | 订阅 / 账单 / 保险 / 域名 / 保修，多级提前提醒，费用聚合进入统计 |
+| 📦 库存与保养 | 数量 / 保质期 / 低库存阈值；按日期或用量的保养计划 |
+| 🗂️ 文档保险箱 | 护照 / 证件 / 驾照 / 签证 / 证书 / 保单，对象存储附件（文件不入库，见 [docs/ATTACHMENTS.md](docs/ATTACHMENTS.md)） |
+| 👥 个人 CRM | 互动日志与联系节奏，逾期联系人提醒 |
+| 🔥 习惯打卡 | 连续天数与周视图 |
+| 🏠 家庭多档案 | profiles 模型，列表与提醒按档案感知 |
+| 💊 家庭用药 | 剂量排程、打卡、库存递减、依从性与可打印报告 |
+
+### 机器人 / AI / Agent（v2.20.0，Waves 10-13）
+
+| 能力 | 说明 | 文档 |
+|------|------|------|
+| 📆 中国日历增强 | 节假日 / 调休、农历 / 干支 / 生肖 / 宜忌 / 节气、节日感知提醒 | |
+| 📊 周期摘要 | 月 / 年度图文摘要与「立即发送」 | |
+| 🎯 目标与里程碑 | 进度跟踪与「N 年前的今天」 | |
+| 🔔 Web Push / PWA | 浏览器推送回归为一等渠道，可安装、离线安全 | |
+| 🔗 日历双向 / 分享 | CalDAV 只读与可选回写、公开 ICS 订阅、分享 / 嵌入 OG 元数据 | |
+| 🤖 Telegram 机器人 | Webhook 密钥校验、去重、命令集、内联键盘、链接与审计 | |
+| 🧠 AI 助手 | OpenAI 兼容网关（云端 / 本地）、NL 建事件、可选摘要 / 打标 / 翻译 | [docs/AI.md](docs/AI.md) |
+| 🔐 Agent / MCP | scoped 可撤销令牌、两阶段确认、无状态 MCP 与只读资源 | [docs/AGENT.md](docs/AGENT.md) |
+| 🔍 搜索 / 模式挖掘 | `pg_trgm` 中文搜索（零出网）与确定性模式挖掘；语义检索为可选 | |
+
+### 后台 AI（v2.21.0，Waves 14-15）
+
+| 能力 | 说明 |
+|------|------|
+| ⚙️ 持久化作业运行时 | Postgres 队列 + 有界 drain + 表驱动调度链，无常驻进程、无触发即零消耗 |
+| 💰 预算护栏 | 模型分档、每月成本护栏、每日提醒预算（默认 3 条）、静默时段与去重 |
+| 🌅 主动例程 | 早间简报 / 晚间复盘 / 周度复盘 / 每小时巡检（确定性优先） |
+| ✅ 人工确认 | 批准 / 改 / 拒绝决策卡与「为什么」偏好记忆 |
+| 🖥️ 本地 Worker | 可选的只出站 Worker，协议与服务器一致 |
+
+详见 [docs/BACKGROUND_AI.md](docs/BACKGROUND_AI.md)、[docs/WORKER.md](docs/WORKER.md)、[docs/CRON.md](docs/CRON.md)。
+
+### 扩展功能（v2.22.0，Waves 16-18）
+
+| 能力 | 说明 |
+|------|------|
+| 🔎 全局搜索 / Ask | 跨实体搜索与零 AI 的问答面板 |
+| 🏷️ 标签 / 去重 / 批量 | 跨实体标签与 AND/OR、去重助手（含撤销）、批量操作（逐项结果） |
+| 📋 今日一览 / 数据健康 | 可配置卡片；结构自检与安全一键修复、渠道修复向导 |
+| 🧰 模板 / 默认 / 审计 | 例程模板、历史智能默认、撤销与审计轨迹 |
+| 📥 外部订阅 | ICS / 只读 IMAP 入库（带来源标签，不回写） |
+| 🎙️ 本地语音 / OCR | 浏览器本地语音建事件（不上传）；OCR 默认关闭 |
+| 🖨️ 打印 / 导出 | 本地渲染 HTML 再打印为 PDF，零出网 |
+| 🔗 分享 / 备份 | 家庭只读分享；加密 WebDAV / S3 兼容备份 |
+| 🌤️ 黄历 / 天气 / 包裹 | 进阶黄历（附免责声明）、Open-Meteo 天气与空气质量、包裹跟踪 |
+| 🚗 工时 / 照护 / 车辆 / 清单 | 考勤工时、儿童 / 长者 / 宠物照护、车辆油耗与保养、观影 / 阅读清单 |
+
+> ⚠️ **已实现但尚未接线**：考勤 / 照护 / 宠物 / 车辆 / 清单 / 家庭库存 / 双向日历同步 / 家庭协作的后端模块已存在，但尚未挂载到 `backend/src/index.ts`，当前部署**不可达**。
+> 另有**未实现**项：字段级加密（161）、联系人生日祝福（168）、Wave 19 端到端验证（170）。详见 [CHANGELOG.md](CHANGELOG.md) 的 v2.22.0 条目。
 
 ---
 
@@ -124,7 +192,7 @@ vercel --prod
 
 ### 初始化数据库
 
-部署后数据库表会在 **首次 API 冷启动时自动迁移**（v1–v32）。也可手动执行：
+部署后数据库表会在 **首次 API 冷启动时自动迁移**（v1–v75）。也可手动执行：
 
 ```bash
 # 拉取 Vercel 环境变量
@@ -134,7 +202,7 @@ vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-部署完成后可在 **设置 → 部署向导** 查看「系统自检」（数据库连接、结构版本 v32、CRON_SECRET、Turnstile 等）。
+部署完成后可在 **设置 → 部署向导** 查看「系统自检」（数据库连接、结构版本 v75、CRON_SECRET、Turnstile 等）。
 
 部署完成！生产环境请绑定自定义域名（例如 `https://timemark.example.com`）。
 
@@ -192,7 +260,7 @@ Vercel 远程构建同样使用 `vercel.json` 中的 `installCommand: "pnpm inst
 │   │  Vercel CDN  │         │    Vercel Postgres       │  │
 │   │  Static      │         │    (Neon PostgreSQL)     │  │
 │   │  Frontend    │         │    Serverless SQL        │  │
-│   │  (React SPA) │         │    13 张表 · 索引        │  │
+│   │  (React SPA) │         │    60+ 张表 · 索引       │  │
 │   └──────┬───────┘         └───────────┬─────────────┘  │
 │          │                             │                │
 │          │    ┌──────────────────┐     │                │
@@ -216,7 +284,7 @@ Vercel 远程构建同样使用 `vercel.json` 中的 `installCommand: "pnpm inst
 
 | 层级 | 技术 | 说明 |
 |:----:|------|------|
-| 前端 | React 18 + TypeScript + TailwindCSS + Radix UI | 现代化响应式界面 |
+| 前端 | React 19 + TypeScript + TailwindCSS 4 + Radix UI | 现代化响应式界面 |
 | 后端 | Hono + TypeScript + lunar-javascript | Vercel Serverless Functions |
 | 数据库 | PostgreSQL (Vercel Postgres / Neon) | Serverless SQL，0.5GB 免费存储 |
 | 定时任务 | Vercel Cron（每日维护）+ cron-job.org（分钟级提醒） | 见 [FREE_TIER_DEPLOY.md](FREE_TIER_DEPLOY.md) |
@@ -297,7 +365,7 @@ Cron 每分钟提醒任务使用校正后的时间，在配置的提醒时刻 ±
 | 提前天数 | 1天 / 3天 / 7天 / 14天 / 30天 (可多选) |
 | 通知渠道 | 42 个 HTTP 渠道任意组合 (可多选) |
 | 重复事件 | 每天 / 每周 / 每月 / 每年 |
-| 通知模板 | 18 种预设模板 + 自定义模板 |
+| 通知模板 | 57 种预设模板（覆盖 40 种事件类型）+ 自定义模板 |
 | 收件人邮箱 | 支持多个收件人邮箱 |
 
 ### 通知模板
@@ -429,8 +497,36 @@ TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插�
 | `DEFAULT_ADMIN_PASSWORD` | 可选 | 初始管理员密码；未设则 `TimeMark@2026` |
 | `HEALTH_DETAIL_TOKEN` | 可选 | `/api/health?detailed=1` 详情令牌 |
 | `LOG_QUERIES` | 可选 | `true` 时打印 SQL（仅调试） |
+| `NODEJS_HELPERS` | 推荐 | 字面量 `0`（Vercel Hobby 要求） |
+| `TZ` | 可选 | 服务器默认时区，默认 `Asia/Shanghai` |
+| `CRON_ALLOWED_IPS` | 可选 | 逗号分隔的 Cron 来源 IP 白名单 |
+| `HEALTHCHECK_URL` | 可选 | Healthchecks.io 心跳 ping URL |
+| `LOG_LEVEL` | 可选 | 日志级别，默认 `info` |
+| `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` | 可选 | Passkey，与正式域名一致 |
+| `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | 可选 | Google 日历只读同步，见 [docs/GOOGLE_CALENDAR_OAUTH.md](docs/GOOGLE_CALENDAR_OAUTH.md) |
+| `BLOB_READ_WRITE_TOKEN` | 可选 | 附件对象存储（Vercel Blob）；缺失时生产附件 503 |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET` | 可选 | Telegram 机器人 webhook |
+| `PUSH_VAPID_PUBLIC_KEY` / `PUSH_VAPID_PRIVATE_KEY` / `PUSH_VAPID_SUBJECT` | 可选 | 浏览器 Web Push（`npx web-push generate-vapid-keys`） |
+| `AGENT_WORKER_TOKEN` | 可选 | 本地 Worker 专用凭证（与 `CRON_SECRET` 独立轮换），见 [docs/WORKER.md](docs/WORKER.md) |
 
 > 🔐 **敏感变量切勿勾选 Preview/Development**。预览部署已启用 Vercel Standard Protection，Secret 类变量仅 Production 可避免泄露到预览环境。
+
+### 环境变量（可选：AI / Agent / 后台 AI，默认不配置即关闭相关能力）
+
+| 变量 | 默认 | 说明 |
+|------|:----:|------|
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | 空 | 云端主用（OpenAI 兼容），见 [docs/AI.md](docs/AI.md) |
+| `AI_FALLBACK_BASE_URL` / `AI_FALLBACK_API_KEY` / `AI_FALLBACK_MODEL` | 空 | 云端备用回退 |
+| `OLLAMA_BASE_URL` / `OLLAMA_MODEL` / `OLLAMA_API_KEY` | 空 | 本地模型；**留空 `OLLAMA_MODEL` 即关闭本地槽位** |
+| `EMBEDDINGS_ENABLED` / `EMBEDDINGS_BASE_URL` / `EMBEDDINGS_MODEL` | 关闭 | 语义检索为可选加速，非 `true` 即关闭 |
+| `MCP_ENABLED` | `false` | MCP 传输层；非 `true` 即关闭 |
+| `AGENT_TOOLS_ENABLED` | 未设置时启用 | 全局 kill switch；`.env.example` 出厂值为 `false` |
+| `WORKFLOWS_ENABLED` | 启用 | 后台调度链开关；设为 `false` / `0` / `off` 关闭 |
+| `AGENT_MONTHLY_TOKEN_BUDGET` / `AGENT_MONTHLY_CALL_BUDGET` | 不限制 | 每月成本护栏 |
+| `AGENT_NOTIFICATION_BUDGET_PER_DAY` | `3` | 每日主动提醒预算 |
+| `AGENT_NOTIFICATION_DEDUPE_WINDOW_MS` / `AGENT_ROUTINE_COOLDOWN_MS` | `6h` / `60min` | 反噪音窗口 |
+
+> 后台 AI 的完整架构、免费额度约束与默认值矩阵见 [docs/BACKGROUND_AI.md](docs/BACKGROUND_AI.md)。
 
 ---
 
@@ -538,7 +634,12 @@ npx pnpm build
 
 | 版本 | 日期 | 内容 |
 |:----:|:----:|------|
-| **v2.17.0** | 2026-09 | *占位（发布前由 todo 131 补全）* 依赖大版本升级（React 19 / Vite 8 / Tailwind 4 / Zod 4 / Vitest 5 / TypeScript 7 / Hono 4 等）；通知渠道扩充至 42 个（新增 10 个 HTTP 渠道）并生成渠道矩阵；Service Worker 安全化（不再缓存 HTML，激活即清空缓存）；i18n 资源加载器（zh/en）；文档校正（重试队列真实行为、优化计划收尾） |
+| **v2.22.0** | 2026-10-01 | 30 项扩展功能接入（搜索 / Ask / 标签 / 去重 / 今日一览 / 数据健康 / 批量 / 模板 / 智能默认 / 审计 / 自检 / 订阅入库 / 语音 / OCR / 导出 / 分享 / 备份 / 黄历 / 天气 / 包裹）；提醒链路修复（触发日志、跳过原因、补发、时区校验）；**未完成：153-160 待接线、161/168 未实现、170 未验证** |
+| **v2.21.0** | 2026-09-30 | 后台 AI 运行时：持久化 Postgres 队列、有界 drain、表驱动调度链、模型分档与成本护栏、每日提醒预算、控制面与「AI 后台」页、四个主动例程、决策卡与反馈记忆、可选本地 Worker、运行观测与看门狗 |
+| **v2.20.0** | 2026-09-29 | 中国日历增强、周期摘要、目标里程碑、Web Push / PWA、CalDAV 与公开订阅、Telegram 双向机器人、AI 网关与 NL 解析、Agent 工具 / 令牌 / MCP、模式挖掘、pg_trgm 搜索、本地模型、应用内助手 |
+| **v2.19.0** | 2026-09-28 | 到期中心、库存与保养、文档保险箱与附件、个人 CRM、习惯打卡、家庭多档案、家庭用药与依从性报告 |
+| **v2.18.0** | 2026-09-27 | 依赖大版本升级（React 19.3 / Vite 8.3 / Tailwind 4.3 / Zod 4.6 / Vitest 5.0 / TS 7.0 等）；Service Worker 安全化；i18n 资源加载器；文档矛盾修正；日志与可访问性加固 |
+| **v2.17.0** | 2026-09-27 | 渠道真相修复 + 新增 10 个 HTTP 渠道（云端 42：webhook 11 · token 31）+ 渠道矩阵生成；死代码与 exotic 依赖清理；CI 真门禁与工程基线 |
 | **v2.16.0** | 2026-07 | 双历/农历修复、NTP 按时区校准、登录加速、单用户模式、提醒 Cron 修复、安全加固（零信任/Passkey Turnstile/SSRF/Webhook） |
 | **v2.15.0** | 2026-07 | 联系人多邮箱/手机、待办打勾与完成历史、日历年/月/日视图、安全加固（发信白名单/HSTS/密钥脱敏/SMTP TLS） |
 | **v2.14.x** | 2026-07 | Turnstile 修复、深浅色切换、Google OAuth 文档、收件箱全链路、Phase B/C 优化项 |

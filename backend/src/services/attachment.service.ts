@@ -3,6 +3,7 @@ import { query } from '../db/index.js';
 import { ATTACHMENT_MAX_BYTES, type AttachmentOwnerType } from '@timemark/shared';
 import { deleteObject, getObject, putObject, type StoredObject } from './storage.service.js';
 import { logFireAndForget } from '../utils/logger.js';
+import { decryptFieldValue, encryptFieldValue } from './field-encryption.service.js';
 
 /**
  * 附件数据访问与存储编排（todo 53）。
@@ -110,8 +111,8 @@ export function serializeAttachmentRow(row: Record<string, unknown>): Attachment
     user_id: Number(row.user_id),
     owner_type: (row.owner_type as AttachmentOwnerType | null) ?? null,
     owner_id: row.owner_id == null ? null : Number(row.owner_id),
-    filename: String(row.filename),
-    content_type: String(row.content_type),
+    filename: decryptFieldValue(row.filename) ?? '',
+    content_type: decryptFieldValue(row.content_type) ?? '',
     byte_size: Number(row.byte_size),
     sha256: String(row.sha256),
     storage_key: String(row.storage_key),
@@ -183,8 +184,9 @@ export async function createAttachment(
         userId,
         data.ownerType,
         data.ownerId,
-        data.filename,
-        data.contentType,
+        // Task 161: filename + mime are encrypted at rest; storage key/size stay operational.
+        encryptFieldValue(data.filename),
+        encryptFieldValue(data.contentType),
         stored.size,
         stored.sha256,
         storageKey,

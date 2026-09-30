@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 /**
- * Integrator tail pin: the pending migrations 59, 60, 61, 62, 63, 64, 65, 67, 69, 70 and 71
+ * Integrator tail pin: the pending migrations 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74 and 75
  * were folded verbatim from `backend/src/db/pending/*.sql` into the tail of
  * `applyIncrementalMigrations` (one entry per file, ascending numeric order, name ending `_v<N>`).
  *
@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
  * `backend/src/db/pending/` as the record; this pin guards the registration itself.
  *
  * Sibling per-migration pins (`migration-vNN.test.ts`) keep the tail assertion
- * (`versions[versions.length - 1]`) at the current max - bumped 58 -> 71 in the same fold.
+ * (`versions[versions.length - 1]`) at the current max - bumped 58 -> 75 in the same fold.
  */
 
 const { mockQuery } = vi.hoisted(() => ({
@@ -41,6 +41,10 @@ const FOLDED: ReadonlyArray<{ version: number; name: string; marker: string }> =
   { version: 69, name: 'feeds_export_v69', marker: 'feed_ingest_proposals' },
   { version: 70, name: 'ocr_share_remote_backup_v70', marker: 'share_tokens' },
   { version: 71, name: 'weather_parcels_v71', marker: 'user_weather_settings' },
+  { version: 72, name: 'timesheet_care_pets_v72', marker: 'timesheet_sessions' },
+  { version: 73, name: 'vehicle_watchlist_household_v73', marker: 'household_lists' },
+  { version: 74, name: 'calendar_sync_collaboration_v74', marker: 'calendar_sync_accounts' },
+  { version: 75, name: 'birthday_link_v75', marker: 'greeting_opt_out' },
 ];
 
 const FOLDED_VERSIONS = FOLDED.map((entry) => entry.version);
@@ -64,7 +68,7 @@ beforeEach(() => {
   mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
 });
 
-describe('folded pending migrations 59-71 (integrator tail pin)', () => {
+describe('folded pending migrations 59-75 (integrator tail pin)', () => {
   it('registers every folded file exactly once, ascending, with a `_v<N>` name and non-empty SQL', () => {
     const versions = sourceVersions();
     for (const { version, name } of FOLDED) {
@@ -83,8 +87,8 @@ describe('folded pending migrations 59-71 (integrator tail pin)', () => {
     }
     // 58 keeps its position and the folded block is the new tail.
     expect(versions.indexOf(59)).toBe(versions.indexOf(58) + 1);
-    expect(versions[versions.length - 1]).toBe(71);
-    expect(versions.filter((v) => v === 71)).toHaveLength(1);
+    expect(versions[versions.length - 1]).toBe(75);
+    expect(versions.filter((v) => v === 75)).toHaveLength(1);
     // Nothing before the fold moved.
     expect(MIGRATE_SOURCE).toContain("name: 'tags_tag_links_v58'");
     expect(MIGRATE_SOURCE).toContain("name: 'search_trgm_remaining_v57'");
@@ -101,22 +105,22 @@ describe('folded pending migrations 59-71 (integrator tail pin)', () => {
     expect(callsMatching('idx_tag_links_tag')).toHaveLength(0);
   });
 
-  it('is idempotent: a recorded 71 row makes the runner skip the whole folded block', async () => {
-    await applyIncrementalMigrations(71);
+  it('is idempotent: a recorded 75 row makes the runner skip the whole folded block', async () => {
+    await applyIncrementalMigrations(75);
     expect(versionInserts()).toEqual([]);
     for (const { marker } of FOLDED) {
       expect(callsMatching(marker)).toHaveLength(0);
     }
   });
 
-  it('does not record a folded version whose SQL fails, and still walks on to 71', async () => {
+  it('does not record a folded version whose SQL fails, and still walks on to 75', async () => {
     mockQuery.mockImplementation(async (text: string) => {
       if (text.includes('scheduler_runs')) throw new Error('permission denied for table scheduler_runs');
       return { rows: [], rowCount: 0 };
     });
     await applyIncrementalMigrations(58);
     expect(versionInserts()).not.toContain(59);
-    expect(versionInserts()).toContain(71);
+    expect(versionInserts()).toContain(75);
     expect(versionInserts()).toEqual(FOLDED_VERSIONS.filter((v) => v !== 59));
   });
 });

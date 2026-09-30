@@ -72,7 +72,7 @@ describe('migration v55 registration (checkbox 101)', () => {
     await applyIncrementalMigrations(55);
     // v56 (checkbox 102) is the tail after v55; applying on a recorded 55 runs only v56.
     expect(callsMatching('CREATE TABLE IF NOT EXISTS agent_audit_logs')).toHaveLength(0);
-    expect(versionInserts()).toEqual([56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71]);
+    expect(versionInserts()).toEqual([56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75]);
   });
 
   it('does not record v55 when its SQL fails, so a later cold start retries', async () => {
@@ -88,7 +88,7 @@ describe('migration v55 registration (checkbox 101)', () => {
     const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
     expect(versions.filter((v) => v === 55)).toHaveLength(1);
     expect(versions.indexOf(55)).toBe(versions.indexOf(54) + 1);
-    expect(versions[versions.length - 1]).toBe(71);
+    expect(versions[versions.length - 1]).toBe(75);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }

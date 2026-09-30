@@ -59,7 +59,14 @@ import {
   resolveHolidayMode,
 } from '../services/holiday-reminder.service.js';
 import { createLogger } from '../utils/logger.js';
+import { decryptFieldValue } from '../services/field-encryption.service.js';
 import { recordEventTrigger } from '../services/trigger-log.service.js';
+import {
+  resolveBirthdayGreeting,
+  deliverBirthdayGreeting,
+  type BirthdayGreetingEvent,
+  type BirthdayGreetingResolution,
+} from '../services/birthday-greeting.service.js';
 import { getSyncedNow, scheduleTimeSync, DEFAULT_SYNC_TIMEZONE } from '../utils/ntp.js';
 
 const log = createLogger('tasks');
@@ -376,6 +383,45 @@ const DOCUMENT_SOURCE: DatedReminderSource = {
   // 证件到期提醒绝不调整（checkbox 78 明确要求）
   holidayAware: false,
 };
+
+/** 想看清单（task 157）发布提醒的默认提前天数（行内 reminder_config.daysBeforeList 优先）。 */
+const DEFAULT_WATCHLIST_LEAD_DAYS = [7, 1, 0] as const;
+
+/** claim 键前缀 `watchlist:`，与 expiry/inventory/maintenance/document 互不冲突。 */
+function buildWatchlistSendKey(todayYmd: string, daysUntil: number, reminderTime: string): string {
+  return `watchlist:${todayYmd}#d${daysUntil}#t${reminderTime}`;
+}
+
+/**
+ * 想看清单（task 157）发布/上映提醒：release_date 为到期日，仅
+ * wanted / in_progress 的行进入候选；done / dropped 与未定档（release_date
+ * 为空）的行不提醒。复用同一个分钟级迭代器与 reminder_send_claims 去重 ——
+ * 绝不新建第二个调度器。
+ */
+const WATCHLIST_SOURCE: DatedReminderSource = {
+  table: 'watchlist_items',
+  alias: 'w',
+  dueColumn: 'release_date',
+  titleColumn: 'title',
+  kindColumn: 'kind',
+  defaultKind: 'other',
+  extraWhere: `AND w.release_date IS NOT NULL AND w.status IN ('wanted', 'in_progress')`,
+  label: 'watchlist',
+  defaultLeadDays: () => DEFAULT_WATCHLIST_LEAD_DAYS,
+  buildSendKey: buildWatchlistSendKey,
+  toEventType: (kind) => `watchlist_${kind}`,
+  holidayAware: false,
+};
+
+/** 想看清单发布提醒（task 157）：复用同一引擎，send key 带 `watchlist:` 前缀。 */
+export async function sendWatchlistReminders(now: Date = getSyncedNow(DEFAULT_SYNC_TIMEZONE)): Promise<{
+  candidates: number;
+  sent: number;
+  claimed: number;
+  skipped: number;
+}> {
+  return runDatedReminderIterator(WATCHLIST_SOURCE, now);
+}
 
 /**
  * 本次派发是否至少有一个渠道明确成功。
@@ -792,7 +838,7 @@ export async function sendCadenceReminders(
       const tag = typeof raw.relationship === 'string' && raw.relationship.trim() ? raw.relationship.trim() : '';
       const summary =
         typeof raw.last_interaction_summary === 'string' && raw.last_interaction_summary.trim()
-          ? raw.last_interaction_summary.trim()
+          ? decryptFieldValue(raw.last_interaction_summary.trim()) ?? ''
           : '';
       const customMessage = [
         `🤝 关系维系提醒：${displayName}${tag ? `（${tag}）` : ''}`,
@@ -1606,6 +1652,9 @@ export async function sendReminders() {
     calendar_type: string;
     notification_channels: string[];
     notification_account_ids: any;
+    /** checkbox 168: 生日祝福需要分辨事件类型与联系人链接（缓存 payload 为 SELECT *，迁移落地后含 contact_id） */
+    type?: string;
+    contact_id?: number | null;
     /** v41 家庭档案：提醒时区优先取该档案的 timezone（checkbox 69） */
     profile_id?: number | null;
     targetDate?: Date;
@@ -1795,6 +1844,19 @@ export async function sendReminders() {
   
   log.info({ count: eventsToRemind.length }, 'Events to remind');
 
+  // checkbox 168：生日祝福（发给联系人）与机主提醒彻底解耦。这里只解析、不发送：
+  // 解析结果用于 (1) 给机主提醒附一句显式提示（联系人无邮箱/已删除），(2) 稍后投递祝福。
+  // 解析内部绝不抛出（查询失败 → skip/lookup_failed），机主提醒路径不可能被它影响。
+  const birthdayGreetings = new Map<number, BirthdayGreetingResolution>();
+  for (const event of eventsToRemind.slice(0, 50)) {
+    if (event.type !== 'birthday' || (event.daysUntil ?? 0) !== 0) continue;
+    try {
+      birthdayGreetings.set(event.id, await resolveBirthdayGreeting(event as unknown as BirthdayGreetingEvent));
+    } catch (error) {
+      log.warn({ eventId: event.id, err: error }, 'Birthday greeting resolution failed');
+    }
+  }
+
   for (const event of eventsToRemind.slice(0, 50)) {
     const rawChannels = event.notification_channels;
     const baseChannels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
@@ -1840,11 +1902,15 @@ export async function sendReminders() {
       }
       try {
         // Relationship mapping is handled inside sendNotifications() per-recipient
+        const greeting = birthdayGreetings.get(event.id);
+        const ownerHint = greeting?.action === 'skip' ? greeting.hint : undefined;
         const channelResults = await sendNotifications(event, event.user_id, channels, {
           // 档案级通知路由（checkbox 70）：有路由行时只发该档案的账户，否则全部启用账户
           profileId: event.profile_id,
           // checkbox 78: 仅在节假日/顺延场景附加正文文案（非节假日时与旧行为逐字节一致）
           ...(event.holidayLabel ? { holidayLabel: event.holidayLabel } : {}),
+          // checkbox 168：联系人无邮箱/已删除时，机主提醒照常发送，只附一句提示
+          ...(ownerHint ? { ownerHint } : {}),
         });
         log.info({ eventId: event.id, channelResults }, 'Sent notifications');
         
@@ -1901,6 +1967,19 @@ export async function sendReminders() {
       const skipKey = event.snoozeSendKey
         ?? buildReminderSendKey(today, event.daysUntil ?? 0, event.matchedReminderTime);
       await recordSkippedTrigger(event.id, event.id, event.user_id, skipKey);
+    }
+  }
+
+  // checkbox 168：生日祝福投递。与机主提醒的发送结果完全无关（机主提醒不依赖联系人渠道，
+  // 祝福也不依赖机主提醒是否成功）；每个联系人每年至多一条，claim 去重（重复 tick 只打 debug）。
+  for (const event of eventsToRemind.slice(0, 50)) {
+    const greeting = birthdayGreetings.get(event.id);
+    if (!greeting) continue;
+    const year = getTodayString(now, getEventTimezone(event.user_id, event.profile_id)).slice(0, 4);
+    try {
+      await deliverBirthdayGreeting(event as unknown as BirthdayGreetingEvent, greeting, year);
+    } catch (error) {
+      log.warn({ eventId: event.id, err: error }, 'Birthday greeting delivery failed');
     }
   }
 
@@ -1961,6 +2040,7 @@ export async function sendReminders() {
   // 家庭用药（D3，checkbox 73）：按剂量 scheduled_for 的定时 / 稍后 / 升级提醒
   try {
     await sendMedicationReminders(now);
+  await sendWatchlistReminders(now);
   } catch (error) {
     log.error({ err: error }, 'Medication reminder evaluation failed');
   }

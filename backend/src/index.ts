@@ -118,8 +118,21 @@ import migrationSelfcheckRoutes from './routes/migration-selfcheck.js';
 import aiStatusRoutes from './routes/ai-status.js';
 // task 141: deterministic smart defaults derived from history (no model calls).
 import smartDefaultsRoutes from './routes/smart-defaults.js';
+// tasks 153/154/155: attendance / child-elder care / pet care routes (migration v72).
+import timesheetRoutes from './routes/timesheet.js';
+import careRoutes from './routes/care.js';
+import petsRoutes from './routes/pets.js';
+// tasks 156/157/158: vehicle ledger / watch-read list / household lists (migration v73).
+import vehiclesRoutes from './routes/vehicles.js';
+import watchlistRoutes from './routes/watchlist.js';
+import inventoryListRoutes from './routes/inventory-list.js';
+// tasks 159/160: external calendar sync + single-owner collaboration invites (migration v74).
+import calendarSyncRoutes from './routes/calendar-sync.js';
+import collaborationRoutes from './routes/collaboration.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
 import { ensureVercelReady } from './vercel-init.js';
+// task 161: field-level encryption migration (mirrors the Vercel cold-start bootstrap).
+import { migrateFieldEncryption } from './services/field-encryption.service.js';
 
 const log = createLogger('bootstrap');
 
@@ -286,6 +299,17 @@ app.route('/api/remote-backup', remoteBackupRoutes);
 app.route('/api/ai-status', aiStatusRoutes);
 // task 141: smart defaults from history.
 app.route('/api/smart-defaults', smartDefaultsRoutes);
+// tasks 153/154/155: attendance, care and pets.
+app.route('/api/timesheet', timesheetRoutes);
+app.route('/api/care', careRoutes);
+app.route('/api/pets', petsRoutes);
+// tasks 156/157/158: vehicles, watch/read list and household lists.
+app.route('/api/vehicles', vehiclesRoutes);
+app.route('/api/watchlist', watchlistRoutes);
+app.route('/api/inventory-list', inventoryListRoutes);
+// tasks 159/160: two-way calendar sync and family collaboration.
+app.route('/api/calendar-sync', calendarSyncRoutes);
+app.route('/api/collaboration', collaborationRoutes);
 // todo 88: also expose the canonical `/share/:token` server-rendered meta document at the app
 // root so it resolves locally and in tests. On Vercel this path is owned by the SPA rewrite in
 // vercel.json (`/((?!api/|.*\\..*).*)` -> /index.html), so the OG image (`/api/og/image/:token`)
@@ -387,6 +411,9 @@ async function bootstrap() {
 
   // 2.5 迁移旧密钥加密的数据到新密钥
   await migrateEncryptionKey();
+
+  // 2.6 字段级加密迁移（task 161；与 Vercel 冷启动 vercel-init.ts 保持一致）
+  await migrateFieldEncryption();
 
   // 3. 初始化管理员用户
   const userResult = await query('SELECT id FROM users LIMIT 1');

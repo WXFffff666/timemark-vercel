@@ -1,5 +1,6 @@
 import { query } from '../db/index.js';
 import { computeNextDueAt, computeNextDueUsage, toYmdString } from '@timemark/shared';
+import { decryptFieldValue, encryptFieldValue } from './field-encryption.service.js';
 import type {
   CreateMaintenancePlanInput,
   RecordMaintenanceLogInput,
@@ -88,7 +89,8 @@ export function serializeMaintenancePlan(row: RawRow): MaintenancePlan {
     last_done_at: toYmdString(row.last_done_at),
     next_due_at: toYmdString(row.next_due_at),
     next_due_usage: toNumberOrNull(row.next_due_usage),
-    notes: row.notes == null ? null : String(row.notes),
+    // Task 161: notes are encrypted at rest; decrypt failures degrade to a placeholder.
+    notes: decryptFieldValue(row.notes),
     reminder_config: parseReminderConfig(row.reminder_config),
     is_active: row.is_active !== false,
     created_at: toIsoOrNull(row.created_at),
@@ -103,7 +105,7 @@ export function serializeMaintenanceLog(row: RawRow): MaintenanceLogEntry {
     done_at: toYmdString(row.done_at),
     usage_at: toNumberOrNull(row.usage_at),
     cost_cents: toNumberOrNull(row.cost_cents),
-    notes: row.notes == null ? null : String(row.notes),
+    notes: decryptFieldValue(row.notes),
     created_at: toIsoOrNull(row.created_at),
   };
 }
@@ -183,7 +185,7 @@ export async function createMaintenancePlan(
       input.lastDoneAt ?? null,
       input.nextDueAt ?? null,
       input.nextDueUsage ?? null,
-      input.notes ?? null,
+      encryptFieldValue(input.notes ?? null),
       input.reminderConfig ? JSON.stringify(input.reminderConfig) : null,
       input.isActive ?? true,
     ],
@@ -233,7 +235,7 @@ export async function updateMaintenancePlan(
   if (patch.lastDoneAt !== undefined) push('last_done_at', patch.lastDoneAt ?? null);
   if (patch.nextDueAt !== undefined) push('next_due_at', patch.nextDueAt ?? null);
   if (patch.nextDueUsage !== undefined) push('next_due_usage', patch.nextDueUsage ?? null);
-  if (patch.notes !== undefined) push('notes', patch.notes ?? null);
+  if (patch.notes !== undefined) push('notes', encryptFieldValue(patch.notes ?? null));
   if (patch.reminderConfig !== undefined) {
     push('reminder_config', patch.reminderConfig ? JSON.stringify(patch.reminderConfig) : null);
   }
@@ -329,7 +331,7 @@ export async function recordMaintenanceLog(
   const log = await query(
     `INSERT INTO maintenance_logs (plan_id, done_at, usage_at, cost_cents, notes)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [planId, input.doneAt, input.usageAt ?? null, input.costCents ?? null, input.notes ?? null],
+    [planId, input.doneAt, input.usageAt ?? null, input.costCents ?? null, encryptFieldValue(input.notes ?? null)],
   );
 
   return {

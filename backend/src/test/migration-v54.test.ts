@@ -89,7 +89,7 @@ describe('migration v54 registration (checkbox 112)', () => {
     expect(callsMatching('agent_jobs')).toHaveLength(0);
     expect(callsMatching('agent_routines')).toHaveLength(0);
     // v55 (checkbox 101) is the tail after v54; applying on a recorded 54 runs only v55.
-    expect(versionInserts()).toEqual([55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71]);
+    expect(versionInserts()).toEqual([55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75]);
   });
 
   it('does not record v54 when its SQL fails, so a later cold start retries', async () => {
@@ -105,7 +105,7 @@ describe('migration v54 registration (checkbox 112)', () => {
     const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
     expect(versions.filter((v) => v === 54)).toHaveLength(1);
     expect(versions.indexOf(54)).toBe(versions.indexOf(53) + 1);
-    expect(versions[versions.length - 1]).toBe(71);
+    expect(versions[versions.length - 1]).toBe(75);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }
