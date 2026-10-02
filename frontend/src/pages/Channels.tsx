@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { normalizeEmail, SMTP_PROVIDER_PRESETS, applySmtpProviderToForm, getSmtpProviderPreset, inferSmtpProviderId, inferSmtpEncryption } from '@timemark/shared';
 import { Button } from '@/components/ui/button';
@@ -58,7 +58,11 @@ export default function Channels() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [templates, setTemplates] = useState<CloudChannelTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
+  // 首屏才出骨架；保存/测试/删除后的刷新保留旧内容，不再整页转圈。
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  // 单飞句柄：并发的 fetchData 复用同一次请求（连点保存/测试不会重复打接口）。
+  const inflightRef = useRef<Promise<void> | null>(null);
   const [activeTab, setActiveTab] = useState<ConfigMethod>('webhook');
   
   // Modal navigation state - track the flow: list -> template -> config -> qr
@@ -85,24 +89,41 @@ export default function Channels() {
   const [testingAll, setTestingAll] = useState(false);
 
   useEffect(() => {
-    fetchData();
+    fetchData({ initial: true });
   }, []);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      setTemplates(await fetchChannelTemplates({ refresh: true }));
+  /**
+   * 拉取目录 + 账户。
+   *
+   * 之前有三个问题：两次请求串行（目录拿到才发账户）、每次都 `refresh: true` 把目录缓存
+   * 彻底废掉、以及每次刷新都 setLoading(true) 让整页转圈——保存一次账户屏幕就白转一下。
+   * 现在：两个请求并行；目录只在首屏强制刷新一次（会话内不变）；并发调用共享同一次请求。
+   */
+  const fetchData = async (options: { initial?: boolean } = {}): Promise<void> => {
+    if (inflightRef.current) return inflightRef.current;
 
-      // Fetch accounts - api already returns data.data, so result is Account[]
-      const accountsRes = await api.get<Account[]>('/config/accounts');
-      if (accountsRes) {
-        setAccounts(accountsRes);
+    const run = (async () => {
+      if (options.initial) setInitialLoading(true);
+      try {
+        const [templatesRes, accountsRes] = await Promise.all([
+          fetchChannelTemplates({ refresh: options.initial === true }),
+          api.get<Account[]>('/config/accounts'),
+        ]);
+        setTemplates(templatesRes);
+        setAccounts(accountsRes ?? []);
+        setLoadFailed(false);
+      } catch (error) {
+        // 拉取失败不能显示成"你还没有配置渠道"——那是误导，要说出来。
+        console.error('Failed to fetch data:', error);
+        setLoadFailed(true);
+      } finally {
+        if (options.initial) setInitialLoading(false);
+        inflightRef.current = null;
       }
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-    } finally {
-      setLoading(false);
-    }
+    })();
+
+    inflightRef.current = run;
+    return run;
   };
 
   // Test a single account and update status
@@ -532,6 +553,7 @@ export default function Channels() {
             <Switch
               checked={account.is_active !== false}
               onCheckedChange={() => toggleAccount(account)}
+              aria-label={`启用或停用渠道账户 ${account.name}`}
             />
           </div>
 
@@ -628,9 +650,28 @@ export default function Channels() {
           </button>
           。
         </p>
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+        {initialLoading ? (
+          // 局部骨架：只在首屏出现，且形状与真实账户卡片一致，页面框架与说明文字不消失
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" aria-busy="true" aria-label="正在加载通知渠道">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="glass-panel rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10 animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-slate-200/60 dark:bg-slate-700/50" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-28 rounded-full bg-slate-200/60 dark:bg-slate-700/50" />
+                    <div className="h-3 w-20 rounded-full bg-slate-200/60 dark:bg-slate-700/50" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : loadFailed ? (
+          // 拉取失败不是"你没有配置渠道"，要如实说出来并给重试
+          <div className="glass-panel rounded-[2rem] p-10 text-center ring-1 ring-black/5 dark:ring-white/10">
+            <AlertCircle size={40} className="mx-auto text-amber-500 mb-3" />
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">渠道加载失败</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">没能取回通知渠道与账户，请检查网络后重试。</p>
+            <Button variant="outline" onClick={() => fetchData({ initial: true })}>重试</Button>
           </div>
         ) : (
           <>
