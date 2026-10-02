@@ -1,5 +1,7 @@
+/// <reference types="node" />
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import indexPayload from '../../public/search-index.json';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   loadStaticSearchIndex,
   resetStaticSearchIndex,
@@ -12,7 +14,10 @@ import {
  * `test` script regenerates frontend/public/search-index.json first, so this
  * also guards that the build-time tokenizer and the client tokenizer agree.
  */
-const indexJson = indexPayload as unknown as { meta: { corpora: string[]; documents: number } };
+const indexJson = JSON.parse(
+  // vitest runs with cwd = frontend/, and import.meta.url is http:// under jsdom (not file:)
+  readFileSync(resolve(process.cwd(), 'public/search-index.json'), 'utf8'),
+) as { meta: { corpora: string[]; documents: number } };
 
 function stubFetchOk(): ReturnType<typeof vi.fn> {
   const mock = vi.fn(async () => ({ ok: true, json: async () => indexJson }));
