@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail, Settings as SettingsIcon, Link2, Copy, RefreshCw, Plus, Trash2, GitBranch, Languages, Sparkles } from 'lucide-react';
+import { User, Shield, Bell, HardDrive, Smartphone, ChevronRight, ArrowLeft, LogOut, Camera, CalendarClock, Globe, Mail, Settings as SettingsIcon, Link2, Copy, RefreshCw, Plus, Trash2, GitBranch, Languages, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/lib/api';
+import { maskCredentialInUrl } from '@/lib/credentials';
 import { getLang, setLang } from '@/i18n';
 import { TIMEZONE_OPTIONS } from '@/lib/timezone-utils';
 import { useTimezone } from '@/components/RealtimeClock';
@@ -57,6 +58,45 @@ interface IcsFeed {
   createdAt: string | null;
   lastAccessAt: string | null;
   revokedAt: string | null;
+}
+
+/** 只读 URL + 复制；默认遮罩令牌，眼睛按钮临时明文。 */
+function SecretUrlField({
+  value,
+  label,
+  onCopy,
+}: {
+  value: string | null;
+  label: string;
+  onCopy: (value: string) => void;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <div className="flex gap-2">
+      <Input
+        readOnly
+        value={value ? (revealed ? value : maskCredentialInUrl(value)) : '加载中...'}
+        className="font-mono text-xs"
+        aria-label={label}
+      />
+      {value && (
+        <>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setRevealed((prev) => !prev)}
+            aria-label={revealed ? `隐藏${label}` : `显示${label}`}
+            aria-pressed={revealed}
+          >
+            {revealed ? <EyeOff size={16} /> : <Eye size={16} />}
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => onCopy(value)} aria-label={`复制${label}`}>
+            <Copy size={16} />
+          </Button>
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function Settings() {
@@ -871,47 +911,38 @@ export default function Settings() {
 
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">收件箱接收 URL</label>
-                <div className="flex gap-2">
-                  <Input readOnly value={inboxReceiveUrl || '加载中...'} className="font-mono text-xs" aria-label="收件箱接收 URL" />
-                  {inboxReceiveUrl && (
-                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(inboxReceiveUrl, '收件箱接收 URL')} aria-label="复制收件箱接收 URL">
-                      <Copy size={16} />
-                    </Button>
-                  )}
-                </div>
+                <SecretUrlField
+                  value={inboxReceiveUrl}
+                  label="收件箱接收 URL"
+                  onCopy={(v) => copyToClipboard(v, '收件箱接收 URL')}
+                />
                 <p className="text-xs text-slate-400 mt-1">POST JSON: {"{ title, body, sender? }"}；可配置 X-Timemark-Signature 签名</p>
               </div>
 
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">Webhook 入站 URL</label>
-                <div className="flex gap-2">
-                  <Input readOnly value={webhookUrl || '加载中...'} className="font-mono text-xs" aria-label="Webhook 入站 URL" />
-                  {webhookUrl && (
-                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(webhookUrl, 'Webhook URL')} aria-label="复制 Webhook 入站 URL">
-                      <Copy size={16} />
-                    </Button>
-                  )}
-                </div>
+                <SecretUrlField
+                  value={webhookUrl}
+                  label="Webhook 入站 URL"
+                  onCopy={(v) => copyToClipboard(v, 'Webhook URL')}
+                />
                 <p className="text-xs text-slate-400 mt-1">POST JSON: {"{ name, date, type? }"}</p>
               </div>
 
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">日历 Feed URL（ICS）</label>
-                <div className="flex gap-2">
-                  <Input readOnly value={calendarFeedUrl || '加载中...'} className="font-mono text-xs" aria-label="日历 Feed URL（ICS）" />
-                  {calendarFeedUrl && (
-                    <Button variant="outline" size="icon" onClick={() => copyToClipboard(calendarFeedUrl, '日历 Feed URL')} aria-label="复制日历 Feed URL">
-                      <Copy size={16} />
-                    </Button>
-                  )}
-                </div>
+                <SecretUrlField
+                  value={calendarFeedUrl}
+                  label="日历 Feed URL（ICS）"
+                  onCopy={(v) => copyToClipboard(v, '日历 Feed URL')}
+                />
                 <p className="text-xs text-slate-400 mt-1">在 Google Calendar / Outlook 中添加「通过 URL 订阅」</p>
                 {calendarFeedTokens.length > 0 && (
                   <ul className="mt-2 space-y-1 text-xs font-mono">
                     {calendarFeedTokens.map((t) => (
                       <li key={t.url} className="flex gap-2 items-center">
                         <span className="text-slate-500 shrink-0">{t.name}:</span>
-                        <span className="truncate">{t.url}</span>
+                        <span className="truncate">{maskCredentialInUrl(t.url)}</span>
                         <Button variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={() => copyToClipboard(t.url, t.name)} aria-label="复制 Feed Token">
                           <Copy size={14} />
                         </Button>
