@@ -6,12 +6,16 @@ import { NAV_GROUPS, NAV_PRIMARY } from '@/lib/nav-groups';
 import { getLang, t } from '@/i18n';
 
 /**
- * 移动端导航。底栏只放 5 个高频入口，其余全部收进「更多」面板并按四组分区。
+ * 应用导航栏。底栏只放 5 个高频入口，其余全部收进「更多」面板并按四组分区。
  *
  * 以前这里是 12 个入口平铺，且另外 8 个已挂载页面（/today /ask /assistant /
  * agent-console /data-health /cron-monitor /lunar-holidays /docker-migration）
  * 一个入口都没有——功能写完了、路由挂上了，用户只能手敲地址。
  * 现在入口由 lib/nav-groups.ts 统一提供，并有测试逐条核对 App.tsx 的受保护路由。
+ *
+ * 组件名沿用 MobileBottomNav，但它现在各断点都渲染：之前是 md:hidden，而页面的
+ * 桌面端没有任何导航，那 8 个页面在桌面端依然只能手敲地址。13/14 个引用它的页面都
+ * 预留了 pb-24 底部空间，所以桌面端也不会压住内容。
  */
 export function MobileBottomNav() {
   const navigate = useNavigate();
@@ -44,7 +48,7 @@ export function MobileBottomNav() {
   return (
     <>
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-white/10 bg-white/80 dark:bg-slate-900/90 backdrop-blur flex justify-around py-2"
+        className="fixed bottom-0 inset-x-0 z-30 border-t border-white/10 bg-white/80 dark:bg-slate-900/90 backdrop-blur flex justify-around py-2 md:justify-center md:gap-2"
         aria-label="主导航"
       >
         {NAV_PRIMARY.map(({ path, icon: Icon, labelKey }) => {
@@ -79,7 +83,7 @@ export function MobileBottomNav() {
 
       {moreOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
           onClick={() => setMoreOpen(false)}
         >
           <div
