@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Bell, CheckCircle2, AlertCircle, Clock, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Bell, CheckCircle2, AlertCircle, Clock, ArrowLeft, RefreshCw, SkipForward } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { readDelivery, realChannelIds, type DeliveryOutcome } from '@timemark/shared';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } as const } };
@@ -13,11 +14,44 @@ interface ReminderLog {
   id: number;
   event_id: number;
   event_name: string;
-  status: 'success' | 'failed';
+  /** 落库只记 success/failed/skipped；部分失败记 success，真实结果看 channel_results */
+  status: 'success' | 'failed' | 'skipped';
   error_message: string | null;
   channel_results: object | string | null;
   created_at: string;
 }
+
+const OUTCOME_STYLE: Record<DeliveryOutcome, { label: string; badge: 'success' | 'destructive' | 'secondary'; icon: typeof CheckCircle2; box: string; text: string }> = {
+  delivered: {
+    label: '成功',
+    badge: 'success',
+    icon: CheckCircle2,
+    box: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 border-emerald-100 dark:border-emerald-800/50',
+    text: 'text-emerald-600 dark:text-emerald-400',
+  },
+  // 部分失败以前显示绿色"成功"并把错误藏起来：3 个渠道到了、1 个没到，用户完全看不到
+  partial: {
+    label: '部分失败',
+    badge: 'secondary',
+    icon: AlertCircle,
+    box: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 border-amber-100 dark:border-amber-800/50',
+    text: 'text-amber-600 dark:text-amber-400',
+  },
+  failed: {
+    label: '失败',
+    badge: 'destructive',
+    icon: AlertCircle,
+    box: 'bg-red-50 dark:bg-red-900/30 text-red-600 border-red-100 dark:border-red-800/50',
+    text: 'text-red-500 dark:text-red-400',
+  },
+  skipped: {
+    label: '已跳过',
+    badge: 'secondary',
+    icon: SkipForward,
+    box: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+    text: 'text-slate-500 dark:text-slate-400',
+  },
+};
 
 export default function Reminders() {
   const navigate = useNavigate();
@@ -68,20 +102,11 @@ export default function Reminders() {
     return channelMap[channel] || channel;
   };
 
-  const formatChannels = (channelResults?: object | string | null) => {
-    if (!channelResults) return '';
-    try {
-      // JSONB columns arrive as a parsed object on the wire; legacy TEXT columns arrive
-      // as a JSON string. Tolerate both (same shape as TriggerLogs.parseChannelResults).
-      const parsed = typeof channelResults === 'string' ? JSON.parse(channelResults) : channelResults;
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return Object.keys(parsed).map(getChannelName).join('、');
-      }
-    } catch {
-      // malformed channel_results → nothing to display
-    }
-    return '';
-  };
+  // JSONB 列在网络上是已解析对象，历史 TEXT 列是 JSON 字符串，两种都交给 realChannelIds
+  // 处理（畸形值返回空列表而不是崩掉）。它同时剔除了 _quiet_hours / _skipped 这类内部
+  // 标记键 —— 把它们当渠道列出来，用户会以为真有这么个通知渠道。
+  const formatChannels = (channelResults?: object | string | null) =>
+    realChannelIds(channelResults).map(getChannelName).join('、');
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
@@ -122,17 +147,28 @@ export default function Reminders() {
           </div>
         ) : (
           <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-4">
-            {reminders.map((r) => (
+            {reminders.map((r) => {
+              const delivery = readDelivery({
+                status: r.status,
+                channelResults: r.channel_results,
+                errorMessage: r.error_message,
+              });
+              const style = OUTCOME_STYLE[delivery.outcome];
+              const Icon = style.icon;
+              // 落库的 error_message 是权威的人读信息（可能比逐渠道原因更完整），
+              // 只有它缺失时才用推导出的逐渠道原因兜底。
+              const detail = r.error_message ?? delivery.reason;
+              return (
               <motion.div key={r.id} variants={itemVariants} className="glass-panel rounded-[2.5rem] p-6 flex items-center justify-between hover:shadow-xl transition-all ring-1 ring-black/5 dark:ring-white/10">
                 <div className="flex items-center gap-5">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner border ${r.status === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 border-emerald-100 dark:border-emerald-800/50' : 'bg-red-50 dark:bg-red-900/30 text-red-600 border-red-100 dark:border-red-800/50'}`}>
-                    {r.status === 'success' ? <CheckCircle2 size={26} /> : <AlertCircle size={26} />}
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner border ${style.box}`}>
+                    <Icon size={26} />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-3">
-                      {r.event_name} 
-                      <Badge variant={r.status === 'success' ? 'success' : 'destructive'} className="scale-90">
-                        {r.status === 'success' ? '成功' : '失败'}
+                      {r.event_name}
+                      <Badge variant={style.badge} className="scale-90">
+                        {style.label}
                       </Badge>
                     </h3>
                     <div className="flex items-center gap-3 mt-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -140,13 +176,21 @@ export default function Reminders() {
                       <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
                       <span>渠道: {formatChannels(r.channel_results)}</span>
                     </div>
-                    {r.error_message && r.status === 'failed' && (
-                      <div className="mt-2 text-sm text-red-500 dark:text-red-400">{r.error_message}</div>
+                    {/* 部分失败也要说清楚：旧代码只在 status==='failed' 时显示错误，
+                        于是"3 个到了 1 个没到"既显示成功又看不到原因。 */}
+                    {delivery.outcome === 'partial' && delivery.delivered.length > 0 && (
+                      <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                        已送达 {delivery.delivered.length} 个，未送达 {delivery.failed.length} 个
+                      </div>
+                    )}
+                    {detail && delivery.outcome !== 'delivered' && (
+                      <div className={`mt-1 text-sm ${style.text}`}>{detail}</div>
                     )}
                   </div>
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
           </motion.div>
         )}
       </main>

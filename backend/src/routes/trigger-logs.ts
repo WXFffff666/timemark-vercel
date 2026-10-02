@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
 import { sendNotifications } from '../services/notifications/index.js';
+import { readDelivery } from '@timemark/shared';
 import type { User } from '@timemark/shared';
 
 const triggerLogs = new Hono<{ Variables: { user: User } }>();
@@ -116,23 +117,24 @@ triggerLogs.post('/:id/retry', async (c) => {
 
     const logEntry = logResult.rows[0];
 
-    if (logEntry.status === 'success') {
+    // 部分失败（3 成功 1 失败）落库时 status='success'，旧代码因此直接 400 把重试挡掉，
+    // 用户既看不到失败也补不了。真实结果从 channel_results 推导。
+    const delivery = readDelivery({
+      status: logEntry.status,
+      channelResults: logEntry.channel_results,
+      errorMessage: logEntry.error_message,
+    });
+
+    if (delivery.outcome === 'delivered') {
       return c.json({ success: false, error: 'Cannot retry a successful notification' }, 400);
     }
 
-    // Determine which channels to retry from error_details or channel_results
-    let channelsToRetry: string[] = [];
-    
-    if (logEntry.channel_type) {
-      channelsToRetry = logEntry.channel_type.split(',').map((s: string) => s.trim());
-    } else if (logEntry.channel_results) {
-      try {
-        const results = JSON.parse(logEntry.channel_results);
-        channelsToRetry = Object.entries(results)
-          .filter(([, r]: [string, any]) => !r.success)
-          .map(([ch]) => ch);
-      } catch { /* ignore parse error */ }
-    }
+    // 重试只补真实失败渠道：_quiet_hours / _skipped 是内部标记，补发它们没有意义。
+    // channel_results 是 JSONB，pg 已解析成对象（历史 TEXT 列才是字符串），交给 readDelivery
+    // 两种形状都能处理——旧代码对对象做 JSON.parse 会抛异常并被静默吞掉。
+    const channelsToRetry: string[] = logEntry.channel_type
+      ? logEntry.channel_type.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : delivery.failed;
 
     if (channelsToRetry.length === 0) {
       return c.json({ success: false, error: 'No failed channels to retry' }, 400);

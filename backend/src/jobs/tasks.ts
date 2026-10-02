@@ -47,6 +47,7 @@ import {
   buildDoseEscalationKey,
   buildDoseReminderKey,
   isWithinMinutes,
+  readDelivery,
 } from '@timemark/shared';
 import { sendNotifications, isInQuietHours } from '../services/notifications/index.js';
 import { createInboxMessage } from '../services/inbox.service.js';
@@ -1914,16 +1915,21 @@ export async function sendReminders() {
         });
         log.info({ eventId: event.id, channelResults }, 'Sent notifications');
         
-        // Determine overall status from per-channel results
-        const hasFailure = Object.values(channelResults).some(r => !r.success);
-        const allFailed = Object.values(channelResults).every(r => !r.success);
-        const status = allFailed && Object.keys(channelResults).length > 0 ? 'failed' : 'success';
-        const errorMessage = hasFailure
-          ? Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => `${ch}: ${r.error}`).join('; ')
-          : undefined;
-        
-        // Build error details for failed channels
-        const failedEntries = Object.entries(channelResults).filter(([, r]) => !r.success);
+        // 投递结果只看真实渠道：_quiet_hours / _skipped 是内部标记，不是渠道。
+        // 旧代码把它们算进失败，于是安静时段会写下 error_message="_quiet_hours: quiet_hours"，
+        // error_details.channel_type 也变成这个不存在的渠道。
+        const delivery = readDelivery({ channelResults });
+        // status 仍然只取 success/failed（去重、连续失败计数、清理都按它工作，不新增取值）。
+        // 部分失败记 success：已送达的渠道不能因为另一个渠道失败而被重复投递；真实状态由
+        // channel_results 推导，前端展示与重试接口共用 readDelivery。
+        const status = delivery.outcome === 'delivered' || delivery.outcome === 'partial' ? 'success' : 'failed';
+        const errorMessage = delivery.reason;
+
+        // 只记真实失败渠道（readDelivery 已剔除标记键）
+        const results = channelResults as Record<string, { success?: boolean; error?: string; accountId?: number }>;
+        const failedEntries = delivery.failed
+          .map((channel) => [channel, results[channel]] as const)
+          .filter((entry): entry is readonly [string, { error?: string; accountId?: number }] => !!entry[1]);
         const errorDetails = failedEntries.length > 0 ? {
           channel_type: failedEntries.map(([ch]) => ch).join(','),
           account_id: failedEntries[0][1].accountId,

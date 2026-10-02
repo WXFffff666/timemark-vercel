@@ -27,6 +27,7 @@ export * from './smtp-providers.js';
 export * from './smtp-transport.js';
 export * from './email-compose.js';
 export * from './event-schedule.js';
+export * from './delivery-outcome.js';
 export * from './expiry-schedule.js';
 export * from './document-schedule.js';
 export * from './contact-cadence.js';
