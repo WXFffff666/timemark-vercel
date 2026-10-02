@@ -326,28 +326,28 @@ auth.post('/refresh', async (c) => {
     const refreshToken = body.refreshToken || getRefreshTokenFromCookie(c);
 
     if (!refreshToken) {
-      return c.json({ success: false, error: 'Refresh token is required' }, 400);
+      return c.json({ success: false, error: 'Refresh token is required', code: 'refresh_missing' }, 400);
     }
 
     // Verify refresh token
     const payload = await verifyToken(refreshToken, undefined, 'refresh');
     if (!payload) {
-      return c.json({ success: false, error: 'Invalid or expired refresh token' }, 401);
+      return c.json({ success: false, error: 'Invalid or expired refresh token', code: 'refresh_invalid' }, 401);
     }
 
     if (!payload.sessionToken) {
-      return c.json({ success: false, error: 'Invalid or expired refresh token' }, 401);
+      return c.json({ success: false, error: 'Invalid or expired refresh token', code: 'refresh_invalid' }, 401);
     }
 
     const session = await getSessionByToken(payload.sessionToken);
     if (!session) {
-      return c.json({ success: false, error: 'Session expired or revoked' }, 401);
+      return c.json({ success: false, error: 'Session expired or revoked', code: 'session_revoked' }, 401);
     }
 
     const { getUserById } = await import('../services/auth.service.js');
     const user = await getUserById(payload.userId);
     if (!user) {
-      return c.json({ success: false, error: 'User not found' }, 401);
+      return c.json({ success: false, error: 'User not found', code: 'user_missing' }, 401);
     }
 
     // The mode chosen at login, read back off the signed refresh token. It used to be

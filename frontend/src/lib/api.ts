@@ -33,28 +33,82 @@ const setAccessToken = (token: string) => {
   sessionStorage.setItem('accessToken', token);
 };
 
-async function refreshSession(refreshToken?: string | null): Promise<boolean> {
+/**
+ * Why a refresh failed, kept distinguishable on purpose.
+ *
+ * `ok`         the session is alive
+ * `expired`    the server said this credential is finished (expired / revoked / invalid).
+ *              This is the ONLY outcome that may drop the local session.
+ * `transport`  we never reached the server, or it answered 5xx / 429. The credential's
+ *              validity is unknown, so it is unknown — not invalid. Retrying with backoff
+ *              is correct; logging the user out is not.
+ *
+ * Collapsing these into one boolean is what made users get logged out by a tunnel, a
+ * laptop lid, or a Vercel cold start.
+ */
+export type RefreshOutcome = 'ok' | 'expired' | 'transport';
+
+export class ApiTransportError extends Error {
+  /** Attempts left before we give up and surface the failure to the caller. */
+  readonly retryable = true;
+  constructor(message: string, readonly attempts: number) {
+    super(message);
+    this.name = 'ApiTransportError';
+  }
+}
+
+/** Codes emitted by POST /api/auth/refresh that mean "this session is over". */
+const TERMINAL_REFRESH_CODES = new Set(['refresh_missing', 'refresh_invalid', 'session_revoked', 'user_missing']);
+
+/** Full jitter: sleep a random duration in [0, min(cap, base * 2^attempt)]. */
+const RETRY_BASE_MS = 300;
+const RETRY_CAP_MS = 3000;
+const MAX_TRANSPORT_ATTEMPTS = 2;
+
+function fullJitterDelay(attempt: number): number {
+  const ceiling = Math.min(RETRY_CAP_MS, RETRY_BASE_MS * 2 ** attempt);
+  return Math.random() * ceiling;
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function refreshSession(refreshToken?: string | null): Promise<RefreshOutcome> {
+  let response: Response;
   try {
-    const response = await fetch(`${API_BASE}/auth/refresh`, {
+    response = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(refreshToken ? { refreshToken } : {}),
     });
-    if (!response.ok) return false;
-    const data: ApiResponse<{ accessToken?: string }> = await response.json();
-    if (!data.success) return false;
-    if (data.data?.accessToken && !usesCookieAuth()) {
-      setAccessToken(data.data.accessToken);
-    }
-    return true;
   } catch {
-    return false;
+    // fetch only rejects for transport-level problems: offline, DNS, TLS, CORS, aborted.
+    // The server never spoke, so it never said anything about this session.
+    return 'transport';
   }
+
+  if (response.status >= 500 || response.status === 429) {
+    // A platform or rate-limit failure is not a verdict on the credential either.
+    return 'transport';
+  }
+
+  if (!response.ok) {
+    // Only a known code is a verdict. An unrecognized 4xx (proxy, WAF, gateway, an older
+    // deploy) is unknown — clearing the session on a guess is how people lose a day of work.
+    const data = (await response.json().catch(() => null)) as { code?: string } | null;
+    return data?.code && TERMINAL_REFRESH_CODES.has(data.code) ? 'expired' : 'transport';
+  }
+
+  const data = (await response.json().catch(() => null)) as ApiResponse<{ accessToken?: string }> | null;
+  if (!data?.success) return 'transport';
+  if (data.data?.accessToken && !usesCookieAuth()) {
+    setAccessToken(data.data.accessToken);
+  }
+  return 'ok';
 }
 
-let isRefreshing = false;
-let refreshPromise: Promise<boolean> | null = null;
+// Single-flight handle: one in-flight refresh shared by every concurrent 401.
+let refreshPromise: Promise<RefreshOutcome> | null = null;
 
 async function request<T>(url: string, options?: RequestInit, retryCount = 0): Promise<T> {
   const { accessToken, refreshToken } = getTokens();
@@ -66,29 +120,51 @@ async function request<T>(url: string, options?: RequestInit, retryCount = 0): P
     ...options?.headers,
   };
 
-  const response = await fetch(`${API_BASE}${url}`, { ...options, headers, credentials: 'include' });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${url}`, { ...options, headers, credentials: 'include' });
+  } catch (error) {
+    // A dead network says nothing about the session. Surface it as retryable and keep
+    // every credential intact — the old code treated this identically to an invalid token.
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    if (retryCount < MAX_TRANSPORT_ATTEMPTS) {
+      await sleep(fullJitterDelay(retryCount));
+      return request<T>(url, options, retryCount + 1);
+    }
+    throw new ApiTransportError('网络连接失败，请检查网络后重试', MAX_TRANSPORT_ATTEMPTS);
+  }
 
-  if (response.status === 401 && retryCount < 2) {
-    if (retryCount === 0) {
-      if (!isRefreshing) {
-        isRefreshing = true;
-        refreshPromise = refreshSession(refreshToken);
-      }
-      const refreshed = await refreshPromise;
-      isRefreshing = false;
-      refreshPromise = null;
-      if (refreshed) {
-        return request<T>(url, options, 1);
-      }
+  if (response.status === 401 && retryCount === 0) {
+    // Single-flight: concurrent 401s share one refresh. The old code had a race where a
+    // second caller could read `refreshPromise` after it had been nulled, treat the
+    // successful refresh as a failure, and log the user out.
+    if (!refreshPromise) {
+      refreshPromise = refreshSession(refreshToken).finally(() => {
+        refreshPromise = null;
+      });
+    }
+    const outcome = await refreshPromise;
+
+    if (outcome === 'ok') return request<T>(url, options, 1);
+
+    if (outcome === 'transport') {
+      // Unknown, not invalid: one more try with backoff, session kept whatever happens.
+      await sleep(fullJitterDelay(0));
+      return request<T>(url, options, MAX_TRANSPORT_ATTEMPTS);
     }
 
-    if (retryCount <= 1) {
-      clearStaleBearerTokens();
-      return request<T>(url, options, 2);
-    }
-
+    // 'expired': the server explicitly rejected the credential. This is the only path
+    // that ends the session. No blind retry first — a retry here could only 401 again.
+    clearStaleBearerTokens();
     localStorage.removeItem(SESSION_ID_KEY);
-    throw new Error('HTTP 401: 登录已过期，请重新登录');
+    throw new Error('登录已过期，请重新登录');
+  }
+
+  if (response.status === 401) {
+    // A second 401 after a successful refresh means the credential really is dead.
+    clearStaleBearerTokens();
+    localStorage.removeItem(SESSION_ID_KEY);
+    throw new Error('登录已过期，请重新登录');
   }
 
   if (!response.ok) {
