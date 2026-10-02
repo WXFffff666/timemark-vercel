@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+﻿import { Hono } from 'hono';
 import { z } from 'zod';
 import { verifyUserForLogin, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock, getIpBlockStatus, evaluateIpBlock, checkIpWhitelistFromUser, verifyTotpCode, verifyUserPassword } from '../services/auth.service.js';
 import { getClientIp, getClientIpInfo } from '../utils/client-ip.js';
@@ -14,7 +14,16 @@ import { sendSecurityAlert } from '../services/alert.service.js';
 import { ensureLunarHolidayEvents } from '../services/lunar-holidays.js';
 import { hashPassword } from '../utils/password.js';
 import { query } from '../db/index.js';
-import { setAuthCookies, clearAuthCookies, getRefreshTokenFromCookie, getAccessTokenFromCookie, setAccessCookie, setRefreshCookie } from '../utils/auth-cookies.js';
+import {
+  setAuthCookies,
+  clearAuthCookies,
+  getRefreshTokenFromCookie,
+  getAccessTokenFromCookie,
+  setAccessCookie,
+  setRefreshCookie,
+  accessMaxAgeSeconds,
+  refreshMaxAgeSeconds,
+} from '../utils/auth-cookies.js';
 import { loginRateLimit, authMutationRateLimit } from '../middleware/rate-limit.js';
 import { logFireAndForget } from '../utils/logger.js';
 
@@ -141,7 +150,13 @@ auth.post('/login', loginRateLimit, async (c) => {
 
     const numericUserId = parseInt(user.id, 10);
     const { session, accessToken, refreshToken } = await createSession(user.id, deviceFingerprint || '', false, rememberMe);
-    setAuthCookies(c, accessToken, refreshToken, rememberMe);
+    setAuthCookies(
+    c,
+    accessToken,
+    refreshToken,
+    accessMaxAgeSeconds(rememberMe),
+    refreshMaxAgeSeconds(rememberMe, session.expiresAt),
+  );
 
     void Promise.all([
       createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', true, undefined, {
@@ -335,14 +350,21 @@ auth.post('/refresh', async (c) => {
       return c.json({ success: false, error: 'User not found' }, 401);
     }
 
-    const sessionMs = new Date(session.expiresAt).getTime() - Date.now();
-    const rememberMe = sessionMs > 24 * 60 * 60 * 1000;
+    // The mode chosen at login, read back off the signed refresh token. It used to be
+    // re-derived here as `remaining > 24h`, which silently downgraded a 30-day
+    // remembered session to a browser-session cookie once it had under 24h left —
+    // i.e. remember-me users were logged out on browser restart after six days.
+    // A pre-existing refresh token carries no claim; `rememberMe` is then false, the
+    // safe direction (degrade to a session cookie rather than silently extend).
+    const rememberMe = payload.rememberMe === true;
 
     const accessToken = await generateAccessToken(user.id, payload.sessionToken, rememberMe);
-    const newRefreshToken = await generateRefreshToken(user.id, payload.sessionToken);
+    const newRefreshToken = await generateRefreshToken(user.id, payload.sessionToken, rememberMe);
 
-    setAccessCookie(c, accessToken, rememberMe);
-    setRefreshCookie(c, newRefreshToken, rememberMe);
+    // The cookie is capped at the session's own deadline so a browser never holds a
+    // credential the server has already expired.
+    setAccessCookie(c, accessToken, accessMaxAgeSeconds(rememberMe));
+    setRefreshCookie(c, newRefreshToken, refreshMaxAgeSeconds(rememberMe, session.expiresAt));
 
     return c.json({ success: true, data: { user, authMode: 'cookie' } });
   } catch (error: any) {

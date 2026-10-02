@@ -211,7 +211,7 @@ webauthn.post('/login/verify', loginRateLimit, async (c) => {
 
   await createLoginLog(String(user.id), ip, userAgent, '', true);
   const { createSession } = await import('../services/session.service.js');
-  const { setAuthCookies } = await import('../utils/auth-cookies.js');
+  const { setAuthCookies, accessMaxAgeSeconds, refreshMaxAgeSeconds } = await import('../utils/auth-cookies.js');
   const { session, accessToken, refreshToken } = await createSession(String(user.id), '', false, parsed.data.rememberMe);
   await logSecurityEvent({
     userId: user.id,
@@ -221,7 +221,14 @@ webauthn.post('/login/verify', loginRateLimit, async (c) => {
     userAgent: c.req.header('user-agent') || 'unknown',
     metadata: { method: 'passkey' },
   });
-  setAuthCookies(c, accessToken, refreshToken, !!parsed.data.rememberMe);
+  const rememberMe = !!parsed.data.rememberMe;
+  setAuthCookies(
+    c,
+    accessToken,
+    refreshToken,
+    accessMaxAgeSeconds(rememberMe),
+    refreshMaxAgeSeconds(rememberMe, session.expiresAt),
+  );
   return c.json({ success: true, data: { user: { id: String(user.id), username: user.username }, sessionId: session.id } });
 });
 

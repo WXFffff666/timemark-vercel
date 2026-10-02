@@ -1,4 +1,5 @@
 import { sign, verify } from 'hono/jwt';
+import { SESSION_TTL } from './session-ttl.js';
 
 const DEFAULT_JWT_SECRET = 'change-this-secret-in-production';
 const DEV_ONLY_SECRET = DEFAULT_JWT_SECRET;
@@ -31,6 +32,14 @@ export interface TokenPayload {
   sessionToken?: string;
   /** Absent on tokens minted before this claim existed; see verifyToken(). */
   typ?: TokenType;
+  /**
+   * Whether the session was created with "stay signed in". Carried on the refresh
+   * token so `/refresh` reads the mode instead of re-deriving it from the remaining
+   * lifetime — that re-derivation silently downgraded a 30-day session once it had
+   * under 24h left. Absent on pre-existing tokens; treated as `false` (the safe
+   * direction: degrade to a session cookie rather than silently extend).
+   */
+  rememberMe?: boolean;
 }
 
 export async function generateAccessToken(
@@ -39,7 +48,7 @@ export async function generateAccessToken(
   rememberMe: boolean = false,
   secret?: string,
 ): Promise<string> {
-  const expiresIn = rememberMe ? 60 * 60 : 15 * 60;
+  const expiresIn = rememberMe ? SESSION_TTL.accessRememberSeconds : SESSION_TTL.accessShortSeconds;
   const payload: Record<string, unknown> = {
     userId,
     typ: 'access',
@@ -49,11 +58,17 @@ export async function generateAccessToken(
   return sign(payload, resolveJwtSecret(secret));
 }
 
-export async function generateRefreshToken(userId: string, sessionToken?: string, secret?: string): Promise<string> {
+export async function generateRefreshToken(
+  userId: string,
+  sessionToken?: string,
+  rememberMe: boolean = false,
+  secret?: string,
+): Promise<string> {
   const payload: Record<string, unknown> = {
     userId,
     typ: 'refresh',
-    exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+    rememberMe,
+    exp: Math.floor(Date.now() / 1000) + SESSION_TTL.refreshCookieSeconds,
   };
   if (sessionToken) payload.sessionToken = sessionToken;
   return sign(payload, resolveJwtSecret(secret));
@@ -76,6 +91,8 @@ export async function verifyToken(
     return {
       userId: payload.userId as string,
       sessionToken: payload.sessionToken as string | undefined,
+      typ: payload.typ as TokenType | undefined,
+      rememberMe: payload.rememberMe === true,
     };
   } catch {
     return null;

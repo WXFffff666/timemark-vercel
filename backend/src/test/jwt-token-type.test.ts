@@ -68,7 +68,7 @@ describe('jwt token type claim', () => {
   });
 
   it('rejects a token signed with a different secret', async () => {
-    const foreign = await generateRefreshToken(USER_ID, 'sess-1', OTHER_SECRET);
+    const foreign = await generateRefreshToken(USER_ID, 'sess-1', false, OTHER_SECRET);
     expect(await verifyToken(foreign, undefined, 'refresh')).toBeNull();
     expect(await verifyToken(foreign, undefined, 'access')).toBeNull();
   });

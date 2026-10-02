@@ -1,12 +1,13 @@
 import { query } from '../db/index.js';
 import { randomUUID } from 'crypto';
 import type { Session } from '@timemark/shared';
+import { SESSION_TTL } from '../utils/session-ttl.js';
 
 export async function createSession(userId: string, deviceFingerprint: string, isTrusted: boolean, rememberMe: boolean = false): Promise<{ session: Session; accessToken: string; refreshToken: string }> {
   const { generateAccessToken, generateRefreshToken } = await import('../utils/jwt.js');
   
   const token = randomUUID();
-  const expiresIn = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
+  const expiresIn = (rememberMe ? SESSION_TTL.sessionRememberSeconds : SESSION_TTL.sessionShortSeconds) * 1000;
   const expiresAt = new Date(Date.now() + expiresIn).toISOString();
 
   // Convert userId string to integer for database
@@ -22,7 +23,9 @@ export async function createSession(userId: string, deviceFingerprint: string, i
 
   const id = result.rows[0].id;
   const accessToken = await generateAccessToken(userId, token, rememberMe);
-  const refreshToken = await generateRefreshToken(userId, token);
+  // rememberMe travels on the refresh token so /refresh can read it back instead of
+  // re-deriving the mode from the remaining lifetime (which downgraded long sessions).
+  const refreshToken = await generateRefreshToken(userId, token, rememberMe);
 
   return {
     session: { id, userId, token, deviceFingerprint, isTrusted, expiresAt },
@@ -32,8 +35,13 @@ export async function createSession(userId: string, deviceFingerprint: string, i
 }
 
 export async function getSessionByToken(token: string): Promise<Session | null> {
+  // Absolute deadline only: `expires_at` is written once at creation and never
+  // extended, so a refresh never slides the session. There is deliberately no idle
+  // timeout yet — `sessions` has no `last_active_at` column. OWASP asks for both an
+  // idle and an absolute timeout; adding idle needs that column plus renewal capped
+  // by SESSION_TTL, i.e. a migration. Do not mistake this for an oversight.
   const result = await query(
-    "SELECT * FROM sessions WHERE token = $1 AND expires_at > NOW()", 
+    "SELECT * FROM sessions WHERE token = $1 AND expires_at > NOW()",
     [token]
   );
   if (result.rows.length === 0) return null;
