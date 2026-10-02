@@ -149,8 +149,13 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 | 🌤️ 黄历 / 天气 / 包裹 | 进阶黄历（附免责声明）、Open-Meteo 天气与空气质量、包裹跟踪 |
 | 🚗 工时 / 照护 / 车辆 / 清单 | 考勤工时、儿童 / 长者 / 宠物照护、车辆油耗与保养、观影 / 阅读清单 |
 
-> ⚠️ **已实现但尚未接线**：考勤 / 照护 / 宠物 / 车辆 / 清单 / 家庭库存 / 双向日历同步 / 家庭协作的后端模块已存在，但尚未挂载到 `backend/src/index.ts`，当前部署**不可达**。
-> 另有**未实现**项：字段级加密（161）、联系人生日祝福（168）、Wave 19 端到端验证（170）。详见 [CHANGELOG.md](CHANGELOG.md) 的 v2.22.0 条目。
+> ⚠️ **后端已挂载，前端缺页面**：照护 / 宠物 / 车辆 / 观影清单 / 双向日历同步 / 家庭协作的 API
+> **已经挂载**在 `backend/src/index.ts`（`/api/care`、`/api/pets`、`/api/vehicles`、
+> `/api/watchlist`、`/api/calendar-sync`、`/api/collaboration`），可直接调用；真正缺的是
+> **前端页面与导航入口**，界面上暂时无法使用。（考勤工时与家庭库存则确实尚未挂载。）
+> 字段级加密（161）与联系人生日祝福（168）**已实现**
+> （`backend/src/services/field-encryption.service.ts`、`birthday-greeting.service.ts`）。
+> 仍未完成的是 Wave 19 端到端验证（170）。详见 [CHANGELOG.md](CHANGELOG.md) 的 v2.22.0 条目。
 
 ---
 
