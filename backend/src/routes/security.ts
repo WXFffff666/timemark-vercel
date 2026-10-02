@@ -11,6 +11,7 @@ import type { User } from '@timemark/shared';
 import { isTurnstileEnabled } from '../utils/turnstile.js';
 import { getCronSecret } from '../utils/heartbeat.js';
 import { getAccessTokenFromCookie } from '../utils/auth-cookies.js';
+import { readBuildInfo } from '../utils/build-info.js';
 import { computeSchemaHealth, describeSchemaHealth, isSchemaHealthy } from '../services/schema-health.js';
 
 const security = new Hono<{ Variables: { user: User } }>();
@@ -278,12 +279,14 @@ security.get('/deploy-info', async (c) => {
     passwordChangedAt = null;
   }
 
+  const build = readBuildInfo();
+
   return c.json({
     success: true,
     data: {
-      version: process.env.npm_package_version || '2.16.0',
-      platform: process.env.VERCEL ? 'vercel' : 'local',
-      vercelUrl: process.env.VERCEL_URL || null,
+      version: build.version,
+      platform: build.platform,
+      vercelUrl: build.vercelUrl,
       turnstileConfigured,
       cronSecretConfigured,
       jwtConfigured,
@@ -303,11 +306,11 @@ security.get('/deploy-info', async (c) => {
       personalSingleAccount: true,
       sessionTokensAutoRotate: true,
       envSecretsRequireManualRotation: false,
-      // Misnamed for years: this has always been the commit SHA, not a build time.
-      // The real deploy time is injected by scripts/build-vercel-api.mjs as
-      // __BUILD_TIME__; fall back to null on a local run.
-      commitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
-      buildTime: process.env.__BUILD_TIME__ || null,
+      // Both are frozen into the bundle by scripts/build-vercel-api.mjs; the host env is
+      // only a fallback for a local run. This field was named buildTime for years while
+      // carrying the commit SHA.
+      commitSha: build.commitSha,
+      buildTime: build.buildTime,
       envChecks: [
         {
           id: 'database',
