@@ -131,12 +131,23 @@ self.addEventListener('push', (event) => {
       const title = String(payload.title || 'TimeMark');
       const body = String(payload.body || '');
       const target = sanitizeNotificationUrl(payload.url);
+      // 动作按钮必须原样传给浏览器，否则后端发的 actions 在这里就被丢掉了。
+      // 只保留白名单字段：渲染的是浏览器原生按钮，不做任何 HTML/URL 拼接。
+      const actions = Array.isArray(payload.actions)
+        ? payload.actions
+            .filter((a) => a && typeof a.action === 'string' && typeof a.title === 'string')
+            .slice(0, 2)
+            .map((a) => ({ action: a.action.slice(0, 64), title: a.title.slice(0, 40) }))
+        : [];
+      const eventId = Number(payload.eventId);
       await self.registration.showNotification(title, {
         body,
         icon: typeof payload.icon === 'string' ? payload.icon : '/favicon.svg',
         badge: typeof payload.badge === 'string' ? payload.badge : '/favicon.svg',
         tag: typeof payload.tag === 'string' ? payload.tag : 'timemark',
-        data: { url: target },
+        ...(actions.length > 0 ? { actions } : {}),
+        // eventId 一并带上：动作按钮要拿它调 HTTP 端点，不能靠解析 url。
+        data: { url: target, eventId: Number.isInteger(eventId) && eventId > 0 ? eventId : null },
       });
       await notifyClients({ ...payload, title, body, url: target });
     })(),
@@ -178,9 +189,75 @@ async function handleNotificationClick(data) {
   await self.clients.openWindow(url);
 }
 
+/**
+ * 「延后」动作按钮。
+ *
+ * 与网页不同，通知动作发生在没有 DOM、没有 React 的 Service Worker 里：没有 api() 封装，
+ * 也没有登录态可用。凭证只能从同源 localStorage 取（应用登录时就写在 `accessToken`）。
+ * 取不到就如实告诉用户「请打开应用」，绝不能假装延后成功——那会让用户以为提醒被推走了。
+ */
+async function handleSnoozeAction(eventId) {
+  const id = Number(eventId);
+  let token = null;
+  try {
+    token =
+      self.localStorage.getItem('accessToken') ||
+      self.sessionStorage.getItem('accessToken');
+  } catch {
+    token = null;
+  }
+
+  const feedback = (body) =>
+    self.registration.showNotification('TimeMark', {
+      body,
+      icon: '/favicon.svg',
+      badge: '/favicon.svg',
+      tag: 'timemark-snooze',
+      data: { url: self.location.origin + '/reminders' },
+    });
+
+  if (!Number.isInteger(id) || id <= 0) {
+    await feedback('无法识别是哪条提醒，请打开应用查看');
+    return;
+  }
+  if (!token) {
+    await feedback('请先登录 TimeMark 后再使用此按钮');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${self.location.origin}/api/events/${id}/snooze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ minutes: 10 }),
+    });
+    if (response.ok) {
+      await feedback('已延后 10 分钟');
+      return;
+    }
+    // 401/403：凭证过期或失效，提示重新登录而不是泛化成网络错误
+    if (response.status === 401 || response.status === 403) {
+      await feedback('登录已失效，请重新登录后再试');
+      return;
+    }
+    await feedback('延后失败，请打开应用重试');
+  } catch {
+    await feedback('网络不可用，延后未生效');
+  }
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(handleNotificationClick(event.notification.data || {}));
+  const data = event.notification.data || {};
+  // 按下按钮：就地执行动作，不打开页面（用户已经看过了）
+  if (event.action === 'snooze') {
+    event.waitUntil(handleSnoozeAction(data.eventId));
+    return;
+  }
+  event.waitUntil(handleNotificationClick(data));
 });
 
 self.addEventListener('message', (event) => {

@@ -270,6 +270,46 @@ events.post('/:id/test-send', async (c) => {
   }
 });
 
+/**
+ * Web Push 通知上的「延后」动作（见 services/notifications/webpush.service.ts 的 actions）。
+ *
+ * 复用 bot 的 snoozeTodo，而不是在这里重写 UPDATE：snoozed_until 的语义（从请求时刻起算、
+ * 不动 date/next_occurrence、刷新 cron 缓存）只有那一个实现知道，抄一份必然漂移。
+ * bot 的 /snooze 命令与这个 HTTP 端点因此永远一致。
+ */
+events.post('/:id/snooze', async (c) => {
+  const user = c.get('user');
+  const eventId = Number(c.req.param('id'));
+  if (!Number.isInteger(eventId) || eventId <= 0) {
+    return c.json({ success: false, error: 'Invalid event id' }, 400);
+  }
+
+  let minutes = 10;
+  try {
+    const body = await c.req.json();
+    // 只接受一个有限的档位：通知按钮是固定文案，不该由请求体决定延后多久。
+    if (body && Number.isInteger(body.minutes)) minutes = Number(body.minutes);
+  } catch {
+    // 没有 body 就用默认 10 分钟（通知上那个按钮的语义）
+  }
+  if (![10, 60, 1440].includes(minutes)) {
+    return c.json({ success: false, error: 'Unsupported snooze duration' }, 400);
+  }
+
+  try {
+    const { defaultBotDataProvider } = await import('../services/bot/bot-data.service.js');
+    const result = await defaultBotDataProvider.snoozeTodo(Number(user.id), eventId, minutes);
+    if (result.status === 'not_found') {
+      // 不泄露别人的事件是否存在
+      return c.json({ success: false, error: 'Event not found' }, 404);
+    }
+    return c.json({ success: true, data: { snoozedUntil: result.snoozedUntil, localTime: result.localTime } });
+  } catch (error) {
+    console.error('[snooze] Error:', error);
+    return c.json({ success: false, error: 'Failed to snooze reminder' }, 500);
+  }
+});
+
 events.put('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');

@@ -34,6 +34,15 @@ export interface StoredPushSubscription {
   keys_auth: string | null;
 }
 
+/**
+ * A button rendered on the notification itself. The browser only renders `action` +
+ * `title`; `data` is ours and reaches the service worker via notification.data.
+ */
+export interface WebPushAction {
+  action: string;
+  title: string;
+}
+
 export interface WebPushPayload {
   title: string;
   body: string;
@@ -41,6 +50,10 @@ export interface WebPushPayload {
   icon: string;
   badge: string;
   tag: string;
+  /** 事件 id，供通知上的动作按钮调用 HTTP 端点；认不出事件时省略 */
+  eventId?: number;
+  /** Optional in-app buttons; absent when the event has no id to act on. */
+  actions?: WebPushAction[];
 }
 
 export interface WebPushDeliveryResult {
@@ -105,13 +118,16 @@ export function buildWebPushPayload(event: Record<string, unknown>): WebPushPayl
   const date = typeof event.date === 'string' ? event.date.slice(0, 10) : '';
   const fallback = [date, typeof event.type === 'string' ? event.type : ''].filter(Boolean).join(' · ');
   const eventId = Number(event.id);
+  const hasEvent = Number.isFinite(eventId) && eventId > 0;
   return {
     title,
     body: message || fallback || '打开 TimeMark 查看详情',
-    url: Number.isFinite(eventId) && eventId > 0 ? `/reminders?event=${eventId}` : '/reminders',
+    url: hasEvent ? `/reminders?event=${eventId}` : '/reminders',
     icon: '/favicon.svg',
     badge: '/favicon.svg',
-    tag: Number.isFinite(eventId) && eventId > 0 ? `timemark-event-${eventId}` : 'timemark',
+tag: hasEvent ? `timemark-event-${eventId}` : 'timemark',
+    // 只有认得出事件才给按钮：没有 id 时 action 无从落地，按下去只会失败。
+    ...(hasEvent ? { eventId, actions: [{ action: 'snooze', title: '延后 10 分钟' }] } : {}),
   };
 }
 
