@@ -24,9 +24,13 @@ export function isSecureSecret(): boolean {
   return !!current && current !== DEFAULT_JWT_SECRET && current.length >= 32;
 }
 
+export type TokenType = 'access' | 'refresh';
+
 export interface TokenPayload {
   userId: string;
   sessionToken?: string;
+  /** Absent on tokens minted before this claim existed; see verifyToken(). */
+  typ?: TokenType;
 }
 
 export async function generateAccessToken(
@@ -38,6 +42,7 @@ export async function generateAccessToken(
   const expiresIn = rememberMe ? 60 * 60 : 15 * 60;
   const payload: Record<string, unknown> = {
     userId,
+    typ: 'access',
     exp: Math.floor(Date.now() / 1000) + expiresIn,
   };
   if (sessionToken) payload.sessionToken = sessionToken;
@@ -47,15 +52,27 @@ export async function generateAccessToken(
 export async function generateRefreshToken(userId: string, sessionToken?: string, secret?: string): Promise<string> {
   const payload: Record<string, unknown> = {
     userId,
+    typ: 'refresh',
     exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
   };
   if (sessionToken) payload.sessionToken = sessionToken;
   return sign(payload, resolveJwtSecret(secret));
 }
 
-export async function verifyToken(token: string, secret?: string): Promise<TokenPayload | null> {
+export async function verifyToken(
+  token: string,
+  secret?: string,
+  expectedType?: TokenType,
+): Promise<TokenPayload | null> {
   try {
     const payload = await verify(token, resolveJwtSecret(secret), 'HS256');
+    if (expectedType) {
+      // A token minted before the typ claim existed carries no typ. Treat it as an access
+      // token only, so already-issued cookies keep working until they expire while a legacy
+      // refresh token is rejected at /refresh and the user simply logs in again.
+      const actualType = payload.typ === undefined ? 'access' : payload.typ;
+      if (actualType !== expectedType) return null;
+    }
     return {
       userId: payload.userId as string,
       sessionToken: payload.sessionToken as string | undefined,

@@ -315,7 +315,7 @@ auth.post('/refresh', async (c) => {
     }
 
     // Verify refresh token
-    const payload = await verifyToken(refreshToken);
+    const payload = await verifyToken(refreshToken, undefined, 'refresh');
     if (!payload) {
       return c.json({ success: false, error: 'Invalid or expired refresh token' }, 401);
     }

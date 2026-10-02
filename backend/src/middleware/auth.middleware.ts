@@ -16,14 +16,14 @@ export async function authMiddleware(c: Context<{ Variables: { user: User } }>, 
   const authHeader = c.req.header('Authorization');
   let token = authHeader?.replace(/^Bearer\s+/i, '').trim() || undefined;
   if (token === '') token = undefined;
-  let payload = token ? await verifyToken(token) : null;
+  let payload = token ? await verifyToken(token, undefined, 'access') : null;
 
   // Bearer 无效或缺失时，回退 HttpOnly Cookie
   if (!payload) {
     const cookieToken = getAccessTokenFromCookie(c);
     if (cookieToken) {
       token = cookieToken;
-      payload = await verifyToken(cookieToken);
+      payload = await verifyToken(cookieToken, undefined, 'access');
     }
   }
 
