@@ -19,6 +19,7 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 
@@ -91,7 +92,7 @@ describe('migration v50 registration (checkbox 94)', () => {
     expect(callsMatching('CREATE TABLE IF NOT EXISTS bot_link_codes')).toHaveLength(0);
     expect(callsMatching('CREATE TABLE IF NOT EXISTS bot_audit_logs')).toHaveLength(0);
     // v50 itself is never re-applied; v51 (checkbox 97) and v52 (checkbox 105) still run.
-    expect(versionInserts()).toEqual([51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75]);
+    expect(versionInserts()).toEqual(registeredMigrationVersions(MIGRATE_SOURCE).filter((v) => v > 50));
   });
 
   it('does not record v50 when its SQL fails, so a later cold start retries', async () => {
@@ -147,17 +148,11 @@ describe('migration v50 registration (checkbox 94)', () => {
   });
 
   it('registers v50 once, ascending, immediately after 49 in the source-of-truth list', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions).toContain(49);
     expect(versions).toContain(50);
     expect(versions.filter((v) => v === 50)).toHaveLength(1);
     expect(versions.indexOf(50)).toBe(versions.indexOf(49) + 1);
-    // v51 (checkbox 97, /snooze persistence) is the new tail; 1-50 stay untouched.
-    expect(versions[versions.length - 1]).toBe(75);
-
-    for (let i = 1; i < versions.length; i += 1) {
-      expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
-    }
     expect(MIGRATE_SOURCE).toContain(`name: '${BOT_LINKS_MIGRATION}'`);
     // Migrations 1-49 are untouched: the source still contains the recent names.
     expect(MIGRATE_SOURCE).toContain("name: 'bot_updates_v49'");

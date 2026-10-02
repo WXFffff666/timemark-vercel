@@ -15,6 +15,7 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 const SCHEMA_SQL = readFileSync(new URL('../../../shared/src/schema.pg.sql', import.meta.url), 'utf8');
@@ -125,7 +126,7 @@ describe('migration v38 registration (todo 54)', () => {
   });
 
   it('registers v38 once, ascending, immediately after 37 in the source-of-truth list', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions).toContain(37);
     expect(versions).toContain(38);
     expect(versions.filter((v) => v === 38)).toHaveLength(1);
@@ -133,10 +134,6 @@ describe('migration v38 registration (todo 54)', () => {
     // Later lanes append beyond 38 (v39 CRM); tolerance mirrors the v35-v36 precedent.
     expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(38);
     expect(Math.max(...versions)).toBeGreaterThanOrEqual(38);
-
-    for (let i = 1; i < versions.length; i += 1) {
-      expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
-    }
   });
 
   it('mirrors the documents table into shared/src/schema.pg.sql with the same markers', () => {

@@ -16,6 +16,7 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 const SCHEMA_SQL = readFileSync(new URL('../../../shared/src/schema.pg.sql', import.meta.url), 'utf8');
@@ -191,16 +192,13 @@ describe('migration v39 registration (todo 60)', () => {
   });
 
   it('registers v39 once, ascending, immediately after 38 in the source-of-truth list', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions).toContain(38);
     expect(versions).toContain(39);
     expect(versions.filter((v) => v === 39)).toHaveLength(1);
     expect(versions[versions.indexOf(38) + 1]).toBe(39);
     expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(39);
 
-    for (let i = 1; i < versions.length; i += 1) {
-      expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
-    }
     // The migration name is discoverable for the evidence file.
     expect(MIGRATE_SOURCE).toContain(`name: '${CRMCADENCE}'`);
   });

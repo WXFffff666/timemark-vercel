@@ -20,19 +20,12 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { migrationSqlFor, registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 const MIGRATION_NAME = 'agent_tokens_v55';
 
-function migrationSql(marker: string): string {
-  const nameIndex = MIGRATE_SOURCE.indexOf(`name: '${marker}'`);
-  if (nameIndex < 0) throw new Error(`migration ${marker} not found in migrate.ts`);
-  const sqlStart = MIGRATE_SOURCE.indexOf('sql: `', nameIndex);
-  const sqlEnd = MIGRATE_SOURCE.indexOf('`,', sqlStart);
-  return MIGRATE_SOURCE.slice(sqlStart + 'sql: `'.length, sqlEnd);
-}
-
-const V55_SQL = migrationSql(MIGRATION_NAME);
+const V55_SQL = migrationSqlFor(MIGRATE_SOURCE, MIGRATION_NAME);
 
 function parseInList(constraint: string, column: string): string[] {
   const match = V55_SQL.match(new RegExp(`${constraint} CHECK \\(${column} IN \\(([^)]*)\\)\\)`));
@@ -72,7 +65,7 @@ describe('migration v55 registration (checkbox 101)', () => {
     await applyIncrementalMigrations(55);
     // v56 (checkbox 102) is the tail after v55; applying on a recorded 55 runs only v56.
     expect(callsMatching('CREATE TABLE IF NOT EXISTS agent_audit_logs')).toHaveLength(0);
-    expect(versionInserts()).toEqual([56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75]);
+    expect(versionInserts()).toEqual(registeredMigrationVersions(MIGRATE_SOURCE).filter((v) => v > 55));
   });
 
   it('does not record v55 when its SQL fails, so a later cold start retries', async () => {
@@ -85,7 +78,7 @@ describe('migration v55 registration (checkbox 101)', () => {
   });
 
   it('registers v55 once, ascending, immediately after 54 as the tail of the source-of-truth list', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.filter((v) => v === 55)).toHaveLength(1);
     expect(versions.indexOf(55)).toBe(versions.indexOf(54) + 1);
     expect(versions[versions.length - 1]).toBe(75);

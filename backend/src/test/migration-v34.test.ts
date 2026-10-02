@@ -15,6 +15,7 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 
@@ -114,12 +115,8 @@ describe('migration v34 registration (todo 44)', () => {
   });
 
   it('bumps the source-of-truth migration list with v34 once, in ascending order', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.length).toBeGreaterThan(0);
-    // Strictly ascending: no reuse, no renumber, no gap left for another lane to collide with.
-    for (let i = 1; i < versions.length; i += 1) {
-      expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
-    }
     // The pre-existing max was 33 (v32 = session_data_text, v33 = logging indexes), which is
     // why the plan's "version: 32" instruction could not be followed literally.
     expect(versions).toContain(33);

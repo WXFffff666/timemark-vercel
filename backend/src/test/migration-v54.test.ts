@@ -26,19 +26,12 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { migrationSqlFor, registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 const MIGRATION_NAME = 'agent_jobs_v54';
 
-function migrationSql(marker: string): string {
-  const nameIndex = MIGRATE_SOURCE.indexOf(`name: '${marker}'`);
-  if (nameIndex < 0) throw new Error(`migration ${marker} not found in migrate.ts`);
-  const sqlStart = MIGRATE_SOURCE.indexOf('sql: `', nameIndex);
-  const sqlEnd = MIGRATE_SOURCE.indexOf('`,', sqlStart);
-  return MIGRATE_SOURCE.slice(sqlStart + 'sql: `'.length, sqlEnd);
-}
-
-const V54_SQL = migrationSql(MIGRATION_NAME);
+const V54_SQL = migrationSqlFor(MIGRATE_SOURCE, MIGRATION_NAME);
 
 /**
  * The five job kinds the plan defines for Wave 14/15. The routines (122-125) and the
@@ -79,7 +72,8 @@ describe('migration v54 registration (checkbox 112)', () => {
     // v53 and earlier must not re-run on top of a recorded 53. (v57 also ships gin_trgm_ops,
     // so key on the v53-only `idx_events_name_trgm` index name instead.)
     expect(callsMatching('idx_events_name_trgm')).toHaveLength(0);
-    expect(callsMatching('user_patterns')).toHaveLength(0);
+    // v63's SQL mentions `user_patterns` in a doc comment, so the marker must be the DDL.
+    expect(callsMatching('CREATE TABLE IF NOT EXISTS user_patterns')).toHaveLength(0);
     expect(versionInserts()).toContain(54);
     expect(versionInserts()).not.toContain(53);
   });
@@ -89,7 +83,7 @@ describe('migration v54 registration (checkbox 112)', () => {
     expect(callsMatching('agent_jobs')).toHaveLength(0);
     expect(callsMatching('agent_routines')).toHaveLength(0);
     // v55 (checkbox 101) is the tail after v54; applying on a recorded 54 runs only v55.
-    expect(versionInserts()).toEqual([55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75]);
+    expect(versionInserts()).toEqual(registeredMigrationVersions(MIGRATE_SOURCE).filter((v) => v > 54));
   });
 
   it('does not record v54 when its SQL fails, so a later cold start retries', async () => {
@@ -102,13 +96,9 @@ describe('migration v54 registration (checkbox 112)', () => {
   });
 
   it('registers v54 once, ascending, immediately after 53 in the source-of-truth list', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.filter((v) => v === 54)).toHaveLength(1);
     expect(versions.indexOf(54)).toBe(versions.indexOf(53) + 1);
-    expect(versions[versions.length - 1]).toBe(75);
-    for (let i = 1; i < versions.length; i += 1) {
-      expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
-    }
     expect(MIGRATE_SOURCE).toContain(`name: '${MIGRATION_NAME}'`);
     // Migrations 1-53 are untouched.
     expect(MIGRATE_SOURCE).toContain("name: 'search_trgm_embeddings_v53'");

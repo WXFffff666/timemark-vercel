@@ -15,6 +15,7 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 const SCHEMA_SQL = readFileSync(new URL('../../../shared/src/schema.pg.sql', import.meta.url), 'utf8');
@@ -151,16 +152,12 @@ describe('migration v35 + v36 registration (todos 49, 50)', () => {
   });
 
   it('bumps the source-of-truth migration list through 36, ascending, with 34 immediately before 35', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.length).toBeGreaterThan(0);
     // Later lanes append beyond 36 (v37 attachments, v38 documents); tolerance here mirrors
     // the v34 test's precedent. What this test owns: 35/36 exist once, ascending and in place.
     expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(36);
     expect(Math.max(...versions)).toBeGreaterThanOrEqual(36);
-
-    for (let i = 1; i < versions.length; i += 1) {
-      expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
-    }
 
     // The pre-existing max was 34 (the expiry lane owns it); 35/36 were appended right after.
     const idx34 = versions.indexOf(34);

@@ -25,6 +25,7 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 
@@ -50,7 +51,7 @@ const FOLDED: ReadonlyArray<{ version: number; name: string; marker: string }> =
 const FOLDED_VERSIONS = FOLDED.map((entry) => entry.version);
 
 function sourceVersions(): number[] {
-  return [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+  return registeredMigrationVersions(MIGRATE_SOURCE);
 }
 
 function callsMatching(marker: string): string[] {

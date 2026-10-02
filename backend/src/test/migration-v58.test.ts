@@ -24,6 +24,7 @@ vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
 import { TAG_ENTITY_TYPES } from '../services/tag.service.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 const MIGRATION_NAME = 'tags_tag_links_v58';
@@ -84,7 +85,7 @@ describe('migration v58 registration (checkbox 134)', () => {
   });
 
   it('registers v58 once, ascending, immediately after 57 as the tail of the source-of-truth list', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.filter((v) => v === 58)).toHaveLength(1);
     expect(versions.indexOf(58)).toBe(versions.indexOf(57) + 1);
     expect(versions[versions.length - 1]).toBe(75);

@@ -19,6 +19,7 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 const MIGRATION_NAME = 'agent_confirmations_v56';
@@ -83,7 +84,7 @@ describe('migration v56 registration (checkbox 102)', () => {
   });
 
   it('registers v56 once, ascending, immediately after 55 as the tail of the source-of-truth list', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.filter((v) => v === 56)).toHaveLength(1);
     expect(versions.indexOf(56)).toBe(versions.indexOf(55) + 1);
     expect(versions[versions.length - 1]).toBe(75);

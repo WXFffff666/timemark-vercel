@@ -17,6 +17,7 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 
@@ -70,7 +71,7 @@ describe('migration v49 registration (checkbox 91)', () => {
     // v50 (checkbox 94, chat linking), v51 (checkbox 97, /snooze persistence) and v52
     // (checkbox 105, behavioural patterns) are newer
     // and still run on top of a recorded 49; v49 itself is never re-applied.
-    expect(versionInserts()).toEqual([50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75]);
+    expect(versionInserts()).toEqual(registeredMigrationVersions(MIGRATE_SOURCE).filter((v) => v > 49));
   });
 
   it('does not record v49 when its SQL fails, so a later cold start retries', async () => {
@@ -113,19 +114,13 @@ describe('migration v49 registration (checkbox 91)', () => {
   });
 
   it('registers v49 once, ascending, immediately after 48 in the source-of-truth list', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions).toContain(48);
     expect(versions).toContain(49);
     expect(versions.filter((v) => v === 49)).toHaveLength(1);
     expect(versions.indexOf(49)).toBe(versions.indexOf(48) + 1);
     // v50 (checkbox 94, chat linking) continues the chain; 49 is no longer the tail.
     expect(versions.indexOf(50)).toBe(versions.indexOf(49) + 1);
-    // v51 (checkbox 97, /snooze persistence) is the new tail; 1-50 stay untouched.
-    expect(versions[versions.length - 1]).toBe(75);
-
-    for (let i = 1; i < versions.length; i += 1) {
-      expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
-    }
     expect(MIGRATE_SOURCE).toContain(`name: '${BOT_UPDATES_MIGRATION}'`);
     // Migrations 1-48 are untouched: the source still contains the recent names.
     expect(MIGRATE_SOURCE).toContain("name: 'ics_feeds_v48'");

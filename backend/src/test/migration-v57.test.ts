@@ -34,6 +34,7 @@ vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
 import { TRIGRAM_FACET_SQL, TRIGRAM_SEARCH_SQL, TRIGRAM_SEARCH_TYPED_SQL } from '../services/search.service.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 const MIGRATION_NAME = 'search_trgm_remaining_v57';
@@ -111,7 +112,7 @@ describe('migration v57 registration (checkbox 132)', () => {
   });
 
   it('registers v57 once, ascending, immediately after 56 as the tail of the source-of-truth list', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.filter((v) => v === 57)).toHaveLength(1);
     expect(versions.indexOf(57)).toBe(versions.indexOf(56) + 1);
     expect(versions[versions.length - 1]).toBe(75);

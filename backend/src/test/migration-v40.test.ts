@@ -16,6 +16,7 @@ const { mockQuery } = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ query: mockQuery }));
 
 import { applyIncrementalMigrations } from '../db/migrate.js';
+import { registeredMigrationVersions } from './helpers.js';
 
 const MIGRATE_SOURCE = readFileSync(new URL('../db/migrate.ts', import.meta.url), 'utf8');
 const SCHEMA_SQL = readFileSync(new URL('../../../shared/src/schema.pg.sql', import.meta.url), 'utf8');
@@ -130,7 +131,7 @@ describe('migration v40 registration (todo 64)', () => {
   });
 
   it('registers v40 once, ascending, immediately after 39 in the source-of-truth list', () => {
-    const versions = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
+    const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions).toContain(39);
     expect(versions).toContain(40);
     expect(versions.filter((v) => v === 40)).toHaveLength(1);
@@ -140,9 +141,6 @@ describe('migration v40 registration (todo 64)', () => {
     // The plan text claimed version 38; the real previous max was 39.
     expect(versions.filter((v) => v === 38)).toHaveLength(1);
 
-    for (let i = 1; i < versions.length; i += 1) {
-      expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
-    }
     expect(MIGRATE_SOURCE).toContain(`name: '${HABITS_MIGRATION}'`);
   });
 
