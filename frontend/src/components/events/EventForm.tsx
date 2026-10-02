@@ -20,13 +20,15 @@ import {
 import { normalizeEmail, suggestTemplateForContact, isFamilyLikeContact } from '@timemark/shared';
 import { resolveNextGregorianOccurrence } from '@timemark/shared/event-schedule';
 import { contactHasAnyEmail, getContactEmailList } from '@/lib/contact-utils';
-import { channelToAccountTypeFor } from '@/lib/channel-account-type';
+import { accountTypesForChannel, isChannelSelected } from '@/lib/channel-account-type';
+import { fetchChannelTemplates, type ChannelTemplate } from '@/lib/channel-templates';
+import { ChannelIcon } from '@/components/channels/ChannelIcon';
 import { api, fetchAvailableChannels, type AvailableChannel } from '@/lib/api';
 import { VoiceInputButton } from './VoiceInputButton';
 import type { VoiceDraft } from './voice-input';
 import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
 import { getBlessing } from '@timemark/shared/blessings';
-import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate, NotificationChannel } from '@timemark/shared';
+import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate } from '@timemark/shared';
 
 interface NotificationAccountResponse {
   id: number;
@@ -135,53 +137,8 @@ const parseLunarInput = (input: string): LunarDate | null => {
   };
 };
 
-const notificationChannels = [
-  // Email channels
-  { value: 'email', label: '邮件', icon: '📧' },
-  { value: 'resend', label: 'Resend邮件', icon: '📧' },
-  { value: 'smtp', label: 'SMTP邮件', icon: '📧' },
-  // Webhook channels
-  { value: 'feishu', label: '飞书', icon: '📱' },
-  { value: 'dingtalk', label: '钉钉', icon: '🔔' },
-  { value: 'wecom', label: '企业微信', icon: '💬' },
-  { value: 'discord', label: 'Discord', icon: '🎮' },
-  { value: 'slack', label: 'Slack', icon: '💼' },
-  { value: 'googlechat', label: 'Google Chat', icon: '🔵' },
-  { value: 'irc', label: 'IRC', icon: '💻' },
-  { value: 'synologychat', label: '群晖 Chat', icon: '🖥️' },
-  { value: 'twitch', label: 'Twitch', icon: '📺' },
-  // Token-based channels
-  { value: 'telegram', label: 'Telegram', icon: '✈️' },
-  { value: 'line', label: 'LINE', icon: '🟢' },
-  { value: 'matrix', label: 'Matrix', icon: '⚡' },
-  { value: 'mattermost', label: 'Mattermost', icon: '🧱' },
-  { value: 'msteams', label: 'MS Teams', icon: '📊' },
-  { value: 'nextcloud_talk', label: 'Nextcloud Talk', icon: '☁️' },
-  { value: 'wxpusher', label: 'WxPusher', icon: '💚' },
-  { value: 'qmsg', label: 'Qmsg', icon: '🐧' },
-  { value: 'serverchan', label: 'Server酱', icon: '📡' },
-  { value: 'pushplus', label: 'PushPlus', icon: '➕' },
-  { value: 'bark', label: 'Bark', icon: '🐕' },
-  { value: 'gotify', label: 'Gotify', icon: '📨' },
-  { value: 'meow', label: '喵推送', icon: '🐱' },
-  { value: 'pushme', label: 'PushMe', icon: '📲' },
-  { value: 'wecomapp', label: '企微应用', icon: '🏢' },
-  { value: 'ntfy', label: 'ntfy', icon: '📢' },
-  { value: 'pushover', label: 'Pushover', icon: '🔔' },
-  { value: 'apprise', label: 'Apprise', icon: '🔗' },
-  // Wave 2 渠道（Server酱³ / 息知 / AnPush / Chanify / Pushback / SimplePush / Zulip / Rocket.Chat / FCM / Twilio WhatsApp）
-  { value: 'serverchan3', label: 'Server酱³', icon: '📡' },
-  { value: 'xizhi', label: '息知', icon: '💬' },
-  { value: 'anpush', label: 'AnPush', icon: '🔔' },
-  { value: 'chanify', label: 'Chanify', icon: '📲' },
-  { value: 'pushback', label: 'Pushback', icon: '🔔' },
-  { value: 'simplepush', label: 'SimplePush', icon: '⚡' },
-  { value: 'zulip', label: 'Zulip', icon: '🧵' },
-  { value: 'rocketchat', label: 'Rocket.Chat', icon: '🚀' },
-  { value: 'fcm', label: 'Firebase 推送', icon: '🔥' },
-  { value: 'twilio_whatsapp', label: 'Twilio WhatsApp', icon: '🟢' },
-];
-
+// 渠道选项不再在前端抄一份：以前那份漏了 generic_webhook / pushdeer / twilio，
+// 用户配好账号也选不到。统一走后端目录 GET /channels/templates。
 const defaultReminderConfig: ReminderConfig = {
   enabled: true,
   daysBeforeList: [1, 3],
@@ -194,6 +151,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [availableChannels, setAvailableChannels] = useState<AvailableChannel[]>([]);
+  const [channelOptions, setChannelOptions] = useState<ChannelTemplate[]>([]);
+  const [channelListFailed, setChannelListFailed] = useState(false);
   const [formData, setFormData] = useState<CreateEventRequest>({
     name: '',
     type: 'birthday',
@@ -508,6 +467,14 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
       fetchAvailableChannels()
         .then(data => setAvailableChannels(data))
         .catch(err => console.error('Failed to load available channels:', err));
+
+      setChannelListFailed(false);
+      fetchChannelTemplates()
+        .then(setChannelOptions)
+        .catch(err => {
+          console.error('Failed to load channel templates:', err);
+          setChannelListFailed(true);
+        });
     }
   }, [open]);
 
@@ -647,10 +614,10 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
     if (isSelected) {
       // 取消选择该渠道，并移除相关 accountIds
-      const accountType = channelToAccountTypeFor(channel);
-      const newAccountIds = accountType
-        ? currentAccountIds.filter(id => !accounts.some(a => String(a.id) === id && a.type === accountType))
-        : currentAccountIds;
+      const accountTypes = accountTypesForChannel(channel);
+      const newAccountIds = currentAccountIds.filter(
+        id => !accounts.some(a => String(a.id) === id && accountTypes.includes(a.type))
+      );
       setFormData({
         ...formData,
         reminderConfig: {
@@ -693,13 +660,11 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   };
 
   const openAccountPicker = async (channel: string, currentAccountIds: string[]) => {
-    const accountType = channelToAccountTypeFor(channel);
-    if (!accountType) return;
-
+    const accountTypes = accountTypesForChannel(channel);
     setAccountsLoading(true);
     try {
       const data = await api.get<NotificationAccountResponse[]>('/config/accounts');
-      const filtered = data.filter(a => a.type === accountType && a.is_active);
+      const filtered = data.filter(a => accountTypes.includes(a.type) && a.is_active);
       setPickerAccounts(filtered);
       setPickerSelectedIds(currentAccountIds.filter(id => filtered.some(a => String(a.id) === id)));
       setAccountPickerChannel(channel);
@@ -1334,25 +1299,35 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">通知渠道</label>
                     <div className="grid grid-cols-4 gap-2">
-                      {notificationChannels.map((channel) => {
-                        const accountType = channelToAccountTypeFor(channel.value);
-                        const configuredAccounts = availableChannels.filter(a => a.type === accountType);
+                      {channelListFailed && (
+                        <p className="col-span-4 text-xs text-amber-600 dark:text-amber-400">
+                          渠道列表加载失败，请检查网络后重试。
+                        </p>
+                      )}
+                      {!channelListFailed && channelOptions.length === 0 && (
+                        <p className="col-span-4 text-xs text-slate-400 dark:text-slate-500">
+                          正在加载渠道…
+                        </p>
+                      )}
+                      {channelOptions.map((channel) => {
+                        const accountTypes = accountTypesForChannel(channel.id);
+                        const configuredAccounts = availableChannels.filter(a => accountTypes.includes(a.type));
                         const hasActive = configuredAccounts.some(a => a.is_active && a.last_test_result !== 'failed');
                         const hasWarning = configuredAccounts.some(a => a.is_active && a.last_test_result === 'failed');
                         const isConfigured = configuredAccounts.length > 0;
-                        const isSelected = formData.reminderConfig.channels?.includes(channel.value as NotificationChannel);
+                        const isSelected = isChannelSelected(formData.reminderConfig.channels, channel.id);
                         const isDisabled = !isConfigured;
 
                         return (
                           <button
-                            key={channel.value}
+                            key={channel.id}
                             type="button"
                             onClick={() => {
                               if (isDisabled) {
                                 navigate('/channels');
                                 onClose();
                               } else {
-                                toggleChannel(channel.value);
+                                toggleChannel(channel.id);
                               }
                             }}
                             className={`relative h-full min-h-[48px] w-full rounded-xl text-xs font-medium transition-all duration-300 flex flex-col items-center justify-center gap-1 p-1.5 ${
@@ -1374,8 +1349,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                                   ? 'bg-yellow-500'
                                   : 'bg-green-500'
                             }`} />
-                            <span className={`text-base leading-none ${isDisabled ? 'opacity-40' : ''}`}>{channel.icon}</span>
-                            <span className="text-center leading-tight line-clamp-2">{channel.label}</span>
+                            <span className={`text-base leading-none ${isDisabled ? 'opacity-40' : ''}`}><ChannelIcon name={channel.icon} fallback="Bell" /></span>
+                            <span className="text-center leading-tight line-clamp-2">{channel.name}</span>
                             {isDisabled && (
                               <span className="flex items-center gap-0.5 text-[9px] text-slate-400 dark:text-slate-500">
                                 <ExternalLink size={8} />
@@ -1393,18 +1368,18 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                     <div className="space-y-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">通知账户</label>
                       <div className="space-y-2">
-                        {notificationChannels
-                          .filter(ch => formData.reminderConfig.channels?.includes(ch.value as NotificationChannel))
+{channelOptions
+                          .filter(ch => isChannelSelected(formData.reminderConfig.channels, ch.id))
                           .map(channel => {
-                            const accountType = channelToAccountTypeFor(channel.value);
+                            const accountTypes = accountTypesForChannel(channel.id);
                             const selectedIds = formData.reminderConfig.accountIds || [];
-                            const channelAccounts = accounts.filter(a => a.type === accountType && selectedIds.includes(String(a.id)));
+                            const channelAccounts = accounts.filter(a => accountTypes.includes(a.type) && selectedIds.includes(String(a.id)));
 
                             return (
-                              <div key={channel.value} className="flex items-center justify-between text-sm">
+                              <div key={channel.id} className="flex items-center justify-between text-sm">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-base">{channel.icon}</span>
-                                  <span className="font-medium text-slate-700 dark:text-slate-300">{channel.label}</span>
+                                  <span className="text-base"><ChannelIcon name={channel.icon} fallback="Bell" /></span>
+                                  <span className="font-medium text-slate-700 dark:text-slate-300">{channel.name}</span>
                                 </div>
                                 <div className="text-xs text-slate-500 dark:text-slate-400 max-w-[55%] truncate text-right">
                                   {channelAccounts.length > 0
@@ -1601,9 +1576,11 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
                 <span className="text-2xl">
-                  {notificationChannels.find(c => c.value === accountPickerChannel)?.icon}
+                  {channelOptions.find(c => c.id === accountPickerChannel)?.icon && (
+                    <ChannelIcon name={channelOptions.find(c => c.id === accountPickerChannel)?.icon} fallback="Bell" />
+                  )}
                 </span>
-                选择 {notificationChannels.find(c => c.value === accountPickerChannel)?.label} 账号
+                选择 {channelOptions.find(c => c.id === accountPickerChannel)?.name} 账号
               </DialogTitle>
             </DialogHeader>
             {accountsLoading ? (

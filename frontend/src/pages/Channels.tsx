@@ -7,39 +7,20 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  MessageCircle, Mail, Webhook, MessageSquare, AlertCircle, CheckCircle2, 
+import {
+  Webhook, MessageSquare, AlertCircle, CheckCircle2,
   Link2Off, ArrowLeft, Plus, ExternalLink, Settings,
-  Gamepad2, Hash, Building2, Terminal, Server, Video, Smartphone,
-  Send, Grid3X3, Cloud, Zap, Phone, Shield, BookOpen, ChevronRight,
+  BookOpen, ChevronRight,
   Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { fetchChannelTemplates, type CloudChannelTemplate } from '@/lib/channel-templates';
+import { ChannelIcon } from '@/components/channels/ChannelIcon';
 import type { NotificationAccount } from '@timemark/shared';
 
 // Channel configuration method types (cloud deploy: webhook + token only)
 type ConfigMethod = 'webhook' | 'token';
-
-interface ChannelField {
-  name: string;
-  label: string;
-  type: 'text' | 'password' | 'textarea' | 'select';
-  required: boolean;
-  placeholder?: string;
-  description?: string;
-}
-
-interface ChannelTemplate {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  configMethod: ConfigMethod;
-  fields: ChannelField[];
-  docsUrl?: string;
-  isBuiltIn: boolean;
-}
 
 interface Account extends NotificationAccount {
   is_active?: boolean;
@@ -54,13 +35,6 @@ interface Account extends NotificationAccount {
   last_test_result?: 'success' | 'failed' | null;
   connection_status?: string | null;
 }
-
-// Icon mapping
-const iconMap: Record<string, React.ElementType> = {
-  MessageCircle, MessageSquare, Mail, Webhook, Gamepad2, Hash, Building2,
-  Terminal, Server, Video, Smartphone, Send, Grid3X3, Cloud, Zap, Phone,
-  Shield, BookOpen, Plus, Settings, Loader2
-};
 
 const containerVariants = { 
   hidden: { opacity: 0 }, 
@@ -83,7 +57,7 @@ const itemVariants = {
 export default function Channels() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [templates, setTemplates] = useState<ChannelTemplate[]>([]);
+  const [templates, setTemplates] = useState<CloudChannelTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ConfigMethod>('webhook');
   
@@ -93,7 +67,7 @@ export default function Channels() {
   // Modals state
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<ChannelTemplate | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<CloudChannelTemplate | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [configForm, setConfigForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -117,11 +91,7 @@ export default function Channels() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch templates - api already returns data.data, so result is ChannelTemplate[]
-      const templatesRes = await api.get<ChannelTemplate[]>('/channels/templates');
-      if (templatesRes) {
-        setTemplates(templatesRes.filter(t => t.configMethod === 'webhook' || t.configMethod === 'token'));
-      }
+      setTemplates(await fetchChannelTemplates({ refresh: true }));
 
       // Fetch accounts - api already returns data.data, so result is Account[]
       const accountsRes = await api.get<Account[]>('/config/accounts');
@@ -196,10 +166,6 @@ export default function Channels() {
     }
   };
 
-  const getTemplateIcon = (iconName: string) => {
-    return iconMap[iconName] || MessageSquare;
-  };
-
   const getAccountStatus = (account: Account): 'disabled' | 'connected' | 'failed' | 'untested' => {
     if (!account.is_active) return 'disabled';
     const live = connectionStatus[account.id];
@@ -229,7 +195,7 @@ export default function Channels() {
     setShowTemplateModal(true);
   };
 
-  const selectTemplate = (template: ChannelTemplate) => {
+  const selectTemplate = (template: CloudChannelTemplate) => {
     setSelectedTemplate(template);
     setShowTemplateModal(false);
     setConfigTestMessage(null);
@@ -283,7 +249,7 @@ export default function Channels() {
     setShowConfigModal(true);
   };
 
-  const buildConfigFormFromAccount = (account: Account, template: ChannelTemplate): Record<string, string> => {
+  const buildConfigFormFromAccount = (account: Account, template: CloudChannelTemplate): Record<string, string> => {
     const form: Record<string, string> = { name: account.name || '' };
     const chatId = String((account as any).chatId || (account as any).chat_id || '');
 
@@ -526,7 +492,6 @@ export default function Channels() {
 
   const renderAccountCard = (account: Account) => {
     const template = templates.find(t => t.id === account.type);
-    const Icon = template ? getTemplateIcon(template.icon) : MessageSquare;
     const badge = getStatusBadge(account);
     const status = getAccountStatus(account);
 
@@ -539,7 +504,7 @@ export default function Channels() {
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
-                <Icon size={24} />
+                <ChannelIcon name={template?.icon} size={24} />
               </div>
               <div>
                 <h3 className="font-semibold text-slate-900 dark:text-white">{account.name}</h3>
@@ -767,7 +732,6 @@ export default function Channels() {
                   className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-2"
                 >
                   {filteredTemplates.map((template) => {
-                    const Icon = getTemplateIcon(template.icon);
                     return (
                       <button
                         key={template.id}
@@ -776,7 +740,7 @@ export default function Channels() {
                       >
                         <div className="flex items-start gap-4">
                           <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center group-hover:bg-primary-100 dark:group-hover:bg-primary-900/50 group-hover:text-primary-600 transition-colors">
-                            <Icon size={24} />
+<ChannelIcon name={template?.icon} size={24} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
@@ -832,10 +796,7 @@ export default function Channels() {
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-xl text-primary-600 dark:text-primary-400 shrink-0">
                   {selectedTemplate && (
-                    (() => {
-                      const Icon = getTemplateIcon(selectedTemplate.icon);
-                      return <Icon size={24} />;
-                    })()
+                    <ChannelIcon name={selectedTemplate.icon} size={24} />
                   )}
                 </div>
                 <DialogTitle className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white truncate">

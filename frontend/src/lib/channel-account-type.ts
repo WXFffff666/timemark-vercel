@@ -1,56 +1,53 @@
 /**
- * 通知渠道 value → notification_accounts.type。
- * 必须与 backend/src/services/notifications/index.ts 的 `channelToAccountType` 对齐：
- * Wave 2 渠道（serverchan3/xizhi/anpush/chanify/pushback/simplepush/zulip/rocketchat/fcm/twilio_whatsapp）
- * 的账号类型与渠道 id 同名（identity 映射）。
+ * 事件渠道 ↔ notification_accounts.type
  *
- * 提取为纯函数供事件表单的事件渠道选择器与联系人气道绑定共用，并可直接单测
- * （原先内联在 EventForm.tsx 里，新增渠道漏配会导致按钮永远灰掉）。
+ * 这两份映射以前是手抄的整表（前端各一份，后端一份），于是抄漏就变成功能故障：
+ * generic_webhook / pushdeer / twilio 根本没有条目，按钮永远灰着；nextcloud_talk 被映射成
+ * nextcloudtalk，而账号是按模板 id 存的，配置了也显示未配置。
+ *
+ * 后端 channelToAccountType 对每个渠道都是 identity，只有历史别名例外。所以这里只列别名，
+ * 其余靠 identity 兜住——新增渠道不需要再改前端。
+ *
+ * 表的 key 一律是**规范渠道 id**（= 后端模板 id = 选择器渲染的 value），
+ * value 是历史上可能已经存进库的账号 type / 事件渠道 value。
  */
-export const CHANNEL_TO_ACCOUNT_TYPE: Record<string, string> = {
-  email: 'email',
-  resend: 'resend',
-  smtp: 'smtp',
-  feishu: 'feishu',
-  wecom: 'wecom',
-  dingtalk: 'dingtalk',
-  telegram: 'telegram',
-  discord: 'discord',
-  slack: 'slack',
-  googlechat: 'googlechat',
-  irc: 'irc',
-  synologychat: 'synologychat',
-  twitch: 'twitch',
-  line: 'line',
-  matrix: 'matrix',
-  mattermost: 'mattermost',
-  msteams: 'msteams',
-  nextcloud_talk: 'nextcloudtalk',
-  qmsg: 'qmsg',
-  wxpusher: 'wxpusher',
-  serverchan: 'serverchan',
-  pushplus: 'pushplus',
-  bark: 'bark',
-  gotify: 'gotify',
-  meow: 'meow',
-  pushme: 'pushme',
-  wecomapp: 'wecomapp',
-  ntfy: 'ntfy',
-  pushover: 'pushover',
-  apprise: 'apprise',
-  // Wave 2 channels (checkboxes 15-22)
-  serverchan3: 'serverchan3',
-  xizhi: 'xizhi',
-  anpush: 'anpush',
-  chanify: 'chanify',
-  pushback: 'pushback',
-  simplepush: 'simplepush',
-  zulip: 'zulip',
-  rocketchat: 'rocketchat',
-  fcm: 'fcm',
-  twilio_whatsapp: 'twilio_whatsapp',
+
+/** 规范渠道 id → 历史上同义的账号 type */
+const LEGACY_ACCOUNT_TYPES: Record<string, string[]> = {
+  wxpusher: ['wechat', 'wechat_official'],
+  qmsg: ['qq'],
+  nextcloud_talk: ['nextcloudtalk'],
 };
 
-export function channelToAccountTypeFor(channelId: string): string | undefined {
-  return CHANNEL_TO_ACCOUNT_TYPE[channelId];
+/** 账号 type → 规范渠道 id；不是任何渠道的历史别名就按 identity 走 */
+const CANONICAL_BY_LEGACY_TYPE: Record<string, string> = Object.entries(LEGACY_ACCOUNT_TYPES)
+  .reduce<Record<string, string>>((acc, [channelId, types]) => {
+    for (const t of types) acc[t] = channelId;
+    return acc;
+  }, {});
+
+/**
+ * 一个渠道可能对应的账号 type，规范拼写排第一。
+ * 两种拼写都留着：老库里可能已经存在另一种 type 的账号。
+ */
+export function accountTypesForChannel(channelId: string): string[] {
+  const canonical = CANONICAL_BY_LEGACY_TYPE[channelId] ?? channelId;
+  return [...new Set([canonical, channelId, ...(LEGACY_ACCOUNT_TYPES[canonical] ?? [])])];
+}
+
+/**
+ * 账号 type → 事件渠道 value（contact-event-bridge 用）。
+ * 必须返回**规范** id：选择器只渲染规范渠道，写入别名会让用户看不到自己已选的渠道。
+ */
+export function channelForAccountType(accountType: string): string {
+  return CANONICAL_BY_LEGACY_TYPE[accountType] ?? accountType;
+}
+
+/**
+ * 事件已保存的 channels 里是否包含该规范渠道（含历史别名）。
+ * 老事件存的是 `wechat`，改用模板目录渲染后仍要显示为已勾选，否则一存就丢。
+ */
+export function isChannelSelected(channels: readonly string[] | undefined, channelId: string): boolean {
+  if (!channels) return false;
+  return accountTypesForChannel(channelId).some((t) => channels.includes(t));
 }
