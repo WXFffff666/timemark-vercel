@@ -12,10 +12,8 @@ import { apiRateLimit, rateLimit } from './middleware/rate-limit.js';
 import { getConfiguredOrigins, isAllowedOrigin } from './utils/allowed-origins.js';
 import 'dotenv/config';
 import { createLogger } from './utils/logger.js';
-import { assertCanCreateUser } from './utils/single-user.js';
 import { waitForDb, query } from './db/index.js';
 import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
-import { hashPassword } from './utils/password.js';
 import { initSecretKeys } from './utils/secrets.js';
 import { isTurnstileEnabled } from './utils/turnstile.js';
 import { getClockOffsetMs, getLastTimeSyncResult, scheduleTimeSync, DEFAULT_SYNC_TIMEZONE } from './utils/ntp.js';
@@ -130,7 +128,7 @@ import inventoryListRoutes from './routes/inventory-list.js';
 import calendarSyncRoutes from './routes/calendar-sync.js';
 import collaborationRoutes from './routes/collaboration.js';
 import { logStorageStartupStatus } from './services/storage.service.js';
-import { ensureVercelReady } from './vercel-init.js';
+import { ensureVercelReady, ensureAdminUser } from './vercel-init.js';
 // task 161: field-level encryption migration (mirrors the Vercel cold-start bootstrap).
 import { migrateFieldEncryption } from './services/field-encryption.service.js';
 
@@ -415,25 +413,10 @@ async function bootstrap() {
   // 2.6 字段级加密迁移（task 161；与 Vercel 冷启动 vercel-init.ts 保持一致）
   await migrateFieldEncryption();
 
-  // 3. 初始化管理员用户
+  // 3. 初始化管理员用户（与 Vercel 冷启动共用同一个实现 vercel-init.ts）
   const userResult = await query('SELECT id FROM users LIMIT 1');
   if (userResult.rows.length === 0) {
-    const isProd = process.env.NODE_ENV === 'production';
-    const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
-    const password = process.env.DEFAULT_ADMIN_PASSWORD;
-    if (isProd && !password) {
-      log.warn('DEFAULT_ADMIN_PASSWORD not set — skipping auto admin creation');
-    } else {
-      await assertCanCreateUser();
-      const passwordHash = await hashPassword(password || 'TimeMark@2026');
-
-      await query(
-        'INSERT INTO users (username, password_hash) VALUES ($1, $2)',
-        [username, passwordHash]
-      );
-
-      log.info({ username }, 'Default admin user created — change password on first login');
-    }
+    await ensureAdminUser();
   } else {
     log.info('数据库已初始化，已存在用户');
   }

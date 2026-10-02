@@ -176,7 +176,7 @@
 6. 部署后运行：`npx tsx scripts/migrate-db.ts`
 7. 配置 cron-job.org → `GET /api/cron/reminder-check`（每分钟）
 8. 可选：每日 `GET /api/cron/channel-health`；设置 `HEALTHCHECK_URL` 心跳
-9. 首次登录后修改默认密码 `TimeMark@2026`
+9. 首次登录后修改 `DEFAULT_ADMIN_PASSWORD`（部署前自行设置，仓库不提供默认值）
 
 ---
 

@@ -61,7 +61,7 @@ Set these variables in the Vercel Dashboard under **Settings > Environment Varia
 | `CRON_SECRET` | Yes | Shared secret for external cron job authentication |
 | `CORS_ORIGIN` | No | Comma-separated allowed origins (defaults to localhost) |
 | `DEFAULT_ADMIN_USERNAME` | No | Initial admin username (default: `admin`) |
-| `DEFAULT_ADMIN_PASSWORD` | No | Initial admin password (default: `TimeMark@2026`) |
+| `DEFAULT_ADMIN_PASSWORD` | **Yes** | Initial admin password. **No shipped default.** Must be ≥12 characters and not a well-known default; a cold start with it unset or weak refuses to create the admin and logs `ADMIN_BOOTSTRAP_REFUSED`. |
 | `TURNSTILE_SITE_KEY` / `SiteKey` | No | Cloudflare Turnstile site key (login CAPTCHA) |
 | `TURNSTILE_SECRET_KEY` / `SecretKey` | No | Cloudflare Turnstile secret key |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` | No | Passkey relying party (use production domain) |
@@ -168,7 +168,7 @@ After deployment, perform these manual click-through tests **as a real user**—
 #### 4.5.1. Login Flow Test
 1. Open `https://<your-project>.vercel.app` in Chrome
 2. Verify the login page renders: TimeMark logo, "掌控您的每一个倒数时刻" tagline, username/password fields, login button
-3. **Manually type** default credentials (`admin` / `TimeMark@2026`) character by character
+3. **Manually type** the credentials you configured (`admin` / your `DEFAULT_ADMIN_PASSWORD`) character by character
 4. Click "登 录" button
 5. Monitor Network tab in Chrome DevTools:
    - `POST /api/auth/login` should return **200** with `{ accessToken, refreshToken }`
@@ -536,7 +536,7 @@ After rollback, verify:
 | `CRON_SECRET` | **Yes** (for cron) | -- | Shared secret for authenticating Vercel Cron Job requests. Any random string. Must match what your cron handlers expect. |
 | `CORS_ORIGIN` | No | `http://localhost:5173,http://localhost:3000` | Comma-separated list of allowed CORS origins. Vercel deployment URL (`https://*.vercel.app`) is automatically added. |
 | `DEFAULT_ADMIN_USERNAME` | No | `admin` | Initial admin username created by `migrate-db.ts` on first run. |
-| `DEFAULT_ADMIN_PASSWORD` | No | `TimeMark@2026` | Initial admin password created by `migrate-db.ts` on first run. Change after first login. |
+| `DEFAULT_ADMIN_PASSWORD` | **Yes in production** | *(none — you set it)* | Initial admin password. No shipped default. `migrate-db.ts` throws if it is unset; the Vercel cold start refuses and logs `ADMIN_BOOTSTRAP_REFUSED` when it is unset or under 12 characters. Change after first login. |
 | `TZ` | No | `Asia/Shanghai` | Server timezone for cron scheduling and log timestamps. |
 | `LOG_QUERIES` | No | `false` | Set to `true` to log all SQL queries to stdout (debugging only, not for production). |
 

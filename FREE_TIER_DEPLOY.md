@@ -59,7 +59,7 @@ npx tsx scripts/migrate-db.ts
 
 登录后打开 **设置 → 部署向导**，确认「数据库结构版本」为 **v75**。
 
-默认账号：`admin` / `TimeMark@2026`（首次登录会提示改密码）
+默认账号：`admin`，密码为你自己在 Vercel Production 环境变量里设置的 `DEFAULT_ADMIN_PASSWORD`（≥12 位、非常见默认值；**本仓库不再提供任何默认口令**，未设置时冷启动会拒绝创建管理员并记录 `ADMIN_BOOTSTRAP_REFUSED`）。首次登录会提示改密码。
 
 ### 5. 配置外部 Cron（关键！）
 

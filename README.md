@@ -226,10 +226,12 @@ npx tsx scripts/migrate-db.ts
 
 | 项目 | 值 |
 |:----:|:--:|
-| 默认用户名 | `admin` |
-| 默认密码 | `TimeMark@2026` |
+| 默认用户名 | `admin`（可由 `DEFAULT_ADMIN_USERNAME` 覆盖） |
+| 默认密码 | **无默认值。** 部署前必须自行设置 `DEFAULT_ADMIN_PASSWORD`（≥12 位、非常见默认值） |
 
-> ⚠️ **首次登录后请立即修改密码！** 进入设置页面即可修改。
+> ⚠️ **仓库不提供任何默认口令。** 生产冷启动时若 `DEFAULT_ADMIN_PASSWORD` 未设置或过弱，**不会创建管理员**，并记录 `ADMIN_BOOTSTRAP_REFUSED`（可在部署日志中检索）。请在 Vercel Production 环境变量中配置强密码后再部署。
+>
+> **首次登录后请立即修改密码！** 进入设置页面即可修改；安全中心会显示「初始密码是否已改过」（依据 `user_configs.password_changed_at`）。
 
 ### 详细部署文档
 
@@ -476,7 +478,7 @@ TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插�
 |:----:|------|
 | 生产地址 | `https://timemark.the37777777.top` |
 | 用户名 | `admin`（默认，可由 `DEFAULT_ADMIN_USERNAME` 覆盖） |
-| 密码 | 由 `DEFAULT_ADMIN_PASSWORD` 环境变量设定；未自定义时默认为 `TimeMark@2026` |
+| 密码 | 必填 | 由 `DEFAULT_ADMIN_PASSWORD` 环境变量设定；**无默认值**，生产环境未设置或弱于 12 位时拒绝创建管理员 |
 
 > ⚠️ **首次登录会强制修改密码**（`mustChangePassword`）。请在 Vercel Production 环境变量中设置强密码，勿将 `JWT_SECRET` / `MASTER_KEY` / `TURNSTILE_SECRET_KEY` / `CRON_SECRET` 勾选 Preview。
 
@@ -494,7 +496,7 @@ TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插�
 | `TURNSTILE_SITE_KEY` | 推荐 | Cloudflare Turnstile 站点密钥（可公开） |
 | `TURNSTILE_SECRET_KEY` | 推荐 | Turnstile 服务端密钥，**仅 Production** |
 | `DEFAULT_ADMIN_USERNAME` | 可选 | 初始管理员用户名，默认 `admin` |
-| `DEFAULT_ADMIN_PASSWORD` | 可选 | 初始管理员密码；未设则 `TimeMark@2026` |
+| `DEFAULT_ADMIN_PASSWORD` | **生产必填** | 初始管理员密码；无默认值，≥12 位且非常见默认值，否则冷启动拒绝创建并记录 `ADMIN_BOOTSTRAP_REFUSED` |
 | `HEALTH_DETAIL_TOKEN` | 可选 | `/api/health?detailed=1` 详情令牌 |
 | `LOG_QUERIES` | 可选 | `true` 时打印 SQL（仅调试） |
 | `NODEJS_HELPERS` | 推荐 | 字面量 `0`（Vercel Hobby 要求） |
@@ -537,7 +539,7 @@ TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插�
 | `TZ` | `Asia/Shanghai` | 时区 |
 | `JWT_SECRET` / `MASTER_KEY` | 首次启动自动生成 | 保存到 `data/.env` |
 | `DEFAULT_ADMIN_USERNAME` | `admin` | 初始管理员 |
-| `DEFAULT_ADMIN_PASSWORD` | `TimeMark@2026` | 初始密码（首次登录强制修改） |
+| `DEFAULT_ADMIN_PASSWORD` | 无默认值 | 初始密码（生产必填，≥12 位；首次登录强制修改） |
 
 ---
 

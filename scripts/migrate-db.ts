@@ -95,7 +95,14 @@ async function migrate(): Promise<void> {
     // 4. Create default admin user (idempotent)
     // ---------------------------------------------------------------------------
     const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
-    const password = process.env.DEFAULT_ADMIN_PASSWORD || 'TimeMark@2026';
+    // No published default credential: this script has no production gate, so the
+    // operator must supply the password explicitly.
+    const password = process.env.DEFAULT_ADMIN_PASSWORD?.trim();
+    if (!password) {
+      throw new Error(
+        'DEFAULT_ADMIN_PASSWORD is required to create the admin user — export it before running this script',
+      );
+    }
 
     const { rows: existing } = await pool.query('SELECT id FROM users LIMIT 1');
 

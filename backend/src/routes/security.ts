@@ -251,6 +251,25 @@ security.get('/deploy-info', async (c) => {
   const poolerRecommended = dbUrl.includes('neon.tech') || dbUrl.includes('supabase');
   const poolerDetected = dbUrl.includes('-pooler') || dbUrl.includes('pooler.');
 
+  // Whether the bootstrap password has ever been changed. `null` means the admin is
+  // still on the initial `DEFAULT_ADMIN_PASSWORD` and must change it on first login.
+  //
+  // The real column is `user_configs.password_changed_at` — the same one the login
+  // response reads (`mustChangePassword = !user.passwordChangedAt`) and the
+  // change-password endpoint writes. NOTE: `user_configs.must_change_password`
+  // (added in db/migrate.ts) is written by nothing in this codebase and is dead —
+  // deliberately not wired up and not dropped, since dropping it is a migration.
+  let passwordChangedAt: string | null = null;
+  try {
+    const adminRow = await query(
+      'SELECT c.password_changed_at FROM users u LEFT JOIN user_configs c ON c.user_id = u.id LIMIT 1',
+    );
+    const raw = adminRow.rows[0]?.password_changed_at as Date | string | null | undefined;
+    passwordChangedAt = raw ? new Date(String(raw)).toISOString() : null;
+  } catch {
+    passwordChangedAt = null;
+  }
+
   return c.json({
     success: true,
     data: {
@@ -267,6 +286,7 @@ security.get('/deploy-info', async (c) => {
       expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
       schemaUpToDate: schemaVersion >= EXPECTED_SCHEMA_VERSION,
       jwtSecretRotatedAt: jwtAge,
+      passwordChangedAt,
       personalSingleAccount: true,
       sessionTokensAutoRotate: true,
       envSecretsRequireManualRotation: false,
