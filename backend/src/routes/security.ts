@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+﻿import { Hono } from 'hono';
 import { authenticator } from 'otplib';
 import QRCode from 'qrcode';
 import { authMiddleware } from '../middleware/auth.middleware.js';
@@ -11,6 +11,7 @@ import type { User } from '@timemark/shared';
 import { isTurnstileEnabled } from '../utils/turnstile.js';
 import { getCronSecret } from '../utils/heartbeat.js';
 import { getAccessTokenFromCookie } from '../utils/auth-cookies.js';
+import { computeSchemaHealth, describeSchemaHealth, isSchemaHealthy } from '../services/schema-health.js';
 
 const security = new Hono<{ Variables: { user: User } }>();
 security.use('*', authMiddleware);
@@ -225,22 +226,29 @@ security.post('/totp/disable', async (c) => {
 
 // ============ Deploy / system info ============
 
-// Keep in sync with latest migration version in db/migrate.ts
-const EXPECTED_SCHEMA_VERSION = 31;
-
 security.get('/deploy-info', async (c) => {
   const jwtAge = process.env.JWT_SECRET_ROTATED_AT || null;
 
   let schemaVersion = 0;
   let databaseOk = false;
+  // Derived from backend/src/db/migration-versions.ts, which is generated from migrate.ts.
+  // This used to be a hand-maintained `EXPECTED_SCHEMA_VERSION = 31` compared with `>=`,
+  // so a database on v75 satisfied it and the page showed a green check for any version
+  // at or above 31. Read every recorded version, not just MAX(): a migration that errored
+  // leaves a hole *underneath* a healthy-looking max.
+  let recordedSchemaVersions: number[] = [];
   try {
     await query('SELECT 1');
     databaseOk = true;
-    const schemaResult = await query('SELECT MAX(version) AS version FROM schema_version');
-    schemaVersion = Number(schemaResult.rows[0]?.version) || 0;
+    const schemaResult = await query('SELECT version FROM schema_version ORDER BY version ASC');
+    recordedSchemaVersions = (schemaResult.rows as Array<{ version: unknown }>)
+      .map((row) => Number(row.version))
+      .filter((version) => Number.isFinite(version));
+    schemaVersion = recordedSchemaVersions.length > 0 ? Math.max(...recordedSchemaVersions) : 0;
   } catch {
     databaseOk = false;
   }
+  const schemaHealth = computeSchemaHealth(recordedSchemaVersions);
 
   const turnstileConfigured = isTurnstileEnabled();
   const cronSecretConfigured = !!getCronSecret();
@@ -283,14 +291,23 @@ security.get('/deploy-info', async (c) => {
       databaseUrlConfigured,
       databaseOk,
       schemaVersion,
-      expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
-      schemaUpToDate: schemaVersion >= EXPECTED_SCHEMA_VERSION,
+      expectedSchemaVersion: schemaHealth.expected,
+      /** One of up_to_date | behind | ahead | failed_gap. Prefer this over schemaUpToDate. */
+      schemaStatus: schemaHealth.status,
+      schemaMissingVersions: schemaHealth.missingVersions,
+      schemaFutureVersions: schemaHealth.futureVersions,
+      schemaHint: describeSchemaHealth(schemaHealth),
+      schemaUpToDate: isSchemaHealthy(schemaHealth),
       jwtSecretRotatedAt: jwtAge,
       passwordChangedAt,
       personalSingleAccount: true,
       sessionTokensAutoRotate: true,
       envSecretsRequireManualRotation: false,
-      buildTime: process.env.VERCEL_GIT_COMMIT_SHA || null,
+      // Misnamed for years: this has always been the commit SHA, not a build time.
+      // The real deploy time is injected by scripts/build-vercel-api.mjs as
+      // __BUILD_TIME__; fall back to null on a local run.
+      commitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
+      buildTime: process.env.__BUILD_TIME__ || null,
       envChecks: [
         {
           id: 'database',
@@ -309,10 +326,12 @@ security.get('/deploy-info', async (c) => {
         {
           id: 'schema',
           label: '数据库结构版本',
-          ok: schemaVersion >= EXPECTED_SCHEMA_VERSION,
-          hint: schemaVersion >= EXPECTED_SCHEMA_VERSION
-            ? `当前 v${schemaVersion}（已是最新）`
-            : `当前 v${schemaVersion}，期望 v${EXPECTED_SCHEMA_VERSION}。重新部署或访问站点触发迁移`,
+          // A failed gap is an error, not a warning: something the running code needs
+          // is absent, and re-running the migration will not fill it because the runner
+          // gates on the frozen pre-loop max.
+          severity: schemaHealth.status === 'failed_gap' ? 'error' : 'warning',
+          ok: isSchemaHealthy(schemaHealth),
+          hint: describeSchemaHealth(schemaHealth),
         },
         {
           id: 'jwtSecret',

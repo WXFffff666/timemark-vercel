@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 143 - post-migration self-check and idempotent automatic repair.
  *
  * After `runMigrations()` has run, verify:
@@ -17,19 +17,23 @@
 import { decrypt } from '@timemark/shared/crypto';
 import { query } from '../../db/index.js';
 import { createLogger } from '../../utils/logger.js';
+import { computeSchemaHealth } from '../schema-health.js';
 import { LEGACY_MASTER_KEY } from '../../utils/secrets.js';
 
 const log = createLogger('migration-selfcheck');
 
-/** Max version in the inline migration list of backend/src/db/migrate.ts (v58). */
-export const EXPECTED_MIGRATION_MAX = 58;
+/**
+ * Expected versions now come from backend/src/db/migration-versions.ts, generated from
+ * migrate.ts by scripts/gen-migration-versions.mjs. This module used to carry its own
+ * copies — `EXPECTED_MIGRATION_MAX = 58` and a hardcoded array stopping at 58 — which had
+ * already drifted from the real max (75) and from routes/security.ts (31).
+ */
+import {
+  MAX_MIGRATION_VERSION as EXPECTED_MIGRATION_MAX,
+  MIGRATION_VERSIONS as EXPECTED_MIGRATION_VERSIONS,
+} from '../../db/migration-versions.js';
 
-/** Versions the inline migration list records (2-14, then 16-58; v15 was skipped). */
-export const EXPECTED_MIGRATION_VERSIONS: readonly number[] = [
-  2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
-  16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
-  39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58,
-];
+export { EXPECTED_MIGRATION_MAX, EXPECTED_MIGRATION_VERSIONS };
 
 /** Tables created by shared/src/schema.pg.sql and by migrate.ts (v2..v58). */
 export const EXPECTED_TABLES: readonly string[] = [
@@ -230,13 +234,24 @@ async function checkSchemaVersion(findings: SelfCheckFinding[]): Promise<SelfChe
     };
   }
 
-  const presentSet = new Set(present);
-  const current = present.length > 0 ? Math.max(...present) : null;
-  const missingVersions = EXPECTED_MIGRATION_VERSIONS.filter((version) => !presentSet.has(version));
-  const futureVersions = present.filter((version) => !EXPECTED_MIGRATION_VERSIONS.includes(version));
-  const upToDate = presentSet.has(EXPECTED_MIGRATION_MAX);
+  // One classification, shared with routes/security.ts. `upToDate` used to be
+  // `presentSet.has(EXPECTED_MIGRATION_MAX)`, which reports healthy when the max row exists
+  // even if a migration below it errored and the walk continued past the hole.
+  const health = computeSchemaHealth(present);
+  const { current, missingVersions, futureVersions } = health;
+  const upToDate = health.status === 'up_to_date';
 
-  if (!upToDate) {
+  if (health.status === 'failed_gap') {
+    findings.push({
+      category: 'schema_version',
+      id: 'schema_version_failed_gap',
+      severity: 'error',
+      repairable: false,
+      detail: `schema_version has a hole below max ${String(current)}: missing [${missingVersions.join(', ')}]. A migration errored and the runner continued past it, so MAX(version) hid it. Check the deploy log for that version and re-run it manually.`,
+    });
+  }
+
+  if (!upToDate && health.status !== 'failed_gap') {
     const onlyLatestMissing =
       missingVersions.length === 1 && missingVersions[0] === EXPECTED_MIGRATION_MAX;
     findings.push({
@@ -508,11 +523,12 @@ export async function repairMigrationFindings(precomputed?: SelfCheckResult): Pr
         repaired.push(finding.id);
         log.info({ event: 'migration_selfcheck_repair', id: finding.id }, `Repaired ${finding.id}`);
       } else if (finding.category === 'schema_version' && finding.id === 'schema_version_latest_missing') {
-        await query(
-          'INSERT INTO schema_version (version, applied_at) VALUES ($1, CURRENT_TIMESTAMP) ON CONFLICT (version) DO NOTHING',
-          [EXPECTED_MIGRATION_MAX],
-        );
-        repaired.push(finding.id);
+        // Repairing a "missing latest row" by INSERTing EXPECTED_MIGRATION_MAX is unsafe and was
+      // actively harmful: with this module's stale constant that was 58, so running the repair
+      // on a healthy v75 database would have fabricated a bogus v58 row and made the recorded
+      // history non-contiguous. The runner is the only thing that may write schema_version,
+      // because only it actually applies the DDL. Schema findings are report-only now.
+      void finding;
         log.info({ event: 'migration_selfcheck_repair', id: finding.id }, `Repaired ${finding.id}`);
       } else {
         skipped.push({ id: finding.id, reason: 'repair not implemented for this finding' });

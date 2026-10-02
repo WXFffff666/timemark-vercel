@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,35 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+
+/**
+ * `/api/security/deploy-info`. Typed rather than `any` because this page renders the
+ * schema state, and the schema state is the one thing here that can be actively wrong:
+ * an untyped field is how "expected v31, actual v75, ✓" survived for months.
+ */
+type SchemaStatus = 'up_to_date' | 'behind' | 'ahead' | 'failed_gap';
+
+interface DeployInfo {
+  version: string;
+  platform: string;
+  vercelUrl: string | null;
+  commitSha: string | null;
+  buildTime: string | null;
+  schemaVersion: number;
+  expectedSchemaVersion: number;
+  schemaStatus: SchemaStatus;
+  schemaHint: string;
+  schemaMissingVersions: number[];
+  schemaFutureVersions: number[];
+  passwordChangedAt: string | null;
+  turnstileConfigured: boolean;
+  cronSecretConfigured: boolean;
+}
+
+function formatDeployTime(iso: string): string {
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleString();
+}
 import { Shield, Monitor, Globe, Ban, Key, Clock, Trash2, ArrowLeft, Fingerprint, Plus } from 'lucide-react';
 import {
   isPasskeySupported,
@@ -34,7 +63,7 @@ export default function Security() {
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [totpCode, setTotpCode] = useState('');
-  const [deployInfo, setDeployInfo] = useState<any>(null);
+  const [deployInfo, setDeployInfo] = useState<DeployInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [passkeys, setPasskeys] = useState<PasskeyCredential[]>([]);
   const [passkeyName, setPasskeyName] = useState('');
@@ -161,8 +190,25 @@ export default function Security() {
           <Card>
             <CardHeader><CardTitle className="text-base">部署状态</CardTitle></CardHeader>
             <CardContent className="text-sm space-y-1 text-slate-600 dark:text-slate-300">
-              <p>版本: {deployInfo.version} · 平台: {deployInfo.platform}</p>
-              <p>数据库结构: v{deployInfo.schemaVersion ?? '?'} / v{deployInfo.expectedSchemaVersion ?? '?'}{deployInfo.schemaUpToDate ? ' ✓' : '（待迁移）'}</p>
+              <p data-testid="deploy-version">版本: {deployInfo.version} · 平台: {deployInfo.platform}</p>
+              <p data-testid="deploy-commit">
+                部署: {deployInfo.commitSha ? `\`${deployInfo.commitSha.slice(0, 7)}\`` : '未知'}
+                {deployInfo.buildTime ? ` · ${formatDeployTime(deployInfo.buildTime)}` : ''}
+              </p>
+              <p data-testid="deploy-schema">
+                数据库结构: v{deployInfo.schemaVersion ?? '?'} / v{deployInfo.expectedSchemaVersion ?? '?'}
+                {deployInfo.schemaStatus === 'up_to_date' ? ' ✓' : ''}
+              </p>
+              {deployInfo.schemaStatus && deployInfo.schemaStatus !== 'up_to_date' && (
+                <p
+                  role="alert"
+                  data-testid="deploy-schema-alert"
+                  className={`text-xs ${deployInfo.schemaStatus === 'failed_gap' ? 'text-destructive font-medium' : 'text-amber-600 dark:text-amber-400'}`}
+                >
+                  {deployInfo.schemaHint}
+                </p>
+              )}
+              <p>初始密码: {deployInfo.passwordChangedAt ? '已修改' : '尚未修改（建议尽快改）'}</p>
               <p>Turnstile: {deployInfo.turnstileConfigured ? '已配置' : '未配置（可选）'}</p>
               <p>Cron Secret: {deployInfo.cronSecretConfigured ? '已配置' : '未配置'}</p>
               <p className="text-xs text-slate-500 pt-1">

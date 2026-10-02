@@ -17,14 +17,20 @@ import { registeredMigrationVersions } from './helpers.js';
  * The per-migration files keep what is per-migration (this migration's SQL, its markers,
  * its runner behaviour, its `_vNN` name). The whole-chain invariants live here, once.
  *
- * Adding a migration = append one entry to the `migrations` array in migrate.ts and bump
- * `MAX_MIGRATION_VERSION` below - one line, one file. Nothing else in the suite needs to
- * move. If `backend/src/db/migration-versions.ts` (a generated version manifest) exists,
- * regenerate it in the same change; it is not the source of truth and is not read here.
+ * Adding a migration = append one entry to the `migrations` array in migrate.ts and run
+ * `node scripts/gen-migration-versions.mjs`. Nothing else in the suite needs to move: the
+ * expected version used by the health check is read from that generated manifest, not from a
+ * second hand-maintained number, and the drift guard below fails if the manifest and migrate.ts
+ * disagree.
  */
 
-/** The highest registered migration version. Bump this when you append a migration. */
-const MAX_MIGRATION_VERSION = 75;
+/**
+ * The highest registered migration version. Imported, not restated: it used to be a literal
+ * `75` here and a different literal in routes/security.ts (31) and a third in
+ * migration-selfcheck.service.ts (58) — three "expected schema version" constants that all
+ * disagreed while every one of them reported a green check.
+ */
+const { MAX_MIGRATION_VERSION } = await import('../db/migration-versions.js');
 
 /**
  * The numbers that were never allocated: 1 predates the chain (v2 is the first entry) and
