@@ -26,6 +26,14 @@ const loaders: Record<string, () => Promise<unknown>> = {
   '/ask': () => import('../pages/Ask'),
   '/today': () => import('../pages/Today'),
   '/data-health': () => import('../pages/DataHealth'),
+  '/annual-report': () => import('../pages/AnnualReport'),
+  '/assistant': () => import('../pages/Assistant'),
+  '/cron-monitor': () => import('../pages/CronMonitor'),
+  '/lunar-holidays': () => import('../pages/LunarHolidays'),
+  '/login-history': () => import('../pages/LoginHistory'),
+  '/integrations-docs': () => import('../pages/IntegrationsDocs'),
+  '/deploy-wizard': () => import('../pages/DeployWizard'),
+  '/docker-migration': () => import('../pages/DockerMigration'),
 };
 
 const prefetched = new Set<string>();
