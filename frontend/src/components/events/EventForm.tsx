@@ -610,7 +610,9 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
   const toggleChannel = async (channel: string) => {
     const currentChannels = formData.reminderConfig.channels || [];
     const currentAccountIds = formData.reminderConfig.accountIds || [];
-    const isSelected = currentChannels.includes(channel);
+    // 必须走别名判定：老事件存的是 `wechat`，勾选框也是按 isChannelSelected 显示已勾选，
+    // 这里若用精确匹配，点一个「已勾选」的框会变成再追加一个 `wxpusher`（重复而不是取消）。
+    const isSelected = isChannelSelected(currentChannels, channel);
 
     if (isSelected) {
       // 取消选择该渠道，并移除相关 accountIds
@@ -622,7 +624,8 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
         ...formData,
         reminderConfig: {
           ...formData.reminderConfig,
-          channels: currentChannels.filter(c => c !== channel),
+          // 所有历史拼写一起删干净，否则取消后仍被判定为已勾选
+          channels: currentChannels.filter(c => !accountTypes.includes(c)),
           accountIds: newAccountIds,
         },
       });
