@@ -201,6 +201,30 @@ async function handleNotificationClick(data) {
  *
  * 任何失败都如实告诉用户，绝不能假装延后成功——那会让人以为提醒被推走了。
  */
+async function snoozeRequest(id) {
+  return fetch(`${self.location.origin}/api/events/${id}/snooze`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ minutes: 10 }),
+  });
+}
+
+/**
+ * 拿新的 access cookie。access cookie 只有 15 分钟（记住我 1 小时），而推送通知恰恰
+ * 是在应用关着的时候送达的 —— 不刷新就必然 401，「延后」按钮等于永远点不动。
+ * refresh cookie 跟着会话走（最长 30 天），所以这里换一次 access 就够了。
+ */
+async function refreshAccessCookie() {
+  const response = await fetch(`${self.location.origin}/api/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  return response.ok;
+}
+
 async function handleSnoozeAction(eventId) {
   const id = Number(eventId);
 
@@ -219,19 +243,26 @@ async function handleSnoozeAction(eventId) {
   }
 
   try {
-    const response = await fetch(`${self.location.origin}/api/events/${id}/snooze`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ minutes: 10 }),
-    });
+    let response = await snoozeRequest(id);
+    if (response.status === 401) {
+      // access cookie 过期是常态，不是「请重新登录」：先静默换一次凭证再重试一次。
+      try {
+        if (await refreshAccessCookie()) response = await snoozeRequest(id);
+      } catch {
+        // 刷新本身失败就按原来的 401 处理，如实告诉用户
+      }
+    }
     if (response.ok) {
       await feedback('已延后 10 分钟');
       return;
     }
-    // 401/403：会话过期或失效，提示重新登录而不是泛化成网络错误
-    if (response.status === 401 || response.status === 403) {
-      await feedback('登录已失效，请重新登录后再试');
+    // 403 是 CSRF / 零信任网关按来源拒绝，不是登录问题，别把它说成会话过期。
+    if (response.status === 401) {
+      await feedback('会话已过期，请打开 TimeMark 后再试');
+      return;
+    }
+    if (response.status === 403) {
+      await feedback('请求被安全策略拒绝，请打开应用重试');
       return;
     }
     await feedback('延后失败，请打开应用重试');
