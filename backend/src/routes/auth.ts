@@ -138,13 +138,31 @@ auth.post('/login', loginRateLimit, async (c) => {
     if (user.totpEnabled && user.totpSecret) {
       const totpOk = verifyTotpCode(user.totpSecret, totpCode || '');
       if (!totpOk) {
-        void createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', false, 'totp_invalid');
-        return c.json({
-          success: false,
-          error: '需要双因素验证码',
-          code: 'totp_required',
-          requiresTotp: true,
-        }, 401);
+        // No valid TOTP code — last resort: a one-time recovery code. This is the single
+        // escape hatch for a lost authenticator; without it the account is unrecoverable.
+        const { consumeRecoveryCode } = await import('../services/recovery-codes.service.js');
+        const recoveryUsed = totpCode
+          ? await consumeRecoveryCode(parseInt(user.id, 10), totpCode)
+          : false;
+        if (recoveryUsed) {
+          await logSecurityEvent({
+            userId: parseInt(user.id, 10),
+            username: user.username,
+            eventType: 'totp_recovery_code_used',
+            ip,
+            userAgent,
+            metadata: { reason: 'totp_invalid_recovery_code_accepted' },
+          });
+          logFireAndForget('auth.totp_recovery_code_used', 'Login succeeded via a one-time TOTP recovery code')(undefined);
+        } else {
+          void createLoginLog(user.id, ip, userAgent, deviceFingerprint || '', false, 'totp_invalid');
+          return c.json({
+            success: false,
+            error: '需要双因素验证码',
+            code: 'totp_required',
+            requiresTotp: true,
+          }, 401);
+        }
       }
     }
 

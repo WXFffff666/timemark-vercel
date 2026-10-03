@@ -379,8 +379,13 @@ export function LoginForm() {
             </div>
           </motion.div>
           {showTotp && (
-            <motion.div variants={itemVariants}>
-              <Input placeholder="双因素验证码 (6位)" value={totpCode} onChange={(e) => setTotpCode(e.target.value)} disabled={isLocked || loading} aria-label="双因素验证码" inputMode="numeric" autoComplete="one-time-code" />
+            <motion.div variants={itemVariants} className="space-y-2">
+              {/* inputMode="text", not "numeric": recovery codes contain letters, and a numeric
+                  keypad on mobile makes them impossible to type. */}
+              <Input placeholder="双因素验证码，或恢复码" value={totpCode} onChange={(e) => setTotpCode(e.target.value)} disabled={isLocked || loading} aria-label="双因素验证码或恢复码" inputMode="text" autoComplete="one-time-code" />
+              <p className="text-xs text-hint text-center">
+                验证器丢了？用安全中心签发的恢复码之一登录（格式 xxxxx-xxxxx，每个只能用一次）。
+              </p>
             </motion.div>
           )}
           {turnstileSiteKey && (

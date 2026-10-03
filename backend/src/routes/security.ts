@@ -169,7 +169,15 @@ security.get('/totp/status', async (c) => {
     [parseInt(user.id, 10)],
   );
   const row = result.rows[0] as { totp_secret?: string; totp_enabled?: boolean } | undefined;
-  return c.json({ success: true, data: { enabled: !!(row?.totp_enabled && row?.totp_secret) } });
+  const { countRemainingRecoveryCodes } = await import('../services/recovery-codes.service.js');
+  const recoveryCodesRemaining = await countRemainingRecoveryCodes(parseInt(user.id, 10));
+  return c.json({
+    success: true,
+    data: {
+      enabled: !!(row?.totp_enabled && row?.totp_secret),
+      recoveryCodesRemaining,
+    },
+  });
 });
 
 security.post('/totp/setup', async (c) => {
@@ -203,19 +211,40 @@ security.post('/totp/enable', async (c) => {
   return c.json({ success: true });
 });
 
-security.post('/totp/disable', async (c) => {
-  const user = c.get('user');
-  const { code, password } = await c.req.json().catch(() => ({}));
+/**
+ * Shared guard for the TOTP-sensitive operations (disable, issue recovery codes).
+ * Both require the account password plus a current TOTP code — keeping them in one
+ * place so the two checks cannot drift apart.
+ */
+async function verifyPasswordAndTotp(
+  user: User,
+  password: unknown,
+  code: unknown,
+): Promise<{ ok: true } | { ok: false; status: 401; error: string }> {
   const { verifyUserPassword } = await import('../services/auth.service.js');
   const verified = await verifyUserPassword(user.username, String(password || ''));
-  if (!verified) return c.json({ success: false, error: '密码错误' }, 401);
+  if (!verified) return { ok: false, status: 401, error: '密码错误' };
 
   const result = await query('SELECT totp_secret FROM users WHERE id = $1', [parseInt(user.id, 10)]);
   const secret = result.rows[0]?.totp_secret as string | undefined;
   if (secret && !authenticator.verify({ token: String(code || ''), secret })) {
-    return c.json({ success: false, error: '验证码错误' }, 401);
+    return { ok: false, status: 401, error: '验证码错误' };
   }
-  await query('UPDATE users SET totp_secret = NULL, totp_enabled = FALSE WHERE id = $1', [parseInt(user.id, 10)]);
+  return { ok: true };
+}
+
+security.post('/totp/disable', async (c) => {
+  const user = c.get('user');
+  const { code, password } = await c.req.json().catch(() => ({}));
+  const guard = await verifyPasswordAndTotp(user, password, code);
+  if (!guard.ok) return c.json({ success: false, error: guard.error }, guard.status);
+
+  // Clearing the recovery codes too: they authenticate the same secret this action removes,
+  // and a stale unconsumed code would keep working after 2FA is re-enabled later.
+  await query(
+    `UPDATE users SET totp_secret = NULL, totp_enabled = FALSE, totp_recovery_codes = '[]'::jsonb WHERE id = $1`,
+    [parseInt(user.id, 10)],
+  );
   await logSecurityEvent({
     userId: parseInt(user.id, 10),
     username: user.username,
@@ -223,6 +252,37 @@ security.post('/totp/disable', async (c) => {
     ip: getClientIp(c),
   });
   return c.json({ success: true });
+});
+
+security.post('/totp/recovery-codes', async (c) => {
+  const user = c.get('user');
+  const userId = parseInt(user.id, 10);
+  const { password, code, count } = await c.req.json().catch(() => ({}));
+
+  const statusResult = await query('SELECT totp_secret, totp_enabled FROM users WHERE id = $1', [userId]);
+  const status = statusResult.rows[0] as { totp_secret?: string; totp_enabled?: boolean } | undefined;
+  if (!(status?.totp_enabled && status?.totp_secret)) {
+    return c.json({ success: false, error: '请先启用双因素认证' }, 400);
+  }
+
+  const guard = await verifyPasswordAndTotp(user, password, code);
+  if (!guard.ok) return c.json({ success: false, error: guard.error }, guard.status);
+
+  const { generateRecoveryCodes, replaceRecoveryCodes } = await import('../services/recovery-codes.service.js');
+  const requested = Number(count);
+  const codes = generateRecoveryCodes(Number.isFinite(requested) ? requested : undefined);
+  await replaceRecoveryCodes(userId, codes);
+
+  await logSecurityEvent({
+    userId,
+    username: user.username,
+    eventType: 'totp_recovery_codes_issued',
+    ip: getClientIp(c),
+    metadata: { count: codes.length },
+  });
+
+  // Plaintext is returned exactly once — only hashes stay in the database.
+  return c.json({ success: true, data: { codes } });
 });
 
 // ============ Deploy / system info ============

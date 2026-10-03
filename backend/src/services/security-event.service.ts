@@ -11,6 +11,8 @@ export type SecurityEventType =
   | 'session_revoked'
   | 'totp_enabled'
   | 'totp_disabled'
+  | 'totp_recovery_codes_issued'
+  | 'totp_recovery_code_used'
   | 'passkey_registered'
   | 'passkey_removed'
   | 'passkey_login_success'

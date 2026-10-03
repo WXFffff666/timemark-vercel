@@ -63,6 +63,10 @@ export default function Security() {
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [totpCode, setTotpCode] = useState('');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryCodesRemaining, setRecoveryCodesRemaining] = useState<number | null>(null);
+  const [issuedRecoveryCodes, setIssuedRecoveryCodes] = useState<string[] | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [deployInfo, setDeployInfo] = useState<DeployInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [passkeys, setPasskeys] = useState<PasskeyCredential[]>([]);
@@ -81,7 +85,7 @@ export default function Security() {
         api.get<any[]>('/security/events'),
         api.get<any[]>('/security/ip-bans'),
         api.get<{ enabled: boolean; ips: string[] }>('/security/ip-whitelist'),
-        api.get<{ enabled: boolean }>('/security/totp/status'),
+        api.get<{ enabled: boolean; recoveryCodesRemaining?: number }>('/security/totp/status'),
         api.get<any>('/security/deploy-info'),
         listPasskeys().catch(() => []),
       ]);
@@ -91,6 +95,7 @@ export default function Security() {
       setWhitelistEnabled(!!wl?.enabled);
       setWhitelistIps((wl?.ips || []).join('\n'));
       setTotpEnabled(!!totp?.enabled);
+      setRecoveryCodesRemaining(typeof totp?.recoveryCodesRemaining === 'number' ? totp.recoveryCodesRemaining : null);
       setDeployInfo(deploy ?? null);
       setPasskeys(Array.isArray(keys) ? keys : []);
     } catch (e) {
@@ -127,6 +132,51 @@ export default function Security() {
     setTotpEnabled(true);
     setQrDataUrl('');
     alert('双因素认证已启用');
+  };
+
+  const issueRecoveryCodes = async () => {
+    setRecoveryBusy(true);
+    try {
+      const data = await api.post<{ codes: string[] }>('/security/totp/recovery-codes', {
+        password: recoveryPassword,
+        code: totpCode,
+      });
+      setIssuedRecoveryCodes(data.codes);
+      setRecoveryPassword('');
+      setRecoveryCodesRemaining(data.codes.length);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '恢复码签发失败');
+    } finally {
+      setRecoveryBusy(false);
+    }
+  };
+
+  const copyRecoveryCodes = async () => {
+    if (!issuedRecoveryCodes?.length) return;
+    try {
+      await navigator.clipboard.writeText(issuedRecoveryCodes.join('\n'));
+      alert('已复制全部恢复码');
+    } catch {
+      // Clipboard API can be unavailable (non-HTTPS / permission denied) — select-free fallback.
+      alert('复制失败，请手动抄写');
+    }
+  };
+
+  const disableTotp = async () => {
+    if (!confirm('确定关闭双因素认证？关闭后登录只需用户名和密码，账号安全性会降低。')) return;
+    setRecoveryBusy(true);
+    try {
+      await api.post('/security/totp/disable', { password: recoveryPassword, code: totpCode });
+      setTotpEnabled(false);
+      setRecoveryCodesRemaining(null);
+      setIssuedRecoveryCodes(null);
+      alert('双因素认证已关闭');
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '关闭失败');
+    } finally {
+      setRecoveryBusy(false);
+    }
   };
 
   const unbanIp = async (ip: string) => {
@@ -295,6 +345,54 @@ export default function Security() {
                   <Button onClick={enableTotp}>启用</Button>
                 </div>
               </>
+            )}
+            {totpEnabled && (
+              <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-900/10 p-3">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">恢复码</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  剩余 {recoveryCodesRemaining ?? '—'} 个。验证器丢失时，可用其中一个恢复码登录。
+                  每个只能用一次；重新签发会作废所有旧码。
+                </p>
+                {issuedRecoveryCodes ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-red-600 dark:text-red-400 font-medium">
+                      请立即保存这些恢复码（只显示这一次）：
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 font-mono text-sm" data-testid="recovery-codes-list">
+                      {issuedRecoveryCodes.map((code) => (
+                        <span key={code} className="p-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-center">{code}</span>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={copyRecoveryCodes}>复制全部</Button>
+                      <Button size="sm" variant="outline" onClick={() => setIssuedRecoveryCodes(null)}>我已保存</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-500">签发需要验证账号密码和当前验证器上的 6 位验证码。</p>
+                    <Input
+                      type="password"
+                      placeholder="账号密码"
+                      value={recoveryPassword}
+                      onChange={(e) => setRecoveryPassword(e.target.value)}
+                      autoComplete="current-password"
+                    />
+                    <div className="flex gap-2">
+                      <Input placeholder="6位验证码" value={totpCode} onChange={(e) => setTotpCode(e.target.value)} inputMode="numeric" />
+                      <Button onClick={issueRecoveryCodes} disabled={recoveryBusy || !recoveryPassword || !totpCode}>
+                        {recoveryBusy ? '签发中...' : '签发恢复码'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {totpEnabled && (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">关闭需要账号密码和当前验证码。关闭后已签发的恢复码会一并作废。</p>
+                <Button size="sm" variant="destructive" onClick={disableTotp} disabled={recoveryBusy}>关闭双因素认证</Button>
+              </div>
             )}
           </CardContent>
         </Card>
