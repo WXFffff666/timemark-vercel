@@ -11,6 +11,9 @@ build
 *.js.map
 !api/index.js
 !frontend/public/sw.js
+# 这个文件之前没被列进来，于是 `git add` 静默忽略、脚本从未进过仓库，
+# 结果 index.html 每次加载都 404（PWA 安装横幅也因此从未出现过）。见 CHANGELOG v2.22.0。
+!frontend/public/install-prompt.js
 !*.config.js
 !scripts/build-vercel-api.mjs
 api/handler.cjs
