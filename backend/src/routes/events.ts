@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { createEvent, getEventsByUserIdPaginated, updateEvent, deleteEvent, deleteEventsByIds } from '../services/event.service.js';
-import { createEventSchema, updateEventSchema, batchDeleteSchema, csvImportSchema, formatZodError } from '@timemark/shared';
+import { createEventSchema, updateEventSchema, batchDeleteSchema, csvImportSchema, formatZodError, readDelivery } from '@timemark/shared';
 import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
 import { createLogger, logFireAndForget } from '../utils/logger.js';
@@ -224,8 +224,13 @@ events.post('/:id/test-send', async (c) => {
         data: { channelResults },
       }, 400);
     }
-    const hasFailure = values.some((r) => !r.success);
-    const allFailed = values.length > 0 && values.every((r) => !r.success);
+    // 只看真实渠道：所有渠道都被 filterSupportedChannels 丢掉时，结果里除了被丢掉的
+    // 渠道还有一个 _skipped 标记，它是 success:false 但不是渠道。旧代码把它一起写进
+    // error_details.channel_type 与 error_message，于是提醒日志里出现一个叫 _skipped
+    // 的渠道。判定与 jobs/tasks.ts、trigger-logs 重试写回用同一个 readDelivery。
+    const delivery = readDelivery({ channelResults });
+    const hasFailure = delivery.failed.length > 0;
+    const allFailed = delivery.delivered.length === 0;
     const status = allFailed ? 'failed' : hasFailure ? 'partial' : 'success';
     // checkbox 167（QA 失败场景）：绑定账号已停用时点名该账号；同时写进提醒日志的错误信息。
     const boundAccountNote = allFailed
@@ -234,8 +239,13 @@ events.post('/:id/test-send', async (c) => {
     const errorMessage = boundAccountNote
       ? `绑定通知账号不可用：${boundAccountNote}。请在「设置 → 通知渠道」重新启用或改绑其他账号后重试。`
       : hasFailure
-        ? Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => `${ch}: ${r.error}`).join('; ')
+        ? delivery.reason
         : undefined;
+
+    const sent = channelResults as Record<string, { success?: boolean; error?: string }>;
+    const failedEntries = delivery.failed
+      .map((channel) => [channel, sent[channel]] as const)
+      .filter((entry): entry is readonly [string, { success?: boolean; error?: string }] => !!entry[1]);
 
     await recordEventTrigger(
       Number(event.id),
@@ -247,8 +257,8 @@ events.post('/:id/test-send', async (c) => {
       JSON.stringify(channelResults),
       hasFailure
         ? {
-            channel_type: Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch]) => ch).join(','),
-            details: Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => ({ channel: ch, error: r.error })),
+            channel_type: failedEntries.map(([ch]) => ch).join(','),
+            details: failedEntries.map(([ch, r]) => ({ channel: ch, error: r.error })),
           }
         : undefined,
     );
