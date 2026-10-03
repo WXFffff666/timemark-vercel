@@ -155,9 +155,9 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 > **前端页面与导航入口**，界面上暂时无法使用。（考勤工时与家庭库存则确实尚未挂载。）
 > 字段级加密（161）与联系人生日祝福（168）**已实现**
 > （`backend/src/services/field-encryption.service.ts`、`birthday-greeting.service.ts`）。
-> Wave 19 端到端验证（170）**已部分执行**：浏览器推送 / Service Worker / 通知「延后」按钮 /
-> 登录跳转的 Playwright 用例已在真实浏览器跑通；PWA 可安装性 2 条与需要真实 PostgreSQL 的
-> 用例未通过 / 未运行，如实记录在 [CHANGELOG.md](CHANGELOG.md) 的 v2.22.0 条目。
+> Wave 19 端到端验证（170）**已执行**：`frontend/e2e` 全量 23 个 spec 在真实浏览器下跑完，
+> 125 通过 / 7 失败；失败全部为既有问题（已回退到改动前复跑验证）。逐条清单见
+> [CHANGELOG.md](CHANGELOG.md) 的 v2.22.0 条目。
 
 ---
 

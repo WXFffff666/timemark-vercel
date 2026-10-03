@@ -26,7 +26,12 @@
 - **153-160 的后端模块已挂载，但前端缺页面**：照护 / 宠物 / 车辆 / 观影清单 / 双向日历同步 / 家庭协作的路由**已挂载**在 `backend/src/index.ts`（`/api/care`、`/api/pets`、`/api/vehicles`、`/api/watchlist`、`/api/calendar-sync`、`/api/collaboration`），接口可直接调用；缺的是前端页面与导航入口，界面上仍无法使用。考勤工时与家庭库存则确实尚未挂载。
 - **161 字段级加密**已实现（`backend/src/services/field-encryption.service.ts`，附件文件名/内容类型已在用）。
 - **168 联系人生日祝福**已实现（`birthday-greeting.service.ts`，由提醒 cron 调用）。
-- **170 Wave 19 端到端验证：部分执行**。浏览器推送 / Service Worker / 通知「延后」按钮 / 登录跳转的 Playwright 用例已在真实浏览器（`PLAYWRIGHT_CHANNEL=chrome`）跑通，其中「延后」按钮覆盖了 access cookie 过期 → 换 refresh cookie → 重试一次的完整链路。未执行的部分如实记录：PWA 可安装性 2 条在 dev server 下仍失败（Chrome 对 dev server 报 installability error，既有问题，非本次改动引入）；其余约 19 个用例需要真实 PostgreSQL，本机没有，未运行。
+- **170 Wave 19 端到端验证：已执行**。`frontend/e2e` 全量 23 个 spec 在真实浏览器（`PLAYWRIGHT_CHANNEL=chrome`，本机已装 Chrome/Edge 时无需下载 Playwright 自带 Chromium）下跑完：**125 通过 / 7 失败**。这些用例自带有状态 API mock，只需要 Vite dev server，不需要真实后端或数据库。其中通知「延后」按钮覆盖了 access cookie 过期 → 换 refresh cookie → 重试一次且不重试成风暴的完整链路。
+  7 条失败**均为既有问题，非本次改动引入**（已把 `sw.js` 与 `playwright.config.ts` 回退到 `ff17f04` 复跑，失败集合不变）：
+  - `almanac.spec.ts` / `almanac-advanced.spec.ts`：断言「无 console error」，但页面有一个 404 资源（未定位到具体 URL；常见的 manifest / favicon / sw.js / search-index / icons 均实测 200）。根因未查明，如实记录。
+  - `upgrade-smoke.spec.ts`：路由冒烟渲染断言失败。
+  - `pwa-offline.spec.ts` 2 条：Chrome 对 dev server 报 installability error，`#timemark-install-banner` 不出现。
+  - 另有 2 条（`basic.spec.ts` 未登录跳转、`task-90` RT1 Web Push）在 `--workers=1` 下通过，属并行执行时的偶发，不稳定但非功能缺陷。
 
 ## v2.21.0 (2026-09-30) — 后台 AI 运行时（Waves 14-15）
 
