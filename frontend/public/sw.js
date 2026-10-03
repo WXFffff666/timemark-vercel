@@ -16,6 +16,7 @@
  * - `notificationclick` deep-links to `payload.url` (same-origin only).
  * - `TIMEMARK_SW_SIMULATE_NOTIFICATION_CLICK` invokes the exact same click
  *   handler; Playwright/CDP cannot synthesize a real notification click.
+ * - `TIMEMARK_SW_SIMULATE_SNOOZE` does the same for the snooze action button.
  */
 
 const CACHE_VERSION = 'timemark-v4';
@@ -296,5 +297,10 @@ self.addEventListener('message', (event) => {
   // the exact same handler the real event uses.
   if (event.data && event.data.type === 'TIMEMARK_SW_SIMULATE_NOTIFICATION_CLICK') {
     event.waitUntil(handleNotificationClick(event.data.data || {}));
+  }
+  // E2E hook: same reason — the snooze branch only runs from a real notification
+  // *button* click, which cannot be synthesized either.
+  if (event.data && event.data.type === 'TIMEMARK_SW_SIMULATE_SNOOZE') {
+    event.waitUntil(handleSnoozeAction((event.data.data || {}).eventId));
   }
 });

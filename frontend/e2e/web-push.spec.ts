@@ -278,3 +278,78 @@ test('unsubscribing DELETEs the stored subscription', async ({ page }) => {
 
   expect(captured.unsubscribe).toEqual([{ endpoint: ENDPOINT }]);
 });
+
+/**
+ * 「延后」按钮的凭证刷新契约。
+ *
+ * access cookie 只有 15 分钟（记住我 1 小时），而推送通知是在应用关着时送达的 ——
+ * 不换一次凭证就必然 401，按钮等于永远点不动。所以 401 必须：换 refresh cookie
+ * → 重试 snooze 一次 → 成功。这里把 snooze 第一次答 401、第二次答 200，断言
+ * 「恰好两次 snooze + 恰好一次 refresh」，同时钉住不会重试成风暴。
+ */
+async function mockSnoozeApi(page: Page, snooze: string[], state: { refreshes: number }): Promise<void> {
+  await page.addInitScript(() => {
+    localStorage.setItem('accessToken', 'e2e-push-token');
+  });
+  // service worker 发出的请求不会被 page.route 拦到，必须挂在 context 上
+  await page.context().route('**/api/**', (route) => {
+    const req = route.request();
+    const cors: Record<string, string> = {
+      'Access-Control-Allow-Origin': 'http://localhost:5173',
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+    };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    const { pathname } = new URL(req.url());
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({
+        status,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    if (pathname === '/api/auth/session') return json({ success: true, data: USER });
+    if (pathname === '/api/auth/turnstile-config') return json({ success: true, data: { siteKey: null, enabled: false } });
+    if (pathname === '/api/auth/refresh') {
+      state.refreshes += 1;
+      return json({ success: true, data: USER });
+    }
+    if (/^\/api\/events\/\d+\/snooze$/.test(pathname)) {
+      snooze.push(req.postData() ?? '');
+      // 第一次 401（access cookie 过期），换过凭证之后成功
+      return snooze.length === 1
+        ? json({ success: false, error: 'Unauthorized' }, 401)
+        : json({ success: true, data: { snoozedUntil: '2026-10-05T02:10:00.000Z' } });
+    }
+    return json({ success: true, data: [] });
+  });
+}
+
+async function gotoControlledPage(page: Page): Promise<void> {
+  await stubPushManager(page);
+  await collectPushEvents(page);
+  await page.goto('/settings');
+  await waitForController(page);
+}
+
+test('the snooze action refreshes an expired access cookie and retries exactly once', async ({ page }) => {
+  const snooze: string[] = [];
+  const state = { refreshes: 0 };
+  await mockSnoozeApi(page, snooze, state);
+  await gotoControlledPage(page);
+
+  await page.evaluate(() =>
+    navigator.serviceWorker.controller?.postMessage({ type: 'TIMEMARK_SW_SIMULATE_SNOOZE', data: { eventId: 99 } }),
+  );
+
+  await expect.poll(() => snooze.length, { timeout: 20_000 }).toBe(2);
+  expect(state.refreshes).toBe(1);
+  // 两次都是同一个事件、同一个 10 分钟
+  expect(snooze).toEqual([JSON.stringify({ minutes: 10 }), JSON.stringify({ minutes: 10 })]);
+
+  // 不许重试成风暴：再多等一会儿，调用次数不应继续增长
+  await page.waitForTimeout(1_000);
+  expect(snooze).toHaveLength(2);
+  expect(state.refreshes).toBe(1);
+});
