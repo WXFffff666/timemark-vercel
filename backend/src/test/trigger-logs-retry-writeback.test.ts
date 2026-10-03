@@ -169,4 +169,14 @@ describe('POST /api/trigger-logs/:id/retry 的写回', () => {
     expect(res.status).toBe(400);
     expect(sendNotifications).not.toHaveBeenCalled();
   });
+
+  it('notification_channels 损坏时不抛异常，也不假装能重试', async () => {
+    dbQuery.mockResolvedValue({
+      rows: [logRow({ status: 'skipped', channel_type: null, channel_results: null, notification_channels: '[not json' })],
+    });
+
+    const res = await retry();
+    expect(res.status).toBe(400);
+    expect(sendNotifications).not.toHaveBeenCalled();
+  });
 });
