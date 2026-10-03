@@ -3,7 +3,10 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { query } from '../db/index.js';
 import { sendNotifications } from '../services/notifications/index.js';
 import { readDelivery } from '@timemark/shared';
+import { fetchLogsByOutcome } from '../services/trigger-log-delivery-filter.js';
 import type { User } from '@timemark/shared';
+
+// GET / 的 outcome 筛选与重试合并写回见各 handler 内注释。
 
 /**
  * events.notification_channels 是数组还是 JSON 字符串取决于写入方，这里两种都收。
@@ -31,6 +34,7 @@ triggerLogs.get('/', async (c) => {
   const limit = Math.min(parseInt(c.req.query('limit') || '50'), 200);
   const offset = parseInt(c.req.query('offset') || '0');
   const status = c.req.query('status');
+  const outcome = c.req.query('outcome');
   const channel = c.req.query('channel');
   const eventId = c.req.query('eventId');
 
@@ -49,6 +53,17 @@ triggerLogs.get('/', async (c) => {
     conditions.push(`tl.event_id = $${params.length}`);
   }
   const where = conditions.join(' AND ');
+
+  // outcome 筛选（成功/部分失败/失败/跳过）：「部分失败」落库时 status='success'，
+  // 按裸 status 筛不出来，推导逻辑在 service 里与 shared 的 readDelivery 共用同一份判定。
+  if (outcome && ['partial', 'failed', 'delivered', 'skipped'].includes(outcome)) {
+    const { rows: outcomeRows, total: outcomeTotal } = await fetchLogsByOutcome(userId, outcome, limit, offset);
+    return c.json({
+      success: true,
+      data: outcomeRows,
+      pagination: { total: outcomeTotal, limit, offset },
+    });
+  }
 
   try {
     const result = await query(
@@ -205,14 +220,29 @@ triggerLogs.post('/:id/retry', async (c) => {
       .map((channel) => [channel, sent[channel]] as const)
       .filter((entry): entry is readonly [string, { error?: string; accountId?: number }] => !!entry[1]);
 
+    // 合并而不是覆盖：重试只补发失败渠道，直接写回会把原本次数里已成功渠道的条目抹掉，
+    // 前端从界面看不到它们，审计轨迹退化。本次结果按渠道覆盖旧条目。
+    let previousResults: Record<string, unknown> = {};
+    const rawPrevious = logEntry.channel_results;
+    if (rawPrevious && typeof rawPrevious === 'object') {
+      previousResults = rawPrevious as Record<string, unknown>;
+    } else if (typeof rawPrevious === 'string') {
+      // 历史 TEXT 列时代存的是字符串。
+      try {
+        const parsed = JSON.parse(rawPrevious);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) previousResults = parsed;
+      } catch { /* 坏数据当作没有旧结果 */ }
+    }
+    const mergedResults = { ...previousResults, ...sent };
+
     await query(
-      `UPDATE event_trigger_logs 
+      `UPDATE event_trigger_logs
        SET status = $1, error_message = $2, channel_results = $3, retry_count = $4, error_details = $5
        WHERE id = $6 AND user_id = $7`,
       [
         newStatus,
         newErrorMessage,
-        JSON.stringify(channelResults),
+        JSON.stringify(mergedResults),
         newRetryCount,
         failedEntries.length > 0
           ? JSON.stringify(failedEntries.map(([ch, r]) => ({ channel: ch, error: r.error, accountId: r.accountId })))

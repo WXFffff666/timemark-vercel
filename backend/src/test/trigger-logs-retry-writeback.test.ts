@@ -101,6 +101,34 @@ describe('POST /api/trigger-logs/:id/retry 的写回', () => {
     expect(errorDetails).toBeNull();
   });
 
+  it('写回 channel_results 是合并而不是覆盖：已成功渠道的条目保留', async () => {
+    // 原行 channel_results: email 成功、fcm 失败。重试只补 fcm 且这次成功 ——
+    // 覆盖式写回会让 email 从记录里消失，界面与审计都看不到它。
+    sendNotifications.mockResolvedValue({ fcm: { success: true } });
+
+    const res = await retry();
+    expect(res.status).toBe(200);
+
+    const merged = updateArgs()[2] as string;
+    const parsed = JSON.parse(merged) as Record<string, { success: boolean }>;
+    expect(parsed.email).toEqual({ success: true });
+    expect(parsed.fcm).toEqual({ success: true });
+  });
+
+  it('写回合并时本次结果按渠道覆盖旧条目，历史 TEXT 列的字符串形状也能并进来', async () => {
+    dbQuery.mockResolvedValue({
+      rows: [logRow({ channel_results: JSON.stringify({ email: { success: true }, fcm: { success: false, error: 'HTTP 500' } }) })],
+    });
+    sendNotifications.mockResolvedValue({ fcm: { success: true } });
+
+    const res = await retry();
+    expect(res.status).toBe(200);
+
+    const merged = JSON.parse(updateArgs()[2] as string) as Record<string, { success: boolean }>;
+    expect(merged.email).toEqual({ success: true });
+    expect(merged.fcm).toEqual({ success: true });
+  });
+
   it('重试后部分成功：记 success（已送达的渠道不能被重复投递），原因只列真实失败渠道', async () => {
     sendNotifications.mockResolvedValue({
       fcm: { success: true },

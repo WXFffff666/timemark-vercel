@@ -88,7 +88,9 @@ export default function TriggerLogs() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: '100' });
-      if (statusFilter) params.set('status', statusFilter);
+      // 状态下拉选的是「真实投递结果」（outcome）而不是裸 status：部分失败落库时
+      // status='success'，按 status 筛会把绿色标签混进"成功"、且"失败"里漏掉它。
+      if (statusFilter) params.set('outcome', statusFilter);
       if (channelFilter) params.set('channel', channelFilter);
       const res = await api.getRaw<TriggerLog[]>(`/trigger-logs?${params.toString()}`);
       setLogs(res.data || []);
@@ -202,8 +204,10 @@ export default function TriggerLogs() {
       <div className="max-w-4xl mx-auto px-6 mt-3 flex flex-wrap gap-2">
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border text-sm" aria-label="状态筛选">
           <option value="">全部状态</option>
-          <option value="success">成功</option>
+          <option value="delivered">成功</option>
+          <option value="partial">部分失败</option>
           <option value="failed">失败</option>
+          <option value="skipped">跳过</option>
         </select>
         <input
           value={channelFilter}
