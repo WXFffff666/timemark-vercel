@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Bell, ArrowLeft, Trash2, RefreshCw, CheckCircle2, XCircle, Clock, Calendar } from 'lucide-react';
+import { Bell, ArrowLeft, Trash2, RefreshCw, CheckCircle2, XCircle, Calendar, AlertCircle, SkipForward } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { readDelivery, type DeliveryOutcome } from '@timemark/shared';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } as const } };
@@ -23,15 +24,42 @@ interface TriggerLog {
   trigger_date: string;
   status: string;
   channels?: string;
-  channel_results?: string;
+  /** JSONB：线上是已解析对象，历史 TEXT 列才是 JSON 字符串 */
+  channel_results?: object | string | null;
   error_message?: string;
   created_at: string;
 }
 
-const getStatusIcon = (status: string) => {
-  if (status === 'success') return CheckCircle2;
-  if (status === 'failed') return XCircle;
-  return Clock;
+/**
+ * 真实投递结果 → 展示样式。
+ *
+ * 落库的 status 只有 success/failed/skipped，而「部分失败」（3 个渠道到了、1 个没到）
+ * 被记成 success。只看 status 的话，这个页面会把部分失败画成绿色对勾，并且
+ * **永远不渲染重试按钮** —— 后端已经放行的那条重试路径根本走不到。
+ * 所以这里和提醒记录页共用同一个 readDelivery 判定。
+ */
+const OUTCOME_STYLE: Record<DeliveryOutcome, {
+  label: string;
+  badge: 'success' | 'destructive' | 'secondary';
+  Icon: typeof CheckCircle2;
+  box: string;
+}> = {
+  delivered: {
+    label: '成功', badge: 'success', Icon: CheckCircle2,
+    box: 'bg-white/90 dark:bg-slate-800/90 text-emerald-500 border-white/60 dark:border-white/10',
+  },
+  partial: {
+    label: '部分失败', badge: 'secondary', Icon: AlertCircle,
+    box: 'bg-amber-50/90 dark:bg-amber-900/40 text-amber-600 border-amber-100 dark:border-amber-800/50',
+  },
+  failed: {
+    label: '失败', badge: 'destructive', Icon: XCircle,
+    box: 'bg-red-50/90 dark:bg-red-900/40 text-red-600 border-red-100 dark:border-red-800/50',
+  },
+  skipped: {
+    label: '已跳过', badge: 'secondary', Icon: SkipForward,
+    box: 'bg-slate-50/90 dark:bg-slate-800/90 text-slate-500 border-slate-200 dark:border-white/10',
+  },
 };
 
 const getEventTypeLabel = (type?: string): string => {
@@ -133,11 +161,14 @@ export default function TriggerLogs() {
     }
   };
 
-  const parseChannelResults = (resultsStr?: string): Record<string, ChannelResult> => {
-    if (!resultsStr) return {};
+  // `channel_results` 是 JSONB：线上是已解析对象，历史 TEXT 列才是 JSON 字符串，两种都要认。
+  const parseChannelResults = (results?: object | string | null): Record<string, ChannelResult> => {
+    if (!results) return {};
     try {
-      const parsed = typeof resultsStr === 'string' ? JSON.parse(resultsStr) : resultsStr;
-      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+      const parsed = typeof results === 'string' ? JSON.parse(results) : results;
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+        ? (parsed as Record<string, ChannelResult>)
+        : {};
     } catch {
       return {};
     }
@@ -208,14 +239,22 @@ export default function TriggerLogs() {
             <div className="absolute left-[2.25rem] top-8 bottom-8 w-px bg-gradient-to-b from-primary-500/40 via-slate-200 dark:via-slate-700 to-transparent z-0"></div>
             <div className="space-y-6 relative z-10">
               {logs.map((log) => {
-                const StatusIcon = getStatusIcon(log.status);
                 const channels = parseChannels(log.channels);
                 const channelResults = parseChannelResults(log.channel_results);
-                const isSuccess = log.status === 'success';
+                // 部分失败落库就是 status='success'，只看 status 会把它画成绿色对勾，
+                // 而且重试按钮永远不出现 —— 后端放行的重试路径根本走不到。
+                const delivery = readDelivery({
+                  status: log.status,
+                  channelResults: log.channel_results,
+                  errorMessage: log.error_message,
+                });
+                const style = OUTCOME_STYLE[delivery.outcome];
+                const StatusIcon = style.Icon;
+                const isSuccess = delivery.outcome === 'delivered';
 
                 return (
                   <motion.div key={log.id} variants={itemVariants} className="flex gap-6 items-center">
-                    <div className={`w-16 h-16 rounded-[1.5rem] shrink-0 flex items-center justify-center shadow-md border backdrop-blur-md ${isSuccess ? 'bg-white/90 dark:bg-slate-800/90 text-emerald-500 border-white/60 dark:border-white/10' : 'bg-red-50/90 dark:bg-red-900/40 text-red-600 border-red-100 dark:border-red-800/50'}`}>
+                    <div className={`w-16 h-16 rounded-[1.5rem] shrink-0 flex items-center justify-center shadow-md border backdrop-blur-md ${style.box}`}>
                       <StatusIcon size={26} />
                     </div>
                     <div className="glass-panel rounded-[2.5rem] p-6 flex-1 hover:shadow-xl transition-all ring-1 ring-black/5 dark:ring-white/10">
@@ -225,8 +264,8 @@ export default function TriggerLogs() {
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
                               {log.event_name || `事件 #${log.event_id}`}
                             </h3>
-                            <Badge variant={isSuccess ? 'success' : 'destructive'} className="scale-90">
-                              {isSuccess ? '成功' : '失败'}
+                            <Badge variant={style.badge} className="scale-90">
+                              {style.label}
                             </Badge>
                           </div>
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -234,20 +273,27 @@ export default function TriggerLogs() {
                               <Calendar size={14} /> {log.trigger_date}
                             </span>
                             <span>{getEventTypeLabel(log.event_type)}</span>
-                            {channelResults ? (
+                            {delivery.delivered.length > 0 || delivery.failed.length > 0 ? (
                               <span className="flex items-center gap-1.5 flex-wrap">
                                 <Bell size={14} />
-                                {Object.entries(channelResults).map(([ch, result]) => (
+                                {/* 只列真实渠道：_quiet_hours / _skipped 是内部标记，
+                                    当成渠道显示会让人以为存在这样的通知渠道 */}
+                                {delivery.delivered.map((ch) => (
                                   <span
                                     key={ch}
-                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                      result.success
-                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                                        : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                                    }`}
-                                    title={result.error || ''}
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                    title={channelResults[ch]?.error || ''}
                                   >
-                                    {result.success ? '✓' : '✗'} {ch}
+                                    ✓ {ch}
+                                  </span>
+                                ))}
+                                {delivery.failed.map((ch) => (
+                                  <span
+                                    key={ch}
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                                    title={channelResults[ch]?.error || ''}
+                                  >
+                                    ✗ {ch}
                                   </span>
                                 ))}
                               </span>
@@ -259,13 +305,19 @@ export default function TriggerLogs() {
                             {!isSuccess && log.error_message && !channelResults && (
                               <span className="text-red-500 text-xs">{log.error_message}</span>
                             )}
+                            {delivery.outcome === 'partial' && (
+                              <span className="text-xs text-amber-600 dark:text-amber-400">
+                                已送达 {delivery.delivered.length} 个，未送达 {delivery.failed.length} 个
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
                         <div className="text-sm font-bold text-slate-400 whitespace-nowrap bg-slate-100/50 dark:bg-slate-800/50 px-3 py-1 rounded-lg">
                           {formatRelativeTime(log.created_at)}
                         </div>
-                        {!isSuccess && (
+                        {/* 部分失败也该能重试：后端已按真实结果放行，这里之前被 status 卡住 */}
+                        {delivery.outcome !== 'delivered' && delivery.failed.length > 0 && (
                           <Button
                             size="sm"
                             variant="outline"
