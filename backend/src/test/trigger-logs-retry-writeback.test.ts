@@ -123,4 +123,50 @@ describe('POST /api/trigger-logs/:id/retry 的写回', () => {
     expect(res.status).toBe(400);
     expect(sendNotifications).not.toHaveBeenCalled();
   });
+
+  it('channel_type 与 channel_results 都为空的行（skipped / 异常路径）回落到事件配置的渠道', async () => {
+    // channel_type 只在有真实失败渠道时才写，所以 skipped 行、投递后异常、农历换算失败、
+    // 测试发送抛异常这些行两个字段同时为空。界面按 outcome !== 'delivered' 显示重试按钮，
+    // 后端再回 400 就等于给一个必然失败的按钮 —— 必须回落到事件自己配置的渠道。
+    dbQuery.mockResolvedValue({
+      rows: [logRow({ status: 'skipped', channel_type: null, channel_results: null, error_message: 'no_channel_resolved', notification_channels: ['email', 'telegram'] })],
+    });
+    sendNotifications.mockResolvedValue({ email: { success: true }, telegram: { success: true } });
+
+    const res = await retry();
+    expect(res.status).toBe(200);
+
+    // 回落用的是事件配置的渠道，不是空的
+    expect(sendNotifications).toHaveBeenCalledWith(
+      expect.anything(),
+      USER.id,
+      ['email', 'telegram'],
+    );
+    const [status, errorMessage, , retryCount, errorDetails] = updateArgs();
+    expect(status).toBe('success');
+    expect(errorMessage).toBeNull();
+    expect(retryCount).toBe(1);
+    expect(errorDetails).toBeNull();
+  });
+
+  it('notification_channels 是 JSON 字符串时同样能回落', async () => {
+    dbQuery.mockResolvedValue({
+      rows: [logRow({ status: 'skipped', channel_type: null, channel_results: null, notification_channels: '["email"]' })],
+    });
+    sendNotifications.mockResolvedValue({ email: { success: true } });
+
+    const res = await retry();
+    expect(res.status).toBe(200);
+    expect(sendNotifications).toHaveBeenCalledWith(expect.anything(), USER.id, ['email']);
+  });
+
+  it('连事件配置也没有渠道时仍然是 400（不假装能重试）', async () => {
+    dbQuery.mockResolvedValue({
+      rows: [logRow({ status: 'skipped', channel_type: null, channel_results: null, notification_channels: [] })],
+    });
+
+    const res = await retry();
+    expect(res.status).toBe(400);
+    expect(sendNotifications).not.toHaveBeenCalled();
+  });
 });

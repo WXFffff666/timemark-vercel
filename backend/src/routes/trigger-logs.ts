@@ -5,6 +5,21 @@ import { sendNotifications } from '../services/notifications/index.js';
 import { readDelivery } from '@timemark/shared';
 import type { User } from '@timemark/shared';
 
+/**
+ * events.notification_channels 是数组还是 JSON 字符串取决于写入方，这里两种都收。
+ * 损坏的值返回空数组而不是抛异常 —— 它只用来决定「有没有渠道可补发」。
+ */
+function configuredChannels(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map((c) => String(c).trim()).filter(Boolean);
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map((c) => String(c).trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
 const triggerLogs = new Hono<{ Variables: { user: User } }>();
 
 triggerLogs.use('*', authMiddleware);
@@ -132,9 +147,17 @@ triggerLogs.post('/:id/retry', async (c) => {
     // 重试只补真实失败渠道：_quiet_hours / _skipped 是内部标记，补发它们没有意义。
     // channel_results 是 JSONB，pg 已解析成对象（历史 TEXT 列才是字符串），交给 readDelivery
     // 两种形状都能处理——旧代码对对象做 JSON.parse 会抛异常并被静默吞掉。
+    //
+    // 两者都空时不能再 400：channel_type 只有「存在真实失败渠道」时才写（两个写入点都来自
+    // failedEntries），所以 skipped 行、投递后异常、农历换算失败、测试发送抛异常这些行的
+    // channel_type 与 channel_results 同时为空。界面按 outcome !== 'delivered' 渲染重试按钮
+    // （和这里的 400 闸门同一条规则），这里再挡一次就等于给用户一个必然失败的按钮。
+    // 回落到事件自己配置的渠道，让按钮真的能兑现。
     const channelsToRetry: string[] = logEntry.channel_type
       ? logEntry.channel_type.split(',').map((s: string) => s.trim()).filter(Boolean)
-      : delivery.failed;
+      : delivery.failed.length > 0
+        ? delivery.failed
+        : configuredChannels(logEntry.notification_channels);
 
     if (channelsToRetry.length === 0) {
       return c.json({ success: false, error: 'No failed channels to retry' }, 400);

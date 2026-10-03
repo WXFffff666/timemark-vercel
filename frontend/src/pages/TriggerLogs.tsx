@@ -302,8 +302,11 @@ export default function TriggerLogs() {
                                 <Bell size={14} /> {channels.join(', ')}
                               </span>
                             ) : null}
+                            {/* 没有 channel_results 的行（投递后异常、农历换算失败、测试发送抛异常）只有
+                                error_message 能说明原因；旧写法 `!channelResults` 里
+                                parseChannelResults(null) 返回 {}，恒为真，所以这句话从来没显示过。 */}
                             {!isSuccess && log.error_message && !log.channel_results && (
-                              <span className="text-red-500 text-xs">{delivery.reason || log.error_message}</span>
+                              <span className="text-red-500 text-xs">{log.error_message}</span>
                             )}
                             {delivery.outcome === 'partial' && (
                               <span className="text-xs text-amber-600 dark:text-amber-400">
