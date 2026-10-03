@@ -63,6 +63,8 @@ export default function Channels() {
   const [loadFailed, setLoadFailed] = useState(false);
   // 单飞句柄：并发的 fetchData 复用同一次请求（连点保存/测试不会重复打接口）。
   const inflightRef = useRef<Promise<void> | null>(null);
+  /** 请求进行中又来了一次刷新：排一次尾随刷新，而不是丢掉它 */
+  const trailingRef = useRef(false);
   const [activeTab, setActiveTab] = useState<ConfigMethod>('webhook');
   
   // Modal navigation state - track the flow: list -> template -> config -> qr
@@ -100,7 +102,13 @@ export default function Channels() {
    * 现在：两个请求并行；目录只在首屏强制刷新一次（会话内不变）；并发调用共享同一次请求。
    */
   const fetchData = async (options: { initial?: boolean } = {}): Promise<void> => {
-    if (inflightRef.current) return inflightRef.current;
+    if (inflightRef.current) {
+      // 不能直接丢弃：mutation 之后的刷新如果撞上正在进行的请求就会永远不发生，
+      // 而正在进行的这次拿到的是保存前的响应 —— 界面上就留着旧账户列表，
+      // 用户刚保存的账户凭空消失。标记一次尾随刷新，当前请求结束后补跑。
+      trailingRef.current = true;
+      return inflightRef.current;
+    }
 
     const run = (async () => {
       if (options.initial) setInitialLoading(true);
@@ -119,6 +127,11 @@ export default function Channels() {
       } finally {
         if (options.initial) setInitialLoading(false);
         inflightRef.current = null;
+        if (trailingRef.current) {
+          trailingRef.current = false;
+          // 尾随刷新不带 initial：数据已经在屏上了，别再让整页转一次圈
+          void fetchData();
+        }
       }
     })();
 

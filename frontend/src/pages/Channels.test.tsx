@@ -66,6 +66,15 @@ function routeGet(accounts: unknown[] = []) {
 const countCalls = (path: string) =>
   apiGetMock.mock.calls.filter(([p]) => p === path).length;
 
+/** 手动 resolve 的 promise：用来把某一次请求停在半路。 */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 function account(overrides: Record<string, unknown> = {}) {
   return {
     id: '7',
@@ -132,6 +141,37 @@ describe('Channels 数据加载', () => {
     // 保存/停用后只重取账户；目录是单飞缓存的会话级数据
     await waitFor(() => expect(countCalls('/config/accounts')).toBeGreaterThan(1));
     expect(countCalls('/channels/templates')).toBe(1);
+  });
+
+  it('刷新撞上正在进行的请求时不会被丢掉：排一次尾随刷新', async () => {
+    // 第 1 次账户请求（首屏）立即返回；第 2 次（停用后的刷新）挂住，用来制造"请求进行中"，
+    // 这样第 2 次停用触发的刷新就会撞上它 —— 旧实现直接 return inflight，把它丢了。
+    let accountCalls = 0;
+    const gate = deferred<unknown[]>();
+    apiGetMock.mockImplementation((path: string) => {
+      if (path === '/channels/templates') return Promise.resolve([TEMPLATE]);
+      accountCalls += 1;
+      if (accountCalls === 1) return Promise.resolve([account()]);
+      if (accountCalls === 2) return gate.promise;
+      return Promise.resolve([account()]);
+    });
+
+    renderPage();
+
+    const toggle = await screen.findByRole('switch', { name: '启用或停用渠道账户 我的 Discord' });
+
+    // 第一次停用 → 触发第 2 次请求，并挂住
+    await userEvent.click(toggle);
+    await waitFor(() => expect(countCalls('/config/accounts')).toBe(2));
+
+    // 第二次停用 → 这次刷新撞上仍在进行的请求
+    await userEvent.click(toggle);
+    await waitFor(() => expect(apiPutMock).toHaveBeenCalledTimes(2));
+    expect(countCalls('/config/accounts')).toBe(2);
+
+    // 进行中的请求结束 → 尾随刷新必须补跑，否则界面停在旧数据上
+    gate.resolve([account()]);
+    await waitFor(() => expect(countCalls('/config/accounts')).toBe(3));
   });
 
   it('拉取失败时如实报错，而不是显示成"还没有配置通知渠道"', async () => {
