@@ -166,14 +166,21 @@ triggerLogs.post('/:id/retry', async (c) => {
     const channelResults = await sendNotifications(event, userId, channelsToRetry);
 
     // Update the trigger log with new result
-    const hasFailure = Object.values(channelResults).some(r => !r.success);
-    const allSuccess = Object.values(channelResults).every(r => r.success);
-    const newStatus = allSuccess ? 'success' : 'failed';
+    // 重试同样只看真实渠道：重试发生在安静时段时 sendNotifications 会回一个
+    // _quiet_hours 标记，它是 success:false 但不是渠道。旧代码把它算进失败，于是
+    // 重试一次就把 error_message 写成 "_quiet_hours: quiet_hours"，并把这个假渠道
+    // 存进 error_details。判定与 jobs/tasks.ts 用同一个 readDelivery。
+    const sentDelivery = readDelivery({ channelResults });
+    // status 仍只取 success/failed（去重、连续失败计数、清理都按它工作）。
+    // 部分失败记 success：已送达的渠道不能因为另一个渠道失败而被重复投递。
+    const newStatus = sentDelivery.outcome === 'delivered' || sentDelivery.outcome === 'partial' ? 'success' : 'failed';
     const newRetryCount = (logEntry.retry_count || 0) + 1;
+    const newErrorMessage = newStatus === 'success' ? null : sentDelivery.reason;
 
-    const newErrorMessage = hasFailure
-      ? Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => `${ch}: ${r.error}`).join('; ')
-      : null;
+    const sent = channelResults as Record<string, { error?: string; accountId?: number }>;
+    const failedEntries = sentDelivery.failed
+      .map((channel) => [channel, sent[channel]] as const)
+      .filter((entry): entry is readonly [string, { error?: string; accountId?: number }] => !!entry[1]);
 
     await query(
       `UPDATE event_trigger_logs 
@@ -184,7 +191,9 @@ triggerLogs.post('/:id/retry', async (c) => {
         newErrorMessage,
         JSON.stringify(channelResults),
         newRetryCount,
-        hasFailure ? JSON.stringify(Object.entries(channelResults).filter(([, r]) => !r.success).map(([ch, r]) => ({ channel: ch, error: r.error, accountId: r.accountId }))) : null,
+        failedEntries.length > 0
+          ? JSON.stringify(failedEntries.map(([ch, r]) => ({ channel: ch, error: r.error, accountId: r.accountId })))
+          : null,
         logId,
         userId
       ]
