@@ -156,8 +156,9 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 > 字段级加密（161）与联系人生日祝福（168）**已实现**
 > （`backend/src/services/field-encryption.service.ts`、`birthday-greeting.service.ts`）。
 > Wave 19 端到端验证（170）**已执行**：`frontend/e2e` 全量 23 个 spec 在真实浏览器下跑完，
-> 125 通过 / 7 失败；失败全部为既有问题（已回退到改动前复跑验证）。逐条清单见
-> [CHANGELOG.md](CHANGELOG.md) 的 v2.22.0 条目。
+> 131 通过 / 1 失败（仅剩 PWA 可安装性检查，dev server 的环境限制）。本轮还修掉了
+> 「`install-prompt.js` 从未进仓库导致每次加载都 404」与「basic 用例不自包含」两个真实缺陷，
+> 详见 [CHANGELOG.md](CHANGELOG.md) 的 v2.22.0 条目。
 
 ---
 
