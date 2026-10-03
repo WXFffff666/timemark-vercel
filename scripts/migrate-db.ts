@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
+import { splitSqlStatements } from '../backend/src/db/sql-split.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -66,10 +67,9 @@ async function migrate(): Promise<void> {
     // ---------------------------------------------------------------------------
     // 3. Execute DDL statements one by one
     // ---------------------------------------------------------------------------
-    const statements = schemaSql
-      .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
+    // 不能直接 split(';')：schema 里有注释和字符串里的分号（例如 v51 注释中的
+    // `runMigrations();`），那样会把 CREATE TABLE 切成两半，fresh 部署必然失败。
+    const statements = splitSqlStatements(schemaSql);
 
     console.log(`⚡ Executing ${statements.length} SQL statements...`);
 
