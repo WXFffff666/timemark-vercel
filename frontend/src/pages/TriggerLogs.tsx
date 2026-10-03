@@ -302,8 +302,8 @@ export default function TriggerLogs() {
                                 <Bell size={14} /> {channels.join(', ')}
                               </span>
                             ) : null}
-                            {!isSuccess && log.error_message && !channelResults && (
-                              <span className="text-red-500 text-xs">{log.error_message}</span>
+                            {!isSuccess && log.error_message && !log.channel_results && (
+                              <span className="text-red-500 text-xs">{delivery.reason || log.error_message}</span>
                             )}
                             {delivery.outcome === 'partial' && (
                               <span className="text-xs text-amber-600 dark:text-amber-400">
@@ -316,8 +316,11 @@ export default function TriggerLogs() {
                         <div className="text-sm font-bold text-slate-400 whitespace-nowrap bg-slate-100/50 dark:bg-slate-800/50 px-3 py-1 rounded-lg">
                           {formatRelativeTime(log.created_at)}
                         </div>
-                        {/* 部分失败也该能重试：后端已按真实结果放行，这里之前被 status 卡住 */}
-                        {delivery.outcome !== 'delivered' && delivery.failed.length > 0 && (
+                        {/* 与后端同一个闸门（trigger-logs.ts 对 outcome==='delivered' 直接 400）。
+                            不能顺手加上 `failed.length > 0`：历史失败行没有 channel_results
+                            （异常路径与测试发送失败都只写 error_message），那种行 failed 是空数组，
+                            加了就等于把它们的重试按钮一起弄没了。 */}
+                        {delivery.outcome !== 'delivered' && (
                           <Button
                             size="sm"
                             variant="outline"

@@ -151,4 +151,17 @@ describe('提醒日志页的投递状态', () => {
 
     expect(await list().findByText('部分失败')).toBeInTheDocument();
   });
+
+  it('没有 channel_results 的历史失败行：说出原因，并保留重试按钮', async () => {
+    // 异常路径与「测试发送」失败都只写 error_message，channel_results 是 NULL。
+    // readDelivery 对这种行返回 failed: [] —— 如果重试按钮顺手加上 `failed.length > 0`
+    // 的条件，这些行的按钮就会凭空消失（后端其实是接受重试的）。
+    mockLogs([log({ status: 'failed', channel_results: null, error_message: 'telegram: 401' })]);
+
+    renderPage();
+
+    expect(await list().findByText('失败')).toBeInTheDocument();
+    expect(list().getByText('telegram: 401')).toBeInTheDocument();
+    expect(list().getByRole('button', { name: '手动重试' })).toBeInTheDocument();
+  });
 });
