@@ -45,3 +45,6 @@ test-api*.ps1
 
 # Generated build-time static search index (scripts/build-search-index.mjs)
 frontend/public/search-index.json
+
+# Mimosa security scanner state
+.mimosa/

@@ -617,12 +617,16 @@ Vercel 版使用 PostgreSQL（Neon），推荐通过应用内 **设置 → 数�
 
 ### 换了手机 / 验证器丢了，登不进 TOTP
 
-本项目**没有实现恢复码（recovery code）**，「安全中心 → 双因素认证」的关闭又要求登录后同时提供密码与 6 位验证码（`POST /api/security/totp/disable`），因此**验证器一旦丢失，在单用户模式下无法从界面找回**。这是已知限制，不是 bug 被忽略。
+本项目已支持**恢复码（recovery code）**：启用 2FA 后，在「安全中心 → 双因素认证 → 恢复码」用账号密码 + 当前 6 位验证码签发 10 个（最多 20 个）一次性恢复码。验证器丢失时，在登录页的验证码输入框里填其中一个恢复码（格式 `xxxxx-xxxxx`，大小写/连字符/空格均可）即可登录。注意：
 
-唯一出路是在 Vercel Postgres 里直接清掉该用户的 TOTP，然后用密码登录、再到安全中心重新绑定：
+- 恢复码**每个只能用一次**，用掉即从库里移除；剩余数量显示在安全中心。
+- 存储的是 SHA-256 哈希，明文只在签发时显示一次，请当场保存。
+- **重新签发会作废所有旧码**；关闭 2FA 也会清空全部恢复码。
+
+唯一仍需数据库的情况是恢复码也全部用完/丢失。在 Vercel Postgres 里直接清掉该用户的 TOTP，然后用密码登录、再到安全中心重新绑定：
 
 ```sql
-UPDATE users SET totp_secret = NULL, totp_enabled = FALSE WHERE username = 'admin';
+UPDATE users SET totp_secret = NULL, totp_enabled = FALSE, totp_recovery_codes = '[]' WHERE username = 'admin';
 ```
 
 清掉后登录不再要求验证码。绑定新验证器请走「安全中心 → 双因素认证 → 生成二维码」。注意这条 SQL 等于绕过第二因素，只在你确实持有数据库访问权时使用。

@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.22.1 (2026-10-04) — MFA 恢复码与提醒日志收尾
+
+### 新增
+
+- **TOTP 恢复码（recovery code）**：启用 2FA 后可在「安全中心 → 双因素认证」用账号密码 + 当前验证码签发 10 个（最多 20 个）一次性恢复码。验证器丢失时，在登录页验证码框填恢复码（格式 `xxxxx-xxxxx`，大小写/连字符/空格均可）即可登录。存储只存 SHA-256 哈希，明文仅签发时显示一次；重新签发作废旧码，关闭 2FA 一并清空。登录经恢复码成功会记录安全事件 `totp_recovery_code_used`。迁移 v76 新增 `users.totp_recovery_codes`（JSONB）。
+- **关闭 2FA 的界面入口**：后端 `/api/security/totp/disable` 一直存在，但前端没有入口。现在 TOTP 卡片在已启用状态下提供「关闭双因素认证」按钮（需密码 + 当前验证码，带二次确认）。
+- **提醒日志按真实结果筛选**：状态下拉从裸 `status`（成功/失败）改为 `outcome`（成功/部分失败/失败/跳过）。「部分失败」落库时 `status='success'`，旧筛选下选"成功"会混入它、选"失败"看不到它。后端由 `services/trigger-log-delivery-filter.ts` 用与 `readDelivery` 同一份判定推导。
+
+### 修复
+
+- **手动重试不再覆盖 `channel_results`**：重试一个"部分失败"的行时，改为按渠道合并（本次结果覆盖同名渠道），原先已成功渠道的条目保留，不再从界面与审计轨迹里消失。
+- **`email-compose.test.ts` 时间依赖**：模板按"距事件几天"选措辞，测试原先依赖真实当前时间，跨日期边界（如事件前一天运行）会随机变红。已用 fake timers 冻结时间基准。
+- **v77 迁移：遗留 `email` 渠道归并为 `resend`**：投递代码一直把两者同路径处理，但 `email` 没有界面模板，导致账户/事件勾选里的 `email` 是"活跃却不可见"的渠道。存量数据归并后即可在界面查看与管理；代码里的 `email` 别名保留作兜底。历史触发日志（审计记录）不改写。
+
 ## v2.22.0 (2026-10-01) — 最终发布（Waves 16-19）
 
 > 标签计划：v2.22.0 为 Wave 18 之后的最终标签。
@@ -26,7 +40,7 @@
 - **153-160 的后端模块已挂载，但前端缺页面**：照护 / 宠物 / 车辆 / 观影清单 / 双向日历同步 / 家庭协作的路由**已挂载**在 `backend/src/index.ts`（`/api/care`、`/api/pets`、`/api/vehicles`、`/api/watchlist`、`/api/calendar-sync`、`/api/collaboration`），接口可直接调用；缺的是前端页面与导航入口，界面上仍无法使用。考勤工时与家庭库存则确实尚未挂载。
 - **161 字段级加密**已实现（`backend/src/services/field-encryption.service.ts`，附件文件名/内容类型已在用）。
 - **168 联系人生日祝福**已实现（`birthday-greeting.service.ts`，由提醒 cron 调用）。
-- **双因素认证没有恢复码（recovery code）**：TOTP 一旦启用，登录硬性要求验证码（`routes/auth.ts`），而关闭 TOTP 的接口又要求已登录 + 密码 + 验证码，单用户模式下验证器丢失会**完全无法从界面登录**。当前仅提供数据库侧解法（`UPDATE users SET totp_secret = NULL, totp_enabled = FALSE`），已写入 README 故障排查。补齐恢复码需要新增「生成 → 一次性展示 → 哈希存储 → 消费」整套流程与对应界面，属未完成项。
+- **双因素认证恢复码：已完成（v2.22.1）**。签发（安全中心，需密码 + 当前验证码）、一次性消费（登录页验证码框可直接填恢复码）、哈希存储、重新签发作废旧码，见 v2.22.1 条目。
 - **170 Wave 19 端到端验证：已执行**。`frontend/e2e` 全量 23 个 spec 在真实浏览器（`PLAYWRIGHT_CHANNEL=chrome`，本机已装 Chrome/Edge 时无需下载 Playwright 自带 Chromium）下跑完：**131 通过 / 1 失败**。这些用例自带有状态 API mock，只需要 Vite dev server，不需要真实后端或数据库。通知「延后」按钮覆盖了 access cookie 过期 → 换 refresh cookie → 重试一次且不重试成风暴的完整链路。
   跑这一轮时发现并修掉了两个真实缺陷（均非「测试环境问题」）：
   - **`install-prompt.js` 从未进过仓库**：`index.html` 一直引着它，于是**每次加载页面都 404**（dev 与生产都是）。它同时导致 `almanac` / `almanac-advanced` 两条「无 console error」断言必然失败，并且 PWA 安装横幅（checkbox 85）从未出现过。已补上实现（含中英文文案，跟随 i18n 的 `localStorage.lang`）。
