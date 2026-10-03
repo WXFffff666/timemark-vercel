@@ -25,7 +25,8 @@
 
 - **153-160 的后端模块已挂载，但前端缺页面**：照护 / 宠物 / 车辆 / 观影清单 / 双向日历同步 / 家庭协作的路由**已挂载**在 `backend/src/index.ts`（`/api/care`、`/api/pets`、`/api/vehicles`、`/api/watchlist`、`/api/calendar-sync`、`/api/collaboration`），接口可直接调用；缺的是前端页面与导航入口，界面上仍无法使用。考勤工时与家庭库存则确实尚未挂载。
 - **161 字段级加密**已实现（`backend/src/services/field-encryption.service.ts`，附件文件名/内容类型已在用）。
-- **168 联系人生日祝福**已实现（`birthday-greeting.service.ts`，由提醒 cron 调用）；**170 Wave 19 端到端验证**仍未执行。
+- **168 联系人生日祝福**已实现（`birthday-greeting.service.ts`，由提醒 cron 调用）。
+- **170 Wave 19 端到端验证：部分执行**。浏览器推送 / Service Worker / 通知「延后」按钮 / 登录跳转的 Playwright 用例已在真实浏览器（`PLAYWRIGHT_CHANNEL=chrome`）跑通，其中「延后」按钮覆盖了 access cookie 过期 → 换 refresh cookie → 重试一次的完整链路。未执行的部分如实记录：PWA 可安装性 2 条在 dev server 下仍失败（Chrome 对 dev server 报 installability error，既有问题，非本次改动引入）；其余约 19 个用例需要真实 PostgreSQL，本机没有，未运行。
 
 ## v2.21.0 (2026-09-30) — 后台 AI 运行时（Waves 14-15）
 
