@@ -614,6 +614,18 @@ Vercel 版使用 PostgreSQL（Neon），推荐通过应用内 **设置 → 数�
 
 在 Vercel Postgres 中重置 `users.password_hash`，或删除用户行后重新运行 `npx tsx scripts/migrate-db.ts`（需 `DEFAULT_ADMIN_PASSWORD`）。
 
+### 换了手机 / 验证器丢了，登不进 TOTP
+
+本项目**没有实现恢复码（recovery code）**，「安全中心 → 双因素认证」的关闭又要求登录后同时提供密码与 6 位验证码（`POST /api/security/totp/disable`），因此**验证器一旦丢失，在单用户模式下无法从界面找回**。这是已知限制，不是 bug 被忽略。
+
+唯一出路是在 Vercel Postgres 里直接清掉该用户的 TOTP，然后用密码登录、再到安全中心重新绑定：
+
+```sql
+UPDATE users SET totp_secret = NULL, totp_enabled = FALSE WHERE username = 'admin';
+```
+
+清掉后登录不再要求验证码。绑定新验证器请走「安全中心 → 双因素认证 → 生成二维码」。注意这条 SQL 等于绕过第二因素，只在你确实持有数据库访问权时使用。
+
 ### 邮件发不出去 / Resend 测试失败
 
 1. 确认 **设置 → 通知默认邮箱** 或 Resend 渠道 **收件人邮箱** 至少填一处  

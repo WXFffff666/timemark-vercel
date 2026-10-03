@@ -26,6 +26,7 @@
 - **153-160 的后端模块已挂载，但前端缺页面**：照护 / 宠物 / 车辆 / 观影清单 / 双向日历同步 / 家庭协作的路由**已挂载**在 `backend/src/index.ts`（`/api/care`、`/api/pets`、`/api/vehicles`、`/api/watchlist`、`/api/calendar-sync`、`/api/collaboration`），接口可直接调用；缺的是前端页面与导航入口，界面上仍无法使用。考勤工时与家庭库存则确实尚未挂载。
 - **161 字段级加密**已实现（`backend/src/services/field-encryption.service.ts`，附件文件名/内容类型已在用）。
 - **168 联系人生日祝福**已实现（`birthday-greeting.service.ts`，由提醒 cron 调用）。
+- **双因素认证没有恢复码（recovery code）**：TOTP 一旦启用，登录硬性要求验证码（`routes/auth.ts`），而关闭 TOTP 的接口又要求已登录 + 密码 + 验证码，单用户模式下验证器丢失会**完全无法从界面登录**。当前仅提供数据库侧解法（`UPDATE users SET totp_secret = NULL, totp_enabled = FALSE`），已写入 README 故障排查。补齐恢复码需要新增「生成 → 一次性展示 → 哈希存储 → 消费」整套流程与对应界面，属未完成项。
 - **170 Wave 19 端到端验证：已执行**。`frontend/e2e` 全量 23 个 spec 在真实浏览器（`PLAYWRIGHT_CHANNEL=chrome`，本机已装 Chrome/Edge 时无需下载 Playwright 自带 Chromium）下跑完：**125 通过 / 7 失败**。这些用例自带有状态 API mock，只需要 Vite dev server，不需要真实后端或数据库。其中通知「延后」按钮覆盖了 access cookie 过期 → 换 refresh cookie → 重试一次且不重试成风暴的完整链路。
   7 条失败**均为既有问题，非本次改动引入**（已把 `sw.js` 与 `playwright.config.ts` 回退到 `ff17f04` 复跑，失败集合不变）：
   - `almanac.spec.ts` / `almanac-advanced.spec.ts`：断言「无 console error」，但页面有一个 404 资源（未定位到具体 URL；常见的 manifest / favicon / sw.js / search-index / icons 均实测 200）。根因未查明，如实记录。
