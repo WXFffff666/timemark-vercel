@@ -424,9 +424,13 @@ async function bootstrap() {
   const port = parseInt(process.env.PORT || '3000');
 
   // 5. 启动定时任务 (local/Docker only; Vercel uses Cron Jobs instead)
+  // 直接指向 stub，而不是靠 Vercel 构建期把 `scheduler.js` 改写过去：
+  // 那个改写只发生在 `pnpm build:vercel-api`，本地 `pnpm dev:backend` 没有它，
+  // 于是本地启动直接 ERR_MODULE_NOT_FOUND（`scheduler.ts` 已在 Vercel 迁移中删除）。
+  // 本仓库是 Vercel 优先、定时任务由 `/api/cron/*` + 外部 Cron 触发，没有常驻调度器，
+  // 所以本地也用同一个 no-op stub 才是与生产一致的行为。
   if (!process.env.VERCEL) {
-    // @ts-expect-error - scheduler.ts deleted in Vercel migration; guarded by !process.env.VERCEL
-    const { startScheduler } = await import('./queue/scheduler.js');
+    const { startScheduler } = await import('./queue/scheduler.vercel-stub.js');
     startScheduler().catch((err: unknown) => log.error(err, 'Scheduler failed to start'));
   }
 
@@ -434,8 +438,7 @@ async function bootstrap() {
   process.on('SIGTERM', async () => {
     log.info('SIGTERM received, shutting down...');
     if (!process.env.VERCEL) {
-      // @ts-expect-error - scheduler.ts deleted in Vercel migration; guarded by !process.env.VERCEL
-      const { stopScheduler } = await import('./queue/scheduler.js');
+      const { stopScheduler } = await import('./queue/scheduler.vercel-stub.js');
       await stopScheduler();
     }
     const { gracefulShutdown } = await import('./db/index.js');
