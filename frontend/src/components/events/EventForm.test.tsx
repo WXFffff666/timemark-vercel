@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import type { AvailableChannel } from '@/lib/api';
+import type { Event } from '@timemark/shared';
 
 /**
  * Checkbox 22 follow-up render proof: with a healthy `fcm` account configured, the Firebase button
@@ -47,6 +48,7 @@ const TEMPLATES = [
   { id: 'fcm', name: 'Firebase 推送', description: '', icon: 'Zap', configMethod: 'token', isBuiltIn: true, fields: [] },
   { id: 'zulip', name: 'Zulip', description: '', icon: 'Hash', configMethod: 'token', isBuiltIn: true, fields: [] },
   { id: 'pushdeer', name: 'PushDeer', description: '', icon: 'Send', configMethod: 'token', isBuiltIn: true, fields: [] },
+  { id: 'wxpusher', name: 'WxPusher', description: '', icon: 'Bell', configMethod: 'token', isBuiltIn: true, fields: [] },
 ];
 
 function channel(overrides: Partial<AvailableChannel> & { type: string }): AvailableChannel {
@@ -127,5 +129,43 @@ describe('EventForm channel picker (new channels must be usable when configured)
     await userEvent.click(button);
     expect(navigateMock).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('deselects a legacy channel alias instead of appending the canonical id', async () => {
+    // 老事件存的是历史别名 `wechat`，而选择器渲染的是规范 id `wxpusher`。
+    // 勾选框按 isChannelSelected 显示为已勾选，但 toggleChannel 曾用精确 includes() 判断：
+    // 点一个看起来「已勾选」的框，结果是再追加一个 `wxpusher`，越点越多。
+    fetchAvailableChannelsMock.mockResolvedValue([channel({ id: 12, type: 'wechat', name: '公众号' })]);
+
+    const legacyEvent: Event = {
+      id: '7',
+      userId: '1',
+      name: '老事件',
+      type: 'birthday',
+      date: '2026-10-05',
+      calendarType: 'gregorian',
+      reminderConfig: {
+        enabled: true,
+        daysBeforeList: [0],
+        emailRecipients: [],
+        channels: ['wechat'],
+        accountIds: [],
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    render(
+      <BrowserRouter>
+        <EventForm open onClose={vi.fn()} onSubmit={vi.fn()} event={legacyEvent} />
+      </BrowserRouter>,
+    );
+
+    // 别名被认出来：已选摘要里出现 WxPusher（该区块只在 channels 非空时渲染）
+    await waitFor(() => expect(screen.getByText('通知账户')).toBeInTheDocument());
+
+    await userEvent.click(await screen.findByRole('button', { name: /WxPusher/ }));
+
+    // 点一下就该真的取消：channels 被清空，已选摘要整块消失
+    await waitFor(() => expect(screen.queryByText('通知账户')).not.toBeInTheDocument());
   });
 });
