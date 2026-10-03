@@ -192,20 +192,17 @@ async function handleNotificationClick(data) {
 /**
  * 「延后」动作按钮。
  *
- * 与网页不同，通知动作发生在没有 DOM、没有 React 的 Service Worker 里：没有 api() 封装，
- * 也没有登录态可用。凭证只能从同源 localStorage 取（应用登录时就写在 `accessToken`）。
- * 取不到就如实告诉用户「请打开应用」，绝不能假装延后成功——那会让用户以为提醒被推走了。
+ * 与网页不同，通知动作发生在没有 DOM、没有 React 的 Service Worker 里：没有 api() 封装可用。
+ *
+ * 凭证用**同源会话 Cookie**（`credentials: 'include'`），不要试图读 localStorage：
+ * ServiceWorkerGlobalScope 上没有 localStorage / sessionStorage，读了必然抛 TypeError，
+ * 结果是每个用户点按钮都会被误报成「请先登录」。应用本身也正是靠这个 httpOnly Cookie
+ * 认证的（见 lib/api.ts 的 credentials: 'include'），同源 POST 自带 Origin，CSRF 中间件放行。
+ *
+ * 任何失败都如实告诉用户，绝不能假装延后成功——那会让人以为提醒被推走了。
  */
 async function handleSnoozeAction(eventId) {
   const id = Number(eventId);
-  let token = null;
-  try {
-    token =
-      self.localStorage.getItem('accessToken') ||
-      self.sessionStorage.getItem('accessToken');
-  } catch {
-    token = null;
-  }
 
   const feedback = (body) =>
     self.registration.showNotification('TimeMark', {
@@ -220,25 +217,19 @@ async function handleSnoozeAction(eventId) {
     await feedback('无法识别是哪条提醒，请打开应用查看');
     return;
   }
-  if (!token) {
-    await feedback('请先登录 TimeMark 后再使用此按钮');
-    return;
-  }
 
   try {
     const response = await fetch(`${self.location.origin}/api/events/${id}/snooze`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ minutes: 10 }),
     });
     if (response.ok) {
       await feedback('已延后 10 分钟');
       return;
     }
-    // 401/403：凭证过期或失效，提示重新登录而不是泛化成网络错误
+    // 401/403：会话过期或失效，提示重新登录而不是泛化成网络错误
     if (response.status === 401 || response.status === 403) {
       await feedback('登录已失效，请重新登录后再试');
       return;
