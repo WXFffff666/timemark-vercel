@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   totp_secret TEXT,
   totp_enabled BOOLEAN DEFAULT FALSE,
+  totp_recovery_codes JSONB DEFAULT '[]',
   avatar_url TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

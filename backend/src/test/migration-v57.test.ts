@@ -99,7 +99,7 @@ describe('migration v57 registration (checkbox 132)', () => {
     await applyIncrementalMigrations(57);
     expect(callsMatching('idx_inbox_messages_body_trgm')).toHaveLength(0);
     expect(callsMatching('gin_trgm_ops')).toHaveLength(0);
-    expect(versionInserts()).toEqual([58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75]);
+    expect(versionInserts()).toEqual([58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77]);
   });
 
   it('does not record v57 when its SQL fails, so a later cold start retries', async () => {
@@ -115,7 +115,7 @@ describe('migration v57 registration (checkbox 132)', () => {
     const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.filter((v) => v === 57)).toHaveLength(1);
     expect(versions.indexOf(57)).toBe(versions.indexOf(56) + 1);
-    expect(versions[versions.length - 1]).toBe(75);
+    expect(versions[versions.length - 1]).toBe(77);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }

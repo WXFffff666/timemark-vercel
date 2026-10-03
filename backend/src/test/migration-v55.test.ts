@@ -81,7 +81,7 @@ describe('migration v55 registration (checkbox 101)', () => {
     const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.filter((v) => v === 55)).toHaveLength(1);
     expect(versions.indexOf(55)).toBe(versions.indexOf(54) + 1);
-    expect(versions[versions.length - 1]).toBe(75);
+    expect(versions[versions.length - 1]).toBe(77);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }

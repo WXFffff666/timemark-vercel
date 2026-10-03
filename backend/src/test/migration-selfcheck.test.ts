@@ -76,9 +76,9 @@ describe('schema health', () => {
   it('reports behind and names the exact missing versions when the max is short', () => {
     const health = computeSchemaHealth(recordedUpTo(70));
     expect(health.status).toBe('behind');
-    expect(health.missingVersions).toEqual([71, 72, 73, 74, 75]);
+    expect(health.missingVersions).toEqual([71, 72, 73, 74, 75, 76, 77]);
     expect(isSchemaHealthy(health)).toBe(false);
-    expect(describeSchemaHealth(health)).toContain('缺 71, 72, 73, 74, 75');
+    expect(describeSchemaHealth(health)).toContain('缺 71, 72, 73, 74, 75, 76, 77');
   });
 
   it('reports ahead when the database has a version newer than the code', () => {
@@ -134,16 +134,16 @@ describe('GET /api/security/deploy-info (real surface)', () => {
     const data = await deployInfoBody(recordedUpTo(70));
     expect(data.schemaStatus).toBe('behind');
     expect(data.schemaUpToDate).toBe(false);
-    expect(data.schemaMissingVersions).toEqual([71, 72, 73, 74, 75]);
-    expect(data.schemaHint).toContain('缺 71, 72, 73, 74, 75');
+    expect(data.schemaMissingVersions).toEqual([71, 72, 73, 74, 75, 76, 77]);
+    expect(data.schemaHint).toContain('缺 71, 72, 73, 74, 75, 76, 77');
     const schemaCheck = (data.envChecks as Array<{ id: string; ok: boolean }>).find((c) => c.id === 'schema');
     expect(schemaCheck?.ok).toBe(false);
   });
 
   it('reports ahead when the database is newer than the build', async () => {
-    const data = await deployInfoBody([...MIGRATION_VERSIONS, 76]);
+    const data = await deployInfoBody([...MIGRATION_VERSIONS, 78]);
     expect(data.schemaStatus).toBe('ahead');
-    expect(data.schemaFutureVersions).toEqual([76]);
+    expect(data.schemaFutureVersions).toEqual([78]);
   });
 
   it('reports failed_gap as an error envCheck, not a green one', async () => {

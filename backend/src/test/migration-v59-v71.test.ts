@@ -86,9 +86,9 @@ describe('folded pending migrations 59-75 (integrator tail pin)', () => {
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }
-    // 58 keeps its position and the folded block is the new tail.
+    // 58 keeps its position; the folded block is followed by v76 and v77.
     expect(versions.indexOf(59)).toBe(versions.indexOf(58) + 1);
-    expect(versions[versions.length - 1]).toBe(75);
+    expect(versions[versions.length - 1]).toBe(77);
     expect(versions.filter((v) => v === 75)).toHaveLength(1);
     // Nothing before the fold moved.
     expect(MIGRATE_SOURCE).toContain("name: 'tags_tag_links_v58'");
@@ -97,7 +97,8 @@ describe('folded pending migrations 59-75 (integrator tail pin)', () => {
 
   it('applies every folded version on top of a recorded 58 exactly once, in order', async () => {
     await applyIncrementalMigrations(58);
-    expect(versionInserts()).toEqual(FOLDED_VERSIONS);
+    // v76 (totp_recovery_codes_v76) and v77 (fold_email_channel_v77) sit after the folded block and apply too.
+    expect(versionInserts()).toEqual([...FOLDED_VERSIONS, 76, 77]);
     for (const { marker } of FOLDED) {
       expect(callsMatching(marker).length, `${marker} was not applied`).toBeGreaterThan(0);
     }
@@ -106,22 +107,22 @@ describe('folded pending migrations 59-75 (integrator tail pin)', () => {
     expect(callsMatching('idx_tag_links_tag')).toHaveLength(0);
   });
 
-  it('is idempotent: a recorded 75 row makes the runner skip the whole folded block', async () => {
-    await applyIncrementalMigrations(75);
+  it('is idempotent: a recorded 77 row makes the runner skip the whole folded block', async () => {
+    await applyIncrementalMigrations(77);
     expect(versionInserts()).toEqual([]);
     for (const { marker } of FOLDED) {
       expect(callsMatching(marker)).toHaveLength(0);
     }
   });
 
-  it('does not record a folded version whose SQL fails, and still walks on to 75', async () => {
+  it('does not record a folded version whose SQL fails, and still walks on to 77', async () => {
     mockQuery.mockImplementation(async (text: string) => {
       if (text.includes('scheduler_runs')) throw new Error('permission denied for table scheduler_runs');
       return { rows: [], rowCount: 0 };
     });
     await applyIncrementalMigrations(58);
     expect(versionInserts()).not.toContain(59);
-    expect(versionInserts()).toContain(75);
-    expect(versionInserts()).toEqual(FOLDED_VERSIONS.filter((v) => v !== 59));
+    expect(versionInserts()).toContain(77);
+    expect(versionInserts()).toEqual([...FOLDED_VERSIONS.filter((v) => v !== 59), 76, 77]);
   });
 });

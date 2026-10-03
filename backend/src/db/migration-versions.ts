@@ -3,11 +3,11 @@
 // Regenerate:    node scripts/gen-migration-versions.mjs
 // Guarded by:    backend/src/test/migration-chain.test.ts (fails on drift)
 
-/** Highest registered migration version. 71 entries. */
-export const MAX_MIGRATION_VERSION = 75;
+/** Highest registered migration version. 73 entries. */
+export const MAX_MIGRATION_VERSION = 77;
 
 /** Every registered version, ascending. */
-export const MIGRATION_VERSIONS: readonly number[] = [2,3,4,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,69,70,71,72,73,74,75];
+export const MIGRATION_VERSIONS: readonly number[] = [2,3,4,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,69,70,71,72,73,74,75,76,77];
 
 /** Versions this project never allocated: 15, 66, 68. */
 export const UNALLOCATED_MIGRATION_VERSIONS: readonly number[] = [15,66,68];

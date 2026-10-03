@@ -1665,7 +1665,7 @@ CREATE INDEX IF NOT EXISTS idx_maintenance_plans_notes_trgm ON maintenance_plans
 CREATE INDEX IF NOT EXISTS idx_habits_name_trgm ON habits USING GIN (name gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_goals_title_trgm ON goals USING GIN (title gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_goals_description_trgm ON goals USING GIN (description gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_inbox_messages_title_trgm ON inbox_messages USING GIN (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_inbox_messages_title_trgm ON inbox_messages USING GIN (title gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_inbox_messages_body_trgm ON inbox_messages USING GIN (body gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_inbox_messages_sender_label_trgm ON inbox_messages USING GIN (sender_label gin_trgm_ops);`,
     },
@@ -3095,6 +3095,29 @@ CREATE INDEX IF NOT EXISTS idx_collaboration_activity_owner
       name: 'birthday_link_v75',
       sql: `ALTER TABLE events ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES fixed_contacts(id) ON DELETE SET NULL;
 ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS greeting_opt_out BOOLEAN NOT NULL DEFAULT FALSE;`,
+    },
+    {
+      // v76: TOTP recovery codes. With 2FA on, login hard-requires a TOTP code and this is a
+      // single-user app - a lost authenticator would mean a permanently lost account.
+      // Codes are stored as SHA-256 hashes in this JSONB array. Re-runnable: ADD COLUMN IF NOT EXISTS.
+      version: 76,
+      name: 'totp_recovery_codes_v76',
+      sql: `ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_recovery_codes JSONB NOT NULL DEFAULT '[]';`,
+    },
+    {
+      // v77: fold the legacy 'email' channel into 'resend'. Delivery has always treated the two
+      // identically (same send branch, same account fields), but 'email' has no UI template, so
+      // accounts and event selections typed 'email' stayed active-yet-invisible. Retyping them
+      // makes them visible and manageable under the 'resend' template with zero behaviour change.
+      // Historical trigger logs are left as-is (they are an audit record, and their
+      // channel_results keys are keyed by the original channel id). The 'email' alias stays in
+      // the dispatch chain as a safety net for rows written between the code deploy and this
+      // migration. Idempotent: every UPDATE is guarded by a containment check.
+      version: 77,
+      name: 'fold_email_channel_v77',
+      sql: `UPDATE notification_accounts SET type = 'resend' WHERE type = 'email';
+UPDATE events SET notification_channels = REPLACE(notification_channels::text, '"email"', '"resend"')::jsonb
+  WHERE notification_channels @> '["email"]'::jsonb;`,
     },
   ];
 
