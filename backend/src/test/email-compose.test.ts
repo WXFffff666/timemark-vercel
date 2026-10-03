@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildNaturalReminderText,
   buildReminderSubject,
@@ -11,7 +11,19 @@ import {
 /**
  * 公历默认模板的「捕获基线」——checkbox 169 之前的确切输出。
  * 逐字节相等即是双历改动没有污染公历路径的回归护栏。
+ *
+ * 模板按「距事件还有几天」选择（今天/明天/其余措辞不同），基线文案对应 days>1 的分支。
+ * 曾经依赖真实 now，于是每年 10 月 4 日（事件前一天）这套断言就会随机变红 ——
+ * 这里把系统时间冻结在一个离所有测试日期都超过一天的时刻，跨日稳定。
  */
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-10-01T12:00:00'));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 const GREG_SUBJECT = '周年纪念';
 const GREG_TEXT = '提醒你一下：周年纪念，2026-10-05。\n永远幸福';
 const GREG_HTML = `<!DOCTYPE html>
