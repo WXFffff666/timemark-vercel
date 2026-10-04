@@ -196,6 +196,7 @@ export async function getUserConfig(userId: number): Promise<any> {
     markdown_email_template: r.markdown_email_template || null,
     email_template_style: r.email_template_style || 'classic',
     reminder_catchup_minutes: r.reminder_catchup_minutes == null ? null : Number(r.reminder_catchup_minutes),
+    fallback_enabled: r.fallback_enabled !== false,
     notification_preset: r.notification_preset || null,
     api_scopes: r.api_scopes || 'read,write',
     // checkbox 78 (v45 columns)

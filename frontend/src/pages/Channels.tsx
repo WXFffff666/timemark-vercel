@@ -11,7 +11,7 @@ import {
   Webhook, MessageSquare, AlertCircle, CheckCircle2,
   Link2Off, ArrowLeft, Plus, ExternalLink, Settings,
   BookOpen, ChevronRight,
-  Loader2
+  Loader2, Activity
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
@@ -97,10 +97,29 @@ export default function Channels() {
   }
   const [connectionStatus, setConnectionStatus] = useState<Record<string, ConnectionTestResult>>({});
   const [testingAll, setTestingAll] = useState(false);
+  const [testAllSummary, setTestAllSummary] = useState('');
+  const [channelStats, setChannelStats] = useState<Array<{ channel: string; sent: number; ok: number; failed: number; successRate: number }>>([]);
 
   useEffect(() => {
     fetchData({ initial: true });
   }, []);
+
+  // v78: 近 30 天渠道发送统计（成功/失败/成功率），用于健康概览卡
+  useEffect(() => {
+    api.get<{ windowDays: number; runs: number; channels: Array<{ channel: string; sent: number; ok: number; failed: number; successRate: number }> }>('/channels/stats')
+      .then((d) => setChannelStats(d?.channels ?? []))
+      .catch(() => undefined);
+  }, []);
+
+  // v78: 手动恢复被 24h 暂停的渠道账户
+  const resumeAccount = async (account: Account) => {
+    try {
+      await api.post('/channels/resume', { accountId: Number(account.id) });
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to resume account:', error);
+    }
+  };
 
   /**
    * 拉取目录 + 账户。
@@ -174,13 +193,32 @@ export default function Channels() {
   };
 
   const testAllAccounts = async () => {
-    const testableAccounts = accounts.filter(a => a.is_active !== false);
     setTestingAll(true);
-    for (const account of testableAccounts) {
-      await testAccountStatus(account);
-      await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      // v78: 服务端批量自检 —— 并发测试、结果落库、成功即清除 24h 暂停
+      const res = await api.post<{
+        results: Array<{ accountId: number; accountName: string; channel: string; success: boolean; message: string }>;
+        summary: { total: number; passed: number; failed: number };
+      }>('/channels/test-all', {});
+      const next: Record<string, ConnectionTestResult> = {};
+      for (const r of res?.results ?? []) {
+        next[String(r.accountId)] = {
+          status: r.success ? 'connected' : 'error',
+          message: r.message,
+          timestamp: Date.now(),
+        };
+      }
+      setConnectionStatus((prev) => ({ ...prev, ...next }));
+      const s = res?.summary;
+      if (s) {
+        setTestAllSummary(`自检完成：${s.passed}/${s.total} 通过${s.failed > 0 ? `，${s.failed} 个失败（详见各卡片红点）` : ''}`);
+      }
+      await fetchData();
+    } catch {
+      setTestAllSummary('自检失败：请稍后重试或逐个渠道测试');
+    } finally {
+      setTestingAll(false);
     }
-    setTestingAll(false);
   };
 
 
@@ -537,6 +575,52 @@ export default function Channels() {
    * 而不是正文内容。这里逐项列出检查点与当前 From 域名；DNS 实际验证需要用户
    * 在域名服务商处操作，页面给出可复制的记录要求。
    */
+  const renderChannelStatsCard = () => {
+    if (channelStats.length === 0) return null;
+    const totals = channelStats.reduce((acc, s) => ({ sent: acc.sent + s.sent, ok: acc.ok + s.ok }), { sent: 0, ok: 0 });
+    const overall = totals.sent > 0 ? Math.round((totals.ok / totals.sent) * 100) : 0;
+    return (
+      <section className="mb-10">
+        <div className="glass-panel rounded-[2rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-emerald-500" />
+            近 30 天发送统计
+            <span className={`text-sm px-2 py-0.5 rounded-full ${overall >= 90 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300' : overall >= 60 ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300'}`}>
+              总成功率 {overall}%
+            </span>
+          </h2>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-4">
+            {channelStats.map((s) => {
+              const template = templates.find((t) => t.id === s.channel);
+              return (
+                <div key={s.channel} className="rounded-xl border border-slate-200/60 dark:border-slate-700/50 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                      <ChannelIcon name={template?.icon} size={14} />
+                      {template?.name || s.channel}
+                    </span>
+                    <span className={`text-xs font-semibold ${s.successRate >= 90 ? 'text-emerald-600 dark:text-emerald-400' : s.successRate >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {s.successRate}%
+                    </span>
+                  </div>
+                  <div className="mt-2 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${s.successRate >= 90 ? 'bg-emerald-500' : s.successRate >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                      style={{ width: `${Math.max(s.successRate, 2)}%` }}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    发送 {s.sent} 次 · 成功 {s.ok} · 失败 {s.failed}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+    );
+  };
+
   const renderDeliverabilityCard = () => {
     const emailAccounts = accounts.filter((a) => (['resend', 'smtp'] as string[]).includes(String(a.type)) && a.is_active !== false);
     if (emailAccounts.length === 0) return null;
@@ -613,12 +697,14 @@ export default function Channels() {
                     </span>
                   )}
                   {account.is_active !== false && isAccountSuspended(account) && (
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
-                      title="连续发送失败，已暂停投递 24 小时；测试成功或手动重试会立即恢复"
+                    <button
+                      type="button"
+                      onClick={() => resumeAccount(account)}
+                      className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
+                      title="连续发送失败，已暂停投递 24 小时；点击立即恢复投递"
                     >
-                      ⏸ 暂停中
-                    </span>
+                      ⏸ 暂停中 · 点击恢复
+                    </button>
                   )}
                   {connectionStatus[account.id]?.timestamp && (
                     <span className="text-[10px] text-slate-400" title={connectionStatus[account.id]?.message}>
@@ -728,6 +814,11 @@ export default function Channels() {
           </button>
           。
         </p>
+        {testAllSummary && (
+          <div className="mb-6 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
+            {testAllSummary}
+          </div>
+        )}
         {initialLoading ? (
           // 局部骨架：只在首屏出现，且形状与真实账户卡片一致，页面框架与说明文字不消失
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" aria-busy="true" aria-label="正在加载通知渠道">
@@ -753,6 +844,7 @@ export default function Channels() {
           </div>
         ) : (
           <>
+            {renderChannelStatsCard()}
             {renderDeliverabilityCard()}
             {[
               { title: '已验证的渠道', accounts: connectedAccounts, icon: <CheckCircle2 className="w-5 h-5 text-green-500" /> },

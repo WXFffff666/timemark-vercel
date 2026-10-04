@@ -340,7 +340,7 @@ config.post('/reminders', async (c) => {
 config.get('/notification-advanced', async (c) => {
   const user = c.get('user');
   const row = await query(
-    `SELECT markdown_email_template, notification_preset, api_scopes, email_template_style, reminder_catchup_minutes
+    `SELECT markdown_email_template, notification_preset, api_scopes, email_template_style, reminder_catchup_minutes, fallback_enabled
      FROM user_configs WHERE user_id = $1`,
     [Number(user.id)],
   );
@@ -353,6 +353,7 @@ config.get('/notification-advanced', async (c) => {
       api_scopes: r.api_scopes ?? 'read,write',
       email_template_style: r.email_template_style ?? 'classic',
       reminder_catchup_minutes: r.reminder_catchup_minutes ?? null,
+      fallback_enabled: r.fallback_enabled !== false,
     },
   });
 });
@@ -401,6 +402,12 @@ config.post('/notification-advanced', async (c) => {
       sets.push(`reminder_catchup_minutes = $${idx++}`);
       params.push(minutes);
     }
+  }
+
+  // v78: 渠道自动回退开关（关闭后主渠道失败不再尝试其他渠道）
+  if (typeof body.fallback_enabled === 'boolean') {
+    sets.push(`fallback_enabled = $${idx++}`);
+    params.push(body.fallback_enabled);
   }
 
   if (sets.length === 0) {

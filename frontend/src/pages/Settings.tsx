@@ -18,6 +18,7 @@ import { DigestSettings } from '@/components/digest/DigestSettings';
 import { WebPushToggle } from '@/components/settings/WebPushToggle';
 import { AISettings } from '@/components/settings/AISettings';
 import { AgentTokensSettings } from '@/components/settings/AgentTokensSettings';
+import { buildStyledReminderEmailBodies, buildNaturalReminderText, type EmailTemplateStyle } from '@timemark/shared';
 
 function parseAlertChannels(raw: unknown): string[] {
   if (!raw) return [];
@@ -174,6 +175,7 @@ export default function Settings() {
   const [apiScopes, setApiScopes] = useState('read,write');
   const [emailTemplateStyle, setEmailTemplateStyle] = useState('classic');
   const [reminderCatchupMinutes, setReminderCatchupMinutes] = useState('');
+  const [fallbackEnabled, setFallbackEnabled] = useState(true);
   const [advancedSaving, setAdvancedSaving] = useState(false);
   const [uiLang, setUiLang] = useState<'zh' | 'en'>(getLang());
   const [googleOAuth, setGoogleOAuth] = useState<{
@@ -200,7 +202,7 @@ export default function Settings() {
         externalCalendarUrls?: string[];
         externalCalendarSyncStrategy?: string;
       }>('/calendar/integrations').catch(() => null),
-      api.get<{ markdown_email_template?: string | null; api_scopes?: string; email_template_style?: string; reminder_catchup_minutes?: number | null }>('/config/notification-advanced').catch(() => null),
+      api.get<{ markdown_email_template?: string | null; api_scopes?: string; email_template_style?: string; reminder_catchup_minutes?: number | null; fallback_enabled?: boolean }>('/config/notification-advanced').catch(() => null),
       api.get<{ configured?: boolean; connected?: boolean; email?: string | null; calendarId?: string }>('/calendar/google-oauth/status').catch(() => null),
       api.get<{ feeds: IcsFeed[] }>('/calendar/ics-feeds').catch(() => null),
     ])
@@ -245,6 +247,7 @@ export default function Settings() {
         if (advanced?.api_scopes) setApiScopes(advanced.api_scopes);
         if (advanced?.email_template_style) setEmailTemplateStyle(advanced.email_template_style);
         setReminderCatchupMinutes(advanced?.reminder_catchup_minutes == null ? '' : String(advanced.reminder_catchup_minutes));
+        setFallbackEnabled(advanced?.fallback_enabled !== false);
         if (icsFeedData) {
           setIcsFeeds(Array.isArray(icsFeedData.feeds) ? icsFeedData.feeds : []);
         }
@@ -563,6 +566,7 @@ export default function Settings() {
         api_scopes: apiScopes,
         email_template_style: emailTemplateStyle,
         reminder_catchup_minutes: reminderCatchupMinutes.trim() === '' ? null : Number(reminderCatchupMinutes),
+        fallback_enabled: fallbackEnabled,
       });
       alert('高级通知设置已保存');
     } catch (e) {
@@ -1246,6 +1250,20 @@ export default function Settings() {
                     <option value="minimal">极简</option>
                   </select>
                   <p className="text-xs text-slate-400 mt-1">卡片/极简为现代排版：日期徽章 + 深色模式适配 + 少链接（更不容易进垃圾箱）</p>
+                  <details className="mt-2 max-w-xs">
+                    <summary className="text-xs text-primary-600 dark:text-primary-400 cursor-pointer select-none">预览该模板效果</summary>
+                    <iframe
+                      title="邮件模板预览"
+                      sandbox=""
+                      className="mt-2 w-full max-w-md h-72 rounded-xl border border-slate-200 dark:border-slate-700 bg-white"
+                      srcDoc={buildStyledReminderEmailBodies(
+                        { name: '示例事件（妈妈生日）', date: '2026-10-15', type: 'birthday' },
+                        (emailTemplateStyle as EmailTemplateStyle) || 'classic',
+                      ).html}
+                    />
+                    <pre className="mt-2 w-full max-w-md rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3 text-xs whitespace-pre-wrap text-slate-600 dark:text-slate-300">{buildNaturalReminderText({ name: '示例事件（妈妈生日）', date: '2026-10-15', type: 'birthday' })}</pre>
+                    <p className="text-xs text-slate-400 mt-1">上方为邮件渲染效果，下方为 IM / 推送类渠道收到的纯文本内容（Dry-run，不真实发送）</p>
+                  </details>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-500 mb-1 block">提醒补发窗口（分钟）</label>
@@ -1260,6 +1278,22 @@ export default function Settings() {
                     aria-label="提醒补发窗口分钟数"
                   />
                   <p className="text-xs text-slate-400 mt-1">cron 停摆后，今天内迟到的提醒最多补发多久：0=关闭，1440=当天漏掉的全部补发</p>
+                </div>
+                <div className="flex items-center justify-between max-w-xs">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block">渠道自动回退</label>
+                    <p className="text-xs text-slate-400 mt-1">指定渠道发送失败时，自动改用其他已绑定渠道发送</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={fallbackEnabled}
+                    onClick={() => setFallbackEnabled((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${fallbackEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                    aria-label="渠道自动回退开关"
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${fallbackEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-500 mb-1 block">API Key 权限范围</label>

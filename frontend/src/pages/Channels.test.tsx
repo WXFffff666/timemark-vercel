@@ -150,6 +150,8 @@ describe('Channels 数据加载', () => {
     const gate = deferred<unknown[]>();
     apiGetMock.mockImplementation((path: string) => {
       if (path === '/channels/templates') return Promise.resolve([TEMPLATE]);
+      // v78 新增的统计请求不计入账户门控计数
+      if (path === '/channels/stats') return Promise.resolve({ runs: 0, channels: [] });
       accountCalls += 1;
       if (accountCalls === 1) return Promise.resolve([account()]);
       if (accountCalls === 2) return gate.promise;

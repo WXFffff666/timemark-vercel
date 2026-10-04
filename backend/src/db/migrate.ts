@@ -3128,7 +3128,8 @@ UPDATE events SET notification_channels = REPLACE(notification_channels::text, '
       name: 'notification_reachability_v78',
       sql: `ALTER TABLE notification_accounts ADD COLUMN IF NOT EXISTS suspended_until TIMESTAMPTZ;
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS reminder_catchup_minutes INTEGER;
-ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS email_template_style TEXT NOT NULL DEFAULT 'classic';`,
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS email_template_style TEXT NOT NULL DEFAULT 'classic';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS fallback_enabled BOOLEAN NOT NULL DEFAULT TRUE;`,
     },
   ];
 

@@ -1242,7 +1242,7 @@ export async function sendNotifications(
   const failedChannels = Object.entries(channelResults).filter(
     ([, r]) => !r.success && r.error !== 'no_configuration' && r.error !== 'unsupported_channel',
   );
-  if (failedChannels.length > 0 && eligibleAccounts.length > 1) {
+  if (failedChannels.length > 0 && eligibleAccounts.length > 1 && config?.fallback_enabled !== false) {
     // Collect account IDs already tried
     const triedAccountIds = new Set<number>();
     for (const task of sendTasks) {

@@ -175,6 +175,7 @@ CREATE TABLE IF NOT EXISTS user_configs (
   password_changed_at TIMESTAMP,
   reminder_catchup_minutes INTEGER,
   email_template_style TEXT DEFAULT 'classic',
+  fallback_enabled BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
