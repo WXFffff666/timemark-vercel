@@ -24,6 +24,7 @@ type ConfigMethod = 'webhook' | 'token';
 
 interface Account extends NotificationAccount {
   is_active?: boolean;
+  suspended_until?: string | null;
   token?: string;
   chat_id?: string;
   secret?: string;
@@ -34,6 +35,13 @@ interface Account extends NotificationAccount {
   sessionConfigured?: boolean;
   last_test_result?: 'success' | 'failed' | null;
   connection_status?: string | null;
+}
+
+/** 24h 失败暂停是否生效中（后端 v78：3 连败暂停而非硬禁用，测试成功/手动重试即恢复）。 */
+function isAccountSuspended(account: Account): boolean {
+  if (!account.suspended_until) return false;
+  const until = new Date(account.suspended_until);
+  return Number.isFinite(until.getTime()) && until.getTime() > Date.now();
 }
 
 const containerVariants = { 
@@ -524,6 +532,55 @@ export default function Channels() {
   const untestedAccounts = accounts.filter(a => getAccountStatus(a) === 'untested');
   const disabledAccounts = accounts.filter(a => getAccountStatus(a) === 'disabled');
 
+  /**
+   * 邮件送达健康检查卡（v78）：邮件进垃圾箱的根因几乎都在发件域名的认证配置，
+   * 而不是正文内容。这里逐项列出检查点与当前 From 域名；DNS 实际验证需要用户
+   * 在域名服务商处操作，页面给出可复制的记录要求。
+   */
+  const renderDeliverabilityCard = () => {
+    const emailAccounts = accounts.filter((a) => (['resend', 'smtp'] as string[]).includes(String(a.type)) && a.is_active !== false);
+    if (emailAccounts.length === 0) return null;
+    const resendAccounts = emailAccounts.filter((a) => String(a.type) === 'resend');
+    const fromDomains = new Set<string>();
+    for (const a of resendAccounts) {
+      const from = String(a.webhook || '').trim();
+      const domain = from.includes('@') ? from.split('@').pop() : '';
+      if (domain) fromDomains.add(domain);
+    }
+    for (const a of emailAccounts.filter((x) => x.type === 'smtp')) {
+      const from = String(a.chat_id || '').trim();
+      const domain = from.includes('@') ? from.split('@').pop() : '';
+      if (domain) fromDomains.add(domain);
+    }
+    const usesResendDev = resendAccounts.some((a) => !String(a.webhook || '').includes('@'));
+    return (
+      <section className="mb-10">
+        <div className="glass-panel rounded-[2rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-blue-500" />
+            邮件送达健康
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+            邮件进垃圾箱的根因几乎总在<strong>发件域名认证</strong>（SPF / DKIM / DMARC），不在正文。逐项核对：
+          </p>
+          {usesResendDev && (
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 mb-4">
+              检测到 Resend 渠道使用默认发件地址 <code>onboarding@resend.dev</code>：它只能发给 Resend 账号本人的邮箱，
+              且几乎必然进垃圾箱。请在渠道配置里把「发件人邮箱」改为已验证域名下的地址（如 noreply@mail.你的域名）。
+            </div>
+          )}
+          <ul className="text-sm space-y-2 text-slate-600 dark:text-slate-300">
+            <li>1. 在 Resend 控制台添加发件域名，按提示在 DNS 加 <strong>SPF</strong>（TXT）与 <strong>DKIM</strong>（TXT，2048 位）记录并等待生效。</li>
+            <li>2. 在 DNS 加一条 <strong>DMARC</strong> 记录：<code>_dmarc.你的域名</code> → <code>v=DMARC1; p=none; rua=mailto:dmarc@你的域名</code>（先观察，再收紧到 p=quarantine）。</li>
+            <li>3. 保持 From 地址与 DKIM 签名域<strong>同域对齐</strong>（当前 From 域：{fromDomains.size > 0 ? [...fromDomains].join('、') : '未检测到'}）。</li>
+            <li>4. 收件人侧把发件地址加入通讯录 / 标记「重要」；首次发送建议先发给自己并点「非垃圾邮件」。</li>
+            <li>5. 设置 → 高级通知 里可切换<strong>邮件模板风格</strong>（卡片模板少链接、带纯文本部分，垃圾分更低）。</li>
+          </ul>
+        </div>
+      </section>
+    );
+  };
+
   const renderAccountCard = (account: Account) => {
     const template = templates.find(t => t.id === account.type);
     const badge = getStatusBadge(account);
@@ -553,6 +610,14 @@ export default function Channels() {
                   {template && (
                     <span className={`text-xs px-2 py-0.5 rounded-full ${getMethodColor(template.configMethod)}`}>
                       {getMethodLabel(template.configMethod)}
+                    </span>
+                  )}
+                  {account.is_active !== false && isAccountSuspended(account) && (
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+                      title="连续发送失败，已暂停投递 24 小时；测试成功或手动重试会立即恢复"
+                    >
+                      ⏸ 暂停中
                     </span>
                   )}
                   {connectionStatus[account.id]?.timestamp && (
@@ -688,7 +753,8 @@ export default function Channels() {
           </div>
         ) : (
           <>
-            {[ 
+            {renderDeliverabilityCard()}
+            {[
               { title: '已验证的渠道', accounts: connectedAccounts, icon: <CheckCircle2 className="w-5 h-5 text-green-500" /> },
               { title: '待测试的渠道', accounts: untestedAccounts, icon: <AlertCircle className="w-5 h-5 text-amber-500" /> },
               { title: '测试失败的渠道', accounts: failedAccounts, icon: <AlertCircle className="w-5 h-5 text-red-500" /> },

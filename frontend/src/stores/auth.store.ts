@@ -192,23 +192,25 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Get tokens from appropriate storage
     let accessToken = localStorage.getItem('accessToken');
     let refreshToken = localStorage.getItem('refreshToken');
-    
+
     // If not in localStorage, check sessionStorage
     if (!accessToken) {
       accessToken = sessionStorage.getItem('accessToken');
       refreshToken = sessionStorage.getItem('refreshToken');
     }
-    
+
     const sessionId = localStorage.getItem(SESSION_ID_KEY);
     if (sessionId) {
       clearStaleBearerTokens();
     }
-    
-    // 超时保护
-    const timeoutPromise = new Promise<never>((_, reject) => 
-      setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+
+    // 12s (was 5s): a Vercel cold start on a free plan routinely exceeds 5s, and a
+    // timeout here used to be treated as "not logged in" — the #1 reason 勾了保持登录
+    // 仍被踢回登录页. The cookie stays valid either way.
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Auth check timeout')), 12000)
     );
-    
+
     if (accessToken) {
       try {
         // 使用 Promise.race 实现超时
@@ -221,13 +223,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       } catch (error: any) {
         // Only clear tokens on specific auth errors, not network errors
         const errorMsg = error.message || '';
-        const isAuthError = errorMsg.includes('401') || 
-                          errorMsg.includes('403') || 
-                          errorMsg.includes('Token expired') || 
+        const isAuthError = errorMsg.includes('401') ||
+                          errorMsg.includes('403') ||
+                          errorMsg.includes('Token expired') ||
                           errorMsg.includes('expired') ||
                           errorMsg.includes('Unauthorized') ||
                           errorMsg.includes('Invalid');
-        
+
         // Token expired or invalid, try to refresh
         if (refreshToken && isAuthError) {
           try {
@@ -246,10 +248,13 @@ export const useAuthStore = create<AuthState>((set) => ({
             sessionStorage.removeItem('refreshToken');
           }
         }
-        
+
       }
     } else {
-      // HttpOnly cookie session (no token in storage)
+      // HttpOnly cookie session (no token in storage).
+      // Any failure — 401, 5xx, network hiccup, or the timeout above — gets ONE
+      // refresh attempt before giving up. Treating a cold start / tunnel error as
+      // "session over" is exactly how remembered users got logged out.
       try {
         const user = await Promise.race([
           api.get<User>('/auth/session'),
@@ -257,22 +262,59 @@ export const useAuthStore = create<AuthState>((set) => ({
         ]);
         set({ user, isAuthenticated: true, isLoading: false });
         return;
-      } catch (error: any) {
-        const errorMsg = error.message || '';
-        const isAuthError = errorMsg.includes('401') || errorMsg.includes('Unauthorized');
-        if (isAuthError) {
-          try {
-            await api.post('/auth/refresh', {});
-            const user = await api.get<User>('/auth/session');
-            set({ user, isAuthenticated: true, isLoading: false });
-            return;
-          } catch {
-            // fall through
-          }
+      } catch {
+        try {
+          await api.post('/auth/refresh', {});
+          const user = await api.get<User>('/auth/session');
+          set({ user, isAuthenticated: true, isLoading: false });
+          return;
+        } catch {
+          // Both attempts failed — only now conclude the session is gone.
         }
       }
     }
-    
+
     set({ user: null, isAuthenticated: false, isLoading: false });
   },
 }));
+
+const LAST_RENEW_KEY = 'timemark_last_renew';
+/** At most one background renewal every 12h, on tab focus / visibility. */
+const RENEW_INTERVAL_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * Tab-lifecycle wiring for "stay signed in":
+ *  - focus/visibility triggers a throttled silent refresh, which (a) re-mints the
+ *    access cookie before an idle tab's first request hits a 401 and (b) slides the
+ *    server-side 30-day remembered deadline forward — the backend renews on refresh.
+ *  - a `storage` event for the session id (another tab logged out) drops auth state
+ *    here too, instead of leaving this tab a zombie.
+ * Idempotent; call once from App.
+ */
+export function initAuthLifecycle() {
+  const renew = () => {
+    const hasSession =
+      !!localStorage.getItem(SESSION_ID_KEY) ||
+      localStorage.getItem('timemark_persistent_login') === 'true';
+    if (!hasSession) return;
+    const last = Number(localStorage.getItem(LAST_RENEW_KEY)) || 0;
+    if (Date.now() - last < RENEW_INTERVAL_MS) return;
+    localStorage.setItem(LAST_RENEW_KEY, String(Date.now()));
+    // Fire and forget: a failed renewal is invisible — the 401 path retries later.
+    api.post('/auth/refresh', {}).catch(() => {});
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') renew();
+  });
+  window.addEventListener('focus', renew);
+  window.addEventListener('storage', (e) => {
+    if (e.key === SESSION_ID_KEY && !e.newValue) {
+      useAuthStore.setState({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        mustChangePassword: false,
+      });
+    }
+  });
+}

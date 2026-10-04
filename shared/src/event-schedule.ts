@@ -110,10 +110,12 @@ export function buildReminderSendKey(todayYmd: string, daysUntil: number, remind
 }
 
 /**
- * 补发窗口上限（分钟，checkbox 166）。给 catch-up 一个硬上界：无论调用方传入什么，
- * 迟到方向都不会超过 1 小时，因此分钟差算术不可能把窗口卷到「昨天的槽位」。
+ * 补发窗口上限（分钟，checkbox 166；v78 放宽到 24h）。给 catch-up 一个硬上界：
+ * 分钟差用同日 HH:mm 算术，迟到方向永远指向「今天更早的槽位」（current < 明日槽位
+ * 的 diff 为负、走提前方向被拒绝），所以窗口再大也不会卷进昨天的槽位——上限只影响
+ * 今天内迟到的提醒还能不能补发。1440 = 一整天：cron 停摆数小时后仍能补齐当天提醒。
  */
-export const REMINDER_CATCH_UP_MAX_MINUTES = 60;
+export const REMINDER_CATCH_UP_MAX_MINUTES = 1440;
 
 /** 当前时刻相对提醒时刻的分钟差（迟到为正、提前为负）；任一时间无法解析时返回 null。 */
 export function reminderOffsetMinutes(currentHHmm: string, targetHHmm: string): number | null {

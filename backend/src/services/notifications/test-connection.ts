@@ -12,6 +12,7 @@ import { isPushbackSuccess } from './pushback.service.js';
 import { SIMPLEPUSH_ENDPOINT } from './simplepush.service.js';
 import { normalizeZulipOrgUrl } from './zulip.service.js';
 import { sendFcmMessage } from './fcm.service.js';
+import { testWhatsAppCloudChannel, testHomeAssistantChannel } from './extended-channels.service.js';
 
 export interface TestConnectionResult {
   success: boolean;
@@ -270,6 +271,25 @@ async function testWebhookChannel(type: string, webhook: string, secret?: string
         };
       }
 
+      // v78 batch 3: Kook / Fanbook 收 { content } 而非 { text }
+      case 'kook':
+      case 'fanbook': {
+        const response = await axios.post(
+          webhook,
+          { content: `${WEBHOOK_TEST_TEXT}（${type === 'kook' ? 'Kook' : 'Fanbook'} 渠道）` },
+          { headers: jsonHeaders, timeout: 10000 },
+        );
+        const latency = Date.now() - start;
+        const code = (response.data as { code?: number } | undefined)?.code;
+        if (response.status >= 200 && response.status < 300 && code !== undefined && code !== 0) {
+          return { success: false, message: `${type === 'kook' ? 'Kook' : 'Fanbook'} 返回错误码 ${code}`, latency };
+        }
+        if (response.status >= 200 && response.status < 300) {
+          return { success: true, message: `${type === 'kook' ? 'Kook' : 'Fanbook'} 连接成功，请到频道确认测试消息`, latency };
+        }
+        return { success: false, message: `服务器返回状态码: ${response.status}`, latency };
+      }
+
       case 'generic_webhook':
       default: {
         const response = await axios.post(
@@ -403,6 +423,13 @@ async function testTokenChannel(
 
     case 'twilio_whatsapp':
       return await testTwilioWhatsAppChannel(token, secret!);
+
+    // v78 batch 3
+    case 'whatsapp_cloud':
+      return await testWhatsAppCloudChannel(token, secret!, chatId!);
+
+    case 'homeassistant':
+      return await testHomeAssistantChannel(webhook!, token, chatId!);
 
     default:
       return { success: false, message: `暂不支持测试 ${type} 渠道` };

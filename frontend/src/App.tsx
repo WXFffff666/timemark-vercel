@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './stores/auth.store';
+import { initAuthLifecycle } from './stores/auth.store';
 import { LoginPage } from './pages/Login';
 import ShareEvent from './pages/ShareEvent';
 import { TimezoneProvider } from './components/RealtimeClock';
@@ -91,7 +92,7 @@ function AnimatedRoutes() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const navigate = useNavigate();
 
-  useEffect(() => { checkAuth(); }, [checkAuth]);
+  useEffect(() => { checkAuth(); initAuthLifecycle(); }, [checkAuth]);
 
   useEffect(() => {
     if (isAuthenticated && location.pathname === '/login') {

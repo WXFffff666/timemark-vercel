@@ -3,8 +3,10 @@ import {
   buildNaturalReminderText,
   buildReminderEmailBodies,
   buildReminderSubject,
+  buildStyledReminderEmailBodies,
   formatLunarDateLabel,
   htmlToPlainText,
+  normalizeEmailTemplateStyle,
   renderPlainMarkdownToHtml,
 } from '@timemark/shared';
 import { createSmtpTransporter } from '../../utils/smtp-transporter.js';
@@ -16,7 +18,7 @@ export async function sendSmtpNotification(
   password: string,
   fromEmail: string,
   toEmail: string,
-  options?: { markdownTemplate?: string | null },
+  options?: { markdownTemplate?: string | null; templateStyle?: string | null },
 ): Promise<void> {
   const port = smtpPort || 587;
   const transporter = createSmtpTransporter(smtpHost, port, fromEmail, password);
@@ -61,15 +63,19 @@ export async function sendSmtpNotification(
     html = renderPlainMarkdownToHtml(options.markdownTemplate, vars);
     text = htmlToPlainText(html);
   } else {
-    const bodies = buildReminderEmailBodies({
-      name: eventName,
-      date: eventDate,
-      type: eventType,
-      blessing,
-      customMessage: customMessage || undefined,
-      lunarDate: lunarLabel || undefined,
-      calendarType,
-    });
+    // v78: 模板风格可选（classic=旧模板逐字节不变）。
+    const bodies = buildStyledReminderEmailBodies(
+      {
+        name: eventName,
+        date: eventDate,
+        type: eventType,
+        blessing,
+        customMessage: customMessage || undefined,
+        lunarDate: lunarLabel || undefined,
+        calendarType,
+      },
+      normalizeEmailTemplateStyle(options?.templateStyle),
+    );
     html = bodies.html;
     text = bodies.text;
   }

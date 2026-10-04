@@ -55,7 +55,7 @@ channels.get('/available', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);
   const result = await query(
-    `SELECT id, type, name, config_method, is_active, last_test_result, last_test_at, connection_status
+    `SELECT id, type, name, config_method, is_active, suspended_until, last_test_result, last_test_at, connection_status
      FROM notification_accounts
      WHERE user_id = $1 AND is_active = TRUE`,
     [userId],
@@ -151,11 +151,23 @@ channels.post('/test', async (c) => {
     if (accountId) {
       // Same truthfulness contract as the channel-health cron: a channel without a
       // test path is 'unknown'/'unsupported', real outcomes keep healthy/unhealthy.
+      // A successful test also clears any 24h failure suspension.
       const { connectionStatus, lastTestResult } = classifyChannelTestResult(result);
-      await query(
-        'UPDATE notification_accounts SET last_test_result = $1, last_test_at = CURRENT_TIMESTAMP, connection_status = $2 WHERE id = $3',
-        [lastTestResult, connectionStatus, accountId],
-      );
+      if (result.success) {
+        await query(
+          `UPDATE notification_accounts
+           SET last_test_result = $1, last_test_at = CURRENT_TIMESTAMP, connection_status = $2, suspended_until = NULL
+           WHERE id = $3`,
+          [lastTestResult, connectionStatus, accountId],
+        );
+      } else {
+        await query(
+          `UPDATE notification_accounts
+           SET last_test_result = $1, last_test_at = CURRENT_TIMESTAMP, connection_status = $2
+           WHERE id = $3`,
+          [lastTestResult, connectionStatus, accountId],
+        );
+      }
     }
 
     if (!result.success) {

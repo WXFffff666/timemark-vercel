@@ -1230,6 +1230,114 @@ const tokenChannels: ChannelTemplate[] = [
       }
     ],
     docsUrl: 'https://www.twilio.com/docs/whatsapp/api'
+  },
+  // ============ v78 batch 3 ============
+  {
+    id: 'whatsapp_cloud',
+    name: 'WhatsApp 官方',
+    description: 'Meta WhatsApp Cloud API（官方直连，无需 Twilio）',
+    icon: 'MessageCircle',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: '永久访问令牌',
+        type: 'password',
+        required: true,
+        placeholder: 'EAAG...',
+        description: 'Meta 开发者后台生成的 System User 永久令牌'
+      },
+      {
+        name: 'secret',
+        label: 'Phone Number ID',
+        type: 'text',
+        required: true,
+        placeholder: '1234567890',
+        description: 'WhatsApp Business 账号的 Phone Number ID（不是 WABA ID）'
+      },
+      {
+        name: 'chat_id',
+        label: '收件手机号',
+        type: 'text',
+        required: true,
+        placeholder: '+8613800138000',
+        description: '接收消息的手机号（含国家码）；测试号需先在后台绑定该号码'
+      }
+    ],
+    docsUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api'
+  },
+  {
+    id: 'kook',
+    name: 'Kook',
+    description: 'Kook（开黑啦）频道机器人 Webhook',
+    icon: 'Bot',
+    configMethod: 'webhook',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: 'Webhook 地址',
+        type: 'text',
+        required: true,
+        placeholder: 'https://www.kookapp.cn/api/v3/message/webhook/xxxx/xxxx',
+        description: 'Kook 频道 → 设置 → WebHook，复制完整地址'
+      }
+    ],
+    docsUrl: 'https://developer.kookapp.cn/doc/intro'
+  },
+  {
+    id: 'fanbook',
+    name: 'Fanbook',
+    description: 'Fanbook 频道机器人 Webhook',
+    icon: 'Bot',
+    configMethod: 'webhook',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: 'Webhook 地址',
+        type: 'text',
+        required: true,
+        placeholder: 'https://bot.geekhub.cn/api/webhooks/xxxxxxxx',
+        description: 'Fanbook 服务器 → 频道设置 → Webhook，复制完整地址'
+      }
+    ],
+    docsUrl: 'https://fanbook.zhizhoui.com/'
+  },
+  {
+    id: 'homeassistant',
+    name: 'Home Assistant',
+    description: 'Home Assistant 通知服务（长驻 Home Assistant 实例）',
+    icon: 'House',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: 'HA 地址',
+        type: 'text',
+        required: true,
+        placeholder: 'http://homeassistant.local:8123',
+        description: 'Home Assistant 实例的可访问地址（含端口）'
+      },
+      {
+        name: 'token',
+        label: '长期访问令牌',
+        type: 'password',
+        required: true,
+        description: 'HA 个人资料 → 安全 → 长期访问令牌'
+      },
+      {
+        name: 'chat_id',
+        label: '通知服务名',
+        type: 'text',
+        required: true,
+        placeholder: 'mobile_app_iphone',
+        description: 'notify 服务名（如 mobile_app_xxx，见 HA 开发者工具 → 服务）'
+      }
+    ],
+    docsUrl: 'https://www.home-assistant.io/integrations/notify/'
   }
 ];
 

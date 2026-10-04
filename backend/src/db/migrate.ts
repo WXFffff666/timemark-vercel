@@ -3119,6 +3119,17 @@ ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS greeting_opt_out BOOLEAN NOT
 UPDATE events SET notification_channels = REPLACE(notification_channels::text, '"email"', '"resend"')::jsonb
   WHERE notification_channels @> '["email"]'::jsonb;`,
     },
+    {
+      // v78: notification reachability. Accounts no longer get hard-disabled after 3
+      // consecutive failures (that silently removed them from every resolver); instead they
+      // are suspended for 24h and auto-recover. Also: per-user reminder catch-up window
+      // (minutes; NULL = env/10) and the email template style selector.
+      version: 78,
+      name: 'notification_reachability_v78',
+      sql: `ALTER TABLE notification_accounts ADD COLUMN IF NOT EXISTS suspended_until TIMESTAMPTZ;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS reminder_catchup_minutes INTEGER;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS email_template_style TEXT NOT NULL DEFAULT 'classic';`,
+    },
   ];
 
   for (const migration of migrations) {

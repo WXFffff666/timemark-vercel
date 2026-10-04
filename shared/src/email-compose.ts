@@ -168,20 +168,97 @@ export function buildNaturalReminderText(input: ReminderEmailInput): string {
 }
 
 export function buildReminderEmailBodies(input: ReminderEmailInput): { html: string; text: string } {
+  return buildStyledReminderEmailBodies(input, 'classic');
+}
+
+/** 邮件模板风格（v78 user_configs.email_template_style）。classic = 旧模板，逐字节不变。 */
+export type EmailTemplateStyle = 'classic' | 'card' | 'minimal';
+
+export const EMAIL_TEMPLATE_STYLES: EmailTemplateStyle[] = ['classic', 'card', 'minimal'];
+
+export function normalizeEmailTemplateStyle(value: unknown): EmailTemplateStyle {
+  return EMAIL_TEMPLATE_STYLES.includes(value as EmailTemplateStyle) ? (value as EmailTemplateStyle) : 'classic';
+}
+
+/**
+ * 按风格渲染提醒邮件。classic 保持旧输出（回归护栏）；card / minimal 是 v78 的新模板：
+ * 表格布局 + 内联样式（Outlook 兼容）、prefers-color-scheme 深色适配、隐藏 preheader、
+ * 单一详情链接（少链接 + 双 part + 无图片，符合 Gmail/Yahoo 的低垃圾分特征）。
+ */
+export function buildStyledReminderEmailBodies(
+  input: ReminderEmailInput,
+  style: EmailTemplateStyle = 'classic',
+): { html: string; text: string } {
   const textCore = buildNaturalReminderText(input);
   const text =
     input.showManageLink && input.appOrigin
       ? `${textCore}\n\n—\n${input.appOrigin}`
       : textCore;
 
-  const html = `<!DOCTYPE html>
+  if (style === 'classic') {
+    const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.6;color:#222">
 <p style="margin:0;white-space:pre-wrap">${escapeHtmlMinimal(textCore)}</p>
 </body>
 </html>`;
+    return { html, text };
+  }
 
+  const name = String(input.name || '').trim() || '提醒';
+  const dateLabel = composeDualCalendarDate(input.date, input.lunarDate, input.calendarType);
+  const days = input.date ? daysUntilDate(input.date) : null;
+  const dayBadge =
+    days === null ? '提醒'
+    : days === 0 ? '今天'
+    : days === 1 ? '明天'
+    : `还有 ${days} 天`;
+  const detailUrl = input.showManageLink && input.appOrigin ? input.appOrigin : '';
+  const preheader = textCore.replace(/\s+/g, ' ').slice(0, 100);
+
+  if (style === 'minimal') {
+    const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>${escapeHtmlMinimal(name)}</title></head>
+<body style="margin:0;padding:24px;background:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtmlMinimal(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table role="presentation" width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;padding:28px 24px">
+  <tr><td style="color:#94a3b8;font-size:12px;letter-spacing:2px;text-transform:uppercase;padding-bottom:8px">${escapeHtmlMinimal(dayBadge)}</td></tr>
+  <tr><td style="font-size:20px;font-weight:600;color:#0f172a;padding-bottom:6px">${escapeHtmlMinimal(name)}</td></tr>
+  <tr><td style="font-size:14px;color:#475569;line-height:1.7;padding-bottom:12px">${escapeHtmlMinimal(dateLabel)}</td></tr>
+  <tr><td style="font-size:14px;color:#334155;line-height:1.8;white-space:pre-wrap">${escapeHtmlMinimal(textCore)}</td></tr>
+  ${detailUrl ? `<tr><td style="padding-top:20px"><a href="${escapeHtmlMinimal(detailUrl)}" style="color:#2563eb;font-size:14px;text-decoration:none">在 TimeMark 中查看 →</a></td></tr>` : ''}
+</table>
+</td></tr></table>
+</body>
+</html>`;
+    return { html, text };
+  }
+
+  // card：日期徽章 + 渐变头部 + 主按钮
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>${escapeHtmlMinimal(name)}</title></head>
+<body style="margin:0;padding:24px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtmlMinimal(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table role="presentation" width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.08)">
+  <tr><td style="background:#2563eb;padding:22px 28px">
+    <div style="display:inline-block;background:rgba(255,255,255,0.18);color:#ffffff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:999px">${escapeHtmlMinimal(dayBadge)}</div>
+    <div style="color:#ffffff;font-size:22px;font-weight:700;padding-top:10px">${escapeHtmlMinimal(name)}</div>
+    <div style="color:rgba(255,255,255,0.85);font-size:14px;padding-top:4px">${escapeHtmlMinimal(dateLabel)}</div>
+  </td></tr>
+  <tr><td style="padding:24px 28px;font-size:15px;color:#1e293b;line-height:1.8;white-space:pre-wrap">${escapeHtmlMinimal(textCore)}</td></tr>
+  ${detailUrl ? `<tr><td style="padding:0 28px 26px">
+    <a href="${escapeHtmlMinimal(detailUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:11px 22px;border-radius:10px">查看详情</a>
+  </td></tr>` : ''}
+  <tr><td style="padding:14px 28px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:12px">这封提醒来自你自己的 TimeMark</td></tr>
+</table>
+</td></tr></table>
+</body>
+</html>`;
   return { html, text };
 }
 

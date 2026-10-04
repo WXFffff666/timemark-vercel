@@ -49,6 +49,26 @@ export async function getSessionByToken(token: string): Promise<Session | null> 
   return { id: row.id, userId: row.user_id, token: row.token, deviceFingerprint: row.device_fingerprint, isTrusted: row.is_trusted, expiresAt: row.expires_at };
 }
 
+/**
+ * Sliding renewal for a REMEMBERED session: push `expires_at` out to now+30d.
+ * Called from /auth/refresh when the refresh token carries rememberMe, so an
+ * actively used "stay signed in" session never hits its absolute deadline
+ * mid-usage (it used to hard-expire at exactly 30 days, dropping the user out).
+ * The ceiling still rolls: a session abandoned for 30 days dies regardless.
+ * Returns the new expiry, or null when the session row no longer exists.
+ */
+export async function renewRememberedSession(token: string): Promise<Date | null> {
+  const expiresAt = new Date(Date.now() + SESSION_TTL.sessionRememberSeconds * 1000).toISOString();
+  const result = await query(
+    `UPDATE sessions SET expires_at = $1
+     WHERE token = $2 AND expires_at > NOW()
+     RETURNING expires_at`,
+    [expiresAt, token],
+  );
+  const row = result.rows[0] as { expires_at?: unknown } | undefined;
+  return row?.expires_at ? new Date(String(row.expires_at)) : null;
+}
+
 export async function deleteSession(token: string): Promise<void> {
   await query('DELETE FROM sessions WHERE token = $1', [token]);
 }

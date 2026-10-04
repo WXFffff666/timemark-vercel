@@ -340,7 +340,7 @@ config.post('/reminders', async (c) => {
 config.get('/notification-advanced', async (c) => {
   const user = c.get('user');
   const row = await query(
-    `SELECT markdown_email_template, notification_preset, api_scopes
+    `SELECT markdown_email_template, notification_preset, api_scopes, email_template_style, reminder_catchup_minutes
      FROM user_configs WHERE user_id = $1`,
     [Number(user.id)],
   );
@@ -351,6 +351,8 @@ config.get('/notification-advanced', async (c) => {
       markdown_email_template: r.markdown_email_template ?? null,
       notification_preset: r.notification_preset ?? null,
       api_scopes: r.api_scopes ?? 'read,write',
+      email_template_style: r.email_template_style ?? 'classic',
+      reminder_catchup_minutes: r.reminder_catchup_minutes ?? null,
     },
   });
 });
@@ -382,6 +384,23 @@ config.post('/notification-advanced', async (c) => {
     const scopes = body.api_scopes.split(',').map((s: string) => s.trim()).filter((s: string) => allowed.includes(s));
     sets.push(`api_scopes = $${idx++}`);
     params.push(scopes.length ? scopes.join(',') : 'read');
+  }
+
+  // v78: 邮件模板风格（classic/card/minimal）
+  if (typeof body.email_template_style === 'string' && ['classic', 'card', 'minimal'].includes(body.email_template_style)) {
+    sets.push(`email_template_style = $${idx++}`);
+    params.push(body.email_template_style);
+  }
+
+  // v78: 每用户补发窗口（0-1440 分钟；null = 部署默认）
+  if (body.reminder_catchup_minutes === null) {
+    sets.push(`reminder_catchup_minutes = NULL`);
+  } else if (body.reminder_catchup_minutes !== undefined) {
+    const minutes = Math.trunc(Number(body.reminder_catchup_minutes));
+    if (Number.isFinite(minutes) && minutes >= 0 && minutes <= 1440) {
+      sets.push(`reminder_catchup_minutes = $${idx++}`);
+      params.push(minutes);
+    }
   }
 
   if (sets.length === 0) {

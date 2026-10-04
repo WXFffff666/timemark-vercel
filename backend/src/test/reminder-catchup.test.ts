@@ -370,7 +370,7 @@ describe('catch-up vs on-time race', () => {
 });
 
 describe('grace knob (configurable + bounded)', () => {
-  it('defaults to 10; parses env; clamps to [0, 60]', () => {
+  it('defaults to 10; parses env; clamps to [0, 1440]', () => {
     expect(REMINDER_CATCH_UP_DEFAULT_MINUTES).toBe(10);
     expect(resolveReminderCatchUpMinutes({})).toBe(10);
     expect(resolveReminderCatchUpMinutes({ REMINDER_CATCHUP_GRACE_MINUTES: '' })).toBe(10);
@@ -378,7 +378,7 @@ describe('grace knob (configurable + bounded)', () => {
     expect(resolveReminderCatchUpMinutes({ REMINDER_CATCHUP_GRACE_MINUTES: '15' })).toBe(15);
     expect(resolveReminderCatchUpMinutes({ REMINDER_CATCHUP_GRACE_MINUTES: '0' })).toBe(0);
     expect(resolveReminderCatchUpMinutes({ REMINDER_CATCHUP_GRACE_MINUTES: '-3' })).toBe(0);
-    expect(resolveReminderCatchUpMinutes({ REMINDER_CATCHUP_GRACE_MINUTES: '5000' })).toBe(60);
+    expect(resolveReminderCatchUpMinutes({ REMINDER_CATCHUP_GRACE_MINUTES: '5000' })).toBe(1440);
     expect(CRON_GAP_ALERT_MINUTES).toBe(3); // the reused B29 threshold
   });
 

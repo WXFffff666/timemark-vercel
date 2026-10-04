@@ -42,6 +42,13 @@ import { sendZulipNotification } from './zulip.service.js';
 import { sendRocketChatNotification } from './rocketchat.service.js';
 import { sendFcmNotification } from './fcm.service.js';
 import { sendTwilioWhatsAppNotification } from './twilio-whatsapp.service.js';
+// v78 batch 3: WhatsApp Cloud API / Kook / Fanbook / Home Assistant
+import {
+  sendWhatsAppCloudNotification,
+  sendKookNotification,
+  sendFanbookNotification,
+  sendHomeAssistantNotification,
+} from './extended-channels.service.js';
 // Browser Web Push (checkbox 84): VAPID channel backed by push_subscriptions rows.
 import {
   buildWebPushPayload,
@@ -269,6 +276,11 @@ export const channelToAccountType: Record<string, string> = {
   'rocketchat': 'rocketchat',
   'fcm': 'fcm',
   'twilio_whatsapp': 'twilio_whatsapp',
+  // v78 batch 3
+  'whatsapp_cloud': 'whatsapp_cloud',
+  'kook': 'kook',
+  'fanbook': 'fanbook',
+  'homeassistant': 'homeassistant',
 };
 
 /**
@@ -321,6 +333,11 @@ export const DISPATCHABLE_CHANNELS = new Set<string>([
   'zulip',
   'fcm',
   'twilio_whatsapp',
+  // v78 batch 3
+  'whatsapp_cloud',
+  'kook',
+  'fanbook',
+  'homeassistant',
   // Browser Web Push (checkbox 84) — VAPID, per-user subscriptions
   'web_push',
   // Legacy aliases（旧事件里可能仍存有这些渠道 ID）
@@ -378,6 +395,11 @@ export const FALLBACK_DISPATCHABLE_CHANNELS = new Set<string>([
   'zulip',
   'fcm',
   'twilio_whatsapp',
+  // v78 batch 3
+  'whatsapp_cloud',
+  'kook',
+  'fanbook',
+  'homeassistant',
   // Browser Web Push (checkbox 84) — VAPID, per-user subscriptions
   'web_push',
   // Legacy aliases（旧事件里可能仍存有这些渠道 ID）
@@ -571,7 +593,24 @@ function getChannelConfigFromAccount(
       return (account.token && account.secret && account.webhook && account.chat_id)
         ? { token: account.token, secret: account.secret, webhook: account.webhook, chat_id: account.chat_id }
         : null;
-    
+
+    // v78 batch 3
+    case 'whatsapp_cloud':
+      // token = 永久访问令牌, secret = Phone Number ID, chat_id = 收件人手机号
+      return (account.token && account.secret && account.chat_id)
+        ? { token: account.token, secret: account.secret, chat_id: account.chat_id }
+        : null;
+
+    case 'kook':
+    case 'fanbook':
+      return account.webhook ? { webhook: account.webhook } : null;
+
+    case 'homeassistant':
+      // webhook = HA 地址, token = 长期访问令牌, chat_id = notify 服务名
+      return (account.webhook && account.token && account.chat_id)
+        ? { webhook: account.webhook, token: account.token, chat_id: account.chat_id }
+        : null;
+
     default:
       return null;
   }
@@ -793,11 +832,11 @@ export async function sendNotifications(
     const configs: any[] = [];
     
     if (boundAccountIds.length > 0) {
-      // 找到所有匹配渠道类型的已绑定账户
+      // 找到所有匹配渠道类型的已绑定账户（24h 失败暂停中的账户不参与发送）
       const accountType = channelToAccountType[ch];
       for (const accountId of boundAccountIds) {
         const account = accountsMap.get(accountId);
-        if (account && account.type === accountType && account.is_active) {
+        if (account && account.type === accountType && account.is_active && !isAccountSuspended(account)) {
           const accountConfig = getChannelConfigFromAccount(account, ch);
           if (accountConfig) configs.push(accountConfig);
         }
@@ -808,7 +847,7 @@ export async function sendNotifications(
       const accountType = channelToAccountType[ch];
       if (accountType) {
         for (const account of eligibleAccounts) {
-          if (account.type === accountType && account.is_active) {
+          if (account.type === accountType && account.is_active && !isAccountSuspended(account)) {
             const accountConfig = getChannelConfigFromAccount(account, ch);
             if (accountConfig) configs.push(accountConfig);
           }
@@ -984,7 +1023,7 @@ export async function sendNotifications(
                 fromEmail,
                 email,
                 idempotencyKey,
-                { markdownTemplate: config?.markdown_email_template },
+                { markdownTemplate: config?.markdown_email_template, templateStyle: config?.email_template_style },
               ));
               await logEmail({
                 userId,
@@ -1031,7 +1070,7 @@ export async function sendNotifications(
               password,
               fromEmail,
               recipient,
-              { markdownTemplate: config?.markdown_email_template },
+              { markdownTemplate: config?.markdown_email_template, templateStyle: config?.email_template_style },
             ));
           }
           channelSendMeta[ch] = { recipients: smtpRecipients };
@@ -1103,6 +1142,19 @@ export async function sendNotifications(
           await retryWithBackoff(() => sendTwilioWhatsAppNotification(
             mappedEvent, chConfig.token, chConfig.secret, chConfig.webhook, chConfig.chat_id,
           ));
+        // v78 batch 3: WhatsApp Cloud API / Kook / Fanbook / Home Assistant
+        else if (ch === 'whatsapp_cloud' && chConfig.token && chConfig.secret && chConfig.chat_id)
+          await retryWithBackoff(() => sendWhatsAppCloudNotification(
+            mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id,
+          ));
+        else if (ch === 'kook' && chConfig.webhook)
+          await retryWithBackoff(() => sendKookNotification(mappedEvent, chConfig.webhook));
+        else if (ch === 'fanbook' && chConfig.webhook)
+          await retryWithBackoff(() => sendFanbookNotification(mappedEvent, chConfig.webhook));
+        else if (ch === 'homeassistant' && chConfig.webhook && chConfig.token && chConfig.chat_id)
+          await retryWithBackoff(() => sendHomeAssistantNotification(
+            mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id,
+          ));
         // Browser Web Push (checkbox 84): VAPID, per-user subscriptions.
         else if (ch === 'web_push' && chConfig.subscriptions) {
           const delivery = await deliverWebPush(chConfig.subscriptions, buildWebPushPayload(mappedEvent), userId);
@@ -1143,11 +1195,13 @@ export async function sendNotifications(
         accountId: task.accountId,
         ...(meta?.recipients?.length ? { recipients: meta.recipients } : {}),
       };
-      // Reset consecutive failure count on success
+      // Reset consecutive failure count AND clear any 24h failure suspension on success
       if (task.accountId) {
         try {
           await query(
-            `UPDATE notification_accounts SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            `UPDATE notification_accounts
+             SET updated_at = CURRENT_TIMESTAMP, suspended_until = NULL
+             WHERE id = $1`,
             [task.accountId]
           );
         } catch { /* ignore */ }
@@ -1197,11 +1251,12 @@ export async function sendNotifications(
     
     // Find other active accounts not already tried (within the profile's routing, if any)
     const fallbackCandidates = eligibleAccounts.filter(
-      a => a.is_active && !triedAccountIds.has(a.id)
+      a => a.is_active && !isAccountSuspended(a) && !triedAccountIds.has(a.id)
     );
-    
+
     let fallbackAttempts = 0;
-    const maxFallbacks = 2;
+    // 单用户应用：把每个未尝试过的账户类型都试一遍（上限 6），而不是只试 2 个。
+    const maxFallbacks = 6;
     
     for (const [failedCh] of failedChannels) {
       if (fallbackAttempts >= maxFallbacks) break;
@@ -1233,8 +1288,13 @@ export async function sendNotifications(
           break; // One successful fallback is enough for this failed channel
         } catch (fallbackErr) {
           const fbErrMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-          console.error(`[Fallback] ${candidateChannel} (account ${candidate.id}) also failed: ${fbErrMsg}`);
-          channelResults[`${candidateChannel}_fallback`] = { success: false, error: fbErrMsg, accountId: candidate.id };
+          log.warn(
+            { event: 'notification.fallback_failed', channel: candidateChannel, accountId: candidate.id, err: fallbackErr },
+            `Fallback ${candidateChannel} (account ${candidate.id}) also failed`,
+          );
+          // `_` 前缀 = 内部标记键：readDelivery 会剔除，不会把回退尝试当成一个真实失败渠道
+          // 混进「部分失败」展示（旧键 `resend_fallback` 会被当成渠道名）。
+          channelResults[`_fallback_${candidateChannel}`] = { success: false, error: fbErrMsg, accountId: candidate.id };
         }
       }
     }
@@ -1298,7 +1358,9 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any, ev
       throw new Error('未配置收件邮箱：请在事件、通知渠道或设置中填写默认邮箱');
     }
     for (const recipient of recipientEmails) {
-      await sendEmailNotification(mappedEvent, chConfig.apiKey, fromEmail, recipient);
+      await sendEmailNotification(mappedEvent, chConfig.apiKey, fromEmail, recipient, undefined, {
+        templateStyle: config?.email_template_style,
+      });
     }
   }
   else if (ch === 'smtp' && chConfig.webhook && chConfig.token && chConfig.chat_id) {
@@ -1308,7 +1370,7 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any, ev
     }
     const smtpPort = parseInt(chConfig.secret || '587', 10);
     for (const recipient of smtpRecipients) {
-      await sendSmtpNotification(mappedEvent, chConfig.webhook, smtpPort, chConfig.token, chConfig.chat_id, recipient);
+      await sendSmtpNotification(mappedEvent, chConfig.webhook, smtpPort, chConfig.token, chConfig.chat_id, recipient, { templateStyle: config?.email_template_style });
     }
   }
   else if (ch === 'serverchan' && chConfig.token) await sendServerChanNotification(mappedEvent, chConfig.token);
@@ -1348,6 +1410,15 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any, ev
     await sendFcmNotification(mappedEvent, chConfig.token, chConfig.chat_id);
   else if (ch === 'twilio_whatsapp' && chConfig.token && chConfig.secret && chConfig.webhook && chConfig.chat_id)
     await sendTwilioWhatsAppNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.webhook, chConfig.chat_id);
+  // v78 batch 3: WhatsApp Cloud API / Kook / Fanbook / Home Assistant
+  else if (ch === 'whatsapp_cloud' && chConfig.token && chConfig.secret && chConfig.chat_id)
+    await sendWhatsAppCloudNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id);
+  else if (ch === 'kook' && chConfig.webhook)
+    await sendKookNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'fanbook' && chConfig.webhook)
+    await sendFanbookNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'homeassistant' && chConfig.webhook && chConfig.token && chConfig.chat_id)
+    await sendHomeAssistantNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id);
   else if (ch === 'generic_webhook' && chConfig.webhook)
     await sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch);
   else if (ch === 'synologychat' && chConfig.webhook)
@@ -1361,13 +1432,18 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any, ev
 
 /**
  * Track consecutive failures for a notification account.
- * After 3 consecutive failures, auto-disable the account.
+ *
+ * After 3 consecutive failures the account is SUSPENDED for 24h instead of being
+ * hard-disabled. The old `is_active = FALSE` silently removed the channel from every
+ * resolver and the user's reminders just stopped arriving with no trace in the UI.
+ * A suspension auto-expires, is cleared by a successful send / channel test / manual
+ * retry, and shows up in the channels page.
  */
 async function trackConsecutiveFailure(accountId: number, channelType: string, _errorMsg: string): Promise<void> {
   try {
     // Count recent consecutive failures for this account
     const result = await query(
-      `SELECT COUNT(*) as fail_count FROM event_trigger_logs 
+      `SELECT COUNT(*) as fail_count FROM event_trigger_logs
        WHERE account_id = $1 AND channel_type = $2 AND status = 'failed'
        AND id > COALESCE(
          (SELECT MAX(id) FROM event_trigger_logs WHERE account_id = $3 AND channel_type = $4 AND status = 'success'),
@@ -1376,13 +1452,25 @@ async function trackConsecutiveFailure(accountId: number, channelType: string, _
       [accountId, channelType, accountId, channelType]
     );
     const consecutiveFailures = (result.rows[0]?.fail_count || 0) + 1; // +1 for current failure
-    
+
     if (consecutiveFailures >= 3) {
-      await query(
-        `UPDATE notification_accounts SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-        [accountId]
+      const current = await query(
+        'SELECT suspended_until FROM notification_accounts WHERE id = $1',
+        [accountId],
       );
-      console.log(`[Notifications] Channel ${channelType} (account ${accountId}) disabled after 3 consecutive failures`);
+      const alreadySuspended = !!(current.rows[0] as { suspended_until?: string | null } | undefined)?.suspended_until;
+      if (!alreadySuspended) {
+        await query(
+          `UPDATE notification_accounts
+           SET suspended_until = NOW() + INTERVAL '24 hours', updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [accountId],
+        );
+        log.warn(
+          { event: 'notification.account_suspended', accountId, channelType },
+          `Account ${accountId} (${channelType}) suspended for 24h after ${consecutiveFailures} consecutive failures`,
+        );
+      }
     }
   } catch (error) {
     log.warn(
@@ -1390,4 +1478,11 @@ async function trackConsecutiveFailure(accountId: number, channelType: string, _
       'Failed to track consecutive failure',
     );
   }
+}
+
+/** True when the account is inside a 24h failure suspension (still is_active). */
+export function isAccountSuspended(account: { suspended_until?: string | Date | null } | undefined): boolean {
+  if (!account?.suspended_until) return false;
+  const until = new Date(account.suspended_until);
+  return Number.isFinite(until.getTime()) && until.getTime() > Date.now();
 }

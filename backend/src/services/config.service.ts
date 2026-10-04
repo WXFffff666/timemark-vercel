@@ -194,6 +194,8 @@ export async function getUserConfig(userId: number): Promise<any> {
     quiet_hours_end: r.quiet_hours_end || null,
     default_test_email: r.default_test_email || null,
     markdown_email_template: r.markdown_email_template || null,
+    email_template_style: r.email_template_style || 'classic',
+    reminder_catchup_minutes: r.reminder_catchup_minutes == null ? null : Number(r.reminder_catchup_minutes),
     notification_preset: r.notification_preset || null,
     api_scopes: r.api_scopes || 'read,write',
     // checkbox 78 (v45 columns)
@@ -234,6 +236,8 @@ export interface NotificationAccount {
   secret: string | null;
   chat_id: string | null;
   is_active: boolean;
+  /** 24h 失败暂停的截止时间（v78）；缺失/NULL/过期 = 未暂停。 */
+  suspended_until?: string | null;
   config_method: 'webhook' | 'token' | 'plugin';
   session_data: any | null;
   plugin_package: string | null;

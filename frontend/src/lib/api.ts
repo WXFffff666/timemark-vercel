@@ -223,16 +223,25 @@ export const api = {
   patch: <T>(url: string, body?: any) => request<T>(url, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(url: string, body?: any) => request<T>(url, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) }),
   getRaw: async <T>(url: string): Promise<{ data: T; pagination?: Record<string, unknown> }> => {
-    const { accessToken } = getTokens();
-    const response = await fetch(`${API_BASE}${url}`, {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
-      },
-    });
+    const doFetch = () => {
+      const { accessToken } = getTokens();
+      return fetch(`${API_BASE}${url}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
+        },
+      });
+    };
+    let response = await doFetch();
+    // Same contract as request(): one refresh-and-retry on the first 401, then give up.
+    // getRaw used to skip this, so TriggerLogs' export/list died on a stale access cookie.
+    if (response.status === 401) {
+      const outcome = await (refreshPromise ?? refreshSession(getTokens().refreshToken));
+      if (outcome === 'ok') response = await doFetch();
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const json = await response.json();
     if (!json.success) throw new Error(json.error || 'Request failed');

@@ -4,9 +4,9 @@
 > 唯一数据源：`backend/src/services/notifications/channels.config.ts`（`getSupportedChannelTemplates()`）。
 > 连接测试列由 `test-connection.ts` 的真实分支解析得到；官方地址优先取模板 `officialUrl`，缺省回退 `docsUrl`。
 
-**云端可用渠道：42 个**（webhook 11 · token 31）· **Serverless 不可用：8 个** · **当前 schema：v75**
+**云端可用渠道：46 个**（webhook 13 · token 33）· **Serverless 不可用：8 个** · **当前 schema：v78**
 
-## 1. 云端渠道总表（42）
+## 1. 云端渠道总表（46）
 
 | # | ID | 名称 | configMethod | 必填字段 → DB 列 | 真实连接测试 | 官方地址 |
 |---|----|------|--------------|------------------|--------------|----------|
@@ -52,8 +52,12 @@
 | 40 | `zulip` | Zulip | `token` | `webhook` → `webhook`、`token` → `token`、`chat_id` → `chat_id`、`secret` → `secret` | ✅ `test-connection.ts` → `testTokenChannel` | <https://zulip.com/api/send-message> |
 | 41 | `fcm` | Firebase 推送 (FCM) | `token` | `token` → `token`、`chat_id` → `chat_id` | ✅ `test-connection.ts` → `testTokenChannel` | <https://firebase.google.com/docs/cloud-messaging/send/v1-api> |
 | 42 | `twilio_whatsapp` | Twilio WhatsApp | `token` | `token` → `token`、`secret` → `secret`、`webhook` → `webhook`、`chat_id` → `chat_id` | ✅ `test-connection.ts` → `testTokenChannel` | <https://www.twilio.com/docs/whatsapp/api> |
+| 43 | `whatsapp_cloud` | WhatsApp 官方 | `token` | `token` → `token`、`secret` → `secret`、`chat_id` → `chat_id` | ✅ `test-connection.ts` → `testTokenChannel` | <https://developers.facebook.com/docs/whatsapp/cloud-api> |
+| 44 | `kook` | Kook | `webhook` | `webhook` → `webhook` | ✅ `test-connection.ts` → `testWebhookChannel` | <https://developer.kookapp.cn/doc/intro> |
+| 45 | `fanbook` | Fanbook | `webhook` | `webhook` → `webhook` | ✅ `test-connection.ts` → `testWebhookChannel` | <https://fanbook.zhizhoui.com/> |
+| 46 | `homeassistant` | Home Assistant | `token` | `webhook` → `webhook`、`token` → `token`、`chat_id` → `chat_id` | ✅ `test-connection.ts` → `testTokenChannel` | <https://www.home-assistant.io/integrations/notify/> |
 
-## 2. 字段 → notification_accounts 列（含可选字段，共 88 项）
+## 2. 字段 → notification_accounts 列（含可选字段，共 96 项）
 
 | 渠道 | 字段 | → DB 列 | 必填 | 标签 | 英文标签 |
 |------|------|---------|------|------|----------|
@@ -145,6 +149,14 @@
 | `twilio_whatsapp` | `secret` | `secret` | 是 | Auth Token | — |
 | `twilio_whatsapp` | `webhook` | `webhook` | 是 | 发信号码 (From) | — |
 | `twilio_whatsapp` | `chat_id` | `chat_id` | 是 | 收件号码 (To) | — |
+| `whatsapp_cloud` | `token` | `token` | 是 | 永久访问令牌 | — |
+| `whatsapp_cloud` | `secret` | `secret` | 是 | Phone Number ID | — |
+| `whatsapp_cloud` | `chat_id` | `chat_id` | 是 | 收件手机号 | — |
+| `kook` | `webhook` | `webhook` | 是 | Webhook 地址 | — |
+| `fanbook` | `webhook` | `webhook` | 是 | Webhook 地址 | — |
+| `homeassistant` | `webhook` | `webhook` | 是 | HA 地址 | — |
+| `homeassistant` | `token` | `token` | 是 | 长期访问令牌 | — |
+| `homeassistant` | `chat_id` | `chat_id` | 是 | 通知服务名 | — |
 
 ## 3. Serverless 不可用渠道（8）
 
@@ -163,9 +175,9 @@
 
 | 项 | 值 |
 |----|----|
-| 云端渠道总数 | 42 |
-| webhook 渠道 | 11 |
-| token 渠道 | 31 |
-| 有 provider 专属连接测试 | 42 |
+| 云端渠道总数 | 46 |
+| webhook 渠道 | 13 |
+| token 渠道 | 33 |
+| 有 provider 专属连接测试 | 46 |
 | Serverless 不可用 | 8 |
-| schema 版本 | v75 |
+| schema 版本 | v78 |

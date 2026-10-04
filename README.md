@@ -4,7 +4,7 @@
 
 <h1>🎂 TimeMark</h1>
 
-<h3>智能事件提醒系统 | 42 个通知渠道 | 农历转换 | 关系映射</h3>
+<h3>智能事件提醒系统 | 46 个通知渠道 | 农历转换 | 关系映射</h3>
 
 <p>一个为生日、纪念日等重要日期打造的全功能提醒系统。<br/>Vercel Serverless 部署，PostgreSQL 数据库，零服务器运维。</p>
 
@@ -49,7 +49,7 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 | 密钥管理 | data/.env 文件 | **Vercel Environment Variables** |
 | 静态资源 | Docker 镜像内 | **Vercel Edge Network (CDN)** |
 | 免费额度 | 需自备服务器 | **Vercel Hobby 免费套餐可用** |
-| 通知渠道 | 38 个渠道 | **42 个 HTTP 渠道（Webhook/Token，云端可用）** |
+| 通知渠道 | 38 个渠道 | **46 个 HTTP 渠道（Webhook/Token，云端可用）** |
 
 ### 架构优势
 
@@ -69,7 +69,7 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 | 部署平台 | Docker / NAS（群晖 · 威联通 · 铁威马 · 飞牛OS） | Vercel Serverless |
 | 数据库 | SQLite (sql.js，内置) | PostgreSQL (Vercel Postgres / Neon) |
 | 定时任务 | Croner（进程内每分钟检查） | Vercel Cron + cron-job.org |
-| 通知渠道 | **38 个全部可用** | 42 个云端可用 HTTP 渠道 |
+| 通知渠道 | **38 个全部可用** | 46 个云端可用 HTTP 渠道 |
 | 运维成本 | 需自备服务器 | 零运维，Hobby 免费套餐可用 |
 | 适合场景 | 数据完全自持 / 内网 / NAS | 公网访问 / 免服务器 / 快速上线 |
 
@@ -81,7 +81,7 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 
 | 🗓️ 精准农历 | 📢 多渠道通知 | 👨‍👩‍👧‍👦 智能关系映射 | 🔒 安全防护 | 🌍 全球时区 |
 |:----------:|:----------:|:---------------:|:----------:|:--------:|
-| 闰月自动转换 | 42 个通知渠道 | 36 种称呼映射 | 登录锁定 + 告警 | NTP 按用户时区校准 |
+| 闰月自动转换 | 46 个通知渠道 | 36 种称呼映射 | 登录锁定 + 告警 | NTP 按用户时区校准 |
 | 公历/农历/双历 | 同渠道多账户 | 家庭关系映射 | Turnstile + Passkey | 默认北京时间 |
 
 | 📝 通知模板 | 🔄 重复事件 | 📧 多邮箱支持 | 📅 日历导出 | 🎯 11 种事件类型 |
@@ -200,7 +200,7 @@ vercel --prod
 
 ### 初始化数据库
 
-部署后数据库表会在 **首次 API 冷启动时自动迁移**（v1–v75）。也可手动执行：
+部署后数据库表会在 **首次 API 冷启动时自动迁移**（v1–v78）。也可手动执行：
 
 ```bash
 # 拉取 Vercel 环境变量
@@ -210,7 +210,7 @@ vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-部署完成后可在 **设置 → 部署向导** 查看「系统自检」（数据库连接、结构版本 v75、CRON_SECRET、Turnstile 等）。
+部署完成后可在 **设置 → 部署向导** 查看「系统自检」（数据库连接、结构版本 v78、CRON_SECRET、Turnstile 等）。
 
 部署完成！生产环境请绑定自定义域名（例如 `https://timemark.example.com`）。
 
@@ -373,7 +373,7 @@ Cron 每分钟提醒任务使用校正后的时间，在配置的提醒时刻 ±
 |--------|--------|
 | 提醒时间 | 06:00 - 22:00 + 自定义任意时间 (可多选) |
 | 提前天数 | 1天 / 3天 / 7天 / 14天 / 30天 (可多选) |
-| 通知渠道 | 42 个 HTTP 渠道任意组合 (可多选) |
+| 通知渠道 | 46 个 HTTP 渠道任意组合 (可多选) |
 | 重复事件 | 每天 / 每周 / 每月 / 每年 |
 | 通知模板 | 57 种预设模板（覆盖 40 种事件类型）+ 自定义模板 |
 | 收件人邮箱 | 支持多个收件人邮箱 |
@@ -405,7 +405,7 @@ Cron 每分钟提醒任务使用校正后的时间，在配置的提醒时刻 ±
 
 ---
 
-## 📢 通知渠道（云端可用 42 个）
+## 📢 通知渠道（云端可用 46 个）
 
 TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插件、无长连接 IM）。所有渠道通过「通知账户」统一管理，支持同渠道多账户，创建事件时可选择发送目标。
 
@@ -426,7 +426,7 @@ TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插�
 
 详见 [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)。
 
-### 🔗 Webhook 类（11 个）
+### 🔗 Webhook 类（13 个）
 
 | 渠道 | 说明 |
 |------|------|
@@ -441,8 +441,10 @@ TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插�
 | Twitch | Twitch EventSub Webhook |
 | 通用 Webhook | 自定义 HTTP 回调（可选签名校验） |
 | Rocket.Chat | Rocket.Chat 频道传入 Webhook |
+| Kook | Kook（开黑啦）频道机器人 Webhook |
+| Fanbook | Fanbook 频道机器人 Webhook |
 
-### 🔑 Token 类（31 个）
+### 🔑 Token 类（33 个）
 
 | 渠道 | 说明 |
 |------|------|
@@ -477,6 +479,8 @@ TimeMark Vercel 版仅保留 **Webhook / Token 类 HTTP 渠道**（无扫码插�
 | Zulip | Zulip 流消息推送 |
 | 🔥 Firebase 推送 (FCM) | Firebase Cloud Messaging HTTP v1 |
 | 🟢 Twilio WhatsApp | 通过 Twilio 发送 WhatsApp 消息 |
+| 🟢 WhatsApp Cloud | Meta 官方 WhatsApp Cloud API（区别于 Twilio） |
+| 🏠 Home Assistant | HA notify 服务推送（长寿命令牌） |
 
 ---
 

@@ -172,6 +172,8 @@ export default function Settings() {
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [markdownTemplate, setMarkdownTemplate] = useState('');
   const [apiScopes, setApiScopes] = useState('read,write');
+  const [emailTemplateStyle, setEmailTemplateStyle] = useState('classic');
+  const [reminderCatchupMinutes, setReminderCatchupMinutes] = useState('');
   const [advancedSaving, setAdvancedSaving] = useState(false);
   const [uiLang, setUiLang] = useState<'zh' | 'en'>(getLang());
   const [googleOAuth, setGoogleOAuth] = useState<{
@@ -198,7 +200,7 @@ export default function Settings() {
         externalCalendarUrls?: string[];
         externalCalendarSyncStrategy?: string;
       }>('/calendar/integrations').catch(() => null),
-      api.get<{ markdown_email_template?: string | null; api_scopes?: string }>('/config/notification-advanced').catch(() => null),
+      api.get<{ markdown_email_template?: string | null; api_scopes?: string; email_template_style?: string; reminder_catchup_minutes?: number | null }>('/config/notification-advanced').catch(() => null),
       api.get<{ configured?: boolean; connected?: boolean; email?: string | null; calendarId?: string }>('/calendar/google-oauth/status').catch(() => null),
       api.get<{ feeds: IcsFeed[] }>('/calendar/ics-feeds').catch(() => null),
     ])
@@ -241,6 +243,8 @@ export default function Settings() {
         }
         if (advanced?.markdown_email_template) setMarkdownTemplate(advanced.markdown_email_template);
         if (advanced?.api_scopes) setApiScopes(advanced.api_scopes);
+        if (advanced?.email_template_style) setEmailTemplateStyle(advanced.email_template_style);
+        setReminderCatchupMinutes(advanced?.reminder_catchup_minutes == null ? '' : String(advanced.reminder_catchup_minutes));
         if (icsFeedData) {
           setIcsFeeds(Array.isArray(icsFeedData.feeds) ? icsFeedData.feeds : []);
         }
@@ -557,6 +561,8 @@ export default function Settings() {
       await api.post('/config/notification-advanced', {
         markdown_email_template: markdownTemplate.trim() || null,
         api_scopes: apiScopes,
+        email_template_style: emailTemplateStyle,
+        reminder_catchup_minutes: reminderCatchupMinutes.trim() === '' ? null : Number(reminderCatchupMinutes),
       });
       alert('高级通知设置已保存');
     } catch (e) {
@@ -1226,6 +1232,34 @@ export default function Settings() {
                     aria-label="Markdown 邮件模板"
                   />
                   <p className="text-xs text-slate-400 mt-1">变量：name, date, type, blessing, message</p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1 block">邮件模板风格</label>
+                  <select
+                    value={emailTemplateStyle}
+                    onChange={(e) => setEmailTemplateStyle(e.target.value)}
+                    className="h-11 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm w-full max-w-xs"
+                    aria-label="邮件模板风格"
+                  >
+                    <option value="classic">经典（纯文本风）</option>
+                    <option value="card">卡片（推荐，深色适配）</option>
+                    <option value="minimal">极简</option>
+                  </select>
+                  <p className="text-xs text-slate-400 mt-1">卡片/极简为现代排版：日期徽章 + 深色模式适配 + 少链接（更不容易进垃圾箱）</p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1 block">提醒补发窗口（分钟）</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1440}
+                    value={reminderCatchupMinutes}
+                    onChange={(e) => setReminderCatchupMinutes(e.target.value)}
+                    placeholder="留空 = 部署默认（10 分钟）"
+                    className="h-11 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm w-full max-w-xs"
+                    aria-label="提醒补发窗口分钟数"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">cron 停摆后，今天内迟到的提醒最多补发多久：0=关闭，1440=当天漏掉的全部补发</p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-500 mb-1 block">API Key 权限范围</label>

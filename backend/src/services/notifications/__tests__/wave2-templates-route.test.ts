@@ -46,6 +46,6 @@ describe('GET /api/channels/templates (checkbox 22)', () => {
     for (const id of NEW_CHANNEL_IDS) {
       expect(ids, `templates endpoint is missing ${id}`).toContain(id);
     }
-    expect(ids).toHaveLength(42);
+    expect(ids).toHaveLength(46);
   });
 });

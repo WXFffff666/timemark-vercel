@@ -12,7 +12,9 @@ import { filterSupportedChannels } from './notifications/supported-channels.js';
  */
 export async function resolveActiveAccountChannels(userId: number): Promise<string[]> {
   const accounts = await query(
-    `SELECT DISTINCT type FROM notification_accounts WHERE user_id = $1 AND is_active = TRUE`,
+    `SELECT DISTINCT type FROM notification_accounts
+     WHERE user_id = $1 AND is_active = TRUE
+       AND (suspended_until IS NULL OR suspended_until <= NOW())`,
     [userId],
   );
   const types = (accounts.rows as Array<{ type?: unknown }>)

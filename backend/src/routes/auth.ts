@@ -376,13 +376,21 @@ auth.post('/refresh', async (c) => {
     // safe direction (degrade to a session cookie rather than silently extend).
     const rememberMe = payload.rememberMe === true;
 
+    // Sliding renewal: an actively used remembered session gets its absolute deadline
+    // pushed to now+30d on every refresh, so daily use never hard-expires mid-month.
+    let sessionExpiresAt: Date | string = session.expiresAt;
+    if (rememberMe) {
+      const { renewRememberedSession } = await import('../services/session.service.js');
+      sessionExpiresAt = (await renewRememberedSession(payload.sessionToken)) ?? session.expiresAt;
+    }
+
     const accessToken = await generateAccessToken(user.id, payload.sessionToken, rememberMe);
     const newRefreshToken = await generateRefreshToken(user.id, payload.sessionToken, rememberMe);
 
     // The cookie is capped at the session's own deadline so a browser never holds a
     // credential the server has already expired.
     setAccessCookie(c, accessToken, accessMaxAgeSeconds(rememberMe));
-    setRefreshCookie(c, newRefreshToken, refreshMaxAgeSeconds(rememberMe, session.expiresAt));
+    setRefreshCookie(c, newRefreshToken, refreshMaxAgeSeconds(rememberMe, sessionExpiresAt));
 
     return c.json({ success: true, data: { user, authMode: 'cookie' } });
   } catch (error: any) {

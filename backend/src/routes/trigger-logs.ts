@@ -178,10 +178,13 @@ triggerLogs.post('/:id/retry', async (c) => {
       return c.json({ success: false, error: 'No failed channels to retry' }, 400);
     }
 
-    // Re-activate the account if it was disabled
+    // Re-activate the account if it was disabled, and clear any 24h failure suspension:
+    // a manual retry is an explicit "try again now".
     if (logEntry.account_id) {
       await query(
-        `UPDATE notification_accounts SET is_active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2`,
+        `UPDATE notification_accounts
+         SET is_active = TRUE, suspended_until = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND user_id = $2`,
         [logEntry.account_id, userId]
       );
     }

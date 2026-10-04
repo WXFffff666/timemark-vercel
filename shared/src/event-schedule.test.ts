@@ -101,15 +101,17 @@ describe('event-schedule', () => {
     expect(matchesReminderTimeWindow('09:03', '09:00', 2)).toBe(false);
   });
 
-  it('clamps the catch-up window to the 60-minute ceiling (cannot reach the previous day)', () => {
-    expect(REMINDER_CATCH_UP_MAX_MINUTES).toBe(60);
-    // 请求 5000 分钟 -> 夹到 60：10:00 (= target + 60) 命中，10:01 不命中
-    expect(matchesReminderTimeWindow('10:00', '09:00', 2, 5000)).toBe(true);
-    expect(matchesReminderTimeWindow('10:01', '09:00', 2, 5000)).toBe(false);
+  it('clamps the catch-up window to the 24h ceiling (same-day only, never yesterday)', () => {
+    expect(REMINDER_CATCH_UP_MAX_MINUTES).toBe(1440);
+    // 迟到方向 24h 内都命中：09:00 的槽位在 20:00 仍补发（v78：cron 停摆后补齐当天）
+    expect(matchesReminderTimeWindow('20:00', '09:00', 2, 5000)).toBe(true);
+    expect(matchesReminderTimeWindow('20:00', '09:00', 2)).toBe(true);
+    // 提前方向绝不扩展：昨天语义的槽位（diff 为负）不命中
+    expect(matchesReminderTimeWindow('08:00', '09:00', 2, 5000)).toBe(false);
     // 负数按 0 处理 -> 旧行为
     expect(matchesReminderTimeWindow('09:03', '09:00', 2, -5)).toBe(false);
-    // 一天上限内的 23:00（+14h）绝不命中
-    expect(matchesReminderTimeWindow('23:00', '09:00', 2, 5000)).toBe(false);
+    // 23:59 对 00:00 的槽位 = 1439 分钟迟到，仍命中（同日内）
+    expect(matchesReminderTimeWindow('23:59', '00:00', 2, 5000)).toBe(true);
   });
 
   it('reminderOffsetMinutes returns signed offset or null', () => {

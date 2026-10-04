@@ -173,6 +173,8 @@ CREATE TABLE IF NOT EXISTS user_configs (
   quiet_hours_end TEXT,
   habit_streak_nudge_hour TEXT DEFAULT '20:00',
   password_changed_at TIMESTAMP,
+  reminder_catchup_minutes INTEGER,
+  email_template_style TEXT DEFAULT 'classic',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -189,6 +191,7 @@ CREATE TABLE IF NOT EXISTS notification_accounts (
   secret TEXT,
   chat_id TEXT,
   is_active BOOLEAN DEFAULT TRUE,
+  suspended_until TIMESTAMPTZ,
   config_method TEXT DEFAULT 'webhook',
   session_data TEXT,
   plugin_package TEXT,

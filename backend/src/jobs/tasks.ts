@@ -201,6 +201,18 @@ function catchUpLateMinutes(currentTime: string, targetTime: string, windowMinut
 }
 
 /**
+ * 每用户补发窗口：user_configs.reminder_catchup_minutes（v78）优先；NULL/非法回落到
+ * 部署级 env/默认值。分钟差是同日算术，迟到方向绝不越过今天，所以 1440（一整天）
+ * 也只是「把今天漏掉的槽位补齐」，不会卷进昨天的槽位。
+ */
+export function resolveUserCatchUpMinutes(rawValue: unknown, deploymentDefault: number): number {
+  if (rawValue === null || rawValue === undefined || rawValue === '') return deploymentDefault;
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return deploymentDefault;
+  return Math.min(Math.max(Math.trunc(parsed), 0), REMINDER_CATCH_UP_MAX_MINUTES);
+}
+
+/**
  * Checkbox 166：补发投递可观测。与 >3 分钟间隔告警共用 CRON_GAP_ALERT_MINUTES 阈值，
  * warn 级别一条结构化日志；告警本身仍由 routes/cron.ts 的 checkCronGapAlert 执行。
  */
@@ -522,7 +534,7 @@ async function runDatedReminderIterator(
   now: Date,
 ): Promise<{ candidates: number; sent: number; claimed: number; skipped: number }> {
   const result = await query(
-    `SELECT ${source.alias}.*, uc.timezone, uc.reminders_enabled, uc.holiday_reminder_mode,
+    `SELECT ${source.alias}.*, uc.timezone, uc.reminders_enabled, uc.holiday_reminder_mode, uc.reminder_catchup_minutes,
             p.timezone AS profile_timezone
      FROM ${source.table} ${source.alias}
      LEFT JOIN user_configs uc ON uc.user_id = ${source.alias}.user_id
@@ -533,7 +545,7 @@ async function runDatedReminderIterator(
   let sent = 0;
   let claimed = 0;
   let skipped = 0;
-  const catchUpMinutes = resolveReminderCatchUpMinutes();
+  const deploymentCatchUp = resolveReminderCatchUpMinutes();
 
   for (const raw of result.rows as Array<Record<string, unknown>>) {
     if (raw.is_active === false || raw.reminders_enabled === false) {
@@ -593,8 +605,9 @@ async function runDatedReminderIterator(
       ? config.reminderTimes
       : [...DEFAULT_EXPIRY_REMINDER_TIMES];
     const currentTime = getCurrentHHmm(now, timeZone);
+    const userCatchUp = resolveUserCatchUpMinutes(raw.reminder_catchup_minutes, deploymentCatchUp);
     const matchedReminderTime = reminderTimes.find((time) =>
-      matchesReminderTimeWindow(currentTime, time, 2, catchUpMinutes),
+      matchesReminderTimeWindow(currentTime, time, 2, userCatchUp),
     );
     if (!matchedReminderTime) {
       skipped += 1;
@@ -1497,7 +1510,7 @@ export async function sendReminders() {
 
   // Batch load ALL user configs upfront to avoid N+1 queries
   const allUserConfigs = await query(
-    `SELECT user_id, timezone, reminders_enabled, daily_check_time, days_before_list, reminder_emails, holiday_reminder_mode 
+    `SELECT user_id, timezone, reminders_enabled, daily_check_time, days_before_list, reminder_emails, holiday_reminder_mode, reminder_catchup_minutes
      FROM user_configs`
   );
   const userConfigMap = new Map<number, any>();
@@ -1818,8 +1831,12 @@ export async function sendReminders() {
       
       let matchedReminderTime: string | null = null;
       let matchedLateMinutes: number | null = null;
+      const userCatchUp = resolveUserCatchUpMinutes(
+        userConfigMap.get(event.user_id)?.reminder_catchup_minutes,
+        catchUpMinutes,
+      );
       const shouldRemind = reminderTimes.some((time) => {
-        const match = matchesReminderTimeWindow(currentTime, time, 2, catchUpMinutes);
+        const match = matchesReminderTimeWindow(currentTime, time, 2, userCatchUp);
         if (match) {
           matchedReminderTime = time;
           matchedLateMinutes = catchUpLateMinutes(currentTime, time);

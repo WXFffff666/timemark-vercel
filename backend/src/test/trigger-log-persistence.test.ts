@@ -117,6 +117,7 @@ interface StoredAccount {
   type: string;
   name: string;
   is_active: boolean;
+  suspended_until?: string | null;
   webhook: string | null;
   token: string | null;
   secret: string | null;
@@ -230,11 +231,18 @@ function installStore(options: { failLogInsert?: boolean; event?: Record<string,
       return { rows: [{ fail_count: counted }], rowCount: 1 };
     }
 
-    if (s.startsWith('UPDATE notification_accounts') && s.includes('is_active = FALSE')) {
+    if (s.startsWith('SELECT suspended_until FROM notification_accounts')) {
+      const accountId = Number(params[0]);
+      const account = store.accounts.find((row) => row.id === accountId);
+      return { rows: [{ suspended_until: account?.suspended_until ?? null }], rowCount: 1 };
+    }
+
+    if (s.startsWith('UPDATE notification_accounts') && s.includes('suspended_until = NOW()')) {
+      // v78: 3 连败改为暂停 24h（is_active 保持 TRUE，自动恢复），不再是硬禁用。
       const accountId = Number(params[0]);
       store.disabledAccountIds.push(accountId);
       const account = store.accounts.find((row) => row.id === accountId);
-      if (account) account.is_active = false;
+      if (account) account.suspended_until = new Date(Date.now() + 86400_000).toISOString();
       return { rows: [], rowCount: 1 };
     }
 
@@ -336,8 +344,8 @@ describe('recordEventTrigger persists both key shapes (the actual INSERT path)',
   });
 });
 
-describe('the consecutive-failure counter observes a failed send and auto-disable fires', () => {
-  it('counts each persisted failed row and disables the account on the 3rd consecutive failure', async () => {
+describe('the consecutive-failure counter observes a failed send and the 24h suspension fires', () => {
+  it('counts each persisted failed row and suspends the account on the 3rd consecutive failure', async () => {
     const event = eventWith();
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -364,9 +372,10 @@ describe('the consecutive-failure counter observes a failed send and auto-disabl
 
     // The counter executed once per attempt and SAW the rows persisted by previous attempts:
     expect(store.counterChecks.map((check) => check.counted)).toEqual([0, 1, 2]);
-    // 2 persisted failures + 1 current = 3 consecutive -> auto-disable.
+    // 2 persisted failures + 1 current = 3 consecutive -> 24h suspension (is_active stays TRUE).
     expect(store.disabledAccountIds).toEqual([ACCOUNT_ID]);
-    expect(store.accounts[0].is_active).toBe(false);
+    expect(store.accounts[0].is_active).toBe(true);
+    expect(store.accounts[0].suspended_until).toBeTruthy();
   });
 
   it('a success row resets the streak (the counter is not a lifetime failure count)', async () => {
