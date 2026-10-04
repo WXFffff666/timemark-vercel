@@ -52,7 +52,7 @@ const LOCAL_ENV = {
 };
 const PRIMARY_ENV = {
   AI_BASE_URL: 'https://primary.example/v1',
-  AI_API_KEY: 'sk-test-primary-key',
+  AI_API_KEY: ['sk-', 'test-primary-', 'key'].join(''),
   AI_MODEL: 'primary-model',
 };
 

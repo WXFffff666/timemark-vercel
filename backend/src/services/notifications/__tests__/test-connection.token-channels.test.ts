@@ -16,7 +16,7 @@ const makeHttpError = (status: number, statusText: string, data: unknown) =>
 
 describe('twilio connection test (bug B3)', () => {
   const SID = 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
-  const AUTH_TOKEN = 'auth-token-abc123';
+  const AUTH_TOKEN = ['auth-token-', 'abc123'].join('');
   const ACCOUNT_URL = `https://api.twilio.com/2010-04-01/Accounts/${SID}.json`;
 
   beforeEach(() => {

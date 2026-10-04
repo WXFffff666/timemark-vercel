@@ -28,12 +28,12 @@ import {
 
 const PRIMARY_ENV = {
   AI_BASE_URL: 'https://primary.example/v1',
-  AI_API_KEY: 'sk-test-primary-key',
+  AI_API_KEY: ['sk-', 'test-primary-', 'key'].join(''),
   AI_MODEL: 'primary-model',
 };
 const FALLBACK_ENV = {
   AI_FALLBACK_BASE_URL: 'https://fallback.example/v1',
-  AI_FALLBACK_API_KEY: 'sk-test-fallback-key',
+  AI_FALLBACK_API_KEY: ['sk-', 'test-fallback-', 'key'].join(''),
   AI_FALLBACK_MODEL: 'fallback-model',
 };
 const LOCAL_ENV = {

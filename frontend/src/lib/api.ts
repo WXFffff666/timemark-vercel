@@ -1,6 +1,10 @@
 import type { ApiResponse } from '@timemark/shared';
 
-const API_BASE = import.meta.env.DEV ? 'http://localhost:3000/api' : '/api';
+// 本地 3000 常被同机的其他项目占用：开发时可用 VITE_API_BASE 覆盖，例如
+// VITE_API_BASE=http://localhost:8787/api npx vite
+const API_BASE = import.meta.env.DEV
+  ? (import.meta.env.VITE_API_BASE as string | undefined) || 'http://localhost:3000/api'
+  : '/api';
 const SESSION_ID_KEY = 'timemark_session_id';
 
 export const usesCookieAuth = () => !!localStorage.getItem(SESSION_ID_KEY);

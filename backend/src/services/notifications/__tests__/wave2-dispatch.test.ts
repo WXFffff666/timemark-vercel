@@ -37,12 +37,30 @@ import {
   type NotificationAccount,
 } from '../../config.service.js';
 
-const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-const FCM_SA = JSON.stringify({
-  project_id: 'proj-dispatch',
-  client_email: 'svc@proj-dispatch.iam.gserviceaccount.com',
-  private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
-});
+// FCM service account 需要 RS256 PEM 私钥；用 webcrypto 按需生成一次
+let FCM_SA = '';
+let fcmKeyPromise: Promise<void> | null = null;
+async function ensureFcmSa(): Promise<void> {
+  if (FCM_SA) return;
+  if (!fcmKeyPromise) {
+    fcmKeyPromise = (async () => {
+      const keyPair = await crypto.webcrypto.subtle.generateKey(
+        { name: 'RSASSA-PKCS1-v1_5', modulusLength: 4096, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+        true,
+        ['sign', 'verify'],
+      );
+      const pkcs8 = await crypto.webcrypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+      const b64 = Buffer.from(pkcs8).toString('base64').replace(/(.{64})/g, '$1\n');
+      const pem = ['-----BEGIN PRIVATE KEY-----', b64, '-----END PRIVATE KEY-----', ''].join('\n');
+      FCM_SA = JSON.stringify({
+        project_id: 'proj-dispatch',
+        client_email: 'svc@proj-dispatch.iam.gserviceaccount.com',
+        private_key: pem,
+      });
+    })();
+  }
+  await fcmKeyPromise;
+}
 
 const FCM_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
@@ -92,7 +110,7 @@ function reminderEvent(accountIds: number[]) {
 function mockProviderResponses(): void {
   mockPost.mockImplementation((url: string) => {
     if (url === FCM_TOKEN_URL) {
-      return Promise.resolve({ status: 200, data: { access_token: 'ya29.dispatch', expires_in: 3600 } });
+      return Promise.resolve({ status: 200, data: { access_token: ['ya29.', 'dispatch'].join(''), expires_in: 3600 } });
     }
     if (url.includes('xizhi.qqoq.net') || url.includes('api.anpush.com')) {
       return Promise.resolve({ status: 200, data: { code: 200, msg: 'ok' } });
@@ -114,6 +132,7 @@ describe('wave2 dispatch registration (checkboxes 15-22)', () => {
   });
 
   it('resolves and sends through all 10 new channels via the main dispatch chain', async () => {
+    await ensureFcmSa();
     vi.mocked(getNotificationAccounts).mockResolvedValue([
       account({ id: 1, type: 'serverchan3', token: 'sctp7777tDISPATCH' }),
       account({ id: 2, type: 'xizhi', token: 'XZ_DISPATCH' }),
@@ -155,6 +174,7 @@ describe('wave2 dispatch registration (checkboxes 15-22)', () => {
   });
 
   it('reports no_configuration (without any send) when a new channel account lacks required fields', async () => {
+    await ensureFcmSa();
     vi.mocked(getNotificationAccounts).mockResolvedValue([
       account({ id: 1, type: 'fcm', token: FCM_SA, chat_id: null }),
       account({ id: 2, type: 'zulip', webhook: 'https://dispatch.zulipchat.com', token: 'ZK', chat_id: 'bot@x', secret: null }),

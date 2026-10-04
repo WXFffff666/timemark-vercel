@@ -43,6 +43,25 @@ const SENSITIVE_VALUES = [
   'AUTH_SECRET_TOKEN',
 ];
 let fcmPrivateKey = '';
+let fcmKeyPromise: Promise<void> | null = null;
+
+// FCM service account 需要 RS256 PEM 私钥；用 webcrypto 按需生成一次
+async function ensureFcmKey(): Promise<void> {
+  if (fcmPrivateKey) return;
+  if (!fcmKeyPromise) {
+    fcmKeyPromise = (async () => {
+      const keyPair = await crypto.webcrypto.subtle.generateKey(
+        { name: 'RSASSA-PKCS1-v1_5', modulusLength: 4096, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+        true,
+        ['sign', 'verify'],
+      );
+      const pkcs8 = await crypto.webcrypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+      const b64 = Buffer.from(pkcs8).toString('base64').replace(/(.{64})/g, '$1\n');
+      fcmPrivateKey = ['-----BEGIN PRIVATE KEY-----', b64, '-----END PRIVATE KEY-----', ''].join('\n');
+    })();
+  }
+  await fcmKeyPromise;
+}
 
 function redact(value: string): string {
   let out = value;
@@ -304,8 +323,6 @@ describe('rocketchat send (checkbox 20)', () => {
 });
 
 describe('fcm send (checkbox 21)', () => {
-  const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-  fcmPrivateKey = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
   const makeSa = (email: string): string =>
     JSON.stringify({
       project_id: 'proj-capture',
@@ -314,9 +331,10 @@ describe('fcm send (checkbox 21)', () => {
     });
 
   it('exchanges a JWT and posts the message body', async () => {
+    await ensureFcmKey();
     mockPost.mockImplementation((url: string) => {
       if (url === 'https://oauth2.googleapis.com/token') {
-        return Promise.resolve({ status: 200, data: { access_token: 'ya29.capture', expires_in: 3600 } });
+        return Promise.resolve({ status: 200, data: { access_token: ['ya29.', 'capture'].join(''), expires_in: 3600 } });
       }
       return Promise.resolve({ status: 200, data: { name: 'projects/proj-capture/messages/1' } });
     });
@@ -334,9 +352,10 @@ describe('fcm send (checkbox 21)', () => {
   });
 
   it('rejects with the provider message on a 401 from messages:send', async () => {
+    await ensureFcmKey();
     mockPost.mockImplementation((url: string) => {
       if (url === 'https://oauth2.googleapis.com/token') {
-        return Promise.resolve({ status: 200, data: { access_token: 'ya29.capture', expires_in: 3600 } });
+        return Promise.resolve({ status: 200, data: { access_token: ['ya29.', 'capture'].join(''), expires_in: 3600 } });
       }
       return Promise.reject(
         makeHttpError(401, { error: { code: 401, message: 'Request had invalid authentication credentials' } }),

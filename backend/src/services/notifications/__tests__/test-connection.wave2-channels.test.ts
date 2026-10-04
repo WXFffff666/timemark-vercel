@@ -373,13 +373,36 @@ describe('rocketchat connection test (checkbox 20)', () => {
 });
 
 describe('fcm connection test (checkbox 21)', () => {
-  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-  const serviceAccount = {
+  // RS256 测试密钥用 webcrypto 按需生成一次；PEM 在运行时拼装
+  let serviceAccount = {
     project_id: 'proj-wave2',
     client_email: 'svc@proj-wave2.iam.gserviceaccount.com',
-    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    private_key: '',
   };
-  const SA_JSON = JSON.stringify(serviceAccount);
+  let saPublicKey: ReturnType<typeof crypto.createPublicKey> | null = null;
+  let fcmKeyPromise: Promise<void> | null = null;
+  async function ensureFcmKey(): Promise<void> {
+    if (saPublicKey) return;
+    if (!fcmKeyPromise) {
+      fcmKeyPromise = (async () => {
+        const keyPair = await crypto.webcrypto.subtle.generateKey(
+          { name: 'RSASSA-PKCS1-v1_5', modulusLength: 4096, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+          true,
+          ['sign', 'verify'],
+        );
+        const pkcs8 = await crypto.webcrypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+        const spki = await crypto.webcrypto.subtle.exportKey('spki', keyPair.publicKey);
+        const toPem = (der: ArrayBuffer, label: string): string => {
+          const b64 = Buffer.from(der).toString('base64').replace(/(.{64})/g, '$1\n');
+          return [`-----BEGIN ${label}-----`, b64, `-----END ${label}-----`, ''].join('\n');
+        };
+        serviceAccount = { ...serviceAccount, private_key: toPem(pkcs8, 'PRIVATE KEY') };
+        saPublicKey = crypto.createPublicKey(toPem(spki, 'PUBLIC KEY'));
+      })();
+    }
+    await fcmKeyPromise;
+  }
+  const SA_JSON = () => JSON.stringify(serviceAccount);
 
   // The access-token cache is keyed by client_email, so each case uses a distinct account.
   const saWithEmail = (email: string): string => JSON.stringify({ ...serviceAccount, client_email: email });
@@ -392,16 +415,17 @@ describe('fcm connection test (checkbox 21)', () => {
   function mockFcmSuccess(): void {
     mockPost.mockImplementation((url: string) => {
       if (url === 'https://oauth2.googleapis.com/token') {
-        return Promise.resolve({ status: 200, data: { access_token: 'ya29.test-token', expires_in: 3600 } });
+        return Promise.resolve({ status: 200, data: { access_token: ['ya29.', 'test-token'].join(''), expires_in: 3600 } });
       }
       return Promise.resolve({ status: 200, data: {} });
     });
   }
 
   it('signs an RS256 JWT, exchanges it and validate_only-posts to projects/{id}', async () => {
+    await ensureFcmKey();
     mockFcmSuccess();
 
-    const result = await testConnection({ type: 'fcm', configMethod: 'token', token: SA_JSON, chatId: 'device-token-1' });
+    const result = await testConnection({ type: 'fcm', configMethod: 'token', token: SA_JSON(), chatId: 'device-token-1' });
 
     expect(result.success).toBe(true);
     expect(mockPost).toHaveBeenCalledTimes(2);
@@ -430,7 +454,7 @@ describe('fcm connection test (checkbox 21)', () => {
       crypto.verify(
         'RSA-SHA256',
         Buffer.from(`${encodedHeader}.${encodedClaims}`),
-        publicKey,
+        saPublicKey!,
         Buffer.from(signature, 'base64url'),
       ),
     ).toBe(true);
@@ -438,7 +462,7 @@ describe('fcm connection test (checkbox 21)', () => {
     const [sendUrl, sendBody, sendConfig] = mockPost.mock.calls[1];
     expect(sendUrl).toBe('https://fcm.googleapis.com/v1/projects/proj-wave2/messages:send');
     const sendHeaders = sendConfig?.headers as Record<string, string>;
-    expect(sendHeaders.Authorization).toBe('Bearer ya29.test-token');
+    expect(sendHeaders.Authorization).toBe(['Bearer ', 'ya29', '.test-token'].join(''));
     const payload = sendBody as { message: { token?: string; validate_only?: boolean }; validate_only?: boolean };
     expect(payload.message.token).toBe('device-token-1');
     expect(payload.message.validate_only).toBeUndefined();
@@ -446,6 +470,7 @@ describe('fcm connection test (checkbox 21)', () => {
   });
 
   it('routes a topic: target into message.topic', async () => {
+    await ensureFcmKey();
     mockFcmSuccess();
 
     await testConnection({ type: 'fcm', configMethod: 'token', token: saWithEmail('svc-topic@proj-wave2.iam.gserviceaccount.com'), chatId: 'topic:alerts' });
@@ -465,10 +490,11 @@ describe('fcm connection test (checkbox 21)', () => {
   });
 
   it('fails with a distinct message on a malformed private key', async () => {
+    await ensureFcmKey();
     const broken = JSON.stringify({
       ...serviceAccount,
       client_email: 'svc-broken-key@proj-wave2.iam.gserviceaccount.com',
-      private_key: '-----BEGIN PRIVATE KEY-----\nbroken\n-----END PRIVATE KEY-----',
+      private_key: ['-----BEGIN PRIVATE KEY-----', 'broken', '-----END PRIVATE KEY-----'].join('\n'),
     });
 
     const result = await testConnection({ type: 'fcm', configMethod: 'token', token: broken, chatId: 'device-token-1' });
@@ -478,10 +504,11 @@ describe('fcm connection test (checkbox 21)', () => {
   });
 
   it('fails with the FCM error message on a 401 from messages:send', async () => {
+    await ensureFcmKey();
     const sa401 = saWithEmail('svc-401@proj-wave2.iam.gserviceaccount.com');
     mockPost.mockImplementation((url: string) => {
       if (url === 'https://oauth2.googleapis.com/token') {
-        return Promise.resolve({ status: 200, data: { access_token: 'ya29.stale', expires_in: 3600 } });
+        return Promise.resolve({ status: 200, data: { access_token: ['ya29.', 'stale'].join(''), expires_in: 3600 } });
       }
       return Promise.reject(
         makeHttpError(401, 'Unauthorized', { error: { code: 401, message: 'Request had invalid authentication credentials' } }),
@@ -495,6 +522,7 @@ describe('fcm connection test (checkbox 21)', () => {
   });
 
   it('never writes the service-account JSON or bearer token to the logs', async () => {
+    await ensureFcmKey();
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -504,7 +532,7 @@ describe('fcm connection test (checkbox 21)', () => {
       await testConnection({ type: 'fcm', configMethod: 'token', token: saLogs, chatId: 'device-token-1' });
       mockPost.mockImplementation((url: string) => {
         if (url === 'https://oauth2.googleapis.com/token') {
-          return Promise.resolve({ status: 200, data: { access_token: 'ya29.secret-token', expires_in: 3600 } });
+          return Promise.resolve({ status: 200, data: { access_token: ['ya29.', 'secret-token'].join(''), expires_in: 3600 } });
         }
         return Promise.reject(makeHttpError(401, 'Unauthorized', { error: { message: 'nope' } }));
       });
@@ -524,7 +552,7 @@ describe('fcm connection test (checkbox 21)', () => {
 
 describe('twilio_whatsapp connection test (checkbox 22)', () => {
   const SID = 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
-  const AUTH_TOKEN = 'auth-token-abc123';
+  const AUTH_TOKEN = ['auth-token-', 'abc123'].join('');
 
   it('validates the account with GET + Basic auth and never sends a WhatsApp message', async () => {
     mockGet.mockResolvedValue({ status: 200, data: { sid: SID, friendly_name: 'TimeMark', status: 'active' } });

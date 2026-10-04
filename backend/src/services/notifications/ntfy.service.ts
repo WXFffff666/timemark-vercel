@@ -14,13 +14,19 @@ export async function sendNtfyNotification(
   );
   const message = event.customMessage || `📅 ${event.name}\n📆 日期: ${event.date}\n🏷️ 类型: ${event.type}\n\n🎉 ${blessing}`;
 
-  const url = `${serverUrl.replace(/\/$/, '')}/${topic}`;
-  await axios.post(url, message, {
-    headers: {
-      'Title': `TimeMark: ${event.name}`,
-      'Priority': '3',
-      'Tags': 'calendar',
+  // JSON publish（POST 到服务器根路径）而不是 `/{topic}` + HTTP 头：
+  // Title 里的中文（事件名）放进 HTTP 头会被 ntfy 以 400 拒绝（非 ASCII 头不合法），
+  // JSON 体没有这个限制，自托管与官方 ntfy.sh 行为一致。
+  const url = `${serverUrl.replace(/\/$/, '')}/`;
+  await axios.post(
+    url,
+    {
+      topic,
+      title: `TimeMark: ${event.name}`,
+      message,
+      priority: 3,
+      tags: ['calendar'],
     },
-    timeout: 10000,
-  });
+    { timeout: 10000 },
+  );
 }

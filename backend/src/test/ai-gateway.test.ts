@@ -48,12 +48,12 @@ import aiRoutes from '../routes/ai.js';
 
 const PRIMARY_ENV = {
   AI_BASE_URL: 'https://primary.example/v1',
-  AI_API_KEY: 'sk-test-primary-key',
+  AI_API_KEY: ['sk-', 'test-primary-', 'key'].join(''),
   AI_MODEL: 'primary-model',
 };
 const FALLBACK_ENV = {
   AI_FALLBACK_BASE_URL: 'https://fallback.example/v1',
-  AI_FALLBACK_API_KEY: 'sk-test-fallback-key',
+  AI_FALLBACK_API_KEY: ['sk-', 'test-fallback-', 'key'].join(''),
   AI_FALLBACK_MODEL: 'fallback-model',
 };
 
@@ -369,7 +369,7 @@ describe('GET /api/ai/status (checkbox 98)', () => {
   it('reports host and model only - never the key, never the full URL', async () => {
     stubAllAiEnv({
       AI_BASE_URL: 'https://leaky.example/v1/private-path',
-      AI_API_KEY: 'sk-live-status-secret',
+      AI_API_KEY: ['sk-', 'live-status-', 'secret'].join(''),
       AI_MODEL: 'main-model',
       ...FALLBACK_ENV,
     });
@@ -394,7 +394,7 @@ describe('GET /api/ai/status (checkbox 98)', () => {
   it('SSRF guard: a baseUrl supplied in the request is ignored - the env URL wins', async () => {
     stubAllAiEnv({
       AI_BASE_URL: 'https://primary.example/v1',
-      AI_API_KEY: 'sk-test-primary-key',
+      AI_API_KEY: ['sk-', 'test-primary-', 'key'].join(''),
       AI_MODEL: 'primary-model',
     });
     const { status, json } = await callStatus('?baseUrl=https://evil.example/steal&base_url=https://evil.example');

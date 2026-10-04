@@ -870,13 +870,16 @@ async function testNtfyChannel(serverUrl: string, topic: string): Promise<TestCo
   const start = Date.now();
   try {
     const baseUrl = serverUrl.replace(/\/+$/, '');
+    // JSON publish：标题走 JSON 体，中文事件名不再进 HTTP 头（ntfy 对非 ASCII 头返回 400）
     const response = await axios.post(
-      `${baseUrl}/${encodeURIComponent(topic)}`,
-      'TimeMark 连接测试 - 渠道配置正确',
+      `${baseUrl}/`,
       {
-        headers: { Title: 'TimeMark Test', Priority: '3' },
-        timeout: 10000,
-      }
+        topic,
+        title: 'TimeMark Test',
+        message: 'TimeMark 连接测试 - 渠道配置正确',
+        priority: 3,
+      },
+      { timeout: 10000 }
     );
     const latency = Date.now() - start;
 
