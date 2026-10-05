@@ -1,5 +1,54 @@
 # Changelog
 
+## v2.26.0 (2026-10-05) — 祝福链修复 + 日志保留 + UI 合并 + 全站动画
+
+### 批次 A：祝福链修复（v80 前置）
+
+- **邮件送达性头**：sendRawEmail 双栈（Resend + SMTP）统一附加 Reply-To / List-Unsubscribe（mailto: + https 双写）/ List-Unsubscribe-Post / Message-ID——对齐 Gmail/Yahoo 批量发件人新规，降低被拦截概率。
+- **预演所见即所发**：`/greetings/preview` 改走 `composeFinalGreeting` 单入口（此前预演用组合引擎、真发可能走 AI，两者可能不一致）；历史记录带 source（AI 生成/组合引擎）徽章。
+- **AI 预算闸**：日上限 20 条（超限回落组合引擎，调用方无感）；每 cron tick 上限 5 条 AI 生成。
+- **语气选项**：AI 祝福支持语气要求；设置页单条「AI 预览」按钮（POST /greetings/preview-ai）。
+
+### 批次 B：日志保留与 AI 归档（迁移 v80）
+
+- **18 张日志表全部有界**：此前从未清理过的 13 张表（reminder_send_claims、scheduler_ticks、audit_events、audit_undo_snapshots、security_events、audit_logs、bot_updates、bot_audit_logs、webhook_idempotency_keys、feed_ingest_seen/proposals、greeting_history、cron_execution_logs）补上保留期（30–1095 天按表分级）；runner 单表失败不拖垮整体。
+- **cron 日志有界化**：成功路径改 `cron_job_status` upsert（每 job 恒一行，含 last_summary/duration），替代此前每分钟一条的无限增长；失败才写 `cron_execution_logs` 明细（30 天清理）。`/api/health` 与 `/api/cron-monitor` 改读有界表。
+- **AI 月报归档**：digest 发送前正文（AI 叙述或确定性统计）写入 `digest_archive` 永久保存——原始触发日志 90 天后清掉，AI 提炼的"重要的东西"留下来。
+- **慢查询治理**：event_trigger_logs / cron_execution_logs 加窗口与索引（idx_cron_executed_at、idx_trigger_user_created）；patterns 服务查询加 90 天窗口。
+- **设置页数据管理卡**：保留策略展示 + 「立即清理」（与 nightly 同一代码路径）+ AI 月报归档列表（GET/POST /api/retention）。
+
+### 批次 C：UI 合并（功能重合去重）
+
+- **删除 /assistant 页**：AssistantDock 已全局承载同一面板，独立页是第二个入口——删页，dock 成唯一入口。
+- **/reminders 并入 /trigger-logs**：两页展示的是同一类数据（事件提醒投递历史）且共用 readDelivery 判定——Reminders 列表抽取为 `EventReminderLogs` 组件成为「事件提醒」tab（`?tab=reminders` 可深链），旧链接 301 重定向；底部栏主位直接指向合并页。
+- **联系人快捷发信 → Broadcast 深链**：快捷发信弹窗与「批量邮件」功能重合——按钮改深链 `/broadcast?contact=<id>`，Broadcast 预选该联系人并消费 query；两套写信 UI 归一。
+- **命名修正**：导航「通知模板」→「事件模板」（页面本就自称事件模板）；「问答」→「智能问答」。
+- **导航不变式更新**：nav-groups 测试新增 REDIRECT_ROUTES 集合（重定向兜底路由不需要入口）。
+
+### 批次 D：全站动画与滚动治理
+
+- **页面过渡真正生效**：Routes 包 AnimatePresence(mode='wait') + keyed motion 包装——此前各页根元素写好的 exit= 全是死代码（Routes 没有 AnimatePresence 退出动画从不执行）；路由层统一过渡一次覆盖 28+ 页；/login 与 embed/share 跳过；AppRoutes 显式固定 location，退场树不会跳变到新路由内容。
+- **弹层补动画**：AssistantDock 面板、CommandPalette、MobileBottomNav「更多」抽屉此前都是无动画条件渲染——补出场/退场 motion（抽屉 spring 上滑、面板 fade+scale）。
+- **滚动穿透治理**：全站 17 处内部滚动容器（弹窗、抽屉、面板、列表）补 `overscroll-contain`——弹层内滚到底不再拖动整页。
+- **LocalAI 对话滚动修复**：`scrollIntoView` 会滚动所有可滚祖先（整页）导致发消息后页面跳走——改为只滚对话容器自身 `container.scrollTop`。
+- **PWA 安装浮层「稍后」记忆**：dismiss 后 7 天内不再弹（此前每次加载都弹）。
+
+### 批次 E/F：AI 增强
+
+- **周报 AI 综述（首个真实 AI 消费者）**：确定性周报之上加 2-3 句 AI 综述——每周每用户至多 1 次、maxTokens 220、lite tier，AiDisabledError/失败/空清单退回与纯确定性渲染逐字节一致的原文；usage tokens 计入 costTokens；narrate 可注入（回归测试 3 例）。
+- **本地 AI 会话持久化**：对话历史存 IndexedDB（快照式、上限 100 条、来源徽章一并恢复），刷新/重进不丢；「清空对话」按钮。
+- **快捷指令**：LocalAI 空态提供 4 个常用问法一键填入。
+- **礼物建议**：祝福草稿工具新增「礼物建议」——本地 WebGPU 按关系/备注生成 3-4 个带价位建议（数据不出本机）。
+- **生日前 3 天准备提醒**：生日事件默认注入 d3 提醒（用户已配置 d3 则不重复注入）。
+- **docs/AI.md**：Vercel GPU 专项调研结论（运行时不占构建分钟核实无误 / GPU 仅 beta+Pro / CPU 生成式推理实测不可用）+ AI 消费者与预算总表。
+
+### 验证记录
+
+- 后端 1664 / 前端 308 测试全绿；双端 tsc 干净；vite build 通过
+- v80 干净库迁移验证（docker postgres:16-alpine）：schema_version=80，cron_job_status（含 last_summary）/ digest_archive / greeting_history.source,tone / 新索引全部就位
+- Playwright 真浏览器实测：登录 → /reminders 重定向与 tab → /assistant 删除+dock 全局 → 设置页数据管理卡（真调 purge-now）→ Broadcast ?contact= 深链预选 → 联系人快捷发信深链 → LocalAI 快捷指令 + WebGPU 本地问答端到端 + 会话持久化（刷新恢复）→ 命令面板开合，全程无 console error
+- Mimosa 深度扫描后台执行（git-gate advisory 提示的完整审计补课）
+
 ## v2.25.0 (2026-10-05) — 无审查本地模型 + AI 定时生日祝福
 
 ### 新增（功能 30 项，编号后括注验证方式）
