@@ -1,16 +1,30 @@
 /**
  * 检索增强问答（RAG）：知识库 top-k 命中拼进系统提示 → 本地 WebLLM 生成回答，
- * 回答必须基于来源（防 0.5B 小模型幻觉）。模型不可用/不支持 WebGPU 时返回
+ * 回答必须基于来源（防小模型幻觉）。模型不可用/不支持 WebGPU 时返回
  * 明确的降级说明 + 命中片段，绝不假装智能。
  */
 import { chatWebLlm, isWebLlmSupported, type WebLlmChatMessage } from './engine';
 import { searchKb, type KbHit } from './kb';
+import { WEBLLM_MODELS, type WebLlmTierId } from './models';
 
 export type RagAnswer = {
   answer: string;
   sources: Array<{ id: string; title: string; snippet: string }>;
   mode: 'local-ai' | 'retrieval-only' | 'no-engine';
+  /** 实际使用的档位（retrieval-only 时无意义） */
+  tier: WebLlmTierId | null;
 };
+
+/** 档位 → 生成参数：0.5B 需要硬约束防跑飞；大模型放宽 */
+export function generationParamsForTier(tier: WebLlmTierId): { maxWords: number; maxTokens: number } {
+  switch (tier) {
+    case 'phone':
+      return { maxWords: 150, maxTokens: 400 };
+    case 'chinese':
+    case 'uncensored':
+      return { maxWords: 300, maxTokens: 768 };
+  }
+}
 
 /** 来源 → 引用块（纯函数，便于单测；控制每条 snippet 长度防上下文爆炸） */
 export function formatSourceBlock(hits: KbHit[], maxSnippetChars = 160): string {
@@ -24,18 +38,18 @@ export function formatSourceBlock(hits: KbHit[], maxSnippetChars = 160): string 
 }
 
 const SYSTEM_PROMPT = [
-  '你是 TimeMark 的本地助手，运行在用户浏览器里，只回答关于用户自己的事件、文档和提醒的问题。',
+  '你是 TimeMark 的本地助手，运行在用户浏览器里，只回答关于用户自己的事件、文档和联系人信息的问题。',
   '规则：',
   '1. 只依据 <知识库> 里的内容回答；知识库没有的信息就明确说"知识库里没有找到"。',
   '2. 回答末尾用 [编号] 标注用到的来源。',
-  '3. 简洁中文回答，不超过 150 字。',
+  '3. 简洁中文回答，不超过 {maxWords} 字。',
 ].join('\n');
 
 /** 组装 RAG 消息（纯函数，便于单测） */
-export function buildRagMessages(question: string, hits: KbHit[]): WebLlmChatMessage[] {
+export function buildRagMessages(question: string, hits: KbHit[], maxWords = 150): WebLlmChatMessage[] {
   const block = formatSourceBlock(hits);
   return [
-    { role: 'system', content: `${SYSTEM_PROMPT}\n\n<知识库>\n${block}\n</知识库>` },
+    { role: 'system', content: `${SYSTEM_PROMPT.replace('{maxWords}', String(maxWords))}\n\n<知识库>\n${block}\n</知识库>` },
     { role: 'user', content: question },
   ];
 }
@@ -56,11 +70,14 @@ function hitToSource(h: KbHit): RagAnswer['sources'][number] {
 export async function answerQuestion(
   question: string,
   opts: {
+    tier?: WebLlmTierId;
     onToken?: (partial: string) => void;
     onStatus?: (msg: string, progress?: number) => void;
     signal?: AbortSignal;
   } = {},
 ): Promise<RagAnswer> {
+  const tier: WebLlmTierId = opts.tier && opts.tier in WEBLLM_MODELS ? opts.tier : 'phone';
+  const { maxWords, maxTokens } = generationParamsForTier(tier);
   const { hits, mode: searchMode } = await searchKb(question, 6);
   const sources = hits.map(hitToSource);
 
@@ -69,31 +86,34 @@ export async function answerQuestion(
     const lines = hits.length
       ? `本机不支持 WebGPU 对话，以下是知识库检索结果：\n\n${formatSourceBlock(hits)}`
       : '本机不支持 WebGPU 对话，且知识库里没有找到相关条目。';
-    return { answer: lines, sources, mode: 'retrieval-only' };
+    return { answer: lines, sources, mode: 'retrieval-only', tier: null };
   }
 
   try {
-    const messages = buildRagMessages(question, hits);
+    const messages = buildRagMessages(question, hits, maxWords);
     const answer = await chatWebLlm(messages, {
+      tier,
       onToken: opts.onToken,
       onStatus: opts.onStatus,
       signal: opts.signal,
-      maxTokens: 400,
+      maxTokens,
     });
     if (!answer) {
       return {
         answer: `（本机模型没有产出内容）检索模式：${searchMode === 'vector' ? '语义' : '关键词'}。命中：\n\n${formatSourceBlock(hits)}`,
         sources,
         mode: 'retrieval-only',
+        tier,
       };
     }
-    return { answer, sources, mode: 'local-ai' };
+    return { answer, sources, mode: 'local-ai', tier };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     return {
       answer: `本机模型生成失败（${reason.slice(0, 120)}）。检索命中：\n\n${formatSourceBlock(hits)}`,
       sources,
       mode: 'retrieval-only',
+      tier,
     };
   }
 }

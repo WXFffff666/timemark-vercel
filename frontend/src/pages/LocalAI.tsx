@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Cpu, Database, Loader2, Send, Sparkles, Square } from 'lucide-react';
+import { ArrowLeft, Cpu, Database, Download, Loader2, Send, Sparkles, Square } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { probeDeviceCapability, isLocalChatCapable } from '@/lib/local-ai/device';
-import { isWebLlmWeightReachable, resetWebLlmEngine } from '@/lib/local-ai/engine';
+import { isTierWeightReady, unloadEngines } from '@/lib/local-ai/engine';
 import { buildKbIndex } from '@/lib/local-ai/kb';
 import { answerQuestion, type RagAnswer } from '@/lib/local-ai/rag';
+import {
+  WEBLLM_MODELS,
+  WEBLLM_TIER_IDS,
+  WEBLLM_TIER_STORAGE_KEY,
+  formatWeightsMB,
+  type WebLlmTierId,
+} from '@/lib/local-ai/models';
 
 type HistoryEntry = {
   question: string;
@@ -14,16 +21,25 @@ type HistoryEntry = {
   mode: RagAnswer['mode'];
 };
 
+function loadStoredTier(): WebLlmTierId {
+  try {
+    const v = localStorage.getItem(WEBLLM_TIER_STORAGE_KEY) as WebLlmTierId | null;
+    if (v && v in WEBLLM_MODELS) return v;
+  } catch { /* 隐私模式忽略 */ }
+  return 'phone';
+}
+
 /**
- * 本地 AI（实验）：模型跑在浏览器 WebGPU（知屋同款 WebLLM + Qwen2.5-0.5B），
- * 知识库 = 用户自己的事件/文档（向量索引存 IndexedDB，哈希增量构建）。
- * 数据全程不出本机——这正是它相对于云端 AI 的存在理由。
+ * 本地 AI（实验）：模型跑在浏览器 WebGPU（三档：内置 0.5B 秒开 / 在线获取
+ * Qwen3-1.7B 中文档 / Hermes-3 无审查档），知识库 = 用户自己的事件/文档/联系人
+ * （向量索引存 IndexedDB，哈希增量构建）。数据全程不出本机。
  */
 export function LocalAI() {
   const navigate = useNavigate();
 
   const [device, setDevice] = useState<'checking' | 'ok' | 'unsupported'>('checking');
-  const [weightsOk, setWeightsOk] = useState<boolean | null>(null);
+  const [tier, setTier] = useState<WebLlmTierId>(loadStoredTier);
+  const [bundledReady, setBundledReady] = useState<boolean | null>(null);
   const [modelStatus, setModelStatus] = useState('');
   const [modelProgress, setModelProgress] = useState<number | null>(null);
 
@@ -43,14 +59,21 @@ export function LocalAI() {
       const cap = await probeDeviceCapability();
       setDevice(isLocalChatCapable(cap) ? 'ok' : 'unsupported');
       if (isLocalChatCapable(cap)) {
-        setWeightsOk(await isWebLlmWeightReachable().catch(() => false));
+        setBundledReady(await isTierWeightReady(WEBLLM_MODELS.phone).catch(() => false));
       }
     })();
     return () => {
       abortRef.current?.abort();
       // 离开页面释放 WebGPU 显存；IndexedDB 缓存仍在，下次秒级重载
-      resetWebLlmEngine();
+      void unloadEngines();
     };
+  }, []);
+
+  const handleTierChange = useCallback((next: WebLlmTierId) => {
+    setTier(next);
+    try {
+      localStorage.setItem(WEBLLM_TIER_STORAGE_KEY, next);
+    } catch { /* 隐私模式忽略 */ }
   }, []);
 
   useEffect(() => {
@@ -84,6 +107,7 @@ export function LocalAI() {
     setHistory((prev) => [...prev, { question: q, answer: '…', sources: [], mode: 'local-ai' }]);
     try {
       const result = await answerQuestion(q, {
+        tier,
         signal: abortRef.current.signal,
         onStatus: (msg, p) => {
           setModelStatus(msg);
@@ -118,7 +142,7 @@ export function LocalAI() {
       setModelProgress(null);
       setModelStatus('');
     }
-  }, [question, busy]);
+  }, [question, busy, tier]);
 
   return (
     <div className="min-h-screen pb-24">
@@ -140,7 +164,7 @@ export function LocalAI() {
         {/* 设备与权重状态 */}
         <section className="glass-panel rounded-[2rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
           <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
-            <Cpu size={18} className="text-violet-500" /> 运行环境
+            <Cpu size={18} className="text-violet-500" /> 运行环境与模型档位
           </h2>
           {device === 'checking' && <p className="text-sm text-slate-500">正在探测 WebGPU 能力…</p>}
           {device === 'unsupported' && (
@@ -150,15 +174,39 @@ export function LocalAI() {
             </div>
           )}
           {device === 'ok' && (
-            <ul className="text-sm text-slate-600 dark:text-slate-300 space-y-1.5">
-              <li>✅ WebGPU + shader-f16 就绪（Qwen2.5-0.5B q4f16 可跑，实测 40+ tok/s）</li>
-              <li>
-                {weightsOk === null && '检查同源权重…'}
-                {weightsOk === true && '✅ 模型权重已随站点直发（首次下载 ~278MB 后 IndexedDB 永久缓存，之后离线可用）'}
-                {weightsOk === false && '❌ 权重不可达：部署时需包含 frontend/public/models/mlc-ai/'}
-              </li>
-              <li>对话/向量权重均来自本站同源，运行时零第三方 CDN、零云端 API 调用。</li>
-            </ul>
+            <>
+              <ul className="text-sm text-slate-600 dark:text-slate-300 space-y-1.5 mb-3">
+                <li>✅ WebGPU + shader-f16 就绪</li>
+                <li>
+                  {bundledReady === null && '检查内置权重…'}
+                  {bundledReady === true && '✅ 轻快档（0.5B）已随站点直发，秒开'}
+                  {bundledReady === false && '❌ 内置权重不可达：部署时需包含 frontend/public/models/mlc-ai/'}
+                </li>
+              </ul>
+              <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="模型档位">
+                {WEBLLM_TIER_IDS.map((id) => {
+                  const m = WEBLLM_MODELS[id];
+                  const active = tier === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => handleTierChange(id)}
+                      className={`text-left rounded-2xl border px-4 py-3 transition-colors ${active ? 'border-violet-400 dark:border-violet-600 bg-violet-50 dark:bg-violet-900/30' : 'border-slate-200 dark:border-slate-700 hover:border-violet-300'}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{m.label}</span>
+                        {m.source === 'remote' && <Download size={13} className="text-slate-400 shrink-0" />}
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{m.description}</p>
+                      <p className="text-[11px] text-slate-400 mt-1">{formatWeightsMB(m.weightsBytes)} · {m.source === 'bundled' ? '内置' : '首次点击下载'}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           )}
           {(modelProgress !== null || modelStatus) && (
             <div className="mt-3">

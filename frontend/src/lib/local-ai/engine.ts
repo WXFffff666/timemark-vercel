@@ -1,13 +1,17 @@
 /**
- * WebLLM 本地对话引擎（从知屋 webllm-chat.ts 移植，去掉预热事件总线）。
- * 权重同源 /models/mlc-ai/<id>/（resolve/main 布局），WebGPU 推理，
- * cacheBackend:'indexeddb' 让权重首次下载后永久缓存。
+ * WebLLM 本地对话引擎（多档模型版，知屋 webllm-chat.ts 的 Map 模式）。
+ *
+ * 档位见 models.ts：phone（内置秒开）/ chinese / uncensored（在线获取，
+ * WebLLM 流式下载到 IndexedDB 永久缓存后离线可用）。
+ * 同一时刻只保留一个引擎：切换档位先卸载旧引擎释放显存/内存。
  */
 import {
   WEBLLM_MODELS,
-  webLlmModelBaseUrl,
-  webLlmModelFilesBaseUrl,
-  webllmWeightsBytes,
+  formatWeightsMB,
+  modelWeightsBaseUrl,
+  sameOriginKernelUrl,
+  type WebLlmModel,
+  type WebLlmTierId,
 } from './models';
 import { probeDeviceCapability, isLocalChatCapable } from './device';
 
@@ -16,6 +20,7 @@ export type AiStatusCallback = (msg: string, progress?: number) => void;
 export type WebLlmChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
 export type WebLlmChatOptions = {
+  tier?: WebLlmTierId;
   maxTokens?: number;
   temperature?: number;
   onStatus?: AiStatusCallback;
@@ -36,16 +41,30 @@ type Engine = {
   unload: () => Promise<void>;
 };
 
-const model = WEBLLM_MODELS.primary;
+export function resolveTier(tier?: WebLlmTierId | null): WebLlmModel {
+  if (tier && tier in WEBLLM_MODELS) return WEBLLM_MODELS[tier];
+  return WEBLLM_MODELS.phone;
+}
 
-let enginePromise: Promise<Engine> | null = null;
+const engines = new Map<WebLlmTierId, Promise<Engine>>();
+/** 当前激活档（unload 旧引擎时用） */
+let activeTier: WebLlmTierId | null = null;
 
-export function resetWebLlmEngine(): void {
-  const p = enginePromise;
-  enginePromise = null;
-  void p
-    ?.then((e) => e.unload())
-    .catch((err: unknown) => console.warn('[local-ai] 旧引擎卸载失败（忽略）:', err));
+export function getActiveTier(): WebLlmTierId | null {
+  return activeTier;
+}
+
+/** 卸载指定（或全部）引擎，释放 WebGPU/内存 */
+export async function unloadEngines(tier?: WebLlmTierId): Promise<void> {
+  const targets = tier ? [tier] : [...engines.keys()];
+  for (const t of targets) {
+    const p = engines.get(t);
+    engines.delete(t);
+    if (activeTier === t) activeTier = null;
+    void p
+      ?.then((e) => e.unload())
+      .catch((err: unknown) => console.warn(`[local-ai] ${t} 引擎卸载失败（忽略）:`, err));
+  }
 }
 
 export async function isWebLlmSupported(): Promise<boolean> {
@@ -56,12 +75,16 @@ export async function isWebLlmSupported(): Promise<boolean> {
   }
 }
 
-/** 同源权重可达性（有界 HEAD，探测主分片） */
-export async function isWebLlmWeightReachable(timeoutMs = 8000): Promise<boolean> {
+/**
+ * bundled 档主权重可达性（有界 HEAD）。
+ * remote 档恒返回 true——权重按需从镜像下载，探测远端可达性意义有限且会被限流。
+ */
+export async function isTierWeightReady(model: WebLlmModel, timeoutMs = 8000): Promise<boolean> {
+  if (model.source !== 'bundled') return true;
   const first = model.files.find((f) => f.file.endsWith('.bin'));
   if (!first) return false;
   try {
-    const res = await fetch(`${webLlmModelFilesBaseUrl()}${first.file}`, {
+    const res = await fetch(`${modelWeightsBaseUrl(model)}${first.file}`, {
       method: 'HEAD',
       cache: 'no-store',
       signal: AbortSignal.timeout(timeoutMs),
@@ -72,50 +95,65 @@ export async function isWebLlmWeightReachable(timeoutMs = 8000): Promise<boolean
   }
 }
 
-async function getEngine(onStatus?: AiStatusCallback): Promise<Engine> {
-  if (!enginePromise) {
-    enginePromise = (async () => {
-      const totalMB = Math.round(webllmWeightsBytes(model) / 1048576);
-      onStatus?.(`准备本机模型（${totalMB} MB，WebGPU 推理；首次后 IndexedDB 缓存）…`, 0);
-      const { CreateMLCEngine } = await import('@mlc-ai/web-llm');
-      const engine = await CreateMLCEngine(model.engineModelId, {
-        appConfig: {
-          model_list: [
-            {
-              model: webLlmModelBaseUrl(),
-              model_id: model.engineModelId,
-              model_lib: `${webLlmModelFilesBaseUrl()}Qwen2-0.5B-Instruct-q4f16_1_cs1k-webgpu.wasm`,
-            },
-          ],
-          // 0.2.85 起字段从 useIndexedDBCache 更名为 cacheBackend
-          cacheBackend: 'indexeddb',
+async function buildEngine(model: WebLlmModel, onStatus?: AiStatusCallback): Promise<Engine> {
+  const totalMB = formatWeightsMB(model.weightsBytes);
+  onStatus?.(
+    model.source === 'bundled'
+      ? `准备本机模型（${totalMB}，WebGPU 推理）…`
+      : `准备本机模型（${totalMB}，首次将下载到浏览器永久缓存）…`,
+    0,
+  );
+  const { CreateMLCEngine } = await import('@mlc-ai/web-llm');
+  const engine = await CreateMLCEngine(model.engineModelId, {
+    appConfig: {
+      model_list: [
+        {
+          model: modelWeightsBaseUrl(model),
+          model_id: model.engineModelId,
+          model_lib: sameOriginKernelUrl(model),
         },
-        // 进度节流：每片每几毫秒回调一次，≥2% 或文本变化且距上次 ≥200ms 才上报
-        initProgressCallback: (() => {
-          let lastPct = -1;
-          let lastAt = 0;
-          let lastText = '';
-          return (p: { progress?: number; text?: string }) => {
-            const pct = Math.round((p.progress ?? 0) * 100);
-            const text = p.text || '本机模型载入中…';
-            const now = Date.now();
-            const significant = pct - lastPct >= 2 || text !== lastText;
-            if (!significant || now - lastAt < 200) return;
-            lastPct = pct;
-            lastText = text;
-            lastAt = now;
-            onStatus?.(text, p.progress);
-          };
-        })(),
-      });
-      onStatus?.('本机模型就绪', 1);
-      return engine as unknown as Engine;
-    })().catch((e: unknown) => {
-      enginePromise = null;
-      throw e;
-    });
-  }
-  return enginePromise;
+      ],
+      // 0.2.85 起字段从 useIndexedDBCache 更名为 cacheBackend
+      cacheBackend: 'indexeddb',
+    },
+    // 进度节流：每片每几毫秒回调一次，≥2% 或文本变化且距上次 ≥200ms 才上报
+    initProgressCallback: (() => {
+      let lastPct = -1;
+      let lastAt = 0;
+      let lastText = '';
+      return (p: { progress?: number; text?: string }) => {
+        const pct = Math.round((p.progress ?? 0) * 100);
+        const text = p.text || '本机模型载入中…';
+        const now = Date.now();
+        const significant = pct - lastPct >= 2 || text !== lastText;
+        if (!significant || now - lastAt < 200) return;
+        lastPct = pct;
+        lastText = text;
+        lastAt = now;
+        onStatus?.(text, p.progress);
+      };
+    })(),
+  });
+  onStatus?.('本机模型就绪', 1);
+  return engine as unknown as Engine;
+}
+
+async function getEngine(tier: WebLlmTierId, onStatus?: AiStatusCallback): Promise<Engine> {
+  const existing = engines.get(tier);
+  if (existing) return existing;
+  const model = resolveTier(tier);
+  const promise = (async () => {
+    // 单引擎策略：切档先卸载旧引擎，释放显存
+    if (activeTier && activeTier !== tier) await unloadEngines(activeTier);
+    const engine = await buildEngine(model, onStatus);
+    activeTier = tier;
+    return engine;
+  })().catch((e: unknown) => {
+    engines.delete(tier);
+    throw e;
+  });
+  engines.set(tier, promise);
+  return promise;
 }
 
 /** WebLLM 对话：OpenAI 兼容流式接口，onToken 回传累计文本 */
@@ -123,7 +161,8 @@ export async function chatWebLlm(
   messages: WebLlmChatMessage[],
   opts: WebLlmChatOptions = {},
 ): Promise<string> {
-  const engine = await getEngine(opts.onStatus);
+  const tier = opts.tier ?? 'phone';
+  const engine = await getEngine(tier, opts.onStatus);
   if (opts.signal?.aborted) throw new Error('本机模型生成已停止');
 
   let acc = '';

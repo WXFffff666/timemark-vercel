@@ -4,8 +4,7 @@ import { formatSourceBlock, buildRagMessages } from './rag';
 import { vectorCosine, sliceForEmbedding } from './embeddings';
 import { hashText } from './idb';
 import { isLocalChatCapable } from './device';
-import { webllmWeightsBytes, webLlmModelBaseUrl, webLlmModelFilesBaseUrl } from './models';
-import { WEBLLM_MODELS } from './models';
+import { WEBLLM_MODELS, modelWeightsBaseUrl, sameOriginKernelUrl, webLlmModelBaseUrl } from './models';
 
 describe('local-ai kb document builders', () => {
   it('eventDocText joins name/type/date/person/custom message', () => {
@@ -120,14 +119,29 @@ describe('local-ai device gate', () => {
 });
 
 describe('local-ai model contract', () => {
-  it('weights byte total counts only .bin shards', () => {
-    const bytes = webllmWeightsBytes(WEBLLM_MODELS.primary);
-    expect(bytes).toBe(277996288);
-    expect(WEBLLM_MODELS.primary.files.filter((f) => f.file.endsWith('.bin')).length).toBe(8);
+  it('phone tier: weights byte total counts only .bin shards, 8 shards under GitHub 100MB limit', () => {
+    const phone = WEBLLM_MODELS.phone;
+    expect(phone.source).toBe('bundled');
+    expect(phone.weightsBytes).toBe(277996288);
+    expect(phone.files.filter((f) => f.file.endsWith('.bin')).length).toBe(8);
+    // GitHub 100MB 硬限：入库档任何分片都不得超
+    for (const f of phone.files) expect(f.bytes).toBeLessThanOrEqual(100 * 1024 * 1024);
+  });
+
+  it('remote tiers declare real sha256 contracts and stay out of the bundle', () => {
+    for (const tier of ['chinese', 'uncensored'] as const) {
+      const model = WEBLLM_MODELS[tier];
+      expect(model.source).toBe('remote');
+      expect(model.remoteBaseUrl).toMatch(/^https:\/\/hf-mirror\.com\/.+\/resolve\/main\/$/);
+      const shards = model.files.filter((f) => f.file.endsWith('.bin'));
+      expect(shards.length).toBeGreaterThan(0);
+      for (const f of shards) expect(f.sha256, `${tier} ${f.file}`).toMatch(/^[0-9a-f]{64}$/);
+    }
   });
 
   it('base URLs follow the HF resolve/main mirror layout', () => {
-    expect(webLlmModelBaseUrl()).toMatch(/\/models\/mlc-ai\/Qwen2\.5-0\.5B-Instruct-q4f16_1-MLC\/$/);
-    expect(webLlmModelFilesBaseUrl()).toContain('/resolve/main/');
+    expect(webLlmModelBaseUrl()).toMatch(/\/models\/$/);
+    expect(modelWeightsBaseUrl(WEBLLM_MODELS.phone)).toContain('/resolve/main/');
+    expect(sameOriginKernelUrl(WEBLLM_MODELS.uncensored)).toMatch(/^http:\/\/localhost:\d+\/models\/.+\.wasm$/);
   });
 });
