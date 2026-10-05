@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { documentDocText, eventDocText, keywordScore } from './kb';
+import { contactDocText, documentDocText, eventDocText, keywordScore } from './kb';
 import { formatSourceBlock, buildRagMessages } from './rag';
 import { vectorCosine, sliceForEmbedding } from './embeddings';
 import { hashText } from './idb';
@@ -27,6 +27,14 @@ describe('local-ai kb document builders', () => {
     const text = eventDocText({ name: '交报告', type: 'deadline', date: '2026-11-01' });
     expect(text).not.toContain('相关人');
     expect(text).not.toContain('备注');
+  });
+
+  it('contactDocText joins name/nickname/relationship/notes', () => {
+    const text = contactDocText({ name: '王阿姨', nickname: '老王', relationship: '邻居', notes: '每周三电话' });
+    expect(text).toContain('联系人：王阿姨');
+    expect(text).toContain('昵称：老王');
+    expect(text).toContain('关系：邻居');
+    expect(text).toContain('备注：每周三电话');
   });
 
   it('documentDocText joins title/kind/owner/expiry/notes', () => {

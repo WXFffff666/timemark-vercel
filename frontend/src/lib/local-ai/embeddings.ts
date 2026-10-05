@@ -3,7 +3,7 @@
  * 必须钉 @huggingface/transformers 4.2.0 —— 4.3 拉起的 ORT 1.31-dev 有 f16 Cast
  * 故障（知屋真浏览器取证），勿升级。
  */
-import { LOCAL_EMBEDDING_MODEL_ID, embeddingModelBaseUrl } from './models';
+import { LOCAL_EMBEDDING_MODEL_ID } from './models';
 
 export type AiStatusCallback = (msg: string, progress?: number) => void;
 
@@ -21,8 +21,12 @@ export function resetLocalEmbeddingPipeline(): void {
 async function configureEnv(): Promise<void> {
   const { env } = await import('@huggingface/transformers');
   // 权重同源：/models/<model_id>/ 直发；关掉远程兜底避免静默把请求打到 HF。
+  // 注意必须是相对路径：transformers.js 的文件元数据探测（_get_file_metadata）对
+  // 绝对 http URL 的 localPath 会跳过本地存在性检查（只在非 http 路径时 getFile），
+  // 于是 tokenizer 文件被判定"不存在"，报 tokenizer_class undefined——实测真浏览器复现。
+  // 相对路径走 env.fetch，按页面 origin 解析。
   env.allowLocalModels = true;
-  env.localModelPath = embeddingModelBaseUrl();
+  env.localModelPath = '/models/';
   env.allowRemoteModels = false;
 }
 

@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.24.1 (2026-10-05) — 本地 AI 实机验证修复
+
+### 修复
+
+- **MiniLM tokenizer 加载失败（真浏览器实机验证发现）**：transformers.js v4.2 的文件
+  元数据探测（`_get_file_metadata`）对**绝对 http URL** 形式的 `env.localModelPath`
+  会跳过本地存在性检查（仅对非 http 路径走 `getFile`），且失败结果被
+  `memoizePromise` 缓存在模块内存——tokenizer 文件被判定"不存在"，索引构建 7/7 全失败
+  （`tokenizer_class undefined`）。修复：`localModelPath` 改用相对路径 `/models/`
+  （`env.fetch` 按页面 origin 解析）。实机复测：索引 7/7 成功、二次构建增量跳过 7、
+  WebGPU 本地对话端到端可用。
+- **知识库拉全量**：`/events` 默认 limit=50，KB 显式带 `limit=1000`。
+
+### 新增
+
+- **知识库加入联系人**：KB 现在覆盖 事件 + 文档 + 联系人（姓名/昵称/关系/备注）。
+
+### 验证记录（Playwright 真实浏览器，Chromium WebGPU）
+
+- 运行环境探测：WebGPU + shader-f16 ✅、同源权重可达 ✅
+- 索引构建：首次 7 新建 / 0 失败；二次 7 全部哈希跳过（增量契约成立）
+- 提问「重阳节是什么时候」：语义检索命中重阳节等 6 条 → Qwen2.5-0.5B WebGPU 本地生成回答 + 来源徽章
+
 ## v2.24.0 (2026-10-05) — 本地 AI：浏览器端推理（模仿知屋方案）
 
 ### 新增

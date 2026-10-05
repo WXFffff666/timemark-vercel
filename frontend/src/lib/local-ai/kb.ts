@@ -15,7 +15,7 @@ import {
 
 export type KbDoc = {
   id: string;
-  kind: 'event' | 'document';
+  kind: 'event' | 'document' | 'contact';
   title: string;
   /** 给向量模型的正文（标题 + 关键字段拼接） */
   text: string;
@@ -63,15 +63,33 @@ export function documentDocText(d: {
     .join('\n');
 }
 
+/** 联系人 → KB 文档文本 */
+export function contactDocText(c: {
+  name?: unknown;
+  nickname?: unknown;
+  relationship?: unknown;
+  notes?: unknown;
+}): string {
+  return [
+    `联系人：${String(c.name ?? '')}`,
+    c.nickname ? `昵称：${String(c.nickname)}` : '',
+    c.relationship ? `关系：${String(c.relationship)}` : '',
+    c.notes ? `备注：${String(c.notes)}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 function asArray<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
 }
 
-/** 拉取并构建 KB 文档（事件 + 文档；失败的字段静默跳过） */
+/** 拉取并构建 KB 文档（事件 + 文档 + 联系人；失败的字段静默跳过） */
 export async function collectKbDocs(): Promise<KbDoc[]> {
   const docs: KbDoc[] = [];
   try {
-    const events = asArray<Record<string, unknown>>(await api.get('/events'));
+    // /events 默认 limit=50，KB 要全量 → 显式带大 limit
+    const events = asArray<Record<string, unknown>>(await api.get('/events?limit=1000'));
     for (const e of events) {
       const name = String(e?.name ?? '');
       if (!name) continue;
@@ -83,7 +101,7 @@ export async function collectKbDocs(): Promise<KbDoc[]> {
       });
     }
   } catch {
-    /* 事件拉取失败不阻断文档部分 */
+    /* 事件拉取失败不阻断其余部分 */
   }
   try {
     const docsRes = await api.get<{ items?: Record<string, unknown>[] } | Record<string, unknown>[]>('/documents');
@@ -100,6 +118,21 @@ export async function collectKbDocs(): Promise<KbDoc[]> {
     }
   } catch {
     /* 文档拉取失败不阻断事件部分 */
+  }
+  try {
+    const contacts = asArray<Record<string, unknown>>(await api.get('/contacts'));
+    for (const c of contacts) {
+      const name = String(c?.name ?? '');
+      if (!name) continue;
+      docs.push({
+        id: `contact:${c.id}`,
+        kind: 'contact',
+        title: name,
+        text: contactDocText(c as Parameters<typeof contactDocText>[0]),
+      });
+    }
+  } catch {
+    /* 联系人拉取失败不影响其余部分 */
   }
   return docs.slice(0, KB_MAX_DOCS);
 }
