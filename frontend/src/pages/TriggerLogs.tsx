@@ -301,6 +301,31 @@ export default function TriggerLogs() {
       )}
       {tab === 'reminders' ? (
         <main className="max-w-4xl mx-auto px-6 py-10 mt-2">
+          <div className="flex justify-end mb-2">
+            {/* v2.27 F41：事件提醒历史导出 CSV（后端 /events/reminder-logs?format=csv） */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-full min-h-11"
+              onClick={async () => {
+                const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+                const res = await fetch('/api/events/reminder-logs?format=csv', {
+                  credentials: 'include',
+                  headers: token ? { Authorization: `Bearer ${token}` } : {},
+                });
+                if (!res.ok) return alert('导出失败');
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `reminder-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+              }}
+            >
+              导出 CSV
+            </Button>
+          </div>
           <EventReminderLogs />
         </main>
       ) : (

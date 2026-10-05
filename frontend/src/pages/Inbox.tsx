@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } as const } };
@@ -44,10 +45,18 @@ export default function Inbox() {
   const nextOffsetRef = useRef(0);
 
 
-  const fetchMessages = async (offset = 0) => {
+  // v2.27 F42/F49：文本搜索 + 只看未读（后端 ?q= / ?unread=1 直接支持）
+  const [searchQuery, setSearchQuery] = useState('');
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
+
+  const fetchMessages = async (offset = 0, q = debouncedSearch, unread = unreadOnly) => {
     setLoading(true);
     try {
-      const res = await api.getRaw<InboxMessage[]>(`/inbox?limit=100&offset=${offset}`);
+      const params = new URLSearchParams({ limit: '100', offset: String(offset) });
+      if (q.trim()) params.set('q', q.trim());
+      if (unread) params.set('unread', '1');
+      const res = await api.getRaw<InboxMessage[]>(`/inbox?${params.toString()}`);
       const page = res.data || [];
       setTotal((res.pagination?.total as number) || 0);
       setUnreadCount((res.pagination?.unreadCount as number) || 0);
@@ -65,6 +74,11 @@ export default function Inbox() {
   useEffect(() => {
     fetchMessages();
   }, []);
+
+  useEffect(() => {
+    fetchMessages(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, unreadOnly]);
 
   const markRead = async (id: number) => {
     setPendingMarkId(id);
@@ -135,6 +149,24 @@ export default function Inbox() {
           </div>
         </div>
       </header>
+      <div className="max-w-4xl mx-auto px-6 mt-3 flex flex-wrap gap-2 items-center">
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="搜索标题或正文…"
+          className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm flex-1 min-w-[12rem]"
+          aria-label="搜索收件箱"
+        />
+        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={unreadOnly}
+            onChange={(e) => setUnreadOnly(e.target.checked)}
+            className="h-4 w-4 accent-primary-500"
+          />
+          只看未读
+        </label>
+      </div>
       <main className="max-w-4xl mx-auto px-6 py-10 mt-2">
         {actionError && (
           <div className="mb-4 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50/60 dark:bg-red-900/10 px-4 py-2 text-sm text-red-600 dark:text-red-300">

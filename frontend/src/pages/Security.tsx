@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+import { AuditTrailCard } from '@/components/settings/AuditTrailCard';
 
 /**
  * `/api/security/deploy-info`. Typed rather than `any` because this page renders the
@@ -441,6 +442,9 @@ export default function Security() {
             ))}
           </CardContent>
         </Card>
+
+        {/* v2.27 F45：操作审计卡（/api/audit 此前没有任何 UI 入口） */}
+        <AuditTrailCard />
       </main>
       <MobileBottomNav />
     </div>

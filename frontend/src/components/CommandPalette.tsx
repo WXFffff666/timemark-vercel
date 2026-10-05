@@ -167,7 +167,8 @@ export function CommandPalette() {
 
   const activate = useCallback(
     (hit: GlobalSearchHit) => {
-      navigate(TYPE_ROUTES[hit.owner_type]);
+      // v2.27 F35：深链带 ?focus=<id>，目标页可据此定位/高亮（未消费的页面安全忽略）
+      navigate(`${TYPE_ROUTES[hit.owner_type]}?focus=${hit.owner_id}`);
       setOpen(false);
     },
     [navigate],

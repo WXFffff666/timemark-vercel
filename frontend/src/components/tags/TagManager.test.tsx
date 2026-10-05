@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { BrowserRouter } from 'react-router-dom';
 import type { TagRecord, TaggedEntity } from '@/lib/api';
 
 /**
@@ -51,7 +52,7 @@ beforeEach(() => {
 
 describe('TagManager (checkbox 134)', () => {
   it('renders the vocabulary with link counts and creates a trimmed tag', async () => {
-    render(<TagManager />);
+    render(<BrowserRouter><TagManager  /></BrowserRouter>);
     expect(await screen.findByText('工作')).toBeTruthy();
     expect(screen.getByText('生活')).toBeTruthy();
     expect(screen.getByText('2')).toBeTruthy(); // link_count of 工作
@@ -65,7 +66,7 @@ describe('TagManager (checkbox 134)', () => {
 
   it('renders a duplicate-name error as an alert instead of crashing', async () => {
     createTagMock.mockRejectedValueOnce(new Error('标签名称已存在: 工作'));
-    render(<TagManager />);
+    render(<BrowserRouter><TagManager  /></BrowserRouter>);
     await screen.findByText('工作');
 
     fireEvent.change(screen.getByLabelText('新建标签名称'), { target: { value: '工作' } });
@@ -76,7 +77,7 @@ describe('TagManager (checkbox 134)', () => {
   });
 
   it('deletes a tag after confirmation of the API call', async () => {
-    render(<TagManager />);
+    render(<BrowserRouter><TagManager  /></BrowserRouter>);
     await screen.findByText('生活');
 
     fireEvent.click(screen.getByLabelText('删除标签 生活'));
@@ -85,7 +86,7 @@ describe('TagManager (checkbox 134)', () => {
   });
 
   it('smart filter: AND by default, OR once the toggle changes, composed with entity types', async () => {
-    render(<TagManager />);
+    render(<BrowserRouter><TagManager  /></BrowserRouter>);
     await screen.findByText('工作');
 
     // Disabled until a tag is selected.

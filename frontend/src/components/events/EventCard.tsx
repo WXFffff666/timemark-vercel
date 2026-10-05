@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Clock, Calendar, Edit2, Trash2, Send, CheckCircle2, Circle, Heart, GraduationCap, PartyPopper, Sparkles, CalendarDays, Moon } from 'lucide-react';
+import { Clock, Calendar, Edit2, Trash2, Send, CheckCircle2, Circle, Heart, GraduationCap, PartyPopper, Sparkles, CalendarDays, Moon, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useEffect, useState } from 'react';
@@ -196,6 +196,8 @@ export function EventCard({ event, onEdit, onDelete, onTestSend, selectable, sel
           {onTestSend && (
             <Button variant="ghost" size="sm" className="h-9 px-3 hover:bg-primary-50 dark:hover:bg-primary-900/30 text-slate-600 hover:text-primary-600 dark:text-slate-300 rounded-xl" onClick={(e) => { e.stopPropagation(); onTestSend(event.id); }}><Send size={14} className="mr-1.5" /> 测试</Button>
           )}
+          {/* v2.27 F38：一键复制事件日期（YYYY-MM-DD） */}
+          <Button variant="ghost" size="sm" className="h-9 px-3 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 hover:text-slate-800 dark:text-slate-300 rounded-xl" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(event.date).catch(() => undefined); }}><Copy size={14} className="mr-1.5" /> 复制日期</Button>
           <Button variant="ghost" size="sm" className="h-9 px-3 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-slate-600 hover:text-blue-600 dark:text-slate-300 rounded-xl" onClick={(e) => { e.stopPropagation(); onEdit(event); }}><Edit2 size={14} className="mr-1.5" /> 编辑</Button>
           <Button variant="ghost" size="sm" className="h-9 px-3 hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-600 hover:text-red-600 dark:text-slate-300 rounded-xl" onClick={(e) => { e.stopPropagation(); onDelete(event.id); }}><Trash2 size={14} className="mr-1.5" /> 删除</Button>
         </div>

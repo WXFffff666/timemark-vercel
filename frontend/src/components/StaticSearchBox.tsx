@@ -78,7 +78,9 @@ export function StaticSearchBox() {
               key={hit.id}
               role="option"
               aria-selected={false}
-              className="flex items-center gap-2 rounded-lg px-2 py-1 text-xs bg-slate-50/60 dark:bg-slate-800/40"
+              tabIndex={0}
+              title={hit.title}
+              className="flex items-center gap-2 rounded-lg px-2 py-1 text-xs bg-slate-50/60 dark:bg-slate-800/40 focus-visible:outline-primary-500"
             >
               <span className="shrink-0 rounded bg-primary-100 px-1 py-0.5 text-[10px] text-primary-700 dark:bg-primary-900/40 dark:text-primary-200">
                 {KIND_LABELS[hit.kind] ?? hit.kind}

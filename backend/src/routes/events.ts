@@ -108,6 +108,10 @@ events.get('/reminder-logs', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);
   const limit = Math.min(parseInt(c.req.query('limit') || '50', 10) || 50, 200);
+  const offset = Math.max(parseInt(c.req.query('offset') || '0', 10) || 0, 0);
+  // v2.27 F40：服务级筛选（status 白名单）——此前只有前端展示层
+  const statusRaw = c.req.query('status') || '';
+  const status = ['success', 'failed', 'skipped'].includes(statusRaw) ? statusRaw : null;
   const format = c.req.query('format');
 
   // Display contract: trigger_date is TEXT since migration 51 and holds two families of ids.
@@ -127,9 +131,10 @@ events.get('/reminder-logs', async (c) => {
      FROM event_trigger_logs tl
      LEFT JOIN events e ON e.id = tl.event_id
      WHERE tl.user_id = $1
-     ORDER BY tl.created_at DESC
-     LIMIT $2`,
-    [userId, limit],
+       AND ($2::text IS NULL OR tl.status = $2::text)
+     ORDER BY tl.created_at DESC, tl.id DESC
+     LIMIT $3 OFFSET $4`,
+    [userId, status, limit, offset],
   );
 
   // v2.27 E-9：?format=csv —— 事件维度提醒历史一键导出（与 /trigger-logs/export.csv 同款响应）

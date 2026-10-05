@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutGrid } from 'lucide-react';
@@ -22,6 +22,13 @@ export function MobileBottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
+  // v2.27 F47：抽屉焦点管理 —— 打开时焦点移入第一项，关闭时还原到触发按钮
+  const drawerFirstItemRef = useRef<HTMLButtonElement | null>(null);
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (moreOpen) drawerFirstItemRef.current?.focus();
+    else moreButtonRef.current?.focus();
+  }, [moreOpen]);
   const [, setLangTick] = useState(0);
 
   useEffect(() => {
@@ -71,6 +78,7 @@ export function MobileBottomNav() {
           );
         })}
         <button
+          ref={moreButtonRef}
           type="button"
           onClick={() => setMoreOpen(true)}
           aria-expanded={moreOpen}
@@ -118,6 +126,7 @@ export function MobileBottomNav() {
                     return (
                       <li key={path}>
                         <button
+                          ref={group.id === NAV_GROUPS[0].id && path === NAV_GROUPS[0].items[0].path ? drawerFirstItemRef : undefined}
                           type="button"
                           onMouseEnter={() => prefetchRoute(path)}
                           onFocus={() => prefetchRoute(path)}

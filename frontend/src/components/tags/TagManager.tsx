@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Loader2, Plus, Tag as TagIcon, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,18 @@ import { cn } from '@/lib/utils';
  * (`GET /api/tags/entities`). The filter COMPOSES - the entity-type checkboxes and the limit
  * are additional filters on top of the tag selection, never a replacement for page filters.
  */
+
+// v2.27 F39：实体类型 -> 页面路由（focus 深链）
+const ENTITY_ROUTES: Record<TagEntityType, string> = {
+  event: '/calendar',
+  contact: '/contacts',
+  document: '/documents',
+  expiry: '/expiry',
+  inventory: '/inventory',
+  maintenance: '/maintenance',
+  habit: '/habits',
+  goal: '/goals',
+};
 
 const ENTITY_LABELS: Record<TagEntityType, string> = {
   event: '事件',
@@ -74,6 +87,7 @@ export function TagChips({
 }
 
 export function TagManager() {
+  const navigate = useNavigate();
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -300,8 +314,19 @@ export function TagManager() {
                 </p>
                 <ul className="mt-1 space-y-1 text-xs">
                   {entities.map((entity) => (
-                    <li key={`${entity.entity_type}-${entity.entity_id}`} className="flex gap-2">
-                      <span>#{entity.entity_id}</span>
+                    <li key={`${entity.entity_type}-${entity.entity_id}`} className="flex gap-2 items-center">
+                      {/* v2.27 F39：结果可跳转 —— 事件落到 /calendar?focus=<id>，
+                          其余类型落到对应页面（focus 参数未消费的页面安全忽略） */}
+                      <button
+                        type="button"
+                        className="underline-offset-2 hover:underline text-primary-600 dark:text-primary-400"
+                        onClick={() => {
+                          const target = ENTITY_ROUTES[entity.entity_type] ?? '/';
+                          navigate(`${target}?focus=${entity.entity_id}`);
+                        }}
+                      >
+                        {ENTITY_LABELS[type]} #{entity.entity_id}
+                      </button>
                       <span className="text-slate-500 dark:text-slate-400">
                         {entity.tag_ids
                           .map((id) => tagNameById.get(id) ?? String(id))

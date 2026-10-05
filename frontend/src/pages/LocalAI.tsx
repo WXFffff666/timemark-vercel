@@ -290,6 +290,25 @@ export function LocalAI() {
                     const md = history
                       .map((h) => `## ${h.question}\n\n${h.answer}\n\n${h.sources.length ? `> 来源：${h.sources.map((x) => x.title).join('、')}\n` : ''}`)
                       .join('\n---\n\n');
+                    // v2.27 F48：下载为 .md 文件（复制版之外的可归档形态）
+                    const blob = new Blob([`# 本地 AI 对话导出\n\n${md}`], { type: 'text/markdown;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `local-ai-chat-${new Date().toISOString().slice(0, 10)}.md`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="text-xs text-slate-400 hover:text-indigo-500 transition"
+                >
+                  下载对话
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const md = history
+                      .map((h) => `## ${h.question}\n\n${h.answer}\n\n${h.sources.length ? `> 来源：${h.sources.map((x) => x.title).join('、')}\n` : ''}`)
+                      .join('\n---\n\n');
                     navigator.clipboard.writeText(`# 本地 AI 对话导出\n\n${md}`).catch(() => undefined);
                   }}
                   className="text-xs text-slate-400 hover:text-indigo-500 transition"

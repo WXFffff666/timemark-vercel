@@ -58,6 +58,26 @@ export default function Calendar() {
     if (events.length === 0) fetchEvents();
   }, [events.length, fetchEvents]);
 
+  // v2.27 F36：命令面板 ?focus=<eventId> —— 定位到该事件所在日期并选中
+  useEffect(() => {
+    const focusId = searchParams.get('focus');
+    if (!focusId || events.length === 0) return;
+    const hit = events.find((e) => String(e.id) === focusId);
+    if (hit?.date) {
+      const d = new Date(`${hit.date}T00:00:00`);
+      if (!Number.isNaN(d.getTime())) {
+        setSelectedKey(dateKey(d));
+        setCursor(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+      }
+    }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('focus');
+      return next;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events, searchParams]);
+
 
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
   const todayKey = getTodayDateKey(timezone);

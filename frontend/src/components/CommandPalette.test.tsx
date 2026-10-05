@@ -153,7 +153,8 @@ describe('CommandPalette (checkbox 132)', () => {
 
     // Enter opens the active hit (event -> /calendar) and closes the palette.
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(navigateSpy).toHaveBeenCalledWith('/calendar');
+    // v2.27 F35：深链带 ?focus=<id>
+    expect(navigateSpy).toHaveBeenCalledWith('/calendar?focus=7');
     await waitFor(() => expect(screen.queryByTestId('command-palette')).toBeNull());
   });
 

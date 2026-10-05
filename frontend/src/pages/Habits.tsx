@@ -155,8 +155,10 @@ export default function Habits() {
     return enumerateDays(grid.from, grid.to);
   }, [grid]);
 
+  // v2.27 F44：按名称/创建时间排序（服务端 ?sort= 支持）
+  const [sortBy, setSortBy] = useState<'created_at' | 'name'>('created_at');
   const load = useCallback(async () => {
-    const list = await api.get<HabitWithStreak[]>('/habits?active=true');
+    const list = await api.get<HabitWithStreak[]>(`/habits?active=true&sort=${sortBy}`);
     const rows = Array.isArray(list) ? list : [];
     setHabits(rows);
 
@@ -170,7 +172,7 @@ export default function Habits() {
     const to = shiftCalendarDays(from, 6) ?? anchor;
     const data = await api.get<HabitGridResult>(`/habits/grid?from=${from}&to=${to}`);
     setGrid(data && Array.isArray(data.habits) ? data : null);
-  }, []);
+  }, [sortBy]);
 
   useEffect(() => {
     let cancelled = false;
@@ -296,6 +298,18 @@ export default function Habits() {
       </header>
 
       <main id="main-content" className="max-w-4xl mx-auto px-4 py-6 space-y-6" tabIndex={-1}>
+        {/* v2.27 F44：排序切换 */}
+        <div className="flex justify-end">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+            aria-label="习惯排序"
+          >
+            <option value="created_at">按创建时间</option>
+            <option value="name">按名称</option>
+          </select>
+        </div>
         {error && (
           <p className="text-sm text-destructive glass-panel rounded-2xl px-4 py-3" role="alert">{error}</p>
         )}

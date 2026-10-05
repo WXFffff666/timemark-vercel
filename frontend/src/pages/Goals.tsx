@@ -74,10 +74,14 @@ export default function Goals() {
    *  pending list refresh can never swallow a keystroke into stale state. */
   const milestoneInputs = useRef<Record<number, HTMLInputElement | null>>({});
 
+  // v2.27 F43：排序键 + 方向（服务端 ?sort=/order= 支持）
+  const [sortBy, setSortBy] = useState<'created_at' | 'title' | 'status'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
   const load = useCallback(async () => {
-    const list = await api.get<GoalWithMilestones[]>('/goals');
+    const list = await api.get<GoalWithMilestones[]>(`/goals?sort=${sortBy}&order=${sortOrder}`);
     setGoals(Array.isArray(list) ? list : []);
-  }, []);
+  }, [sortBy, sortOrder]);
 
   useEffect(() => {
     let cancelled = false;
@@ -233,6 +237,28 @@ export default function Goals() {
       </header>
 
       <main id="main-content" className="max-w-4xl mx-auto px-4 py-6 space-y-4" tabIndex={-1}>
+        {/* v2.27 F43：排序工具条 */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+            aria-label="排序字段"
+          >
+            <option value="created_at">按创建时间</option>
+            <option value="title">按名称</option>
+            <option value="status">按状态</option>
+          </select>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full min-h-10"
+            aria-label="切换排序方向"
+            onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
+          >
+            {sortOrder === 'asc' ? '↑ 升序' : '↓ 降序'}
+          </Button>
+        </div>
         {error && <p className="text-sm text-destructive glass-panel rounded-2xl px-4 py-3" role="alert">{error}</p>}
         {status && <p className="text-sm text-hint glass-panel rounded-2xl px-4 py-3" role="status">{status}</p>}
 

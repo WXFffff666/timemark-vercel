@@ -155,7 +155,30 @@ export function DataManagement() {
             </div>
           )}
 
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap gap-2">
+            {/* v2.27 F50：事件 CSV 导出入口（/api/export/events.csv） */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/export/events.csv', { credentials: 'include' });
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  const blob = await res.blob();
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `events-${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : '导出失败');
+                }
+              }}
+            >
+              导出事件 CSV
+            </Button>
             <Button variant="secondary" size="sm" className="min-h-11" disabled={purging} onClick={purgeNow}>
               {purging ? (
                 <>

@@ -74,6 +74,23 @@ function SecretUrlField({
   onCopy: (value: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
+
+  // v2.27 F37：?section=<名称> 深链定位（如 /settings?section=安全与数据）；
+  // 命中后移除参数避免后退困住。
+  useEffect(() => {
+    const section = new URLSearchParams(window.location.search).get('section');
+    if (!section) return;
+    const timer = window.setTimeout(() => {
+      const headings = Array.from(document.querySelectorAll('h2'));
+      const hit = headings.find((h) => h.textContent?.trim() === section);
+      hit?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const url = new URL(window.location.href);
+      url.searchParams.delete('section');
+      window.history.replaceState(null, '', url.toString());
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   return (
     <div className="flex gap-2">
       <Input
