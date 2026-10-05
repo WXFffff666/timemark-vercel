@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users, Upload, Mail, Pencil, Send, Eye } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users, Upload, Mail, Pencil, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,6 @@ import {
 import {
   ensureLabeledEntries,
   formatLabeledList,
-  getContactEmailList,
   contactHasAnyEmail,
 } from '@/lib/contact-utils';
 
@@ -126,19 +125,10 @@ export default function Contacts() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
-  const [sendOpen, setSendOpen] = useState(false);
-  const [sendPickOpen, setSendPickOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [sendingContact, setSendingContact] = useState<FixedContact | null>(null);
   const [form, setForm] = useState<ContactForm>(emptyForm());
   const [groupName, setGroupName] = useState('');
   const [groupEmails, setGroupEmails] = useState('');
-  const [sendSubject, setSendSubject] = useState('');
-  const [sendHtml, setSendHtml] = useState('<p>您好，</p><p>这是一条来自 TimeMark 的消息。</p>');
-  const [sendAccountId, setSendAccountId] = useState<number | ''>('');
-  const [sendAvailableEmails, setSendAvailableEmails] = useState<string[]>([]);
-  const [sendSelectedEmails, setSendSelectedEmails] = useState<string[]>([]);
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [importing, setImporting] = useState(false);
   const [dueIds, setDueIds] = useState<Set<number>>(new Set());
@@ -185,8 +175,6 @@ export default function Contacts() {
     return () => {
       setOpen(false);
       setGroupOpen(false);
-      setSendOpen(false);
-      setSendPickOpen(false);
       setDetailContact(null);
     };
   }, []);
@@ -244,8 +232,6 @@ export default function Contacts() {
     contactHasChannelAddress(a.type, contactFields),
   );
 
-  const emailAccounts = accounts.filter((a) => EMAIL_CHANNEL_TYPES.has(a.type));
-
   const buildPayload = () => ({
     name: form.name.trim(),
     nickname: form.nickname.trim() || undefined,
@@ -300,67 +286,9 @@ export default function Contacts() {
   };
 
   const openQuickSend = (c: FixedContact) => {
-    const emails = getContactEmailList(c);
-    const boundEmail = (c.channel_account_ids || [])
-      .map((id) => emailAccounts.find((a) => a.id === id))
-      .find(Boolean);
-    setSendingContact(c);
-    setSendAvailableEmails(emails);
-    setSendSubject(`来自 TimeMark 的消息 - ${c.name}`);
-    setSendHtml(`<p>${resolveContactDearSalutation(c)}，</p><p>这是一条来自 TimeMark 的消息。</p>`);
-    setSendAccountId(boundEmail?.id ?? emailAccounts[0]?.id ?? '');
-    setError('');
-
-    if (emails.length === 1) {
-      setSendSelectedEmails(emails);
-      setSendPickOpen(false);
-      setSendOpen(true);
-    } else {
-      setSendSelectedEmails([]);
-      setSendPickOpen(true);
-      setSendOpen(false);
-    }
-  };
-
-  const proceedToCompose = () => {
-    if (sendSelectedEmails.length === 0) {
-      setError('请至少选择一个收件邮箱');
-      return;
-    }
-    setError('');
-    setSendPickOpen(false);
-    setSendOpen(true);
-  };
-
-  const toggleSendEmail = (email: string) => {
-    setSendSelectedEmails((prev) =>
-      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email],
-    );
-  };
-
-  const quickSend = async () => {
-    if (!sendingContact || sendSelectedEmails.length === 0) return;
-    setSending(true);
-    setError('');
-    try {
-      const result = await api.post<{
-        recipients: string[];
-        failed?: string[];
-      }>(`/contacts/${sendingContact.id}/send-email`, {
-        subject: sendSubject,
-        html: sendHtml,
-        accountId: sendAccountId || undefined,
-        recipientEmails: sendSelectedEmails,
-      });
-      setSendOpen(false);
-      setSendingContact(null);
-      const sent = result?.recipients?.join('、') || sendSelectedEmails.join('、');
-      alert(`已向 ${sent} 发送邮件`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '发送失败');
-    } finally {
-      setSending(false);
-    }
+    // v2.26 C：快捷发信与「批量邮件」功能重合 —— 统一深链到 Broadcast 并预选该联系人；
+    // 原独立发信弹窗（收件邮箱挑选 + 渠道选择 + 正文编辑）整体删除，避免两套写信 UI。
+    navigate(`/broadcast?contact=${c.id}`);
   };
 
   const importVcard = async (file: File) => {
@@ -397,12 +325,7 @@ export default function Contacts() {
     return `${acc.name} (${CHANNEL_TYPE_LABELS[acc.type] || acc.type})`;
   };
 
-  const canQuickSend = (c: FixedContact) => {
-    if (!contactHasAnyEmail(c) || emailAccounts.length === 0) return false;
-    const bound = c.channel_account_ids || [];
-    if (bound.length === 0) return true;
-    return bound.some((id) => emailAccounts.some((a) => a.id === id));
-  };
+  const canQuickSend = (c: FixedContact) => contactHasAnyEmail(c);
 
   const renderContactMethods = (c: FixedContact) => {
     const rows: { icon: string; text: string }[] = [];
@@ -434,7 +357,7 @@ export default function Contacts() {
   return (
     <div id="main-content" className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24">
       <div className="flex items-center gap-3 mb-4">
-        <Button variant="ghost" size="icon" onClick={() => { setOpen(false); setSendOpen(false); goBack(); }} aria-label="返回" className="min-h-11 min-w-11">
+        <Button variant="ghost" size="icon" onClick={() => { setOpen(false); goBack(); }} aria-label="返回" className="min-h-11 min-w-11">
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1">
@@ -736,86 +659,6 @@ export default function Contacts() {
 
             {error && <p className="text-sm text-red-500">{error}</p>}
             <Button className="w-full min-h-11" onClick={save}>{editingId ? '保存' : '保存并验证'}</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={sendPickOpen} onOpenChange={setSendPickOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>选择收件邮箱 — {sendingContact?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-slate-500">该联系人有多个邮箱，请勾选要发送的地址（默认不全选）</p>
-            <div className="space-y-2">
-              {sendAvailableEmails.map((email) => (
-                <label key={email} className="flex items-center gap-2 text-sm cursor-pointer rounded-lg border p-3">
-                  <input
-                    type="checkbox"
-                    checked={sendSelectedEmails.includes(email)}
-                    onChange={() => toggleSendEmail(email)}
-                    className="rounded"
-                  />
-                  {email}
-                </label>
-              ))}
-            </div>
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button className="w-full min-h-11" disabled={sendSelectedEmails.length === 0} onClick={proceedToCompose}>
-              下一步：编辑邮件
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={sendOpen} onOpenChange={setSendOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>快捷发信 — {sendingContact?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm font-medium mb-1">收件邮箱</p>
-              <p className="text-sm text-slate-600">{sendSelectedEmails.join('、')}</p>
-              {sendAvailableEmails.length > 1 && (
-                <button
-                  type="button"
-                  className="text-xs text-indigo-500 mt-1 hover:underline"
-                  onClick={() => {
-                    setSendOpen(false);
-                    setSendPickOpen(true);
-                  }}
-                >
-                  重新选择收件邮箱
-                </button>
-              )}
-            </div>
-            {emailAccounts.length > 1 && (
-              <div>
-                <label className="text-sm font-medium">通知渠道</label>
-                <select
-                  className="w-full mt-1 rounded-xl border p-2 text-sm bg-transparent"
-                  value={sendAccountId}
-                  onChange={(e) => setSendAccountId(e.target.value ? Number(e.target.value) : '')}
-                >
-                  {emailAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({CHANNEL_TYPE_LABELS[a.type] || a.type})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <Input placeholder="邮件主题" value={sendSubject} onChange={(e) => setSendSubject(e.target.value)} />
-            <textarea
-              className="w-full min-h-[100px] rounded-xl border p-3 text-sm bg-transparent"
-              value={sendHtml}
-              onChange={(e) => setSendHtml(e.target.value)}
-            />
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button className="w-full min-h-11" disabled={sending || !sendSubject || sendSelectedEmails.length === 0} onClick={quickSend}>
-              <Send className="w-4 h-4 mr-2" />{sending ? '发送中…' : '发送邮件'}
-            </Button>
           </div>
         </DialogContent>
       </Dialog>

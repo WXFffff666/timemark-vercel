@@ -15,6 +15,9 @@ import { NAV_ALL_LABEL_KEYS, NAV_ALL_PATHS, NAV_GROUPS, NAV_PRIMARY } from './na
 /** 公开路由不需要导航入口：登录页、分享/嵌入页、根重定向 */
 const PUBLIC_ROUTES = new Set(['/login', '/', '/shared/:token', '/embed/:token', '/share/:token']);
 
+/** v2.26 C：纯重定向兜底路由（旧链接 301 到合并后的页面），不是目的地，不需要入口 */
+const REDIRECT_ROUTES = new Set(['/reminders']);
+
 function appRoutePaths(): string[] {
   const source = readFileSync(join(__dirname, '..', 'App.tsx'), 'utf8');
   return [...source.matchAll(/<Route path="([^"]+)"/g)].map((m) => m[1]);
@@ -22,7 +25,7 @@ function appRoutePaths(): string[] {
 
 describe('导航覆盖', () => {
   const routes = appRoutePaths();
-  const protectedRoutes = routes.filter((r) => !PUBLIC_ROUTES.has(r));
+  const protectedRoutes = routes.filter((r) => !PUBLIC_ROUTES.has(r) && !REDIRECT_ROUTES.has(r));
 
   it('每一条受保护路由都有导航入口', () => {
     const missing = protectedRoutes.filter((r) => !NAV_ALL_PATHS.includes(r));

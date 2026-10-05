@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, Send, Mail, ChevronRight, Eye, Users } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +42,9 @@ interface Campaign {
 export default function Broadcast() {
   const navigate = useNavigate();
   const goBack = useSmartBack('/dashboard');
+  // v2.26 C：联系人页「快捷发信」深链进来（/broadcast?contact=<id>），预选该联系人。
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkContactId = Number(searchParams.get('contact') ?? '') || null;
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
   const [accountId, setAccountId] = useState<number | ''>('');
@@ -80,6 +83,16 @@ export default function Broadcast() {
     }).catch(() => {});
     api.get<Campaign[]>('/broadcast/campaigns').then((d) => setCampaigns(d || [])).catch(() => {});
   }, []);
+
+  // 深链预选：联系人列表就绪后勾上目标联系人并消费掉 query，刷新/后退不再残留。
+  useEffect(() => {
+    if (deepLinkContactId === null || contacts.length === 0) return;
+    const target = contacts.find((c) => c.id === deepLinkContactId);
+    if (target && contactHasAnyEmail(target)) {
+      setSelectedIds((prev) => (prev.includes(target.id) ? prev : [...prev, target.id]));
+    }
+    setSearchParams({}, { replace: true });
+  }, [deepLinkContactId, contacts, setSearchParams]);
 
   const applyTemplate = (category: BroadcastTemplateCategory, greetingId: string) => {
     const built = buildBroadcastEmail(category, greetingId, subject || category.defaultSubject);

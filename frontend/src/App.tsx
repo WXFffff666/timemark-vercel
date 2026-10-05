@@ -11,7 +11,6 @@ import { CommandPalette } from './components/CommandPalette';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Settings = lazy(() => import('./pages/Settings'));
-const Reminders = lazy(() => import('./pages/Reminders'));
 const LoginHistory = lazy(() => import('./pages/LoginHistory'));
 const Channels = lazy(() => import('./pages/Channels'));
 const Templates = lazy(() => import('./pages/Templates'));
@@ -38,7 +37,6 @@ const DocumentsPage = lazy(() => import('./pages/Documents'));
 const HabitsPage = lazy(() => import('./pages/Habits'));
 const MedicationsPage = lazy(() => import('./pages/Medications'));
 const GoalsPage = lazy(() => import('./pages/Goals'));
-const Assistant = lazy(() => import('./pages/Assistant'));
 const AgentConsole = lazy(() => import('./pages/AgentConsole'));
 const AskPage = lazy(() => import('./pages/Ask'));
 const TodayPage = lazy(() => import('./pages/Today'));
@@ -107,7 +105,8 @@ function AnimatedRoutes() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="/reminders" element={<ProtectedRoute><Reminders /></ProtectedRoute>} />
+          {/* v2.26 C：提醒记录并入 /trigger-logs（?tab=reminders），旧链接 301 兜底 */}
+          <Route path="/reminders" element={<Navigate to="/trigger-logs?tab=reminders" replace />} />
           <Route path="/login-history" element={<ProtectedRoute><LoginHistory /></ProtectedRoute>} />
           <Route path="/security" element={<ProtectedRoute><Security /></ProtectedRoute>} />
           <Route path="/deploy-wizard" element={<ProtectedRoute><DeployWizard /></ProtectedRoute>} />
@@ -129,7 +128,7 @@ function AnimatedRoutes() {
           <Route path="/habits" element={<ProtectedRoute><HabitsPage /></ProtectedRoute>} />
           <Route path="/medications" element={<ProtectedRoute><MedicationsPage /></ProtectedRoute>} />
           <Route path="/goals" element={<ProtectedRoute><GoalsPage /></ProtectedRoute>} />
-          <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
+          {/* v2.26 C：/assistant 页删除 —— AssistantDock 已全局承载同一面板 */}
           <Route path="/agent-console" element={<ProtectedRoute><AgentConsole /></ProtectedRoute>} />
           <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
           <Route path="/today" element={<ProtectedRoute><TodayPage /></ProtectedRoute>} />

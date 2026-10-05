@@ -3,7 +3,6 @@
 const loaders: Record<string, () => Promise<unknown>> = {
   '/dashboard': () => import('../pages/Dashboard'),
   '/settings': () => import('../pages/Settings'),
-  '/reminders': () => import('../pages/Reminders'),
   '/security': () => import('../pages/Security'),
   '/analytics': () => import('../pages/Analytics'),
   '/channels': () => import('../pages/Channels'),
@@ -27,7 +26,6 @@ const loaders: Record<string, () => Promise<unknown>> = {
   '/today': () => import('../pages/Today'),
   '/data-health': () => import('../pages/DataHealth'),
   '/annual-report': () => import('../pages/AnnualReport'),
-  '/assistant': () => import('../pages/Assistant'),
   '/cron-monitor': () => import('../pages/CronMonitor'),
   '/lunar-holidays': () => import('../pages/LunarHolidays'),
   '/login-history': () => import('../pages/LoginHistory'),

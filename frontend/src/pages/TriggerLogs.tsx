@@ -1,13 +1,21 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Bell, ArrowLeft, Trash2, RefreshCw, CheckCircle2, XCircle, Calendar, AlertCircle, SkipForward } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { readDelivery, type DeliveryOutcome } from '@timemark/shared';
 import { ChannelIcon } from '@/components/channels/ChannelIcon';
 import { fetchChannelTemplates } from '@/lib/channel-templates';
+import { EventReminderLogs } from '@/components/reminder/EventReminderLogs';
+
+/**
+ * v2.26 C：/reminders（提醒记录）并入本页 —— 两个页面展示的是同一类数据
+ * （事件提醒投递历史），只保留一个入口。tab 支持深链（?tab=reminders），
+ * 旧链接 /reminders 由 App.tsx 重定向过来。
+ */
+type LogsTab = 'delivery' | 'reminders';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } as const } };
@@ -79,6 +87,10 @@ import { formatRelativeTime } from '@/lib/format-time';
 
 export default function TriggerLogs() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<LogsTab>(() =>
+    searchParams.get('tab') === 'reminders' ? 'reminders' : 'delivery',
+  );
   // v2.25: 渠道徽章显示图标（模板 id → icon 名）
   const [templateIcons, setTemplateIcons] = useState<Record<string, string>>({});
 
@@ -88,6 +100,11 @@ export default function TriggerLogs() {
   const [clearing, setClearing] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [channelFilter, setChannelFilter] = useState('');
+
+  const switchTab = (next: LogsTab) => {
+    setTab(next);
+    setSearchParams(next === 'reminders' ? { tab: 'reminders' } : {}, { replace: true });
+  };
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -217,43 +234,77 @@ export default function TriggerLogs() {
             <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
             <div>
               <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">提醒日志</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">共 {total} 条提醒记录</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                {tab === 'reminders' ? '事件维度的提醒发送记录' : `共 ${total} 条提醒记录`}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={retryAllFailed} disabled={retryingAll}>
-              {retryingAll ? <RefreshCw size={16} className="mr-1 animate-spin" /> : null}
-              {retryingAll ? '重试中' : '重试全部失败'}
-            </Button>
-            <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={exportCsv}>
-              导出 CSV
-            </Button>
-            <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={fetchLogs} disabled={loading}>
-              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-            </Button>
-            <Button variant="ghost" size="sm" className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={clearLogs} disabled={clearing || logs.length === 0}>
-              <Trash2 size={16} className="mr-1" />
-              清空
-            </Button>
-          </div>
+          {tab === 'delivery' && (
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={retryAllFailed} disabled={retryingAll}>
+                {retryingAll ? <RefreshCw size={16} className="mr-1 animate-spin" /> : null}
+                {retryingAll ? '重试中' : '重试全部失败'}
+              </Button>
+              <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={exportCsv}>
+                导出 CSV
+              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={fetchLogs} disabled={loading}>
+                <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+              </Button>
+              <Button variant="ghost" size="sm" className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={clearLogs} disabled={clearing || logs.length === 0}>
+                <Trash2 size={16} className="mr-1" />
+                清空
+              </Button>
+            </div>
+          )}
         </div>
       </header>
-      <div className="max-w-4xl mx-auto px-6 mt-3 flex flex-wrap gap-2">
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border text-sm" aria-label="状态筛选">
-          <option value="">全部状态</option>
-          <option value="delivered">成功</option>
-          <option value="partial">部分失败</option>
-          <option value="failed">失败</option>
-          <option value="skipped">跳过</option>
-        </select>
-        <input
-          value={channelFilter}
-          onChange={(e) => setChannelFilter(e.target.value)}
-          placeholder="渠道筛选"
-          className="h-11 px-3 rounded-xl border text-sm"
-          aria-label="渠道筛选"
-        />
+      <div className="max-w-4xl mx-auto px-6 mt-3">
+        <div className="inline-flex rounded-full glass-panel p-1 ring-1 ring-black/5 dark:ring-white/10" role="tablist" aria-label="日志类型">
+          {([
+            ['delivery', '投递明细'],
+            ['reminders', '事件提醒'],
+          ] as Array<[LogsTab, string]>).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
+              onClick={() => switchTab(value)}
+              className={`px-4 h-9 rounded-full text-sm font-medium transition-colors ${
+                tab === value
+                  ? 'bg-primary-500 text-white shadow'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
+      {tab === 'delivery' && (
+        <div className="max-w-4xl mx-auto px-6 mt-3 flex flex-wrap gap-2">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 px-3 rounded-xl border text-sm" aria-label="状态筛选">
+            <option value="">全部状态</option>
+            <option value="delivered">成功</option>
+            <option value="partial">部分失败</option>
+            <option value="failed">失败</option>
+            <option value="skipped">跳过</option>
+          </select>
+          <input
+            value={channelFilter}
+            onChange={(e) => setChannelFilter(e.target.value)}
+            placeholder="渠道筛选"
+            className="h-11 px-3 rounded-xl border text-sm"
+            aria-label="渠道筛选"
+          />
+        </div>
+      )}
+      {tab === 'reminders' ? (
+        <main className="max-w-4xl mx-auto px-6 py-10 mt-2">
+          <EventReminderLogs />
+        </main>
+      ) : (
       <main className="max-w-4xl mx-auto px-6 py-10 mt-2">
         {loading ? (
           <div className="space-y-4">
@@ -386,6 +437,7 @@ export default function TriggerLogs() {
           </motion.div>
         )}
       </main>
+      )}
     </motion.div>
   );
 }

@@ -1,9 +1,9 @@
 import type { TranslationKey } from '@/i18n/resources/zh';
 import {
   LayoutDashboard, CalendarCheck, BarChart3, FileBarChart, ListTodo, MessageCircleQuestion,
-  Bell, Cable, ScrollText, BellRing, FileStack, Inbox, Megaphone,
+  Bell, Cable, BellRing, FileStack, Inbox, Megaphone,
   AlarmClock, Package, Wrench, FileText, Flame, Pill, Target, Users, CalendarDays, CalendarRange,
-  Sparkles, Bot, HeartPulse, Activity, Shield, KeyRound, BookOpen, Rocket, Settings, Container, Cpu,
+  Bot, HeartPulse, Activity, Shield, KeyRound, BookOpen, Rocket, Settings, Container, Cpu,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -53,9 +53,10 @@ export const NAV_GROUPS: NavGroup[] = [
     id: 'reminders',
     labelKey: 'nav.group.reminders',
     items: [
-      { path: '/reminders', icon: Bell, labelKey: 'nav.reminders', primary: true },
+      // v2.26 C：原 /reminders（提醒记录）并入 /trigger-logs 的「事件提醒」tab，
+      // 底部栏主位直接指向合并后的页面。
+      { path: '/trigger-logs', icon: Bell, labelKey: 'nav.reminders', primary: true },
       { path: '/channels', icon: Cable, labelKey: 'nav.channels' },
-      { path: '/trigger-logs', icon: ScrollText, labelKey: 'nav.triggerLogs' },
       { path: '/notification-rules', icon: BellRing, labelKey: 'nav.notificationRules' },
       { path: '/templates', icon: FileStack, labelKey: 'nav.templates' },
       { path: '/inbox', icon: Inbox, labelKey: 'nav.inbox' },
@@ -82,7 +83,7 @@ export const NAV_GROUPS: NavGroup[] = [
     id: 'system',
     labelKey: 'nav.group.system',
     items: [
-      { path: '/assistant', icon: Sparkles, labelKey: 'nav.assistant' },
+      // v2.26 C：/assistant 页删除 —— AssistantDock 全局承载，入口只剩一个。
       { path: '/local-ai', icon: Cpu, labelKey: 'nav.localAi' },
       { path: '/agent-console', icon: Bot, labelKey: 'nav.agentConsole' },
       { path: '/data-health', icon: HeartPulse, labelKey: 'nav.dataHealth' },

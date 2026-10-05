@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
 
 /**
- * 提醒记录页面字段绑定回归证明：
+ * 「事件提醒」列表字段绑定回归证明（v2.26 C：原 /reminders 页面并入
+ * /trigger-logs 的「事件提醒」tab，被测对象是抽取出的 EventReminderLogs）：
  * - `GET /events/reminder-logs` 返回 `created_at`（端点没有 `sent_at`），
- *   页面必须按 `created_at` 渲染真实相对时间，绝不出现 Invalid Date / undefined。
+ *   列表必须按 `created_at` 渲染真实相对时间，绝不出现 Invalid Date / undefined。
  * - 同一次 SELECT 里是 `channel_results`（不是 `channel`）与 `error_message`（不是 `message`），
- *   页面必须按真实字段渲染。
+ *   组件必须按真实字段渲染。
  * - `event_trigger_logs.channel_results` 在 schema 里是 JSONB（`shared/src/schema.pg.sql:216`），
  *   线上端点把它作为**已解析的 JSON 对象**下发（`typeof === 'object'`）；只有 v14 迁移建出的
  *   旧库才会是 TEXT/JJSON 字符串。因此**对象形态才是主用例**，字符串形态是旧库兼容分支 ——
@@ -24,19 +24,11 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import { api } from '@/lib/api';
-import Reminders from './Reminders';
+import { EventReminderLogs } from '@/components/reminder/EventReminderLogs';
 
 const getMock = vi.mocked(api.get);
 
-function renderPage() {
-  return render(
-    <BrowserRouter>
-      <Reminders />
-    </BrowserRouter>,
-  );
-}
-
-describe('Reminders page', () => {
+describe('EventReminderLogs（原提醒记录页）', () => {
   beforeEach(() => {
     getMock.mockReset();
   });
@@ -55,7 +47,7 @@ describe('Reminders page', () => {
       },
     ] as never);
 
-    renderPage();
+    render(<EventReminderLogs />);
 
     expect(await screen.findByRole('heading', { name: /周年纪念/ })).toBeInTheDocument();
     expect(await screen.findByText('刚刚')).toBeInTheDocument();
@@ -76,7 +68,7 @@ describe('Reminders page', () => {
       },
     ] as never);
 
-    renderPage();
+    render(<EventReminderLogs />);
 
     expect(await screen.findByRole('heading', { name: /服务器续费/ })).toBeInTheDocument();
     expect(await screen.findByText('2小时前')).toBeInTheDocument();
@@ -98,7 +90,7 @@ describe('Reminders page', () => {
       },
     ] as never);
 
-    renderPage();
+    render(<EventReminderLogs />);
 
     expect(await screen.findByRole('heading', { name: /旧库事件/ })).toBeInTheDocument();
     expect(screen.getByText(/渠道: 邮件、Telegram/)).toBeInTheDocument();
@@ -124,7 +116,7 @@ describe('Reminders page', () => {
       },
     ] as never);
 
-    renderPage();
+    render(<EventReminderLogs />);
 
     expect(await screen.findByText('部分失败')).toBeInTheDocument();
     expect(screen.queryByText('成功')).not.toBeInTheDocument();
@@ -151,7 +143,7 @@ describe('Reminders page', () => {
       },
     ] as never);
 
-    renderPage();
+    render(<EventReminderLogs />);
 
     expect(await screen.findByText('失败')).toBeInTheDocument();
     // 渠道行只列真实渠道：email 在、_quiet_hours 不在
@@ -173,7 +165,7 @@ describe('Reminders page', () => {
       },
     ] as never);
 
-    renderPage();
+    render(<EventReminderLogs />);
 
     expect(await screen.findByText('已跳过')).toBeInTheDocument();
     expect(screen.queryByText('失败')).not.toBeInTheDocument();
@@ -189,7 +181,7 @@ describe('Reminders page', () => {
       { id: 8, event_id: 24, event_name: '缺字段', status: 'success', error_message: null, created_at: new Date().toISOString() },
     ] as never);
 
-    renderPage();
+    render(<EventReminderLogs />);
 
     for (const name of ['数组形态', '畸形字符串', '空字符串', '空值', '缺字段']) {
       expect(await screen.findByRole('heading', { name: new RegExp(name) })).toBeInTheDocument();

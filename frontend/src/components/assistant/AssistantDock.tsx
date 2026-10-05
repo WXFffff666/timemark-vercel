@@ -9,8 +9,8 @@ import { AssistantPanel } from './AssistantPanel';
  * checkbox 109: a dockable assistant panel available on every authenticated page.
  *
  * It is a self-contained instance (own `useAssistant`), mounted once from App. It is hidden on
- * the dedicated /assistant page (which hosts the full panel) and on unauthenticated routes.
- * Opening the panel is the only thing that loads the tool registry - no page load issues a call.
+ * unauthenticated routes only (the dedicated /assistant page was removed in v2.26 — the dock
+ * is the single entry). Opening the panel is the only thing that loads the tool registry.
  */
 export function AssistantDock() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -24,7 +24,6 @@ export function AssistantDock() {
   }, [open, loadTools]);
 
   const excluded =
-    location.pathname === '/assistant' ||
     location.pathname === '/login' ||
     location.pathname.startsWith('/share/') ||
     location.pathname.startsWith('/embed/');

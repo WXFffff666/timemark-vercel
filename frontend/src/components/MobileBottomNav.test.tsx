@@ -68,7 +68,8 @@ describe('导航可达性', () => {
     expect(entryButtons).toHaveLength(NAV_ALL_PATHS.length);
 
     // 逐个点名曾经失联的页面，确保它们真的出现在面板里
-    for (const name of ['Cron 监控', '数据健康', '今日一览', 'AI 助手', '智能体控制台', '问答', '农历节日', 'Docker 迁移']) {
+    // （v2.26 C：/assistant 页删除、入口只剩 dock，面板里不再有「AI 助手」）
+    for (const name of ['Cron 监控', '数据健康', '今日一览', '本地 AI', '智能体控制台', '智能问答', '农历节日', 'Docker 迁移']) {
       expect(within(dialog).getByRole('button', { name })).toBeInTheDocument();
     }
   });
