@@ -37,6 +37,12 @@ export default function Calendar() {
   });
   const [listScope, setListScope] = useState<ListScope>('month');
   const [cursor, setCursor] = useState(() => {
+    const raw = searchParams.get('date');
+    if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      const [y, m, d] = raw.split('-').map(Number);
+      const parsed = new Date(y, m - 1, d);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
@@ -76,16 +82,22 @@ export default function Calendar() {
   // v2.27 F3：URL 与 UI 单向同步（replace）——selectDate/导航不再各自写 URL，
   // 刷新/分享始终还原当前视图与日期。
   useEffect(() => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    // 月/年视图以 cursor 的月份锚点写 URL（翻月后刷新仍停在那一月）；日视图用选中日
+    const urlDate =
+      viewMode === 'day'
+        ? selectedKey
+        : `${cursor.getFullYear()}-${pad(cursor.getMonth() + 1)}-01`;
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.set('view', viewMode);
-        next.set('date', selectedKey);
+        next.set('date', urlDate);
         return next;
       },
       { replace: true },
     );
-  }, [viewMode, selectedKey, setSearchParams]);
+  }, [viewMode, selectedKey, cursor, setSearchParams]);
 
   // v2.27 F1：键盘快捷键放在函数定义之后，依赖补全避免过期闭包；带修饰键忽略
   //（否则 Alt+Left 等浏览器快捷键会被吞）。

@@ -445,9 +445,13 @@ export async function getEventsByUserIdPaginated(
   const result = await query(
     `SELECT *, COUNT(*) OVER() AS total_count FROM events
      WHERE user_id = $1
-       AND profile_id = COALESCE($2::int, profile_id)
+       -- 无档案行（profile_id IS NULL）在 profileId 省略时必须保留：
+       -- COALESCE 写法对 NULL 行求值为 NULL（NULL=NULL 不为真），会把它们全部滤掉。
+       AND ($2::int IS NULL OR profile_id = $2::int)
        AND ($3::text IS NULL OR type = $3::text)
-       AND ($4::boolean = FALSE OR next_occurrence IS NOT NULL)
+       -- upcoming 语义：循环事件看 next_occurrence；一次性事件看日期在今天及以后
+       --（next_occurrence 仅循环事件维护，既有设计）
+       AND ($4::boolean = FALSE OR next_occurrence IS NOT NULL OR date >= CURRENT_DATE)
        AND ($8::text IS NULL OR tags::text ILIKE '%' || $8::text || '%')
      ORDER BY
        CASE WHEN $5::text = 'created_at' THEN created_at::text END ASC NULLS LAST,
