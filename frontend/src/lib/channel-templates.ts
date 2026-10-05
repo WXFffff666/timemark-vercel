@@ -33,6 +33,8 @@ export interface ChannelTemplate {
   /** 配置表单的字段定义，Channels 页据此渲染 */
   fields?: ChannelField[];
   docsUrl?: string;
+  /** 官方集成页面（优先于 docsUrl，v2.28 渠道向导直达链接用） */
+  officialUrl?: string;
 }
 
 /**

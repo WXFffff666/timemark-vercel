@@ -281,6 +281,11 @@ export const channelToAccountType: Record<string, string> = {
   'kook': 'kook',
   'fanbook': 'fanbook',
   'homeassistant': 'homeassistant',
+  'pushbullet': 'pushbullet',
+  'join': 'join',
+  'pushsafer': 'pushsafer',
+  'webex': 'webex',
+  'notifiarr': 'notifiarr',
 };
 
 /**
@@ -338,6 +343,11 @@ export const DISPATCHABLE_CHANNELS = new Set<string>([
   'kook',
   'fanbook',
   'homeassistant',
+  'pushbullet',
+  'join',
+  'pushsafer',
+  'webex',
+  'notifiarr',
   // Browser Web Push (checkbox 84) — VAPID, per-user subscriptions
   'web_push',
   // Legacy aliases（旧事件里可能仍存有这些渠道 ID）
@@ -400,6 +410,12 @@ export const FALLBACK_DISPATCHABLE_CHANNELS = new Set<string>([
   'kook',
   'fanbook',
   'homeassistant',
+  // v2.28 batch
+  'pushbullet',
+  'join',
+  'pushsafer',
+  'webex',
+  'notifiarr',
   // Browser Web Push (checkbox 84) — VAPID, per-user subscriptions
   'web_push',
   // Legacy aliases（旧事件里可能仍存有这些渠道 ID）
@@ -610,6 +626,18 @@ function getChannelConfigFromAccount(
       return (account.webhook && account.token && account.chat_id)
         ? { webhook: account.webhook, token: account.token, chat_id: account.chat_id }
         : null;
+
+    // v2.28 batch
+    case 'pushbullet':
+      return account.token ? { token: account.token } : null;
+    case 'join':
+      // token = Api Key, chat_id = Device ID（可选，留空 = group.all）
+      return account.token ? { token: account.token, chat_id: account.chat_id } : null;
+    case 'pushsafer':
+      return account.token ? { token: account.token } : null;
+    case 'webex':
+    case 'notifiarr':
+      return account.webhook ? { webhook: account.webhook } : null;
 
     default:
       return null;
@@ -1155,6 +1183,17 @@ export async function sendNotifications(
           await retryWithBackoff(() => sendHomeAssistantNotification(
             mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id,
           ));
+        // v2.28 batch: PushBullet / Join / PushSafer / Webex / Notifiarr
+        else if (ch === 'pushbullet' && chConfig.token)
+          await retryWithBackoff(() => sendPushBulletNotification(mappedEvent, chConfig.token));
+        else if (ch === 'join' && chConfig.token)
+          await retryWithBackoff(() => sendJoinNotification(mappedEvent, chConfig.token, chConfig.chat_id));
+        else if (ch === 'pushsafer' && chConfig.token)
+          await retryWithBackoff(() => sendPushSaferNotification(mappedEvent, chConfig.token));
+        else if (ch === 'webex' && chConfig.webhook)
+          await retryWithBackoff(() => sendWebexNotification(mappedEvent, chConfig.webhook));
+        else if (ch === 'notifiarr' && chConfig.webhook)
+          await retryWithBackoff(() => sendNotifiarrNotification(mappedEvent, chConfig.webhook));
         // Browser Web Push (checkbox 84): VAPID, per-user subscriptions.
         else if (ch === 'web_push' && chConfig.subscriptions) {
           const delivery = await deliverWebPush(chConfig.subscriptions, buildWebPushPayload(mappedEvent), userId);
@@ -1419,6 +1458,17 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any, ev
     await sendFanbookNotification(mappedEvent, chConfig.webhook);
   else if (ch === 'homeassistant' && chConfig.webhook && chConfig.token && chConfig.chat_id)
     await sendHomeAssistantNotification(mappedEvent, chConfig.webhook, chConfig.token, chConfig.chat_id);
+  // v2.28 batch: PushBullet / Join / PushSafer / Webex / Notifiarr
+  else if (ch === 'pushbullet' && chConfig.token)
+    await sendPushBulletNotification(mappedEvent, chConfig.token);
+  else if (ch === 'join' && chConfig.token)
+    await sendJoinNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'pushsafer' && chConfig.token)
+    await sendPushSaferNotification(mappedEvent, chConfig.token);
+  else if (ch === 'webex' && chConfig.webhook)
+    await sendWebexNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'notifiarr' && chConfig.webhook)
+    await sendNotifiarrNotification(mappedEvent, chConfig.webhook);
   else if (ch === 'generic_webhook' && chConfig.webhook)
     await sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch);
   else if (ch === 'synologychat' && chConfig.webhook)
@@ -1486,3 +1536,10 @@ export function isAccountSuspended(account: { suspended_until?: string | Date | 
   const until = new Date(account.suspended_until);
   return Number.isFinite(until.getTime()) && until.getTime() > Date.now();
 }
+import {
+  sendPushBulletNotification,
+  sendJoinNotification,
+  sendPushSaferNotification,
+  sendWebexNotification,
+  sendNotifiarrNotification,
+} from './extended-channels.service.js';

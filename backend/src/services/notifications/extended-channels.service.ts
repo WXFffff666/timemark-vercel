@@ -150,3 +150,110 @@ export async function testHomeAssistantChannel(baseUrl: string, token: string, s
     return { success: false, message: status ? `HA 错误（HTTP ${status}）：${message}` : `连接失败：${message}` };
   }
 }
+
+// ============ v2.28 batch：PushBullet / Join / PushSafer / Webex / Notifiarr ============
+// 与 batch 3 同一约定：send* 抛错 = 失败；test* 永不抛错。全部纯 axios 单 POST。
+
+// ---- PushBullet：account.token = Access-Token ----
+
+export async function sendPushBulletNotification(event: any, token: string): Promise<void> {
+  await axios.post(
+    'https://api.pushbullet.com/v2/pushes',
+    { type: 'note', title: event.name ?? 'TimeMark 提醒', body: buildMessage(event) },
+    { headers: { 'Access-Token': token, 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+
+export async function testPushBulletChannel(token: string): Promise<TestConnectionResult> {
+  if (!token) return { success: false, message: 'Access-Token 不能为空' };
+  try {
+    await axios.post(
+      'https://api.pushbullet.com/v2/pushes',
+      { type: 'note', title: 'TimeMark 渠道测试', body: '如果你看到这条消息，说明 PushBullet 渠道已通。' },
+      { headers: { 'Access-Token': token, 'Content-Type': 'application/json' }, timeout: 10000 },
+    );
+    return { success: true, message: '测试消息已发送（请在 PushBullet 客户端确认）' };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    return { success: false, message: status ? `PushBullet 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+  }
+}
+
+// ---- Join (joaoapps)：account.token = Api Key，account.chat_id = Device ID（可选，留空发全部设备）----
+
+export async function sendJoinNotification(event: any, apiKey: string, deviceId: string): Promise<void> {
+  await axios.post(
+    'https://joinjoaomgcd.appspot.com/_ah/api/messaging/v1/sendPush',
+    { title: event.name ?? 'TimeMark 提醒', text: buildMessage(event) },
+    {
+      params: deviceId ? { apikey: apiKey, deviceId } : { apikey: apiKey, deviceId: 'group.all' },
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+    },
+  );
+}
+
+export async function testJoinChannel(apiKey: string, deviceId: string): Promise<TestConnectionResult> {
+  if (!apiKey) return { success: false, message: 'Api Key 不能为空' };
+  try {
+    await axios.post(
+      'https://joinjoaomgcd.appspot.com/_ah/api/messaging/v1/sendPush',
+      { title: 'TimeMark 渠道测试', text: '如果你看到这条消息，说明 Join 渠道已通。' },
+      {
+        params: deviceId ? { apikey: apiKey, deviceId } : { apikey: apiKey, deviceId: 'group.all' },
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      },
+    );
+    return { success: true, message: '测试消息已发送（请在 Join 客户端确认）' };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    return { success: false, message: status ? `Join 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+  }
+}
+
+// ---- PushSafer：account.token = Private Key ----
+
+export async function sendPushSaferNotification(event: any, privateKey: string): Promise<void> {
+  await axios.post(
+    'https://www.pushsafer.com/api',
+    { k: privateKey, t: event.name ?? 'TimeMark 提醒', m: buildMessage(event) },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+
+export async function testPushSaferChannel(privateKey: string): Promise<TestConnectionResult> {
+  if (!privateKey) return { success: false, message: 'Private Key 不能为空' };
+  try {
+    await axios.post(
+      'https://www.pushsafer.com/api',
+      { k: privateKey, t: 'TimeMark 渠道测试', m: '如果你看到这条消息，说明 PushSafer 渠道已通。' },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
+    );
+    return { success: true, message: '测试消息已发送（请在 PushSafer 客户端确认）' };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    return { success: false, message: status ? `PushSafer 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+  }
+}
+
+// ---- Webex：account.webhook = Incoming Webhook 完整 URL（Discord 同构）----
+
+export async function sendWebexNotification(event: any, webhook: string): Promise<void> {
+  await axios.post(
+    webhook,
+    { markdown: buildMessage(event) },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+
+// ---- Notifiarr：account.webhook = Passthrough 通道完整 URL ----
+
+export async function sendNotifiarrNotification(event: any, webhook: string): Promise<void> {
+  await axios.post(
+    webhook,
+    { payload: { title: event.name ?? 'TimeMark 提醒', message: buildMessage(event) } },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+

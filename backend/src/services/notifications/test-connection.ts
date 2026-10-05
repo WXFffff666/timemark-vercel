@@ -12,7 +12,13 @@ import { isPushbackSuccess } from './pushback.service.js';
 import { SIMPLEPUSH_ENDPOINT } from './simplepush.service.js';
 import { normalizeZulipOrgUrl } from './zulip.service.js';
 import { sendFcmMessage } from './fcm.service.js';
-import { testWhatsAppCloudChannel, testHomeAssistantChannel } from './extended-channels.service.js';
+import {
+  testWhatsAppCloudChannel,
+  testHomeAssistantChannel,
+  testPushBulletChannel,
+  testJoinChannel,
+  testPushSaferChannel,
+} from './extended-channels.service.js';
 
 export interface TestConnectionResult {
   success: boolean;
@@ -290,6 +296,33 @@ async function testWebhookChannel(type: string, webhook: string, secret?: string
         return { success: false, message: `服务器返回状态码: ${response.status}`, latency };
       }
 
+      // v2.28 batch: Webex 收 { markdown }；Notifiarr 收 { payload }
+      case 'webex': {
+        const response = await axios.post(
+          webhook,
+          { markdown: `${WEBHOOK_TEST_TEXT}（Webex 渠道）` },
+          { headers: jsonHeaders, timeout: 10000 },
+        );
+        const latency = Date.now() - start;
+        if (response.status >= 200 && response.status < 300) {
+          return { success: true, message: 'Webex 连接成功，请到 Space 确认测试消息', latency };
+        }
+        return { success: false, message: `Webex 返回状态码: ${response.status}`, latency };
+      }
+
+      case 'notifiarr': {
+        const response = await axios.post(
+          webhook,
+          { payload: { title: 'TimeMark 渠道测试', message: `${WEBHOOK_TEST_TEXT}（Notifiarr 渠道）` } },
+          { headers: jsonHeaders, timeout: 10000 },
+        );
+        const latency = Date.now() - start;
+        if (response.status >= 200 && response.status < 300) {
+          return { success: true, message: 'Notifiarr 连接成功，请到通知目标确认测试消息', latency };
+        }
+        return { success: false, message: `Notifiarr 返回状态码: ${response.status}`, latency };
+      }
+
       case 'generic_webhook':
       default: {
         const response = await axios.post(
@@ -430,6 +463,14 @@ async function testTokenChannel(
 
     case 'homeassistant':
       return await testHomeAssistantChannel(webhook!, token, chatId!);
+
+    // v2.28 batch
+    case 'pushbullet':
+      return await testPushBulletChannel(token!);
+    case 'join':
+      return await testJoinChannel(token!, chatId!);
+    case 'pushsafer':
+      return await testPushSaferChannel(token!);
 
     default:
       return { success: false, message: `暂不支持测试 ${type} 渠道` };

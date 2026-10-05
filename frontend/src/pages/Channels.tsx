@@ -90,6 +90,9 @@ export default function Channels() {
   const [testingConnection, setTestingConnection] = useState<string | null>(null);
   const [testingConfig, setTestingConfig] = useState(false);
   const [configTestMessage, setConfigTestMessage] = useState<string | null>(null);
+  // v2.28：三步向导 —— 配置弹窗内 ②填写 → ③测试并保存（①选渠道复用现有类型弹窗）
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
+  const [directTestResult, setDirectTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Connection status tracking
   interface ConnectionTestResult {
@@ -295,6 +298,8 @@ export default function Channels() {
     setSelectedTemplate(template);
     setShowTemplateModal(false);
     setConfigTestMessage(null);
+    setWizardStep(1);
+    setDirectTestResult(null);
     
     const initialForm: Record<string, string> = { name: '' };
     template.fields.forEach(field => {
@@ -311,6 +316,47 @@ export default function Channels() {
       setModalBackStack([...modalBackStack, 'template', 'config']);
       setShowConfigModal(true);
     }, 0);
+  };
+
+  // v2.28：三步向导的必填校验（编辑模式下已配置的密文字段留空 = 不修改，视为已填）
+  const missingRequiredFields = (selectedTemplate?.fields ?? [])
+    .filter((f) => {
+      if (!f.required) return false;
+      const v = (configForm[f.name] || '').trim();
+      if (v) return false;
+      if (f.name === 'token') return !selectedAccount?.tokenConfigured;
+      if (f.name === 'secret') return !selectedAccount?.secretConfigured;
+      return true;
+    })
+    .map((f) => f.label);
+
+  // v2.28：保存前直测（/channels/test 支持不带 accountId 的直连配置测试，SMTP 同款）
+  const testConfigDirect = async () => {
+    if (!selectedTemplate) return;
+    setTestingConfig(true);
+    setDirectTestResult(null);
+    try {
+      const payload: Record<string, unknown> = {
+        type: selectedTemplate.id,
+        configMethod: selectedTemplate.configMethod,
+      };
+      for (const field of selectedTemplate.fields) {
+        const dest = field.column ?? field.name;
+        const value = (configForm[field.name] || '').trim();
+        if (!value) continue;
+        if (dest === 'webhook') payload.webhook = value;
+        else if (dest === 'token') payload.token = value;
+        else if (dest === 'secret') payload.secret = value;
+        else if (dest === 'chat_id') payload.chatId = value;
+      }
+      if (selectedAccount?.id) payload.accountId = Number(selectedAccount.id);
+      const result = await api.post<{ success: boolean; message: string }>('/channels/test', payload);
+      setDirectTestResult({ ok: true, message: result?.message || '测试连接成功' });
+    } catch (error: any) {
+      setDirectTestResult({ ok: false, message: error?.message || '测试连接失败' });
+    } finally {
+      setTestingConfig(false);
+    }
   };
 
   // Handle going back in modal navigation
@@ -1151,9 +1197,73 @@ export default function Channels() {
                 </DialogTitle>
               </div>
             </div>
+            {/* v2.28：三步向导步骤指示 */}
+            <div className="flex items-center gap-2 mt-3 text-xs" aria-label="配置步骤">
+              {(['填写参数', '测试并保存'] as const).map((label, i) => {
+                const stepNo = (i + 1) as 1 | 2;
+                const active = wizardStep === stepNo;
+                const done = wizardStep > stepNo;
+                return (
+                  <span
+                    key={label}
+                    className={`px-2.5 py-1 rounded-full font-medium ${
+                      active
+                        ? 'bg-primary-500 text-white'
+                        : done
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                          : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                    }`}
+                  >
+                    {i + 1}. {label}{done ? ' ✓' : ''}
+                  </span>
+                );
+              })}
+            </div>
           </DialogHeader>
 
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain px-5 sm:px-6 py-4 space-y-4 scroll-smooth touch-pan-y">
+          {wizardStep === 2 ? (
+            /* ---------- v2.28 步骤②：测试并保存 ---------- */
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-2">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  {selectedTemplate?.name} · {configForm.name || '(未命名)'}
+                </p>
+                <ul className="text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                  {(selectedTemplate?.fields ?? []).map((f) => {
+                    const v = (configForm[f.name] || '').trim();
+                    const secretConfigured = Boolean(selectedAccount?.secretConfigured);
+                    const tokenConfigured = Boolean(selectedAccount?.tokenConfigured);
+                    const configured = Boolean(selectedAccount) && (f.name === 'token' ? tokenConfigured : f.name === 'secret' ? secretConfigured : false);
+                    const shown = v
+                      ? (f.type === 'password' ? '••••••••（已填写）' : v)
+                      : configured ? '已配置，保持不变' : '（空）';
+                    return <li key={f.name}>{f.label}：{shown}</li>;
+                  })}
+                </ul>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" className="rounded-xl min-h-11" onClick={() => void testConfigDirect()} disabled={testingConfig}>
+                  {testingConfig ? (<><Loader2 size={16} className="mr-2 animate-spin" />测试中…</>) : '发送测试消息'}
+                </Button>
+              </div>
+              {directTestResult && (
+                <p className={`text-sm ${directTestResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`} role="status">
+                  {directTestResult.ok ? '✓ ' : '✗ '}{directTestResult.message}
+                </p>
+              )}
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                测试成功后点击右下角「{selectedAccount ? '保存修改' : '添加渠道'}」完成绑定；测试失败请返回上一步核对参数。
+              </p>
+            </div>
+          ) : (
+            /* ---------- 步骤①：填写参数（原有内容 + 官方链接 + 必填校验提示） ---------- */
+            <div className="space-y-4">
+            {missingRequiredFields.length > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400" role="status">
+                还需填写：{missingRequiredFields.join('、')}
+              </p>
+            )}
             <div>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                 渠道名称 *
@@ -1301,6 +1411,20 @@ export default function Channels() {
             );
             })}
 
+            {/* v2.28：官方获取入口（docsUrl / officialUrl，元数据自带） */}
+            {(selectedTemplate?.officialUrl || selectedTemplate?.docsUrl) && (
+              <a
+                href={selectedTemplate?.officialUrl ?? selectedTemplate?.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600"
+              >
+                <BookOpen size={14} />
+                前往 {selectedTemplate?.name} 官方页面获取 Token / Webhook
+                <ExternalLink size={12} />
+              </a>
+            )}
+
             {selectedTemplate?.id === 'smtp' && (
               <div className="space-y-3">
                 <Button
@@ -1351,6 +1475,8 @@ export default function Channels() {
                 <ExternalLink size={12} />
               </a>
             )}
+            </div>
+          )}
           </div>
 
           <div className="shrink-0 px-5 sm:px-6 py-4 border-t border-slate-200/80 dark:border-slate-700/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur flex gap-3">
@@ -1369,6 +1495,17 @@ export default function Channels() {
             >
               取消
             </Button>
+            {wizardStep === 1 ? (
+              /* v2.28 步骤①主按钮：进入测试步骤（必填未齐时禁用） */
+              <Button
+                variant="vision"
+                className="flex-1 h-12 rounded-2xl font-bold shadow-lg shadow-primary-500/30"
+                onClick={() => { setDirectTestResult(null); setWizardStep(2); }}
+                disabled={missingRequiredFields.length > 0 || !(configForm.name || '').trim()}
+              >
+                下一步：测试连接
+              </Button>
+            ) : (
             <Button
               variant="vision"
               className="flex-1 h-12 rounded-2xl font-bold shadow-lg shadow-primary-500/30"
@@ -1384,6 +1521,7 @@ export default function Channels() {
                 selectedAccount ? '保存修改' : '添加渠道'
               )}
             </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

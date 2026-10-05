@@ -49,7 +49,7 @@ vercel --prod
 
 ### 4. 数据库迁移
 
-**自动**：首次访问 API 时执行 v1–v78 增量迁移。  
+**自动**：首次访问 API 时执行 v1–v80 增量迁移。  
 **手动**（可选）：
 
 ```bash
@@ -57,7 +57,7 @@ vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-登录后打开 **设置 → 部署向导**，确认「数据库结构版本」为 **v78**。
+登录后打开 **设置 → 部署向导**，确认「数据库结构版本」为 **v80**。
 
 默认账号：`admin`，密码为你自己在 Vercel Production 环境变量里设置的 `DEFAULT_ADMIN_PASSWORD`（≥12 位、非常见默认值；**本仓库不再提供任何默认口令**，未设置时冷启动会拒绝创建管理员并记录 `ADMIN_BOOTSTRAP_REFUSED`）。首次登录会提示改密码。
 
@@ -133,7 +133,7 @@ GET https://你的域名/api/time/status?timezone=Asia/Shanghai
 
 **设置 → 部署向导 → 系统自检** 检查：
 
-- 数据库连接、结构版本（**v78**）
+- 数据库连接、结构版本（**v80**）
 - `JWT_SECRET`、`MASTER_KEY`、`CRON_SECRET`
 - Turnstile（可选）
 

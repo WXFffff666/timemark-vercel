@@ -291,4 +291,64 @@ export const CHANNEL_METADATA: Record<string, ChannelMetadata> = {
       },
     },
   },
+  // v2.28 batch：PushBullet / Join / PushSafer / Webex / Notifiarr
+  pushbullet: {
+    nameEn: 'PushBullet',
+    descriptionEn: 'Cross-platform push via PushBullet',
+    officialUrl: 'https://www.pushbullet.com/#settings/account',
+    fields: {
+      token: {
+        labelEn: 'Access-Token',
+        helpText: '在 PushBullet 账户设置页创建 Access Token',
+      },
+    },
+  },
+  join: {
+    nameEn: 'Join',
+    descriptionEn: 'Push to Android devices via Join (joaoapps)',
+    officialUrl: 'https://joinjoaomgcd.appspot.com/',
+    fields: {
+      token: {
+        labelEn: 'Api Key',
+        helpText: 'Join API 页生成（joinjoaomgcd.appspot.com → Join API）',
+      },
+      chat_id: {
+        labelEn: 'Device ID',
+        helpText: '可选；目标设备 ID，留空发到全部设备',
+      },
+    },
+  },
+  pushsafer: {
+    nameEn: 'PushSafer',
+    descriptionEn: 'Cross-platform push via PushSafer',
+    officialUrl: 'https://www.pushsafer.com/',
+    fields: {
+      token: {
+        labelEn: 'Private Key',
+        helpText: 'PushSafer 仪表盘的 Private（Alias）Key',
+      },
+    },
+  },
+  webex: {
+    nameEn: 'Webex',
+    descriptionEn: 'Cisco Webex Space incoming webhook',
+    officialUrl: 'https://developer.webex.com/docs/webhooks-incoming',
+    fields: {
+      webhook: {
+        labelEn: 'Incoming Webhook URL',
+        helpText: 'Webex Space → Integrations → Incoming Webhook 创建',
+      },
+    },
+  },
+  notifiarr: {
+    nameEn: 'Notifiarr',
+    descriptionEn: 'Passthrough notifications via Notifiarr',
+    officialUrl: 'https://notifiarr.com/',
+    fields: {
+      webhook: {
+        labelEn: 'Passthrough URL',
+        helpText: 'Notifiarr 自定义通知通道的完整 Passthrough URL（含 apiKey）',
+      },
+    },
+  },
 };

@@ -275,6 +275,44 @@ const webhookChannels: ChannelTemplate[] = [
       }
     ],
     docsUrl: 'https://docs.rocket.chat/docs/integrations'
+  },
+  {
+    id: 'webex',
+    name: 'Webex',
+    description: 'Cisco Webex 空间 Incoming Webhook（团队提醒）',
+    icon: 'Globe',
+    configMethod: 'webhook',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: 'Incoming Webhook URL',
+        type: 'text',
+        required: true,
+        placeholder: 'https://webexapis.com/v1/webhooks/incoming/...',
+        description: 'Webex Space 的 Incoming Webhook 完整 URL（Space → Integrations → Incoming Webhook 创建）'
+      }
+    ],
+    docsUrl: 'https://developer.webex.com/docs/webhooks-incoming'
+  },
+  {
+    id: 'notifiarr',
+    name: 'Notifiarr',
+    description: 'Notifiarr Passthrough 通知（Home Server / arr 栈常用）',
+    icon: 'Globe',
+    configMethod: 'webhook',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: 'Passthrough 通道 URL',
+        type: 'text',
+        required: true,
+        placeholder: 'https://notifiarr.com/api/v1/notification/passthrough/...',
+        description: 'Notifiarr 自定义通知通道的完整 Passthrough URL（含 apiKey）'
+      }
+    ],
+    docsUrl: 'https://notifiarr.wiki/'
   }
 ];
 
@@ -1338,6 +1376,69 @@ const tokenChannels: ChannelTemplate[] = [
       }
     ],
     docsUrl: 'https://www.home-assistant.io/integrations/notify/'
+  },
+  {
+    id: 'pushbullet',
+    name: 'PushBullet',
+    description: 'PushBullet 全平台推送（单 Access-Token）',
+    icon: 'BellRing',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Access-Token',
+        type: 'password',
+        required: true,
+        description: 'PushBullet 账户设置页生成的 Access Token'
+      }
+    ],
+    docsUrl: 'https://docs.pushbullet.com/'
+  },
+  {
+    id: 'join',
+    name: 'Join',
+    description: 'Join (joaoapps) Android 设备推送',
+    icon: 'Smartphone',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Api Key',
+        type: 'password',
+        required: true,
+        description: 'Join 的 API Key（joinjoaomgcd.appspot.com → Join API 页）'
+      },
+      {
+        name: 'chat_id',
+        label: 'Device ID（可选）',
+        type: 'text',
+        required: false,
+        placeholder: '留空 = 发到全部设备',
+        description: '目标设备的 Device ID（Join API 页可查）',
+        column: 'chat_id'
+      }
+    ],
+    docsUrl: 'https://joaoapps.com/join/api/'
+  },
+  {
+    id: 'pushsafer',
+    name: 'PushSafer',
+    description: 'PushSafer 跨平台推送（单 Private Key）',
+    icon: 'BellRing',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Private Key',
+        type: 'password',
+        required: true,
+        description: 'PushSafer 仪表盘上的 Private（Alias）Key'
+      }
+    ],
+    docsUrl: 'https://www.pushsafer.com/en/pushapi'
   }
 ];
 
