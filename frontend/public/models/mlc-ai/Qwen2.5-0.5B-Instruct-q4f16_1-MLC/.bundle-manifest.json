@@ -1,0 +1,50 @@
+{
+  "id": "mlc-ai/Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
+  "engine": "webllm",
+  "revision": "32ff081fe7e4dfe4ffb167b94c66fdf11e02b8ad",
+  "bundledAt": "2026-10-04T02:17:20.942Z",
+  "weights": [
+    {
+      "file": "params_shard_0.bin",
+      "bytes": 68067328
+    },
+    {
+      "file": "params_shard_1.bin",
+      "bytes": 33234176
+    },
+    {
+      "file": "params_shard_2.bin",
+      "bytes": 33505280
+    },
+    {
+      "file": "params_shard_3.bin",
+      "bytes": 33053696
+    },
+    {
+      "file": "params_shard_4.bin",
+      "bytes": 33020928
+    },
+    {
+      "file": "params_shard_5.bin",
+      "bytes": 29211648
+    },
+    {
+      "file": "params_shard_6.bin",
+      "bytes": 33297408
+    },
+    {
+      "file": "params_shard_7.bin",
+      "bytes": 14605824
+    }
+  ],
+  "smallFiles": [
+    "mlc-chat-config.json",
+    "tokenizer_config.json",
+    "tokenizer.json",
+    "vocab.json",
+    "merges.txt",
+    "tensor-cache.json",
+    "ndarray-cache.json",
+    "Qwen2-0.5B-Instruct-q4f16_1_cs1k-webgpu.wasm"
+  ]
+}

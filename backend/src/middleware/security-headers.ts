@@ -18,7 +18,7 @@ export async function securityHeaders(c: Context, next: Next) {
   if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
     c.header(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; report-uri " +
+      "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:; upgrade-insecure-requests; report-uri " +
         cspReportUri,
     );
   } else if (cspReportUri) {

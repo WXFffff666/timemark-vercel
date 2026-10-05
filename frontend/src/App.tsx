@@ -44,6 +44,7 @@ const AskPage = lazy(() => import('./pages/Ask'));
 const TodayPage = lazy(() => import('./pages/Today'));
 const DataHealthPage = lazy(() => import('./pages/DataHealth'));
 const SharedView = lazy(() => import('./pages/SharedView'));
+const LocalAIPage = lazy(() => import('./pages/LocalAI'));
 
 function PageLoader() {
   return (
@@ -133,6 +134,7 @@ function AnimatedRoutes() {
           <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
           <Route path="/today" element={<ProtectedRoute><TodayPage /></ProtectedRoute>} />
           <Route path="/data-health" element={<ProtectedRoute><DataHealthPage /></ProtectedRoute>} />
+          <Route path="/local-ai" element={<ProtectedRoute><LocalAIPage /></ProtectedRoute>} />
           <Route path="/shared/:token" element={<SharedView />} />
           <Route path="/integrations-docs" element={<ProtectedRoute><IntegrationsDocs /></ProtectedRoute>} />
           <Route path="/cron-monitor" element={<ProtectedRoute><CronMonitor /></ProtectedRoute>} />

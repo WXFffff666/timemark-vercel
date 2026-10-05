@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, Cpu } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -46,6 +47,7 @@ export function AISettings() {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<AiConnectionTestView | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +106,19 @@ export function AISettings() {
           选择供应商，填入模型名与 Base URL（本地模型可编辑；云端地址与密钥由服务器环境变量决定）。
           「测试连接」只会发送一条极短的 ping。本地模型需运行在服务器可访问的地址上。
         </p>
+
+        {/* v79: 浏览器端本地 AI（模仿知屋 WebLLM 方案）——不走服务器，数据不出本机 */}
+        <div className="flex items-center justify-between rounded-2xl border border-violet-200 dark:border-violet-800/50 bg-violet-50/50 dark:bg-violet-900/20 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">浏览器本地推理（实验）</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Qwen2.5-0.5B 跑在浏览器 WebGPU，检索你自己的事件/文档作答——零云端调用，数据不出本机
+            </p>
+          </div>
+          <Button variant="outline" size="sm" className="rounded-full shrink-0" onClick={() => navigate('/local-ai')}>
+            <Cpu size={14} className="mr-1.5" /> 打开
+          </Button>
+        </div>
 
         <p className="text-xs text-slate-500 dark:text-slate-400" role="status">
           {loading

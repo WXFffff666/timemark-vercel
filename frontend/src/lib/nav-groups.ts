@@ -3,7 +3,7 @@ import {
   LayoutDashboard, CalendarCheck, BarChart3, FileBarChart, ListTodo, MessageCircleQuestion,
   Bell, Cable, ScrollText, BellRing, FileStack, Inbox, Megaphone,
   AlarmClock, Package, Wrench, FileText, Flame, Pill, Target, Users, CalendarDays, CalendarRange,
-  Sparkles, Bot, HeartPulse, Activity, Shield, KeyRound, BookOpen, Rocket, Settings, Container,
+  Sparkles, Bot, HeartPulse, Activity, Shield, KeyRound, BookOpen, Rocket, Settings, Container, Cpu,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -83,6 +83,7 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.system',
     items: [
       { path: '/assistant', icon: Sparkles, labelKey: 'nav.assistant' },
+      { path: '/local-ai', icon: Cpu, labelKey: 'nav.localAi' },
       { path: '/agent-console', icon: Bot, labelKey: 'nav.agentConsole' },
       { path: '/data-health', icon: HeartPulse, labelKey: 'nav.dataHealth' },
       { path: '/cron-monitor', icon: Activity, labelKey: 'nav.cronMonitor' },

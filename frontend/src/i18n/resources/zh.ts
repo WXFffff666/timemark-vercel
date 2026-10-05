@@ -31,6 +31,7 @@ export const zh = {
   'nav.calendar': '日历',
   'nav.lunarHolidays': '农历节日',
   'nav.assistant': 'AI 助手',
+  'nav.localAi': '本地 AI',
   'nav.agentConsole': '智能体控制台',
   'nav.dataHealth': '数据健康',
   'nav.cronMonitor': 'Cron 监控',

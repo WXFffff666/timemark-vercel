@@ -1,0 +1,21 @@
+{
+  "id": "Xenova/all-MiniLM-L6-v2",
+  "revision": "751bff37182d3f1213fa05d7196b954e230abad9",
+  "bundledAt": "2026-10-04T20:26:31.845Z",
+  "mainFile": {
+    "file": "onnx/model_quantized.onnx",
+    "bytes": 22972370
+  },
+  "weights": [
+    {
+      "file": "onnx/model_quantized.onnx",
+      "dtype": "q8",
+      "bytes": 22972370
+    }
+  ],
+  "smallFiles": [
+    "config.json",
+    "tokenizer.json",
+    "tokenizer_config.json"
+  ]
+}

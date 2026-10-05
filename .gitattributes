@@ -1,0 +1,3 @@
+# 模型权重为二进制：禁止 git 做任何行尾/编码转换与文本 diff（WebLLM/onnx 权重已直接入库）
+# 整个目录钉死（含 merges.txt/tokenizer.json——行尾转换会破坏 BPE merges 与哈希一致性）
+frontend/public/models/** binary

@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.24.0 (2026-10-05) — 本地 AI：浏览器端推理（模仿知屋方案）
+
+### 新增
+
+- **本地 AI（实验）页面** `/local-ai`：把知屋已验证的浏览器端本地推理方案移植过来——
+  Qwen2.5-0.5B-Instruct（q4f16，WebLLM 0.2.85）跑在浏览器 **WebGPU**（实测 40+ tok/s），
+  向量化用 all-MiniLM-L6-v2 q8（transformers.js 4.2.0，384 维）。**数据全程不出本机、
+  零云端 API 调用**——个人日历数据比聊天记录更私密，这正是它相对云端 AI 的存在理由。
+- **知识库 RAG**：知识库 = 你自己的事件 + 文档；「问问你的数据」按检索增强作答，
+  答案只依据知识库并带来源徽章，防小模型幻觉。无 WebGPU 时自动降级为纯检索
+  （关键词/向量匹配），永不白屏。
+- **增量向量索引**：IndexedDB 逐条存 `{id, contentHash, vector}`，构建时哈希未变
+  即跳过——第一次「让它跑一阵子」，之后同一浏览器秒级完成；知屋同款契约。
+- **权重随站点同源直发**：`frontend/public/models/`（mlc-ai 278MB + MiniLM 23MB，
+  逐字节复制自知屋仓库，sha256 与 HF lfs.oid 对齐），构建零下载、运行时零第三方 CDN，
+  首次拉取后浏览器 IndexedDB 永久缓存、离线可用。`.gitattributes` 钉死二进制。
+- 设计与差异说明：[docs/LOCAL_AI_PLAN.md](docs/LOCAL_AI_PLAN.md)。
+
+### 变更
+
+- **CSP 放开本地推理所需指令**：`script-src` 增加 `'wasm-unsafe-eval'`，新增
+  `worker-src 'self' blob:`（onnxruntime-web proxy worker）——vercel.json 与
+  security-headers.ts 两处同步。
+- 设置 → AI 助手新增「浏览器本地推理（实验）」入口；系统导航组新增「本地 AI」。
+
 ## v2.23.1 (2026-10-05) — 批量重试与送达性头
 
 ### 新增
