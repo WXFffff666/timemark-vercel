@@ -43,7 +43,14 @@ function formatLockTime(totalSeconds: number): string {
 }
 
 export function LoginForm() {
-  const [username, setUsername] = useState('');
+  // v79: 预填上次成功登录的用户名（只存用户名，不存密码）
+  const [username, setUsername] = useState(() => {
+    try {
+      return localStorage.getItem('timemark_last_username') || '';
+    } catch {
+      return '';
+    }
+  });
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
@@ -115,6 +122,10 @@ export function LoginForm() {
         turnstileToken: token,
         totpCode: totp.trim() || undefined,
       });
+      // v79: 登录成功后记住用户名（只存用户名，绝不存密码），下次自动预填
+      try {
+        localStorage.setItem('timemark_last_username', trimmedUsername);
+      } catch { /* 隐私模式下静默跳过 */ }
       if (mustChangePassword) {
         navigate('/settings?changePassword=1', { replace: true });
       } else {

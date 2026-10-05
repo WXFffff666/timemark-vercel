@@ -149,6 +149,7 @@ export default function TriggerLogs() {
   };
 
   const [retryingId, setRetryingId] = useState<number | null>(null);
+  const [retryingAll, setRetryingAll] = useState(false);
 
   const retryLog = async (logId: number) => {
     setRetryingId(logId);
@@ -160,6 +161,24 @@ export default function TriggerLogs() {
       alert(error instanceof Error ? error.message : '重试失败');
     } finally {
       setRetryingId(null);
+    }
+  };
+
+  // v79 批量重试：把近 7 天真实失败（含部分失败）的提醒一次性逐条补发（后端单次上限 10 条）
+  const retryAllFailed = async () => {
+    if (!confirm('将把近 7 天内失败/部分失败的提醒逐条重新发送（单次最多 10 条），继续？')) return;
+    setRetryingAll(true);
+    try {
+      const res = await api.post<{ attempted: number; retried: number; failed: number; candidates: number }>(
+        '/trigger-logs/retry-failed',
+        {},
+      );
+      await fetchLogs();
+      alert(`批量重试完成：成功 ${res.retried} 条，仍失败 ${res.failed} 条（候选 ${res.candidates} 条）`);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '批量重试失败');
+    } finally {
+      setRetryingAll(false);
     }
   };
 
@@ -188,6 +207,10 @@ export default function TriggerLogs() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={retryAllFailed} disabled={retryingAll}>
+              {retryingAll ? <RefreshCw size={16} className="mr-1 animate-spin" /> : null}
+              {retryingAll ? '重试中' : '重试全部失败'}
+            </Button>
             <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={exportCsv}>
               导出 CSV
             </Button>

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface SendPayload {
   subject: string;
@@ -27,6 +27,15 @@ import { sendEmailNotification } from '../services/notifications/email.service.j
 describe('dual-calendar reminder email (checkbox 169)', () => {
   beforeEach(() => {
     mockSend.mockClear();
+    // 主题/正文措辞依赖"距事件几天"（今天：/明天：/还有 N 天），而测试事件硬编码
+    // 2026-10-05 —— 跨过真实日期边界就会随机翻红（实际发生过：10-04 跑是"明天"，
+    // 10-05 跑变"今天"）。冻结系统时间到事件前两天，断言才稳定。
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-03T12:00:00+08:00'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('carries BOTH dates in subject and body for a both-calendar event', async () => {

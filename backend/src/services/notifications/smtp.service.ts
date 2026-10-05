@@ -80,11 +80,19 @@ export async function sendSmtpNotification(
     text = bodies.text;
   }
 
+  // 送达性头：与 Resend 路径同一套（Reply-To / List-Unsubscribe / 去重引用）
+  const deliverabilityHeaders: Record<string, string> = {
+    'Reply-To': String(fromEmail).includes('@') ? String(fromEmail) : 'noreply@timemark.app',
+    'List-Unsubscribe': `<mailto:${String(fromEmail).includes('@') ? String(fromEmail) : 'noreply@timemark.app'}?subject=unsubscribe>`,
+    'X-Entity-Ref-ID': `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+  };
+
   await transporter.sendMail({
     from: fromEmail,
     to: toEmail,
     subject,
     html,
     text,
+    headers: deliverabilityHeaders,
   });
 }

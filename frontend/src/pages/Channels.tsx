@@ -34,6 +34,7 @@ interface Account extends NotificationAccount {
   secretConfigured?: boolean;
   sessionConfigured?: boolean;
   last_test_result?: 'success' | 'failed' | null;
+  last_test_at?: string | null;
   connection_status?: string | null;
 }
 
@@ -99,6 +100,18 @@ export default function Channels() {
   const [testingAll, setTestingAll] = useState(false);
   const [testAllSummary, setTestAllSummary] = useState('');
   const [channelStats, setChannelStats] = useState<Array<{ channel: string; sent: number; ok: number; failed: number; successRate: number }>>([]);
+  const [accountStats, setAccountStats] = useState<Record<number, { sent: number; ok: number; failed: number; successRate: number }>>({});
+  const [statsRuns, setStatsRuns] = useState(0);
+
+  const fetchStats = () => {
+    api.get<{ windowDays: number; runs: number; channels: Array<{ channel: string; sent: number; ok: number; failed: number; successRate: number }>; accounts?: Array<{ accountId: number; sent: number; ok: number; failed: number; successRate: number }> }>('/channels/stats')
+      .then((d) => {
+        setChannelStats(d?.channels ?? []);
+        setAccountStats(Object.fromEntries((d?.accounts ?? []).map((a) => [a.accountId, a])));
+        setStatsRuns(d?.runs ?? 0);
+      })
+      .catch(() => undefined);
+  };
 
   useEffect(() => {
     fetchData({ initial: true });
@@ -106,9 +119,8 @@ export default function Channels() {
 
   // v78: 近 30 天渠道发送统计（成功/失败/成功率），用于健康概览卡
   useEffect(() => {
-    api.get<{ windowDays: number; runs: number; channels: Array<{ channel: string; sent: number; ok: number; failed: number; successRate: number }> }>('/channels/stats')
-      .then((d) => setChannelStats(d?.channels ?? []))
-      .catch(() => undefined);
+    fetchStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // v78: 手动恢复被 24h 暂停的渠道账户
@@ -213,6 +225,7 @@ export default function Channels() {
       if (s) {
         setTestAllSummary(`自检完成：${s.passed}/${s.total} 通过${s.failed > 0 ? `，${s.failed} 个失败（详见各卡片红点）` : ''}`);
       }
+      fetchStats();
       await fetchData();
     } catch {
       setTestAllSummary('自检失败：请稍后重试或逐个渠道测试');
@@ -575,6 +588,29 @@ export default function Channels() {
    * 而不是正文内容。这里逐项列出检查点与当前 From 域名；DNS 实际验证需要用户
    * 在域名服务商处操作，页面给出可复制的记录要求。
    */
+  // v79 渠道配置脱敏导出：凭据已由后端脱敏（只留尾 4 位），导出 JSON 可安全留存
+  const exportAccounts = async () => {
+    try {
+      const res = await api.get<{ accounts: unknown[] } | null>('/config/accounts/export');
+      const payload = {
+        format: 'timemark-channels-backup',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        accounts: res?.accounts ?? [],
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `timemark-channels-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export accounts:', error);
+      setTestAllSummary('导出失败：请稍后重试');
+    }
+  };
+
   const renderChannelStatsCard = () => {
     if (channelStats.length === 0) return null;
     const totals = channelStats.reduce((acc, s) => ({ sent: acc.sent + s.sent, ok: acc.ok + s.ok }), { sent: 0, ok: 0 });
@@ -588,6 +624,9 @@ export default function Channels() {
             <span className={`text-sm px-2 py-0.5 rounded-full ${overall >= 90 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300' : overall >= 60 ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300'}`}>
               总成功率 {overall}%
             </span>
+            {statsRuns > 0 && (
+              <span className="text-xs text-slate-400 font-normal">共 {statsRuns} 次分发（最多统计最近 5000 条日志）</span>
+            )}
           </h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-4">
             {channelStats.map((s) => {
@@ -616,6 +655,28 @@ export default function Channels() {
               );
             })}
           </div>
+          {(() => {
+            // v79: 账户维度明细（同名渠道多账户时一眼看出哪个账户在拖后腿）
+            const accountEntries = Object.entries(accountStats);
+            if (accountEntries.length === 0) return null;
+            return (
+              <div className="mt-4 pt-4 border-t border-slate-200/60 dark:border-slate-700/50">
+                <p className="text-xs font-semibold text-slate-500 mb-2">按账户</p>
+                <div className="flex flex-wrap gap-2">
+                  {accountEntries.map(([id, stat]) => {
+                    const account = accounts.find((a) => Number(a.id) === Number(id));
+                    const cls = stat.successRate >= 90 ? 'text-emerald-600 dark:text-emerald-400' : stat.successRate >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+                    return (
+                      <span key={id} className="text-xs px-2.5 py-1 rounded-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/50">
+                        {account?.name || `账户 #${id}`} <span className={`font-semibold ${cls}`}>{stat.successRate}%</span>
+                        <span className="text-slate-400 ml-1">（{stat.sent} 次）</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </section>
     );
@@ -724,6 +785,17 @@ export default function Channels() {
           <div className="flex items-center justify-between pt-4 border-t border-slate-200/60 dark:border-slate-700/50">
             <span className="text-xs text-slate-500 dark:text-slate-400">
               类型: {template?.name || account.type}
+              {(() => {
+                // v79: 账户维度的真实发送统计 + 上次测试时间
+                const stat = accountStats[Number(account.id)];
+                const parts: string[] = [];
+                if (stat) parts.push(`发送 ${stat.sent} · 成功率 ${stat.successRate}%`);
+                if (account.last_test_at) {
+                  const mins = Math.round((Date.now() - new Date(account.last_test_at).getTime()) / 60000);
+                  parts.push(`上次测试 ${mins < 1 ? '刚刚' : mins < 60 ? `${mins} 分钟前` : mins < 1440 ? `${Math.round(mins / 60)} 小时前` : `${Math.round(mins / 1440)} 天前`}`);
+                }
+                return parts.length ? <span className="ml-2 text-slate-400">{parts.join(' · ')}</span> : null;
+              })()}
             </span>
             <div className="flex gap-2">
               <Button
@@ -780,6 +852,11 @@ export default function Channels() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {accounts.length > 0 && (
+              <Button variant="outline" size="sm" className="rounded-full min-h-11 hidden sm:flex" onClick={exportAccounts} aria-label="导出脱敏渠道配置">
+                导出配置
+              </Button>
+            )}
             <Button variant="outline" size="sm" className="rounded-full min-h-11 hidden sm:flex" onClick={() => navigate('/integrations-docs')} aria-label="查看 ntfy 与集成文档">
               ntfy 教程
             </Button>

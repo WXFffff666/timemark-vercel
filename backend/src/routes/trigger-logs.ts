@@ -27,6 +27,155 @@ const triggerLogs = new Hono<{ Variables: { user: User } }>();
 
 triggerLogs.use('*', authMiddleware);
 
+/**
+ * 单条重试的核心逻辑，供 POST /:id/retry 与 POST /retry-failed（批量）共用。
+ * 返回值区分：not_found / not_retryable（成功行、无渠道可补）/ error / ok。
+ */
+async function retryTriggerLogById(
+  logId: number,
+  userId: number,
+): Promise<{ kind: 'ok' | 'not_found' | 'not_retryable' | 'error'; status?: number; error?: string; data?: unknown }> {
+  try {
+    // Read the trigger log entry
+    const logResult = await query(
+      `SELECT tl.*, e.name as event_name, e.type as event_type, e.date as event_date,
+              e.reminder_config, e.notification_channels, e.notification_account_ids,
+              e.person_name, e.reminder_recipient_name, e.reminder_recipient_email
+       FROM event_trigger_logs tl
+       LEFT JOIN events e ON tl.event_id = e.id
+       WHERE tl.id = $1 AND tl.user_id = $2`,
+      [logId, userId]
+    );
+
+    if (logResult.rows.length === 0) {
+      return { kind: 'not_found', status: 404, error: 'Trigger log not found' };
+    }
+
+    const logEntry = logResult.rows[0];
+
+    // 部分失败（3 成功 1 失败）落库时 status='success'，旧代码因此直接 400 把重试挡掉，
+    // 用户既看不到失败也补不了。真实结果从 channel_results 推导。
+    const delivery = readDelivery({
+      status: logEntry.status,
+      channelResults: logEntry.channel_results,
+      errorMessage: logEntry.error_message,
+    });
+
+    if (delivery.outcome === 'delivered') {
+      return { kind: 'not_retryable', status: 400, error: 'Cannot retry a successful notification' };
+    }
+
+    // 重试只补真实失败渠道：_quiet_hours / _skipped 是内部标记，补发它们没有意义。
+    // channel_results 是 JSONB，pg 已解析成对象（历史 TEXT 列才是字符串），交给 readDelivery
+    // 两种形状都能处理——旧代码对对象做 JSON.parse 会抛异常并被静默吞掉。
+    //
+    // 两者都空时不能再 400：channel_type 只有「存在真实失败渠道」时才写（两个写入点都来自
+    // failedEntries），所以 skipped 行、投递后异常、农历换算失败、测试发送抛异常这些行的
+    // channel_type 与 channel_results 同时为空。界面按 outcome !== 'delivered' 渲染重试按钮
+    // （和这里的 400 闸门同一条规则），这里再挡一次就等于给用户一个必然失败的按钮。
+    // 回落到事件自己配置的渠道，让按钮真的能兑现。
+    const channelsToRetry: string[] = logEntry.channel_type
+      ? logEntry.channel_type.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : delivery.failed.length > 0
+        ? delivery.failed
+        : configuredChannels(logEntry.notification_channels);
+
+    if (channelsToRetry.length === 0) {
+      return { kind: 'not_retryable', status: 400, error: 'No failed channels to retry' };
+    }
+
+    // Re-activate the account if it was disabled, and clear any 24h failure suspension:
+    // a manual retry is an explicit "try again now".
+    if (logEntry.account_id) {
+      await query(
+        `UPDATE notification_accounts
+         SET is_active = TRUE, suspended_until = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND user_id = $2`,
+        [logEntry.account_id, userId]
+      );
+    }
+
+    // Build event object for sendNotifications
+    const event = {
+      id: logEntry.event_id,
+      name: logEntry.event_name,
+      type: logEntry.event_type,
+      date: logEntry.event_date,
+      reminder_config: logEntry.reminder_config,
+      notification_channels: logEntry.notification_channels,
+      notification_account_ids: logEntry.notification_account_ids,
+      person_name: logEntry.person_name,
+      reminder_recipient_name: logEntry.reminder_recipient_name,
+      reminder_recipient_email: logEntry.reminder_recipient_email,
+    };
+
+    // Re-send the notification
+    const channelResults = await sendNotifications(event, userId, channelsToRetry);
+
+    // Update the trigger log with new result
+    // 重试同样只看真实渠道：重试发生在安静时段时 sendNotifications 会回一个
+    // _quiet_hours 标记，它是 success:false 但不是渠道。旧代码把它算进失败，于是
+    // 重试一次就把 error_message 写成 "_quiet_hours: quiet_hours"，并把这个假渠道
+    // 存进 error_details。判定与 jobs/tasks.ts 用同一个 readDelivery。
+    const sentDelivery = readDelivery({ channelResults });
+    // status 仍只取 success/failed（去重、连续失败计数、清理都按它工作）。
+    // 部分失败记 success：已送达的渠道不能因为另一个渠道失败而被重复投递。
+    const newStatus = sentDelivery.outcome === 'delivered' || sentDelivery.outcome === 'partial' ? 'success' : 'failed';
+    const newRetryCount = (logEntry.retry_count || 0) + 1;
+    const newErrorMessage = newStatus === 'success' ? null : sentDelivery.reason;
+
+    const sent = channelResults as Record<string, { error?: string; accountId?: number }>;
+    const failedEntries = sentDelivery.failed
+      .map((channel) => [channel, sent[channel]] as const)
+      .filter((entry): entry is readonly [string, { error?: string; accountId?: number }] => !!entry[1]);
+
+    // 合并而不是覆盖：重试只补发失败渠道，直接写回会把原本次数里已成功渠道的条目抹掉，
+    // 前端从界面看不到它们，审计轨迹退化。本次结果按渠道覆盖旧条目。
+    let previousResults: Record<string, unknown> = {};
+    const rawPrevious = logEntry.channel_results;
+    if (rawPrevious && typeof rawPrevious === 'object') {
+      previousResults = rawPrevious as Record<string, unknown>;
+    } else if (typeof rawPrevious === 'string') {
+      // 历史 TEXT 列时代存的是字符串。
+      try {
+        const parsed = JSON.parse(rawPrevious);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) previousResults = parsed;
+      } catch { /* 坏数据当作没有旧结果 */ }
+    }
+    const mergedResults = { ...previousResults, ...sent };
+
+    await query(
+      `UPDATE event_trigger_logs
+       SET status = $1, error_message = $2, channel_results = $3, retry_count = $4, error_details = $5
+       WHERE id = $6 AND user_id = $7`,
+      [
+        newStatus,
+        newErrorMessage,
+        JSON.stringify(mergedResults),
+        newRetryCount,
+        failedEntries.length > 0
+          ? JSON.stringify(failedEntries.map(([ch, r]) => ({ channel: ch, error: r.error, accountId: r.accountId })))
+          : null,
+        logId,
+        userId
+      ]
+    );
+
+    return {
+      kind: 'ok',
+      data: {
+        status: newStatus,
+        retry_count: newRetryCount,
+        channel_results: channelResults,
+      },
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to retry notification';
+    console.error('[TriggerLogs] Failed to retry:', error);
+    return { kind: 'error', status: 500, error: message };
+  }
+}
+
 // 获取事件触发日志
 triggerLogs.get('/', async (c) => {
   const user = c.get('user');
@@ -129,144 +278,65 @@ triggerLogs.post('/:id/retry', async (c) => {
     return c.json({ success: false, error: 'Invalid log ID' }, 400);
   }
 
-  try {
-    // Read the trigger log entry
-    const logResult = await query(
-      `SELECT tl.*, e.name as event_name, e.type as event_type, e.date as event_date,
-              e.reminder_config, e.notification_channels, e.notification_account_ids,
-              e.person_name, e.reminder_recipient_name, e.reminder_recipient_email
-       FROM event_trigger_logs tl
-       LEFT JOIN events e ON tl.event_id = e.id
-       WHERE tl.id = $1 AND tl.user_id = $2`,
-      [logId, userId]
-    );
-
-    if (logResult.rows.length === 0) {
-      return c.json({ success: false, error: 'Trigger log not found' }, 404);
-    }
-
-    const logEntry = logResult.rows[0];
-
-    // 部分失败（3 成功 1 失败）落库时 status='success'，旧代码因此直接 400 把重试挡掉，
-    // 用户既看不到失败也补不了。真实结果从 channel_results 推导。
-    const delivery = readDelivery({
-      status: logEntry.status,
-      channelResults: logEntry.channel_results,
-      errorMessage: logEntry.error_message,
-    });
-
-    if (delivery.outcome === 'delivered') {
-      return c.json({ success: false, error: 'Cannot retry a successful notification' }, 400);
-    }
-
-    // 重试只补真实失败渠道：_quiet_hours / _skipped 是内部标记，补发它们没有意义。
-    // channel_results 是 JSONB，pg 已解析成对象（历史 TEXT 列才是字符串），交给 readDelivery
-    // 两种形状都能处理——旧代码对对象做 JSON.parse 会抛异常并被静默吞掉。
-    //
-    // 两者都空时不能再 400：channel_type 只有「存在真实失败渠道」时才写（两个写入点都来自
-    // failedEntries），所以 skipped 行、投递后异常、农历换算失败、测试发送抛异常这些行的
-    // channel_type 与 channel_results 同时为空。界面按 outcome !== 'delivered' 渲染重试按钮
-    // （和这里的 400 闸门同一条规则），这里再挡一次就等于给用户一个必然失败的按钮。
-    // 回落到事件自己配置的渠道，让按钮真的能兑现。
-    const channelsToRetry: string[] = logEntry.channel_type
-      ? logEntry.channel_type.split(',').map((s: string) => s.trim()).filter(Boolean)
-      : delivery.failed.length > 0
-        ? delivery.failed
-        : configuredChannels(logEntry.notification_channels);
-
-    if (channelsToRetry.length === 0) {
-      return c.json({ success: false, error: 'No failed channels to retry' }, 400);
-    }
-
-    // Re-activate the account if it was disabled, and clear any 24h failure suspension:
-    // a manual retry is an explicit "try again now".
-    if (logEntry.account_id) {
-      await query(
-        `UPDATE notification_accounts
-         SET is_active = TRUE, suspended_until = NULL, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1 AND user_id = $2`,
-        [logEntry.account_id, userId]
-      );
-    }
-
-    // Build event object for sendNotifications
-    const event = {
-      id: logEntry.event_id,
-      name: logEntry.event_name,
-      type: logEntry.event_type,
-      date: logEntry.event_date,
-      reminder_config: logEntry.reminder_config,
-      notification_channels: logEntry.notification_channels,
-      notification_account_ids: logEntry.notification_account_ids,
-      person_name: logEntry.person_name,
-      reminder_recipient_name: logEntry.reminder_recipient_name,
-      reminder_recipient_email: logEntry.reminder_recipient_email,
-    };
-
-    // Re-send the notification
-    const channelResults = await sendNotifications(event, userId, channelsToRetry);
-
-    // Update the trigger log with new result
-    // 重试同样只看真实渠道：重试发生在安静时段时 sendNotifications 会回一个
-    // _quiet_hours 标记，它是 success:false 但不是渠道。旧代码把它算进失败，于是
-    // 重试一次就把 error_message 写成 "_quiet_hours: quiet_hours"，并把这个假渠道
-    // 存进 error_details。判定与 jobs/tasks.ts 用同一个 readDelivery。
-    const sentDelivery = readDelivery({ channelResults });
-    // status 仍只取 success/failed（去重、连续失败计数、清理都按它工作）。
-    // 部分失败记 success：已送达的渠道不能因为另一个渠道失败而被重复投递。
-    const newStatus = sentDelivery.outcome === 'delivered' || sentDelivery.outcome === 'partial' ? 'success' : 'failed';
-    const newRetryCount = (logEntry.retry_count || 0) + 1;
-    const newErrorMessage = newStatus === 'success' ? null : sentDelivery.reason;
-
-    const sent = channelResults as Record<string, { error?: string; accountId?: number }>;
-    const failedEntries = sentDelivery.failed
-      .map((channel) => [channel, sent[channel]] as const)
-      .filter((entry): entry is readonly [string, { error?: string; accountId?: number }] => !!entry[1]);
-
-    // 合并而不是覆盖：重试只补发失败渠道，直接写回会把原本次数里已成功渠道的条目抹掉，
-    // 前端从界面看不到它们，审计轨迹退化。本次结果按渠道覆盖旧条目。
-    let previousResults: Record<string, unknown> = {};
-    const rawPrevious = logEntry.channel_results;
-    if (rawPrevious && typeof rawPrevious === 'object') {
-      previousResults = rawPrevious as Record<string, unknown>;
-    } else if (typeof rawPrevious === 'string') {
-      // 历史 TEXT 列时代存的是字符串。
-      try {
-        const parsed = JSON.parse(rawPrevious);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) previousResults = parsed;
-      } catch { /* 坏数据当作没有旧结果 */ }
-    }
-    const mergedResults = { ...previousResults, ...sent };
-
-    await query(
-      `UPDATE event_trigger_logs
-       SET status = $1, error_message = $2, channel_results = $3, retry_count = $4, error_details = $5
-       WHERE id = $6 AND user_id = $7`,
-      [
-        newStatus,
-        newErrorMessage,
-        JSON.stringify(mergedResults),
-        newRetryCount,
-        failedEntries.length > 0
-          ? JSON.stringify(failedEntries.map(([ch, r]) => ({ channel: ch, error: r.error, accountId: r.accountId })))
-          : null,
-        logId,
-        userId
-      ]
-    );
-
-    return c.json({
-      success: true,
-      data: {
-        status: newStatus,
-        retry_count: newRetryCount,
-        channel_results: channelResults,
-      },
-    });
-  } catch (error: any) {
-    console.error('[TriggerLogs] Failed to retry:', error);
-    return c.json({ success: false, error: error.message || 'Failed to retry notification' }, 500);
+  const result = await retryTriggerLogById(logId, userId);
+  if (result.kind === 'ok') {
+    return c.json({ success: true, data: result.data });
   }
+  return c.json({ success: false, error: result.error }, (result.status || 500) as 400 | 404 | 500);
+});
+
+// v79 批量重试：近 7 天内真实结果不是 delivered 的日志逐条重发（单次上限 10 条，
+// 防止一次点把几十条失败行同时打向渠道触发限流）。
+triggerLogs.post('/retry-failed', async (c) => {
+  const user = c.get('user');
+  const userId = Number(user.id);
+  const body = await c.req.json().catch(() => ({}));
+  const limit = Math.min(Math.max(Math.trunc(Number(body.limit) || 10), 1), 50);
+
+  const recent = await query(
+    `SELECT tl.id, tl.status, tl.channel_results, tl.error_message
+     FROM event_trigger_logs tl
+     WHERE tl.user_id = $1 AND tl.created_at > NOW() - INTERVAL '7 days'
+     ORDER BY tl.created_at DESC
+     LIMIT 200`,
+    [userId],
+  );
+
+  const retryableIds: number[] = [];
+  for (const row of recent.rows as Array<{ id: number; status: string; channel_results: unknown; error_message: string | null }>) {
+    const delivery = readDelivery({
+      status: row.status,
+      channelResults: row.channel_results,
+      errorMessage: row.error_message,
+    });
+    if (delivery.outcome === 'delivered') continue;
+    retryableIds.push(Number(row.id));
+  }
+
+  const results: Array<{ id: number; ok: boolean; error?: string; status?: string }> = [];
+  let attempted = 0;
+  for (const id of retryableIds) {
+    if (attempted >= limit) break;
+    attempted++;
+    const r = await retryTriggerLogById(id, userId);
+    if (r.kind === 'ok') {
+      const data = r.data as { status?: string } | undefined;
+      results.push({ id, ok: true, status: data?.status });
+    } else {
+      results.push({ id, ok: false, error: r.error });
+    }
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      attempted,
+      retried: results.filter((r) => r.ok).length,
+      failed: results.filter((r) => !r.ok).length,
+      candidates: retryableIds.length,
+      results,
+    },
+  });
 });
 
 // 清除触发日志

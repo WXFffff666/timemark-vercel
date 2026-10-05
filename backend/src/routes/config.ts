@@ -105,6 +105,23 @@ config.get('/accounts', async (c) => {
   });
 });
 
+// v79 渠道配置脱敏导出：给重新部署/迁移用。所有敏感列都过同一个客户端脱敏器
+// （token 只剩尾 4 位等），导出文件可直接随仓库/网盘保存而不泄露凭据。
+config.get('/accounts/export', async (c) => {
+  const user = c.get('user');
+  const accounts = await getNotificationAccounts(Number(user.id));
+  const exportedAt = new Date().toISOString();
+  const payload = {
+    format: 'timemark-channels-backup',
+    version: 1,
+    exportedAt,
+    accounts: accounts.map((a) => maskNotificationAccountForClient(a as unknown as Record<string, unknown>)),
+  };
+  return c.json({ success: true, data: payload }, 200, {
+    'Content-Disposition': `attachment; filename="timemark-channels-${exportedAt.slice(0, 10)}.json"`,
+  });
+});
+
 config.post('/accounts', async (c) => {
   const user = c.get('user');
   try {

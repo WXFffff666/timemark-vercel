@@ -89,14 +89,28 @@ export async function sendEmailNotification(
     text = bodies.text;
   }
 
+  // 送达性头：Reply-To 指回发件地址（个人提醒无需收回复）；List-Unsubscribe 用
+  // 一键退订语法（RFC 8058）。个人单用户部署没有真正的退订端点，用 mailto: 形式
+  // —— Gmail/Yahoo 认可 mailto: 退订头，缺头反而更容易被判为营销邮件。
+  const fromAddress = String(fromEmail);
+  const deliverabilityHeaders: Record<string, string> = {
+    'Reply-To': fromAddress.includes('@') ? fromAddress : 'noreply@timemark.app',
+    'List-Unsubscribe': `<mailto:${fromAddress.includes('@') ? fromAddress : 'noreply@timemark.app'}?subject=unsubscribe>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    'X-Entity-Ref-ID': `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+  };
+
   const { error } = await resend.emails.send({
-    from: String(fromEmail),
+    from: fromAddress,
     to: String(toEmail),
     ...(options?.bcc?.length ? { bcc: options.bcc } : {}),
     subject,
     html,
     text,
-    ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
+    headers: {
+      ...deliverabilityHeaders,
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+    },
   });
 
   if (error) {

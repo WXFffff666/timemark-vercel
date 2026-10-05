@@ -223,21 +223,25 @@ channels.post('/resume', async (c) => {
 
 // v78: 渠道发送统计 —— 聚合近 30 天 event_trigger_logs.channel_results（ChannelResultMap JSON），
 // 按渠道给出 成功/失败/成功率，供渠道页健康概览卡展示。全静态 SQL（无插值）。
+// LIMIT 5000：统计是概览不是审计，30 天超大日志量下避免全表扫描拖慢冷启动。
 channels.get('/stats', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);
   const result = await query(
-    `SELECT channel_results, created_at
+    `SELECT id, channel_results
      FROM event_trigger_logs
      WHERE user_id = $1 AND channel_results IS NOT NULL
-       AND created_at > NOW() - INTERVAL '30 days'`,
+       AND created_at > NOW() - INTERVAL '30 days'
+     ORDER BY created_at DESC
+     LIMIT 5000`,
     [userId],
   );
 
-  type Entry = { success?: boolean };
+  type Entry = { success?: boolean; accountId?: number };
   const perChannel = new Map<string, { sent: number; ok: number }>();
+  const perAccount = new Map<number, { sent: number; ok: number }>();
   let runs = 0;
-  for (const row of result.rows as Array<{ channel_results: unknown }>) {
+  for (const row of result.rows as Array<{ id: number; channel_results: unknown }>) {
     let parsed: Record<string, Entry> | null = null;
     try {
       const raw = typeof row.channel_results === 'string'
@@ -259,8 +263,17 @@ channels.get('/stats', async (c) => {
       stat.sent += 1;
       if (entry.success === true) stat.ok += 1;
       perChannel.set(channel, stat);
+      if (entry.accountId != null && Number.isFinite(Number(entry.accountId))) {
+        const accId = Number(entry.accountId);
+        const accStat = perAccount.get(accId) ?? { sent: 0, ok: 0 };
+        accStat.sent += 1;
+        if (entry.success === true) accStat.ok += 1;
+        perAccount.set(accId, accStat);
+      }
     }
   }
+
+  const toRate = (sent: number, ok: number): number => (sent > 0 ? Math.round((ok / sent) * 100) : 0);
 
   const channels = [...perChannel.entries()]
     .map(([channel, stat]) => ({
@@ -268,11 +281,21 @@ channels.get('/stats', async (c) => {
       sent: stat.sent,
       ok: stat.ok,
       failed: stat.sent - stat.ok,
-      successRate: stat.sent > 0 ? Math.round((stat.ok / stat.sent) * 100) : 0,
+      successRate: toRate(stat.sent, stat.ok),
     }))
     .sort((a, b) => b.sent - a.sent);
 
-  return c.json({ success: true, data: { windowDays: 30, runs, channels } });
+  const accounts = [...perAccount.entries()]
+    .map(([accountId, stat]) => ({
+      accountId,
+      sent: stat.sent,
+      ok: stat.ok,
+      failed: stat.sent - stat.ok,
+      successRate: toRate(stat.sent, stat.ok),
+    }))
+    .sort((a, b) => b.sent - a.sent);
+
+  return c.json({ success: true, data: { windowDays: 30, runs, channels, accounts } });
 });
 
 // v78: 一键全渠道自检 —— 并发测试该用户全部启用渠道账户，逐个落库测试结果，
@@ -280,7 +303,9 @@ channels.get('/stats', async (c) => {
 channels.post('/test-all', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);
-  const accounts = (await getNotificationAccounts(userId)).filter((a) => a.is_active !== false);
+  const accounts = (await getNotificationAccounts(userId))
+    .filter((a) => a.is_active !== false)
+    .slice(0, 50); // 硬上限：单用户不太可能超过；防异常数据把自检变成数百次出站请求
 
   if (accounts.length === 0) {
     return c.json({ success: true, data: { results: [], summary: { total: 0, passed: 0, failed: 0 } } });
