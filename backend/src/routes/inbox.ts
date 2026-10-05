@@ -14,11 +14,19 @@ inbox.use('*', authMiddleware);
 
 inbox.get('/', async (c) => {
   const userId = Number(c.get('user').id);
-  const limit = parseInt(c.req.query('limit') || '50', 10);
-  const offset = parseInt(c.req.query('offset') || '0', 10);
+  // v2.27：limit 封顶 200（此前可一次拉全表）
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1), 200);
+  const offset = Math.max(parseInt(c.req.query('offset') || '0', 10) || 0, 0);
   const unreadOnly = c.req.query('unread') === '1';
 
-  const data = await listInboxMessages(userId, { limit, offset, unreadOnly });
+  // v2.27 A-13：文本搜索 + since 增量拉取
+  const data = await listInboxMessages(userId, {
+    limit,
+    offset,
+    unreadOnly,
+    q: c.req.query('q') || undefined,
+    since: c.req.query('since') || undefined,
+  });
   return c.json({ success: true, data: data.messages, pagination: { total: data.total, unreadCount: data.unreadCount, limit, offset } });
 });
 

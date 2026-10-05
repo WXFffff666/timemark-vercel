@@ -14,18 +14,24 @@ events.use('*', authMiddleware);
 
 events.get('/', async (c) => {
   const user = c.get('user');
-  
-  // 解析分页参数
-  const page = parseInt(c.req.query('page') || '1', 10);
-  const limit = parseInt(c.req.query('limit') || '50', 10);
+
+  // 解析分页参数（v2.27：limit 封顶 200，page 下限 1，防止一次拉全表）
+  const page = Math.max(1, parseInt(c.req.query('page') || '1', 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(c.req.query('limit') || '50', 10) || 50));
   const offset = (page - 1) * limit;
 
   // 可选档案过滤（checkbox 69）：省略 = 全部档案；他人的档案一律 404。
   const profileFilter = await parseProfileFilter(c, Number(user.id));
   if (profileFilter instanceof Response) return profileFilter;
-  
+
+  // v2.27：type 筛选 / upcoming 过滤 / 排序键——全部白名单后透传给服务层。
+  const typeRaw = c.req.query('type') || '';
+  const type = ['birthday', 'anniversary', 'exam', 'holiday', 'other'].includes(typeRaw) ? typeRaw : null;
+  const upcoming = c.req.query('upcoming') === '1' || c.req.query('upcoming') === 'true';
+  const sort = c.req.query('sort') === 'created_at' ? 'created_at' as const : 'date' as const;
+
   // 获取分页数据
-  const result = await getEventsByUserIdPaginated(user.id, limit, offset, profileFilter);
+  const result = await getEventsByUserIdPaginated(user.id, limit, offset, profileFilter, { type, upcoming, sort });
   
   return c.json({
     success: true,
@@ -41,7 +47,10 @@ events.get('/', async (c) => {
 
 events.post('/', async (c) => {
   const user = c.get('user');
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ success: false, error: '请求体必须是 JSON' }, 400);
+  }
   const parsed = createEventSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -185,14 +194,22 @@ events.post('/:id/test-send', async (c) => {
   const { recordEventTrigger } = await import('../services/trigger-log.service.js');
   const { query } = await import('../db/index.js');
   
-  const result = await query('SELECT * FROM events WHERE id = $1 AND user_id = $2', [id, user.id]);
+  // v2.27：列清单代替 SELECT *（只为读通知字段，省大 JSONB 列传输）
+  const result = await query('SELECT id, name, type, date, person_name, reminder_config, notification_channels, notification_account_ids, profile_id FROM events WHERE id = $1 AND user_id = $2', [id, user.id]);
   if (result.rows.length === 0) {
     return c.json({ success: false, error: 'Event not found' }, 404);
   }
   
   const event = result.rows[0];
   const rawChannels = event.notification_channels;
-  const baseChannels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
+  // v2.27：损坏的渠道 JSON 不再让 test-send 500（与定时路径 parseJsonField 同守卫）
+  let baseChannels: string[] = [];
+  try {
+    const parsed = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : (rawChannels || []);
+    baseChannels = Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    baseChannels = [];
+  }
   const today = new Date().toISOString().slice(0, 10);
 
   // checkbox 167：手动测试发送必须和定时路径使用同一套渠道解析
@@ -323,7 +340,10 @@ events.post('/:id/snooze', async (c) => {
 events.put('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ success: false, error: '请求体必须是 JSON' }, 400);
+  }
   const parsed = updateEventSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -354,8 +374,8 @@ events.put('/:id', async (c) => {
     }
   }
 
-  const success = await updateEvent(id, user.id, parsed.data);
-  if (!success) {
+  const updated = await updateEvent(id, user.id, parsed.data);
+  if (!updated) {
     return c.json({ success: false, error: 'Event not found' }, 404);
   }
   const { refreshUserEventCache } = await import('../services/event-cache.service.js');
@@ -363,16 +383,33 @@ events.put('/:id', async (c) => {
   logFireAndForget('events.cache_refresh_failed', 'Failed to refresh user event cache'),
 );
 
-  // 事件更新后立即检查是否需要发送提醒
-  // 这样可以确保不会错过即将到来的提醒时间
-  try {
-    const { sendReminders } = await import('../jobs/tasks.js');
-    await sendReminders();
-  } catch (error) {
-    console.error('[PUT /events/:id] Failed to check reminders after event update:', error);
-  }
+  // v2.27：提醒检查改为 fire-and-forget —— PUT 不再被全量提醒扫描阻塞
+  // （POST 路径 :77 附近已是同款模式，这里对齐）。
+  void (async () => {
+    try {
+      const { sendReminders } = await import('../jobs/tasks.js');
+      await sendReminders();
+    } catch (error) {
+      console.error('[PUT /events/:id] Failed to check reminders after event update:', error);
+    }
+  })();
 
   return c.json({ success: true });
+});
+
+// v2.27 A-2：事件单条读取端点（此前只有列表；供深链/编辑前刷新使用）
+events.get('/:id', async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  if (!/^\d+$/.test(id)) {
+    return c.json({ success: false, error: '无效的事件 ID' }, 400);
+  }
+  const result = await query('SELECT * FROM events WHERE id = $1 AND user_id = $2', [id, user.id]);
+  if (result.rows.length === 0) {
+    return c.json({ success: false, error: 'Event not found' }, 404);
+  }
+  const { mapEventRow } = await import('../services/event.service.js');
+  return c.json({ success: true, data: mapEventRow(result.rows[0]) });
 });
 
 events.delete('/batch', async (c) => {

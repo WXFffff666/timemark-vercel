@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useSmartBack } from '@/hooks/useSmartBack';
 import { api } from '@/lib/api';
 import { calculateCountdown } from '@/lib/countdown';
@@ -280,7 +281,7 @@ export default function Expiry() {
   const [kind, setKind] = useState('');
   const [active, setActive] = useState<'' | 'true' | 'false'>('');
   const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  // （search 由 useDebouncedValue 派生，见下方）
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -295,11 +296,8 @@ export default function Expiry() {
     return () => window.clearInterval(id);
   }, []);
 
-  // Debounce the free-text search so each keystroke does not fire a request.
-  useEffect(() => {
-    const id = window.setTimeout(() => setSearch(searchInput), 300);
-    return () => window.clearTimeout(id);
-  }, [searchInput]);
+  // v2.27 E-11：防抖统一走共享 hook（原四处各手写一份 setTimeout 已删）
+  const search = useDebouncedValue(searchInput, 300);
 
   const loadFiltered = useCallback(async () => {
     const params = new URLSearchParams();

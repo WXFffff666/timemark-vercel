@@ -259,3 +259,10 @@ html[data-theme-transition='to-light']::view-transition-new(root) {
   background: radial-gradient(circle, var(--mesh-color-2) 0%, transparent 70%);
   opacity: var(--mesh-opacity); filter: blur(var(--mesh-blur)); transform-origin: center; will-change: transform;
 }
+
+/* v2.27 D-4：全局键盘焦点可见性 —— Calendar 年/月/日切换、TagManager 的原生
+   radio/checkbox 等自定义控件此前没有可见焦点态。 */
+:focus-visible {
+  outline: 2px solid var(--primary-500, #6366f1);
+  outline-offset: 2px;
+}

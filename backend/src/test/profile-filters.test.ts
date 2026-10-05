@@ -151,6 +151,13 @@ function installDb(): void {
     const scoped = (table: ScopedRow[]): ScopedRow[] =>
       table.filter((r) => r.user_id === userId && (profileFilter === null || r.profile_id === profileFilter));
 
+    if (s.includes('COUNT(*) OVER() AS total_count FROM events')) {
+      // v2.27：events 列表合并为单条 SQL（COUNT OVER + COALESCE 参数化档案过滤）
+      const rows = scoped(events).map((r, i) =>
+        i === 0 ? { ...r, total_count: scoped(events).length } : r,
+      );
+      return { rows, rowCount: rows.length };
+    }
     if (s.includes('SELECT COUNT(*) as total FROM events')) {
       const rows = scoped(events);
       return { rows: [{ total: rows.length }], rowCount: 1 };
@@ -231,9 +238,16 @@ function installDb(): void {
 }
 
 function requestedProfile(sql: string, params: unknown[]): number | null {
+  // v2.27：events 单条 SQL 用 COALESCE($n::int, profile_id) 参数化——参数为 null 即"无过滤"。
+  const co = sql.match(/profile_id = COALESCE\(\$(\d+)::int, profile_id\)/);
+  if (co) {
+    const v = params[Number(co[1]) - 1];
+    return v == null ? null : Number(v);
+  }
   const m = sql.match(/profile_id = \$(\d+)/);
   if (!m) return null;
-  return Number(params[Number(m[1]) - 1]);
+  const v = params[Number(m[1]) - 1];
+  return v == null ? null : Number(v);
 }
 
 interface RouteCase {
@@ -306,8 +320,16 @@ describe('profile-aware list queries (checkbox 69)', () => {
         captured.some((q) => q.sql.includes('FROM profiles')),
         `${routeCase.name} probed profiles without profileId`,
       ).toBe(false);
+      // v2.27：events 路由的档案过滤改为 COALESCE 参数化（参数 null = 无过滤，
+      // 语义不变）；其余路由仍断言完全没有 profile 谓词。
       expect(
-        captured.some((q) => /profile_id = \$/.test(q.sql)),
+        captured.some((q) => {
+          if (routeCase.name === 'events') {
+            return /profile_id = COALESCE\(\$\d+::int, profile_id\)/.test(q.sql)
+              && requestedProfile(q.sql, q.params as unknown[]) !== null;
+          }
+          return /profile_id = \$/.test(q.sql);
+        }),
         `${routeCase.name} filtered by profile without profileId`,
       ).toBe(false);
       // The todo completion query must not gain a subquery either.

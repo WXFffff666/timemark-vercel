@@ -64,17 +64,26 @@ export async function createInboxMessage(params: {
 
 export async function listInboxMessages(
   userId: number,
-  options: { limit?: number; offset?: number; unreadOnly?: boolean } = {},
+  options: { limit?: number; offset?: number; unreadOnly?: boolean; q?: string; since?: string } = {},
 ): Promise<{ messages: InboxMessageRow[]; total: number; unreadCount: number }> {
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
   const offset = Math.max(options.offset ?? 0, 0);
   const unreadOnly = options.unreadOnly === true;
 
   // 收件箱仅展示外部推送（inbound），出站提醒/广播回执见「提醒日志」
-  const where = unreadOnly
-    ? "WHERE user_id = $1 AND source = 'inbound' AND is_read = FALSE"
-    : "WHERE user_id = $1 AND source = 'inbound'";
+  // v2.27 A-13：q 文本搜索（标题/正文 ILIKE）与 since 增量拉取（created_at 有索引）
+  const conditions = ["user_id = $1", "source = 'inbound'"];
   const params: unknown[] = [userId];
+  if (unreadOnly) conditions.push('is_read = FALSE');
+  if (options.q && options.q.trim()) {
+    params.push(`%${options.q.trim()}%`);
+    conditions.push(`(title ILIKE $${params.length} OR body ILIKE $${params.length})`);
+  }
+  if (options.since && /^\d{4}-\d{2}-\d{2}T/.test(options.since)) {
+    params.push(options.since);
+    conditions.push(`created_at > $${params.length}`);
+  }
+  const where = `WHERE ${conditions.join(' AND ')}`;
 
   const [listResult, countResult, unreadResult] = await Promise.all([
     query(

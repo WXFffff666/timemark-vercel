@@ -112,6 +112,17 @@ goals.get('/:id', async (c) => {
   return c.json({ success: true, data });
 });
 
+// v2.27：里程碑独立子资源（此前只在 /:id 整体返回里出现）
+goals.get('/:id/milestones', async (c) => {
+  const userId = Number(c.get('user').id);
+  const id = parseId(c.req.param('id'));
+  if (id === null) return c.json({ success: false, error: '无效的 ID' }, 400);
+  const { getGoal } = await import('../services/goals.service.js');
+  const data = await getGoal(userId, id);
+  if (!data) return c.json({ success: false, error: '目标不存在' }, 404);
+  return c.json({ success: true, data: data.milestones });
+});
+
 goals.patch('/:id', async (c) => {
   const userId = Number(c.get('user').id);
   const id = parseId(c.req.param('id'));

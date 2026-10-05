@@ -91,6 +91,8 @@ import dedupeRoutes from './routes/dedupe.js';
 import auditRoutes from './routes/audit.js';
 // task 137: data-health report + one-click idempotent repairs (migration v65).
 import dataHealthRoutes from './routes/data-health.js';
+// v2.26: retention policy view + manual purge + digest archive list.
+import retentionRoutes from './routes/retention.js';
 // task 139: notification-channel repair checks/actions.
 import channelRepairRoutes from './routes/channel-repair.js';
 // tasks 140/141: recurring routine templates (migration v67).
@@ -147,6 +149,13 @@ const app = new Hono();
  */
 const isTelegramWebhook = (c: { req: { method: string; path: string } }): boolean =>
   c.req.method === 'POST' && c.req.path === '/api/bot/telegram';
+
+// v2.27 C-9：全局兜底错误处理——未捕获异常统一返回 {success,error} JSON 500
+//（此前是 Hono 默认纯文本，前端拿到的是非 JSON 而直接报「请求失败」）。
+app.onError((err, c) => {
+  console.error('[unhandled]', c.req.method, c.req.path, err);
+  return c.json({ success: false, error: '服务器内部错误，请稍后重试' }, 500);
+});
 
 app.use('*', honoLogger());
 app.use('*', async (c, next) => (isTelegramWebhook(c) ? next() : zeroTrustGuard(c, next)));
@@ -276,7 +285,6 @@ app.route('/api/audit', auditRoutes);
 // task 137: data-health report + one-click idempotent repairs.
 app.route('/api/data-health', dataHealthRoutes);
 // v2.26: retention policy view + manual purge + digest archive list.
-import retentionRoutes from './routes/retention.js';
 app.route('/api/retention', retentionRoutes);
 // task 139: notification-channel repair checks / actions.
 app.route('/api/channel-repair', channelRepairRoutes);

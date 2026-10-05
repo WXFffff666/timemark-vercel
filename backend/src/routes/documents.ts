@@ -107,6 +107,14 @@ documents.get('/expiring', async (c) => {
   return c.json({ success: true, data: items.map(toPublicDocument), days });
 });
 
+// v2.27：已过期证件（与 /expiring 对称；到期中心 overdue 的证件侧视图）
+documents.get('/overdue', async (c) => {
+  const userId = Number(c.get('user').id);
+  const { listOverdueDocuments } = await import('../services/document.service.js');
+  const items = await listOverdueDocuments(userId);
+  return c.json({ success: true, data: items.map(toPublicDocument) });
+});
+
 documents.post('/', async (c) => {
   const userId = Number(c.get('user').id);
   const body = await c.req.json().catch(() => ({}));

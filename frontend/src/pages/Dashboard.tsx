@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '@/stores/auth.store';
 import { useEventStore } from '@/stores/event.store';
@@ -78,23 +78,38 @@ export function Dashboard() {
 
   const { completedKeys } = useTodoCompletions();
   const { timezone } = useTimezone();
-  const todoCount = getTodoEvents(events, new Date(), completedKeys, timezone).length;
-  const todayCount = events.filter((e) => isEventToday(e, new Date(), timezone)).length;
+  // v2.27 B-1：按天稳定化的 dayKey + useMemo —— 此前每次渲染都重跑 O(n) 窗口计算
+  const dayKey = `${new Date().getFullYear()}-${new Date().getMonth()}-${new Date().getDate()}`;
+  const todoCount = useMemo(
+    () => getTodoEvents(events, new Date(), completedKeys, timezone).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [events, completedKeys, timezone, dayKey],
+  );
+  const todayCount = useMemo(
+    () => events.filter((e) => isEventToday(e, new Date(), timezone)).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [events, timezone, dayKey],
+  );
 
   const handleImportIcs = async (file: File) => {
-    const text = await file.text();
-    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-    const res = await fetch('/api/calendar/import-ics', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/calendar' },
-      body: text,
-    });
-    const data = await res.json();
-    if (data.success) {
-      alert(`已导入 ${data.data.imported} 个事件`);
-      fetchEvents();
-    } else {
-      alert(data.error || '导入失败');
+    // v2.27：整个导入路径包 try/catch —— 此前 fetch/json 失败是 unhandled rejection，UI 无反馈
+    try {
+      const text = await file.text();
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const res = await fetch('/api/calendar/import-ics', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/calendar' },
+        body: text,
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        alert(`已导入 ${data.data.imported} 个事件`);
+        fetchEvents();
+      } else {
+        alert(data?.error || `导入失败（HTTP ${res.status}）`);
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '导入失败');
     }
   };
 
@@ -191,7 +206,7 @@ export function Dashboard() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
       <header className="sticky top-4 z-50 px-4 max-w-7xl mx-auto" role="banner" aria-label="页面顶部导航">
         <div className="glass-panel rounded-full px-6 py-3 flex justify-between items-center ring-1 ring-white/20 dark:ring-white/10">
-          <div className="flex items-center gap-4 alive-interactive" onClick={() => navigate('/dashboard')} role="button" tabIndex={0} aria-label="返回首页" onKeyDown={(e) => e.key === 'Enter' && navigate('/dashboard')}>
+          <div className="flex items-center gap-4 alive-interactive" onClick={() => navigate('/dashboard')} role="button" tabIndex={0} aria-label="返回首页" onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/dashboard')}>
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary-500 to-purple-500 flex items-center justify-center shadow-lg" aria-hidden>
               <span className="text-white font-bold text-xl">T</span>
             </div>
@@ -284,15 +299,15 @@ export function Dashboard() {
             <p className="text-[10px] text-slate-400 mt-1">进入提醒窗口的事件</p>
           </div>
           <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">总事件</p><p className="text-2xl font-bold">{events.length}</p></div>
-          <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-emerald-400/50 transition" onClick={() => navigate('/contacts')}>
+          <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-emerald-400/50 transition" onClick={() => navigate('/contacts')} role="button" tabIndex={0} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/contacts')}>
             <p className="text-xs text-slate-500 flex items-center gap-1"><Users size={12} />固定联系人</p>
             <p className="text-sm font-medium text-emerald-600">管理 →</p>
           </div>
-          <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-blue-400/50 transition" onClick={() => navigate('/broadcast')}>
+          <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-blue-400/50 transition" onClick={() => navigate('/broadcast')} role="button" tabIndex={0} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/broadcast')}>
             <p className="text-xs text-slate-500 flex items-center gap-1"><Mail size={12} />批量邮件</p>
             <p className="text-sm font-medium text-blue-600">群发 →</p>
           </div>
-          <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition" onClick={() => navigate('/calendar')}>
+          <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition" onClick={() => navigate('/calendar')} role="button" tabIndex={0} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/calendar')}>
             <p className="text-xs text-slate-500 flex items-center gap-1"><Calendar size={12} />日历视图</p>
             <p className="text-sm font-medium text-indigo-600">查看 →</p>
           </div>

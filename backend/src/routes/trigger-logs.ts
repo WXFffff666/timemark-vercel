@@ -180,8 +180,9 @@ async function retryTriggerLogById(
 triggerLogs.get('/', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);
-  const limit = Math.min(parseInt(c.req.query('limit') || '50'), 200);
-  const offset = parseInt(c.req.query('offset') || '0');
+  // v2.27：NaN 守卫（parseInt 失败得 NaN 时旧写法会让 LIMIT NaN 直接 500）
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1), 200);
+  const offset = Math.max(parseInt(c.req.query('offset') || '0', 10) || 0, 0);
   const status = c.req.query('status');
   const outcome = c.req.query('outcome');
   const channel = c.req.query('channel');
@@ -198,7 +199,12 @@ triggerLogs.get('/', async (c) => {
     conditions.push(`tl.channel_type ILIKE $${params.length}`);
   }
   if (eventId) {
-    params.push(parseInt(eventId, 10));
+    // v2.27：非数字 eventId 返回参数层 NaN 会 pg 500 —— 显式校验
+    const parsedEventId = Number(eventId);
+    if (!Number.isInteger(parsedEventId)) {
+      return c.json({ success: false, error: '无效的事件 ID' }, 400);
+    }
+    params.push(parsedEventId);
     conditions.push(`tl.event_id = $${params.length}`);
   }
   const where = conditions.join(' AND ');

@@ -199,6 +199,23 @@ export async function listExpiringDocuments(userId: number, days: number): Promi
     .filter((document) => document.expires_at !== null);
 }
 
+/**
+ * v2.27：已过期证件列表（与到期中心 /api/expiry 的 overdue 对称）。
+ */
+export async function listOverdueDocuments(userId: number): Promise<DocumentRecord[]> {
+  const result = await query(
+    `SELECT * FROM documents
+     WHERE user_id = $1 AND is_active = TRUE
+       AND expires_at IS NOT NULL
+       AND expires_at < CURRENT_DATE
+     ORDER BY expires_at ASC, id ASC`,
+    [userId],
+  );
+  return result.rows
+    .map((row) => serializeDocumentRow(row as RawRow))
+    .filter((document) => document.expires_at !== null);
+}
+
 export async function getDocument(userId: number, id: number): Promise<DocumentRecord | null> {
   const result = await query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [id, userId]);
   const row = result.rows[0];

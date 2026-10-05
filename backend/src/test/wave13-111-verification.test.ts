@@ -376,6 +376,17 @@ async function fakeQuery(text: string, params: unknown[]): Promise<{ rows: unkno
     const total = store.events.filter((event) => event.user_id === userId).length;
     return { rows: [{ total }], rowCount: 1 };
   }
+  // v2.27：events 列表合并为单条静态 SQL（COUNT OVER + 参数化筛选/排序）——
+  // 总数从第一行的 total_count 取，分页/排序语义与旧两段式一致。
+  if (sql.includes('COUNT(*) OVER() AS total_count FROM events')) {
+    const [userId, , , , , limit, offset] = params as [number, unknown, unknown, unknown, unknown, number, number];
+    const scoped = store.events.filter((event) => event.user_id === userId);
+    const rows = scoped
+      .sort((a, b) => (a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1))
+      .slice(offset ?? 0, (offset ?? 0) + (limit ?? 20))
+      .map((event, i) => ({ ...event, total_count: i === 0 ? scoped.length : undefined }));
+    return { rows, rowCount: rows.length };
+  }
   if (sql.startsWith('SELECT * FROM events WHERE user_id = $1')) {
     const [userId, limit, offset] = params as [number, number, number];
     const rows = store.events

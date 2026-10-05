@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
@@ -27,19 +27,49 @@ const COVERAGE_LABEL = getHolidayCoverage().label;
 
 export default function Calendar() {
   const navigate = useNavigate();
-  const { events, fetchEvents } = useEventStore();
+  const { events, fetchEvents, error } = useEventStore();
   const { timezone } = useTimezone();
-  const [viewMode, setViewMode] = useState<ViewMode>('month');
+  // v2.27：视图/日期进 URL（?view=month&date=2026-10-05），刷新/分享不丢状态
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [viewMode, setViewModeState] = useState<ViewMode>(() => {
+    const v = searchParams.get('view');
+    return v === 'year' || v === 'day' ? (v as ViewMode) : 'month';
+  });
   const [listScope, setListScope] = useState<ListScope>('month');
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
-  const [selectedKey, setSelectedKey] = useState<string>(() => dateKey(new Date()));
+  const [selectedKey, setSelectedKey] = useState<string>(() => {
+    const raw = searchParams.get('date');
+    return raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : dateKey(new Date());
+  });
+  const setViewMode = (v: ViewMode) => {
+    setViewModeState(v);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('view', v);
+      next.set('date', selectedKey);
+      return next;
+    }, { replace: true });
+  };
 
   useEffect(() => {
     if (events.length === 0) fetchEvents();
   }, [events.length, fetchEvents]);
+
+  // v2.27：键盘快捷键（←→ 前后一天/一月，t 回今天）与手动刷新
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (e.key === 'ArrowLeft') goPrev();
+      else if (e.key === 'ArrowRight') goNext();
+      else if (e.key === 't' || e.key === 'T') goToday();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
   const todayKey = getTodayDateKey(timezone);
@@ -52,6 +82,12 @@ export default function Calendar() {
   const selectDate = (d: Date) => {
     const key = dateKey(d);
     setSelectedKey(key);
+    setCursor(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+  };
+
+  const goToday = () => {
+    const d = new Date();
+    setSelectedKey(dateKey(d));
     setCursor(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
   };
 
@@ -120,12 +156,13 @@ export default function Calendar() {
           </div>
         </div>
         <div className="glass-panel rounded-full px-3 py-2 flex items-center justify-between ring-1 ring-black/5 dark:ring-white/10">
-          <Button variant="ghost" size="icon" onClick={goPrev}>
+          <Button variant="ghost" size="icon" onClick={goPrev} aria-label="上一月">
             <ChevronLeft size={18} />
           </Button>
           <button
             type="button"
             className="text-sm font-semibold hover:text-primary-600"
+            aria-label="回到今天"
             onClick={() => {
               const now = new Date();
               selectDate(now);
@@ -135,13 +172,20 @@ export default function Calendar() {
           >
             {headerLabel()}
           </button>
-          <Button variant="ghost" size="icon" onClick={goNext}>
+          <Button variant="ghost" size="icon" onClick={goNext} aria-label="下一月">
             <ChevronRight size={18} />
           </Button>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-4 space-y-4">
+        {/* v2.27：加载失败不再是假空态 —— 显示错误 + 重试 */}
+        {error && (
+          <div className="rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50/60 dark:bg-red-900/10 px-4 py-3 text-sm text-red-600 dark:text-red-300 flex items-center justify-between gap-3">
+            <span>事件加载失败：{error}</span>
+            <Button variant="outline" size="sm" className="rounded-full" onClick={() => fetchEvents()}>重试</Button>
+          </div>
+        )}
         {!yearCovered && (
           <section
             data-testid="coverage-warning"

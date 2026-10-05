@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Inbox as InboxIcon, ArrowLeft, Trash2, RefreshCw, Mail, MailOpen, CheckCheck } from 'lucide-react';
+import { Inbox as InboxIcon, ArrowLeft, Trash2, RefreshCw, Mail, MailOpen, CheckCheck, Copy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -35,6 +35,11 @@ export default function Inbox() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
+  // v2.27：展开正文的消息集合 / 错误提示（此前失败只进 console，用户无感知）
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [pendingMarkId, setPendingMarkId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState('');
+
 
   const fetchMessages = async () => {
     setLoading(true);
@@ -56,12 +61,17 @@ export default function Inbox() {
   }, []);
 
   const markRead = async (id: number) => {
+    setPendingMarkId(id);
+    setActionError('');
     try {
       await api.patch(`/inbox/${id}/read`, {});
       setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, is_read: true } : m)));
       setUnreadCount((c) => Math.max(0, c - 1));
     } catch (error) {
       console.error('Failed to mark read:', error);
+      setActionError(error instanceof Error ? error.message : '标记已读失败');
+    } finally {
+      setPendingMarkId(null);
     }
   };
 
@@ -88,6 +98,7 @@ export default function Inbox() {
       if (removed && !removed.is_read) setUnreadCount((c) => Math.max(0, c - 1));
     } catch (error) {
       console.error('Failed to delete message:', error);
+      setActionError(error instanceof Error ? error.message : '删除失败');
     }
   };
 
@@ -112,13 +123,18 @@ export default function Inbox() {
               <CheckCheck size={16} className="mr-1" />
               全部已读
             </Button>
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={fetchMessages} disabled={loading}>
+            <Button variant="ghost" size="icon" className="rounded-full" aria-label="刷新收件箱" onClick={fetchMessages} disabled={loading}>
               <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
             </Button>
           </div>
         </div>
       </header>
       <main className="max-w-4xl mx-auto px-6 py-10 mt-2">
+        {actionError && (
+          <div className="mb-4 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50/60 dark:bg-red-900/10 px-4 py-2 text-sm text-red-600 dark:text-red-300">
+            {actionError}
+          </div>
+        )}
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3, 4].map((i) => (
@@ -158,7 +174,21 @@ export default function Inbox() {
                           {!msg.is_read && <Badge variant="default" className="scale-90">未读</Badge>}
                           <Badge variant="outline" className="scale-90">{sourceLabels[msg.source] || msg.source}</Badge>
                         </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-300 mt-2 whitespace-pre-wrap break-words line-clamp-4">{msg.body}</p>
+                        {/* v2.27 A-7/E-5：正文可展开/收起 + 一键复制 */}
+                        <p className={`text-sm text-slate-600 dark:text-slate-300 mt-2 whitespace-pre-wrap break-words ${expandedIds.has(msg.id) ? '' : 'line-clamp-4'}`}>{msg.body}</p>
+                        {(msg.body.length > 160 || expandedIds.has(msg.id)) && (
+                          <button
+                            type="button"
+                            className="text-xs text-indigo-500 mt-1 hover:underline"
+                            onClick={() => setExpandedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(msg.id)) next.delete(msg.id); else next.add(msg.id);
+                              return next;
+                            })}
+                          >
+                            {expandedIds.has(msg.id) ? '收起' : '展开全文'}
+                          </button>
+                        )}
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs font-medium text-slate-500 dark:text-slate-400">
                           {msg.sender_label && <span>来自 {msg.sender_label}</span>}
                           {msg.channel && <span>渠道 {msg.channel}</span>}
@@ -170,11 +200,21 @@ export default function Inbox() {
                         </div>
                         <div className="flex gap-1">
                           {!msg.is_read && (
-                            <Button size="sm" variant="outline" className="rounded-full text-xs" onClick={() => markRead(msg.id)}>
-                              标为已读
+                            <Button size="sm" variant="outline" className="rounded-full text-xs" disabled={pendingMarkId === msg.id} onClick={() => markRead(msg.id)}>
+                              {pendingMarkId === msg.id ? '处理中…' : '标为已读'}
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" className="rounded-full text-xs text-red-500" onClick={() => deleteMessage(msg.id)}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="rounded-full text-xs text-slate-400"
+                            aria-label="复制正文"
+                            title="复制正文"
+                            onClick={() => navigator.clipboard.writeText(msg.body).catch(() => undefined)}
+                          >
+                            <Copy size={14} />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="rounded-full text-xs text-red-500" aria-label="删除消息" onClick={() => deleteMessage(msg.id)}>
                             <Trash2 size={14} />
                           </Button>
                         </div>

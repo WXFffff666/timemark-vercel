@@ -17,6 +17,19 @@ const CHANNEL_OPTIONS = [
   'email', 'resend', 'feishu', 'dingtalk', 'wecom', 'telegram', 'discord', 'slack', 'pushover', 'ntfy',
 ];
 
+function parseChannelsSafe(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export default function NotificationRules() {
   const goBack = useSmartBack('/settings');
   const [rules, setRules] = useState<ConditionalRule[]>([]);
@@ -35,7 +48,8 @@ export default function NotificationRules() {
       ]);
       setRules((rulesRes || []).map((r) => ({
         ...r,
-        channels: typeof r.channels === 'string' ? JSON.parse(r.channels) : r.channels,
+        // v2.27：畸形 channels JSON 不再让整页崩掉（一条坏规则 -> 该规则渠道为空数组）
+        channels: parseChannelsSafe(r.channels),
       })));
       setPreset(cfg?.notification_preset || '');
     } finally {

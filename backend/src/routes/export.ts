@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { createLogger } from '../utils/logger.js';
@@ -91,3 +92,31 @@ exportRoutes.get('/report.pdf', async (c) => {
 });
 
 export default exportRoutes;
+
+/**
+ * v2.27 E-4：事件 CSV 导出（与 trigger-logs 的 export.csv 同款响应写法）。
+ */
+exportRoutes.get('/events.csv', async (c) => {
+  const userId = Number(c.get('user').id);
+  const result = await query(
+    `SELECT e.id, e.name, e.type, e.date, e.person_name, e.next_occurrence::text AS next_occurrence
+     FROM events e WHERE e.user_id = $1 ORDER BY e.date ASC, e.id ASC`,
+    [userId],
+  );
+  const header = 'id,name,type,date,person_name,next_occurrence';
+  const lines = result.rows.map((row: Record<string, unknown>) => {
+    const r = row as Record<string, unknown>;
+    const esc = (v: unknown) => {
+      const str = v == null ? '' : String(v);
+      return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    return [r.id, r.name, r.type, r.date, r.person_name, r.next_occurrence].map(esc).join(',');
+  });
+  const csv = `\uFEFF${[header, ...lines].join('\n')}`;
+  return new Response(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="events-${new Date().toISOString().slice(0, 10)}.csv"`,
+    },
+  });
+});

@@ -106,7 +106,8 @@ function installStore(options: {
   dbQuery.mockImplementation(async (sql: string, params: unknown[] = []) => {
     const s = String(sql).replace(/\s+/g, ' ').trim();
 
-    if (s.startsWith('SELECT * FROM events')) {
+    // v2.27：test-send 改用列清单查询，这里放宽前缀匹配以同时覆盖两种形态
+    if (s.startsWith('SELECT * FROM events') || s.includes('FROM events WHERE id = $1 AND user_id = $2')) {
       return store.event ? { rows: [store.event], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
     if (s.includes('FROM conditional_reminder_rules')) {

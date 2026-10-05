@@ -134,7 +134,8 @@ decisions.get('/', async (c) => {
     ? (statusRaw as DecisionStatus)
     : undefined;
   const limitRaw = Number(c.req.query('limit'));
-  const limit = Number.isSafeInteger(limitRaw) && limitRaw > 0 ? limitRaw : 20;
+  // v2.27：limit 封顶 100
+  const limit = Number.isSafeInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 100) : 20;
   const includeQuestions = c.req.query('includeQuestions') !== 'false';
   const rows = await listDecisionCards(userId, { status, limit, includeQuestions });
   return c.json({ success: true, data: rows });

@@ -88,7 +88,9 @@ stats.get('/', async (c) => {
            GROUP BY month, status
            ORDER BY month`, [userId]),
     query(`SELECT type, COUNT(*)::int as count FROM events WHERE user_id = $1 GROUP BY type`, [userId]),
-    query(`SELECT COUNT(*)::int as count FROM events WHERE user_id = $1`, [userId]),
+    // v2.27 D-5：activeEvents 口径修正——此前与 totalEvents 是同一条 COUNT，恒相等；
+    // 现在按"仍有下一次触发"统计。
+    query('SELECT COUNT(*)::int as count FROM events WHERE user_id = $1 AND next_occurrence IS NOT NULL', [userId]),
     // 到期中心（D1）：计数 + 周期成本（按货币分组，绝不跨货币求和）
     getExpirySummary(userId),
     getExpiryCosts(userId, { granularity: 'month' }),

@@ -35,6 +35,43 @@ todos.get('/completions', async (c) => {
   });
 });
 
+// v2.27：近 30 天待办完成率（完成的 occurrence 数 / 30 天内应完成的 occurrence 数）。
+// 一条静态聚合 SQL：event 属主校验 + 用户时区无关的 occurrence_date（DATE 列）口径。
+todos.get('/stats', async (c) => {
+  const userId = Number(c.get('user').id);
+  const { query } = await import('../db/index.js');
+  const result = await query(
+    `WITH due AS (
+       SELECT e.id AS event_id, d::date AS occurrence_date
+       FROM events e
+       CROSS JOIN LATERAL generate_series(
+         CURRENT_DATE - 29, CURRENT_DATE, INTERVAL '1 day'
+       ) AS d
+       WHERE e.user_id = $1
+         AND e.date <= d::date
+     )
+     SELECT
+       (SELECT COUNT(*)::int FROM due) AS expected,
+       (SELECT COUNT(*)::int FROM due
+          JOIN todo_completions tc
+            ON tc.event_id = due.event_id
+           AND tc.occurrence_date = due.occurrence_date
+         WHERE tc.user_id = $1) AS completed`,
+    [userId],
+  );
+  const row = result.rows[0] as { expected?: number; completed?: number } | undefined;
+  const expected = Number(row?.expected ?? 0);
+  const completed = Number(row?.completed ?? 0);
+  return c.json({
+    success: true,
+    data: {
+      expected,
+      completed,
+      rate: expected > 0 ? Math.round((completed / expected) * 100) : null,
+    },
+  });
+});
+
 todos.post('/complete', async (c) => {
   const userId = Number(c.get('user').id);
   const body = await c.req.json().catch(() => ({}));

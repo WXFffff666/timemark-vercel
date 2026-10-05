@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { ArrowLeft, CalendarClock, CheckCircle2, Circle, History } from 'lucide-react';
 
@@ -17,6 +17,8 @@ import { useEventStore } from '@/stores/event.store';
 import { useTodoCompletions } from '@/hooks/useTodoCompletions';
 
 import {
+
+  dateKey,
 
   daysUntilEvent,
 
@@ -56,7 +58,15 @@ export default function Todos() {
 
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<'active' | 'history'>('active');
+  // v2.27：tab 进 URL（?tab=history），刷新/分享不丢状态
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTabState] = useState<'active' | 'history'>(() =>
+    searchParams.get('tab') === 'history' ? 'history' : 'active',
+  );
+  const setTab = (v: 'active' | 'history') => {
+    setTabState(v);
+    setSearchParams(v === 'history' ? { tab: 'history' } : {}, { replace: true });
+  };
 
   const { events, fetchEvents } = useEventStore();
   const { timezone } = useTimezone();
@@ -142,7 +152,19 @@ export default function Todos() {
 
 
 
-  const today = useMemo(() => new Date(), []);
+  // v2.27：dayKey 跨零点自动刷新 —— 此前标签页挂到次日，「今天/已过期」全部错判
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const tick = () => {
+      if (dateKey(new Date()) !== dateKey(today)) setToday(new Date());
+    };
+    const iv = window.setInterval(tick, 60_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(iv);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [today]);
 
 
 

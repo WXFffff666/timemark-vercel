@@ -4,6 +4,7 @@ import { Bell, CheckCircle2, AlertCircle, Clock, RefreshCw, SkipForward } from '
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { formatRelativeTime } from '@/lib/format-time';
 import { readDelivery, realChannelIds, type DeliveryOutcome } from '@timemark/shared';
 
 /**
@@ -63,6 +64,8 @@ const OUTCOME_STYLE: Record<DeliveryOutcome, { label: string; badge: 'success' |
 export function EventReminderLogs() {
   const [reminders, setReminders] = useState<ReminderLog[]>([]);
   const [loading, setLoading] = useState(true);
+  // v2.27 E-12：本地状态筛选 chips（成功/部分失败/失败/已跳过）
+  const [outcomeFilter, setOutcomeFilter] = useState<'' | 'delivered' | 'partial' | 'failed' | 'skipped'>('');
 
   const fetchReminders = async () => {
     setLoading(true);
@@ -80,18 +83,6 @@ export function EventReminderLogs() {
   useEffect(() => {
     fetchReminders();
   }, []);
-
-  const formatTime = (timeStr: string) => {
-    const date = new Date(timeStr);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-
-    if (diff < 60000) return '刚刚';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
-    if (diff < 172800000) return '昨天';
-    return date.toLocaleString('zh-CN');
-  };
 
   const getChannelName = (channel: string) => {
     const channelMap: Record<string, string> = {
@@ -114,9 +105,37 @@ export function EventReminderLogs() {
   const formatChannels = (channelResults?: object | string | null) =>
     realChannelIds(channelResults).map(getChannelName).join('、');
 
+  const filtered = outcomeFilter
+    ? reminders.filter((r) => {
+        const d = readDelivery({ status: r.status, channelResults: r.channel_results, errorMessage: r.error_message });
+        return d.outcome === outcomeFilter;
+      })
+    : reminders;
+
+  const FILTERS: Array<['' | 'delivered' | 'partial' | 'failed' | 'skipped', string]> = [
+    ['', '全部'], ['delivered', '成功'], ['partial', '部分失败'], ['failed', '失败'], ['skipped', '已跳过'],
+  ];
+
   return (
     <div>
-      <div className="flex justify-end mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex flex-wrap gap-1.5">
+          {FILTERS.map(([value, label]) => (
+            <button
+              key={value || 'all'}
+              type="button"
+              aria-pressed={outcomeFilter === value}
+              onClick={() => setOutcomeFilter(value)}
+              className={`text-xs px-3 py-1.5 rounded-full border transition ${
+                outcomeFilter === value
+                  ? 'bg-primary-500 text-white border-primary-500'
+                  : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={fetchReminders} disabled={loading}>
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           刷新
@@ -136,7 +155,7 @@ export function EventReminderLogs() {
             </div>
           ))}
         </div>
-      ) : reminders.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="text-center py-16 glass-panel rounded-[2.5rem] ring-1 ring-black/5 dark:ring-white/10">
           <Bell size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
           <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">暂无提醒记录</h3>
@@ -144,7 +163,7 @@ export function EventReminderLogs() {
         </div>
       ) : (
         <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-4">
-          {reminders.map((r) => {
+          {filtered.map((r) => {
             const delivery = readDelivery({
               status: r.status,
               channelResults: r.channel_results,
@@ -169,7 +188,7 @@ export function EventReminderLogs() {
                       </Badge>
                     </h3>
                     <div className="flex items-center gap-3 mt-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
-                      <span className="flex items-center gap-1.5"><Clock size={14} /> {formatTime(r.created_at)}</span>
+                      <span className="flex items-center gap-1.5"><Clock size={14} /> {formatRelativeTime(r.created_at)}</span>
                       <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
                       <span>渠道: {formatChannels(r.channel_results)}</span>
                     </div>

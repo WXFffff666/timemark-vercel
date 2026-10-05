@@ -341,108 +341,131 @@ export async function getEventsByUserId(userId: string): Promise<Event[]> {
  * @param offset - Number of events to skip
  * @returns Object containing events array and total count
  */
-export async function getEventsByUserIdPaginated(userId: string, limit: number, offset: number, profileId?: number | null): Promise<{ events: Event[]; total: number }> {
+/**
+ * v2.27：事件行 -> Event 的共享映射（此前在列表/分页两处各内联一份，新增单条
+ * 读取端点也需要它）。纯函数：JSON 解析全部带守卫，畸形列退默认值。
+ */
+export function mapEventRow(row: EventRow): Event {
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    name: row.name,
+    type: row.type as EventType,
+    date: (() => {
+      try {
+        if (row.date instanceof Date) {
+          const d = row.date;
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        if (typeof row.date === 'string') {
+          return row.date.split('T')[0];
+        }
+        return String(row.date);
+      } catch {
+        return String(row.date);
+      }
+    })(),
+    calendarType: row.calendar_type as CalendarType,
+    lunarDate: row.lunar_date ? (() => { try { return JSON.parse(row.lunar_date); } catch { return undefined; } })() : undefined,
+    reminderConfig: parseReminderConfig(row),
+    recurringConfig: parseRecurringConfig(row),
+    nextOccurrence: row.next_occurrence || null,
+    relationshipMappingId: row.relationship_mapping_id?.toString(),
+    personName: row.person_name,
+    birthDate: row.birth_date,
+    birthDateLunar: row.birth_date_lunar,
+    reminderRecipientName: row.reminder_recipient_name,
+    reminderRecipientEmail: row.reminder_recipient_email,
+    createdAt: row.created_at,
+  };
+}
+
+function parseReminderConfig(row: EventRow): ReminderConfig {
+  const defaultReminderConfig: ReminderConfig = {
+    enabled: true,
+    daysBeforeList: [1, 3, 7],
+    emailRecipients: [],
+  };
+  let reminderConfig: ReminderConfig = { ...defaultReminderConfig };
+  try {
+    const rawConfig = row.reminder_config;
+    if (rawConfig === null || rawConfig === undefined) {
+      reminderConfig = { ...defaultReminderConfig };
+    } else if (typeof rawConfig === 'object') {
+      reminderConfig = { ...defaultReminderConfig, ...(rawConfig as Partial<ReminderConfig>) };
+    } else if (typeof rawConfig === 'string') {
+      const parsed = JSON.parse(rawConfig);
+      reminderConfig = { ...defaultReminderConfig, ...parsed };
+    }
+  } catch (e) {
+    console.error('Failed to parse reminder_config:', e);
+  }
+  let notificationChannels: string[] = [];
+  try {
+    const rawChannels = row.notification_channels;
+    if (rawChannels) {
+      notificationChannels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : rawChannels;
+    }
+  } catch (e) {
+    console.error('Failed to parse notification_channels:', e);
+  }
+  reminderConfig.channels = notificationChannels;
+  reminderConfig.accountIds = parseNotificationAccountIds(row.notification_account_ids);
+  return reminderConfig;
+}
+
+function parseRecurringConfig(row: EventRow): RecurringConfig | undefined {
+  try {
+    const rawRecurring = row.recurring_config;
+    if (rawRecurring) {
+      return (typeof rawRecurring === 'string' ? JSON.parse(rawRecurring) : rawRecurring) as RecurringConfig;
+    }
+  } catch (e) {
+    console.error('Failed to parse recurring_config:', e);
+  }
+  return undefined;
+}
+
+export async function getEventsByUserIdPaginated(
+  userId: string,
+  limit: number,
+  offset: number,
+  profileId?: number | null,
+  options: { type?: string | null; upcoming?: boolean; sort?: 'date' | 'created_at' } = {},
+): Promise<{ events: Event[]; total: number }> {
   const numericUserId = parseInt(userId, 10);
   if (isNaN(numericUserId)) {
     return { events: [], total: 0 };
   }
 
-  // Optional profile filter (checkbox 69): omitted = all profiles, byte-identical
-  // to the pre-profile API shape. The predicate is ADDED, never a rewrite.
-  const params: number[] = [numericUserId];
-  let profileClause = '';
-  if (profileId != null) {
-    params.push(profileId);
-    profileClause = ' AND profile_id = $2';
-  }
-
-  // 获取总数
-  const countResult = await query(`SELECT COUNT(*) as total FROM events WHERE user_id = $1${profileClause}`, params);
-  const total = countResult.rows[0]?.total || 0;
-  
-  // 获取分页数据
+  // v2.27：单条静态 SQL 同时完成筛选/排序/分页/总数（COUNT OVER），省一次 RTT。
+  // 筛选全部是参数化谓词（COALESCE / 布尔哨兵），排序键用 CASE 白名单——
+  // 没有任何字符串拼进 SQL（Mimosa 对 ${} 模板插值误报，故全静态）。
+  // 次序键补 id：同日多事件时分页不再重复/丢行。
   const result = await query(
-    `SELECT * FROM events WHERE user_id = $1${profileClause} ORDER BY date ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-    [...params, limit, offset]
+    `SELECT *, COUNT(*) OVER() AS total_count FROM events
+     WHERE user_id = $1
+       AND profile_id = COALESCE($2::int, profile_id)
+       AND ($3::text IS NULL OR type = $3::text)
+       AND ($4::boolean = FALSE OR next_occurrence IS NOT NULL)
+     ORDER BY
+       CASE WHEN $5::text = 'created_at' THEN created_at::text END ASC NULLS LAST,
+       CASE WHEN $5::text = 'created_at' THEN NULL ELSE date END ASC NULLS LAST,
+       id ASC
+     LIMIT $6::int OFFSET $7::int`,
+    [
+      numericUserId,
+      profileId ?? null,
+      options.type ?? null,
+      options.upcoming === true,
+      options.sort === 'created_at' ? 'created_at' : 'date',
+      limit,
+      offset,
+    ],
   );
+  const total = Number((result.rows[0] as Record<string, unknown> | undefined)?.total_count ?? 0);
   
-  const events = result.rows.map((row: EventRow) => {
-    const defaultReminderConfig: ReminderConfig = {
-      enabled: true,
-      daysBeforeList: [1, 3, 7],
-      emailRecipients: [],
-    };
-    
-    let reminderConfig: ReminderConfig = { ...defaultReminderConfig };
-    try {
-      const rawConfig = row.reminder_config;
-      if (rawConfig === null || rawConfig === undefined) {
-        reminderConfig = { ...defaultReminderConfig };
-      } else if (typeof rawConfig === 'object') {
-        reminderConfig = { ...defaultReminderConfig, ...(rawConfig as Partial<ReminderConfig>) };
-      } else if (typeof rawConfig === 'string') {
-        const parsed = JSON.parse(rawConfig);
-        reminderConfig = { ...defaultReminderConfig, ...parsed };
-      }
-    } catch (e) {
-      console.error('Failed to parse reminder_config:', e);
-    }
-    
-    let notificationChannels: string[] = [];
-    try {
-      const rawChannels = row.notification_channels;
-      if (rawChannels) {
-        notificationChannels = typeof rawChannels === 'string' ? JSON.parse(rawChannels) : rawChannels;
-      }
-    } catch (e) {
-      console.error('Failed to parse notification_channels:', e);
-    }
-    reminderConfig.channels = notificationChannels;
-    reminderConfig.accountIds = parseNotificationAccountIds(row.notification_account_ids);
-    
-    let recurringConfig = undefined;
-    try {
-      const rawRecurring = row.recurring_config;
-      if (rawRecurring) {
-        recurringConfig = typeof rawRecurring === 'string' ? JSON.parse(rawRecurring) : rawRecurring;
-      }
-    } catch (e) {
-      console.error('Failed to parse recurring_config:', e);
-    }
-    
-    return {
-      id: String(row.id),
-      userId: String(row.user_id),
-      name: row.name,
-      type: row.type as EventType,
-      date: (() => {
-        try {
-          if (row.date instanceof Date) {
-            const d = row.date;
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-          }
-          if (typeof row.date === 'string') {
-            return row.date.split('T')[0];
-          }
-          return String(row.date);
-        } catch {
-          return String(row.date);
-        }
-      })(),
-      calendarType: row.calendar_type as CalendarType,
-      lunarDate: row.lunar_date ? (() => { try { return JSON.parse(row.lunar_date); } catch { return undefined; } })() : undefined,
-      reminderConfig,
-      recurringConfig,
-      nextOccurrence: row.next_occurrence || null,
-      relationshipMappingId: row.relationship_mapping_id?.toString(),
-      personName: row.person_name,
-      birthDate: row.birth_date,
-      birthDateLunar: row.birth_date_lunar,
-      reminderRecipientName: row.reminder_recipient_name,
-      reminderRecipientEmail: row.reminder_recipient_email,
-      createdAt: row.created_at,
-    };
-  });
+  const events = result.rows.map((row: EventRow) => mapEventRow(row));
   
   return { events, total };
 }
