@@ -34,7 +34,8 @@ export interface AssistantIntentContext {
 }
 
 /** Quick prompts offered in the UI. Kept here so the panel and the tests share one list. */
-export const ASSISTANT_QUICK_PROMPTS = ['今天有什么', '下周三提醒我', '这个月花了多少', '帮我记一下'] as const;
+// v2.28：覆盖新增路由的说法（该联系谁/习惯/规律/搜索）
+export const ASSISTANT_QUICK_PROMPTS = ['今天有什么', '下周三提醒我', '这个月花了多少', '该联系谁了', '我的习惯怎么样', '帮我找 租房'] as const;
 
 const QUERY_MARKER = /有什么|有啥|安排|待办|日程|做什么|要做什么/;
 const WEEK_MARKER = /本周|这周|这星期|未来(?:七|7)天|最近(?:七|7)天|一周/;

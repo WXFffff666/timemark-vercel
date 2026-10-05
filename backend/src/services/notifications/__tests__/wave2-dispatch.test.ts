@@ -173,6 +173,31 @@ describe('wave2 dispatch registration (checkboxes 15-22)', () => {
     }
   });
 
+  it('v2.28: dispatches through the 5 new channels (pushbullet/join/pushsafer/webex/notifiarr)', async () => {
+    vi.mocked(getNotificationAccounts).mockResolvedValue([
+      account({ id: 1, type: 'pushbullet', token: 'PBT_DISPATCH' }),
+      account({ id: 2, type: 'join', token: 'JOIN_DISPATCH', chat_id: 'DEV_D' }),
+      account({ id: 3, type: 'pushsafer', token: 'PS_DISPATCH' }),
+      account({ id: 4, type: 'webex', webhook: 'https://webexapis.com/v1/webhooks/incoming/WEBEX_D', config_method: 'webhook' }),
+      account({ id: 5, type: 'notifiarr', webhook: 'https://notifiarr.com/api/v1/notification/passthrough/NOTIF_D', config_method: 'webhook' }),
+    ]);
+    mockProviderResponses();
+
+    const result = await sendNotifications(reminderEvent([1, 2, 3, 4, 5]), 1, [
+      'pushbullet', 'join', 'pushsafer', 'webex', 'notifiarr',
+    ]);
+
+    for (const channel of ['pushbullet', 'join', 'pushsafer', 'webex', 'notifiarr']) {
+      expect(result[channel], `${channel} should succeed`).toMatchObject({ success: true });
+    }
+    const requestedUrls = mockPost.mock.calls.map(([url]) => String(url));
+    expect(requestedUrls.some((u) => u.includes('api.pushbullet.com/v2/pushes'))).toBe(true);
+    expect(requestedUrls.some((u) => u.includes('joinjoaomgcd.appspot.com'))).toBe(true);
+    expect(requestedUrls.some((u) => u.includes('pushsafer.com/api'))).toBe(true);
+    expect(requestedUrls.some((u) => u.includes('webexapis.com/v1/webhooks/incoming/WEBEX_D'))).toBe(true);
+    expect(requestedUrls.some((u) => u.includes('notifiarr.com/api/v1/notification/passthrough/NOTIF_D'))).toBe(true);
+  });
+
   it('reports no_configuration (without any send) when a new channel account lacks required fields', async () => {
     await ensureFcmSa();
     vi.mocked(getNotificationAccounts).mockResolvedValue([
