@@ -219,7 +219,7 @@ export function BulkActionBar({
             成功 {outcome.succeeded} 项，失败 {outcome.failed} 项（共 {outcome.requested} 项）
           </p>
           {failures.length > 0 ? (
-            <ul className="mt-1 max-h-32 space-y-0.5 overflow-y-auto text-xs text-slate-600 dark:text-slate-300">
+            <ul className="mt-1 max-h-32 space-y-0.5 overflow-y-auto overscroll-contain text-xs text-slate-600 dark:text-slate-300">
               {failures.map((entry) => (
                 <li key={`${entry.entityType}-${entry.id}`}>
                   #{entry.id}：{entry.message ?? entry.code}

@@ -64,12 +64,35 @@
     return { banner: banner, installBtn: installBtn, dismissBtn: dismissBtn };
   }
 
+  var INSTALL_DISMISS_KEY = 'install-banner-dismissed-at';
+  // 「稍后」记忆（v2.26）：dismiss 后 7 天内不再弹出 —— 之前每次加载都弹，
+  // 实测中它反复出现还挡住底部内容。
+  var DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function dismissedRecently() {
+    try {
+      var at = Number(window.localStorage.getItem(INSTALL_DISMISS_KEY));
+      return Number.isFinite(at) && at > 0 && Date.now() - at < DISMISS_TTL_MS;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markDismissed() {
+    try {
+      window.localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now()));
+    } catch (e) {
+      // 存储不可用就退回一次性关闭行为
+    }
+  }
+
   window.addEventListener('beforeinstallprompt', function (event) {
     // 抑制 Chrome 自带的小横幅，改用我们自己的（可关闭、文案本地化）
     event.preventDefault();
 
     if (document.getElementById(BANNER_ID)) return;
     if (!document.body) return;
+    if (dismissedRecently()) return;
 
     var parts = isEnglish()
       ? buildBanner('Install TimeMark on your desktop', 'Install', 'Later')
@@ -80,7 +103,10 @@
       // prompt() 只能调用一次；用户拒绝后浏览器不再发 beforeinstallprompt
       if (typeof event.prompt === 'function') event.prompt();
     });
-    parts.dismissBtn.addEventListener('click', removeBanner);
+    parts.dismissBtn.addEventListener('click', function () {
+      markDismissed();
+      removeBanner();
+    });
 
     document.body.appendChild(parts.banner);
   });

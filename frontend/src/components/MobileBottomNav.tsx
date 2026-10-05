@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutGrid } from 'lucide-react';
 import { prefetchRoute } from '@/lib/prefetch-routes';
 import { NAV_GROUPS, NAV_PRIMARY } from '@/lib/nav-groups';
@@ -81,18 +82,28 @@ export function MobileBottomNav() {
         </button>
       </nav>
 
-      {moreOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
-          onClick={() => setMoreOpen(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('nav.more')}
-            className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-[2rem] bg-white dark:bg-slate-900 p-5 pb-8 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+      {/* v2.26 D：底部抽屉补出场/退场动画；列表 overscroll-contain 防滚动穿透 */}
+      <AnimatePresence>
+        {moreOpen && (
+          <motion.div
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setMoreOpen(false)}
           >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label={t('nav.more')}
+              className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto overscroll-contain rounded-t-[2rem] bg-white dark:bg-slate-900 p-5 pb-8 shadow-2xl"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 380, damping: 36 }}
+              onClick={(e) => e.stopPropagation()}
+            >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600" />
             {NAV_GROUPS.map((group) => (
               <section key={group.id} className="mb-5">
@@ -126,9 +137,10 @@ export function MobileBottomNav() {
                 </ul>
               </section>
             ))}
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

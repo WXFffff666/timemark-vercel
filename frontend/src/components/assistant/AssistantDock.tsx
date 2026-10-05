@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
 import { useAssistant } from '@/hooks/useAssistant';
@@ -43,16 +44,23 @@ export function AssistantDock() {
         <Sparkles size={20} aria-hidden />
       </button>
 
-      {open && (
-        <div
-          data-testid="assistant-dock"
-          role="dialog"
-          aria-label="智能助手"
-          className="fixed bottom-36 right-4 z-40 flex max-h-[70vh] w-[min(92vw,26rem)] flex-col md:bottom-24 md:right-6"
-        >
-          <AssistantPanel assistant={assistant} variant="dock" onClose={() => setOpen(false)} />
-        </div>
-      )}
+      {/* v2.26 D：面板补出场/退场动画（原为无动画条件渲染） */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            data-testid="assistant-dock"
+            role="dialog"
+            aria-label="智能助手"
+            className="fixed bottom-36 right-4 z-40 flex max-h-[70vh] w-[min(92vw,26rem)] flex-col md:bottom-24 md:right-6"
+            initial={{ opacity: 0, y: 12, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.97 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+          >
+            <AssistantPanel assistant={assistant} variant="dock" onClose={() => setOpen(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

@@ -104,12 +104,13 @@ describe('CommandPalette (checkbox 132)', () => {
     expect(screen.getByTestId('command-palette')).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.queryByTestId('command-palette')).toBeNull();
+    // v2.26 D：加了退场动画，关闭后元素在动画结束前仍挂在 DOM 里（jsdom 不跑动画帧）
+    await waitFor(() => expect(screen.queryByTestId('command-palette')).toBeNull());
 
     openPalette();
     expect(screen.getByTestId('command-palette')).toBeInTheDocument();
     openPalette();
-    expect(screen.queryByTestId('command-palette')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('command-palette')).toBeNull());
   });
 
   it('issues exactly one debounced search after typing, and none for whitespace', async () => {
@@ -153,7 +154,7 @@ describe('CommandPalette (checkbox 132)', () => {
     // Enter opens the active hit (event -> /calendar) and closes the palette.
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(navigateSpy).toHaveBeenCalledWith('/calendar');
-    expect(screen.queryByTestId('command-palette')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('command-palette')).toBeNull());
   });
 
   it('renders facet counts and clicking a chip filters the search to that type', async () => {

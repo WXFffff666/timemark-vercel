@@ -713,7 +713,7 @@ export default function Documents() {
 
       {/* 编辑 / 上传对话框 */}
       <Dialog open={open} onOpenChange={closeEdit}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto overscroll-contain max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId != null ? '编辑证件' : '新建证件'}</DialogTitle>
           </DialogHeader>

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAuthStore } from './stores/auth.store';
 import { initAuthLifecycle } from './stores/auth.store';
 import { LoginPage } from './pages/Login';
@@ -85,6 +86,60 @@ function MeshBackground() {
   );
 }
 
+/** 这些路径不做过渡：登录直进；外嵌/分享页动效无意义且可能被 iframe 限制 */
+const NO_TRANSITION_ROUTES = new Set(['/login']);
+
+/**
+ * 路由表。location 必须显式传入：AnimatePresence 退场期间旧子树仍在渲染，
+ * <Routes> 若读 context location 会直接跳变到新路由的内容。
+ */
+function AppRoutes({ location }: { location: ReturnType<typeof useLocation> }) {
+  return (
+    <Routes location={location}>
+      <Route path="/login" element={<LoginPage />} />
+    <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+    <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+    {/* v2.26 C：提醒记录并入 /trigger-logs（?tab=reminders），旧链接 301 兜底 */}
+    <Route path="/reminders" element={<Navigate to="/trigger-logs?tab=reminders" replace />} />
+    <Route path="/login-history" element={<ProtectedRoute><LoginHistory /></ProtectedRoute>} />
+    <Route path="/security" element={<ProtectedRoute><Security /></ProtectedRoute>} />
+    <Route path="/deploy-wizard" element={<ProtectedRoute><DeployWizard /></ProtectedRoute>} />
+    <Route path="/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
+    <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+    <Route path="/trigger-logs" element={<ProtectedRoute><TriggerLogs /></ProtectedRoute>} />
+    <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
+    <Route path="/notification-rules" element={<ProtectedRoute><NotificationRules /></ProtectedRoute>} />
+    <Route path="/annual-report" element={<ProtectedRoute><AnnualReport /></ProtectedRoute>} />
+    <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+    <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
+    <Route path="/broadcast" element={<ProtectedRoute><Broadcast /></ProtectedRoute>} />
+    <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
+    <Route path="/todos" element={<ProtectedRoute><TodosPage /></ProtectedRoute>} />
+    <Route path="/expiry" element={<ProtectedRoute><ExpiryPage /></ProtectedRoute>} />
+    <Route path="/inventory" element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} />
+    <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
+    <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
+    <Route path="/habits" element={<ProtectedRoute><HabitsPage /></ProtectedRoute>} />
+    <Route path="/medications" element={<ProtectedRoute><MedicationsPage /></ProtectedRoute>} />
+    <Route path="/goals" element={<ProtectedRoute><GoalsPage /></ProtectedRoute>} />
+    {/* v2.26 C：/assistant 页删除 —— AssistantDock 已全局承载同一面板 */}
+    <Route path="/agent-console" element={<ProtectedRoute><AgentConsole /></ProtectedRoute>} />
+    <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
+    <Route path="/today" element={<ProtectedRoute><TodayPage /></ProtectedRoute>} />
+    <Route path="/data-health" element={<ProtectedRoute><DataHealthPage /></ProtectedRoute>} />
+    <Route path="/local-ai" element={<ProtectedRoute><LocalAIPage /></ProtectedRoute>} />
+    <Route path="/shared/:token" element={<SharedView />} />
+    <Route path="/integrations-docs" element={<ProtectedRoute><IntegrationsDocs /></ProtectedRoute>} />
+    <Route path="/cron-monitor" element={<ProtectedRoute><CronMonitor /></ProtectedRoute>} />
+    <Route path="/docker-migration" element={<ProtectedRoute><DockerMigration /></ProtectedRoute>} />
+    <Route path="/lunar-holidays" element={<ProtectedRoute><LunarHolidays /></ProtectedRoute>} />
+    <Route path="/embed/:token" element={<CountdownWidget />} />
+    <Route path="/share/:token" element={<ShareEvent />} />
+    <Route path="/" element={<Navigate to="/dashboard" />} />
+    </Routes>
+  );
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
   const checkAuth = useAuthStore((state) => state.checkAuth);
@@ -101,48 +156,30 @@ function AnimatedRoutes() {
 
   return (
     <Suspense fallback={<PageLoader />}>
-      <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          {/* v2.26 C：提醒记录并入 /trigger-logs（?tab=reminders），旧链接 301 兜底 */}
-          <Route path="/reminders" element={<Navigate to="/trigger-logs?tab=reminders" replace />} />
-          <Route path="/login-history" element={<ProtectedRoute><LoginHistory /></ProtectedRoute>} />
-          <Route path="/security" element={<ProtectedRoute><Security /></ProtectedRoute>} />
-          <Route path="/deploy-wizard" element={<ProtectedRoute><DeployWizard /></ProtectedRoute>} />
-          <Route path="/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
-          <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
-          <Route path="/trigger-logs" element={<ProtectedRoute><TriggerLogs /></ProtectedRoute>} />
-          <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
-          <Route path="/notification-rules" element={<ProtectedRoute><NotificationRules /></ProtectedRoute>} />
-          <Route path="/annual-report" element={<ProtectedRoute><AnnualReport /></ProtectedRoute>} />
-          <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-          <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
-          <Route path="/broadcast" element={<ProtectedRoute><Broadcast /></ProtectedRoute>} />
-          <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
-          <Route path="/todos" element={<ProtectedRoute><TodosPage /></ProtectedRoute>} />
-          <Route path="/expiry" element={<ProtectedRoute><ExpiryPage /></ProtectedRoute>} />
-          <Route path="/inventory" element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} />
-          <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
-          <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
-          <Route path="/habits" element={<ProtectedRoute><HabitsPage /></ProtectedRoute>} />
-          <Route path="/medications" element={<ProtectedRoute><MedicationsPage /></ProtectedRoute>} />
-          <Route path="/goals" element={<ProtectedRoute><GoalsPage /></ProtectedRoute>} />
-          {/* v2.26 C：/assistant 页删除 —— AssistantDock 已全局承载同一面板 */}
-          <Route path="/agent-console" element={<ProtectedRoute><AgentConsole /></ProtectedRoute>} />
-          <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
-          <Route path="/today" element={<ProtectedRoute><TodayPage /></ProtectedRoute>} />
-          <Route path="/data-health" element={<ProtectedRoute><DataHealthPage /></ProtectedRoute>} />
-          <Route path="/local-ai" element={<ProtectedRoute><LocalAIPage /></ProtectedRoute>} />
-          <Route path="/shared/:token" element={<SharedView />} />
-          <Route path="/integrations-docs" element={<ProtectedRoute><IntegrationsDocs /></ProtectedRoute>} />
-          <Route path="/cron-monitor" element={<ProtectedRoute><CronMonitor /></ProtectedRoute>} />
-          <Route path="/docker-migration" element={<ProtectedRoute><DockerMigration /></ProtectedRoute>} />
-          <Route path="/lunar-holidays" element={<ProtectedRoute><LunarHolidays /></ProtectedRoute>} />
-          <Route path="/embed/:token" element={<CountdownWidget />} />
-          <Route path="/share/:token" element={<ShareEvent />} />
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-      </Routes>
+      {/*
+        v2.26 D：全站页面过渡。
+        包一层 keyed motion.div + AnimatePresence(mode='wait') —— 旧代码里各页
+        根元素的 exit= 永远不会执行（Routes 没有 AnimatePresence 包裹），这里在
+        路由层统一做进入/退出过渡，28+ 页一次覆盖；页面内的 stagger 动画照常叠加。
+        跳过理由：/login 无动画直进；/embed /share 是外嵌 iframe 场景，动效无意义。
+      */}
+      <AnimatePresence mode="wait" initial={false}>
+        {NO_TRANSITION_ROUTES.has(location.pathname) ? (
+          <div key={location.pathname}>
+            <AppRoutes location={location} />
+          </div>
+        ) : (
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+          >
+            <AppRoutes location={location} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Suspense>
   );
 }

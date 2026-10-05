@@ -329,7 +329,7 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
         role="log"
         aria-live="polite"
         aria-label="助手对话记录"
-        className="flex-1 space-y-3 overflow-y-auto rounded-2xl bg-white/40 p-3 dark:bg-black/20 min-h-40"
+        className="flex-1 space-y-3 overflow-y-auto overscroll-contain rounded-2xl bg-white/40 p-3 dark:bg-black/20 min-h-40"
       >
         {empty ? (
           <p className="py-6 text-center text-sm text-slate-400">

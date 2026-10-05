@@ -1015,7 +1015,7 @@ export default function Channels() {
       {/* v2.25: 渠道修复向导（暂停徽章的「🔧 修复」动作） */}
       {repairAccountId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-label="渠道修复向导">
-          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto">
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto overscroll-contain">
             <ChannelRepairWizard
               accountId={repairAccountId}
               onClose={() => setRepairAccountId(null)}
@@ -1076,7 +1076,7 @@ export default function Channels() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-2"
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto overscroll-contain pr-2"
                 >
                   {filteredTemplates.map((template) => {
                     return (

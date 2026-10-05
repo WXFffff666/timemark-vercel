@@ -432,7 +432,7 @@ export default function Security() {
 
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><Clock className="w-4 h-4" />安全事件时间线</CardTitle></CardHeader>
-          <CardContent className="space-y-2 max-h-64 overflow-y-auto">
+          <CardContent className="space-y-2 max-h-64 overflow-y-auto overscroll-contain">
             {events.map((e) => (
               <div key={e.id} className="text-sm border-l-2 border-blue-400 pl-3 py-1">
                 <p className="font-medium">{e.event_type}</p>

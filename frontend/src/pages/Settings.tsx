@@ -895,7 +895,7 @@ export default function Settings() {
                 <button type="button" onClick={clearEmailLogs} className="text-xs text-red-500">清空</button>
               )}
             </div>
-            <div className="glass-panel rounded-[2.5rem] p-4 ring-1 ring-black/5 dark:ring-white/10 max-h-64 overflow-y-auto">
+            <div className="glass-panel rounded-[2.5rem] p-4 ring-1 ring-black/5 dark:ring-white/10 max-h-64 overflow-y-auto overscroll-contain">
               {emailLogs.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-6">暂无邮件记录</p>
               ) : (

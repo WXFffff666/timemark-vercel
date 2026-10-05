@@ -507,7 +507,7 @@ export default function Contacts() {
       </Tabs>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto overscroll-contain max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId ? '编辑联系人' : '添加固定联系人'}</DialogTitle>
           </DialogHeader>
@@ -633,7 +633,7 @@ export default function Contacts() {
                 <p className="text-xs text-slate-500">
                   勾选后，提醒与快捷发信将通过对应渠道发送。邮件类渠道使用上方邮箱作为收件地址。
                 </p>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
+                <div className="space-y-2 max-h-40 overflow-y-auto overscroll-contain">
                   {compatibleAccounts.length === 0 ? (
                     <p className="text-xs text-amber-600">请先填写对应渠道的联系方式</p>
                   ) : (

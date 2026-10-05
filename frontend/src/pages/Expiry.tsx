@@ -592,7 +592,7 @@ export default function Expiry() {
       <MobileBottomNav />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto overscroll-contain max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId != null ? '编辑到期项' : '新建到期项'}</DialogTitle>
           </DialogHeader>

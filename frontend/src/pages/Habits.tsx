@@ -481,7 +481,7 @@ export default function Habits() {
       <MobileBottomNav />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto overscroll-contain max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId != null ? '编辑习惯' : '新建习惯'}</DialogTitle>
           </DialogHeader>

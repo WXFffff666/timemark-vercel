@@ -1041,7 +1041,7 @@ export default function Medications() {
       <MobileBottomNav />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto overscroll-contain max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId != null ? '编辑药品' : '新建药品'}</DialogTitle>
           </DialogHeader>

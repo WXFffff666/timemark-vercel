@@ -548,7 +548,7 @@ export default function Maintenance() {
       <MobileBottomNav />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto overscroll-contain max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId != null ? '编辑保养计划' : '新建保养计划'}</DialogTitle>
           </DialogHeader>
@@ -708,7 +708,7 @@ export default function Maintenance() {
       </Dialog>
 
       <Dialog open={recordPlan != null} onOpenChange={(next) => { if (!next) setRecordPlan(null); }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto overscroll-contain max-w-lg">
           <DialogHeader>
             <DialogTitle>记录保养{recordPlan ? ` · ${recordPlan.asset_name}` : ''}</DialogTitle>
           </DialogHeader>

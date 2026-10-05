@@ -274,7 +274,7 @@ export function ContactDetailDrawer({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         data-testid="contact-detail-drawer"
-        className="fixed inset-y-0 right-0 left-auto top-0 h-full max-h-none w-full max-w-xl translate-x-0 translate-y-0 overflow-y-auto rounded-none p-5 sm:max-w-xl sm:rounded-none sm:p-7"
+        className="fixed inset-y-0 right-0 left-auto top-0 h-full max-h-none w-full max-w-xl translate-x-0 translate-y-0 overflow-y-auto overscroll-contain rounded-none p-5 sm:max-w-xl sm:rounded-none sm:p-7"
       >
         {contact && (
           <div className="space-y-5 pb-6">

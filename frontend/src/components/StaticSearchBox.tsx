@@ -66,7 +66,7 @@ export function StaticSearchBox() {
         {loading && <span className="text-[10px] text-slate-400 shrink-0">搜索中…</span>}
       </label>
       {open && hits.length > 0 && (
-        <ul className="mt-2 space-y-1 max-h-48 overflow-y-auto" role="listbox" aria-label="静态搜索结果">
+        <ul className="mt-2 space-y-1 max-h-48 overflow-y-auto overscroll-contain" role="listbox" aria-label="静态搜索结果">
           {hits.map((hit) => (
             <li
               key={hit.id}

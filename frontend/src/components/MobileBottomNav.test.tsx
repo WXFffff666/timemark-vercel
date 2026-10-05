@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { initI18n, setLang } from '@/i18n';
@@ -90,7 +90,7 @@ describe('导航可达性', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: /Cron 监控/ }));
 
     expect(navigateMock).toHaveBeenCalledWith('/cron-monitor');
-    // 导航后应关闭，避免遮罩留在屏幕上
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // 导航后应关闭，避免遮罩留在屏幕上（v2.26 D：退场动画期间元素仍在，等它摘除）
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });

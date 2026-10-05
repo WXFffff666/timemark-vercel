@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlarmClock,
   Calendar,
@@ -195,32 +196,42 @@ export function CommandPalette() {
     location.pathname.startsWith('/embed/');
 
   if (!isAuthenticated || excluded) return null;
-  if (!open) return null;
 
   const trimmed = query.trim();
   const activeFacets = facets
     ? GLOBAL_SEARCH_TYPES.filter((type) => (facets[type] ?? 0) > 0)
     : [];
 
+  // v2.26 D：命令面板补出场/退场动画 + 结果列表 overscroll-contain。
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) setOpen(false);
-      }}
-    >
-      <div
-        className="absolute inset-0 bg-slate-950/30 backdrop-blur-sm"
-        aria-hidden
-        onClick={() => setOpen(false)}
-      />
-      <div
-        data-testid="command-palette"
-        role="dialog"
-        aria-modal="true"
-        aria-label="全局搜索"
-        className="glass-panel relative z-10 w-full max-w-xl overflow-hidden rounded-2xl"
+    <AnimatePresence>
+      {open && (
+      <motion.div
+        className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.14 }}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setOpen(false);
+        }}
       >
+        <div
+          className="absolute inset-0 bg-slate-950/30 backdrop-blur-sm"
+          aria-hidden
+          onClick={() => setOpen(false)}
+        />
+        <motion.div
+          data-testid="command-palette"
+          role="dialog"
+          aria-modal="true"
+          aria-label="全局搜索"
+          className="glass-panel relative z-10 w-full max-w-xl overflow-hidden rounded-2xl"
+          initial={{ opacity: 0, y: -10, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -10, scale: 0.98 }}
+          transition={{ duration: 0.16, ease: 'easeOut' }}
+        >
         <div className="flex items-center gap-2 border-b border-white/40 px-4 py-3 dark:border-white/10">
           <Search size={18} className="shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />
           <input
@@ -266,7 +277,7 @@ export function CommandPalette() {
           id="command-palette-listbox"
           aria-label="搜索结果"
           data-testid="command-palette-results"
-          className="max-h-[50vh] overflow-y-auto py-1"
+          className="max-h-[50vh] overflow-y-auto overscroll-contain py-1"
         >
           {results.map((hit, index) => (
             <li
@@ -349,7 +360,9 @@ export function CommandPalette() {
           <span>↵ 打开</span>
           <span>esc 关闭</span>
         </div>
-      </div>
-    </div>
+        </motion.div>
+      </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

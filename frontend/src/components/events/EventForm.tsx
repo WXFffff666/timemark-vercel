@@ -763,7 +763,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto glass-panel rounded-[2.5rem]">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain glass-panel rounded-[2.5rem]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3 text-2xl font-bold text-slate-900 dark:text-white">
             <div className="p-2.5 bg-primary-50 dark:bg-primary-900/30 rounded-xl text-primary-600 dark:text-primary-400 border border-primary-100 dark:border-primary-800/50">
@@ -1285,7 +1285,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                         <CalendarClock size={14} /> 提醒时间线预览
                       </label>
-                      <ul className="text-xs space-y-1 max-h-32 overflow-y-auto rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+                      <ul className="text-xs space-y-1 max-h-32 overflow-y-auto overscroll-contain rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
                         {reminderTimeline.map((item, i) => (
                           <li key={`${item.date}-${item.time}-${i}`} className="flex justify-between gap-2 text-slate-600 dark:text-slate-300">
                             <span>{item.date} {item.time}</span>
@@ -1597,7 +1597,7 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
                 <p className="text-xs text-slate-400 mt-1">请在设置中添加账户后重试</p>
               </div>
             ) : (
-              <div className="space-y-2 py-2 max-h-[300px] overflow-y-auto">
+              <div className="space-y-2 py-2 max-h-[300px] overflow-y-auto overscroll-contain">
                 {pickerAccounts.map(account => (
                   <button
                     key={account.id}
