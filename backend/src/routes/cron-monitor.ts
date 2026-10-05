@@ -19,10 +19,16 @@ cronMonitor.get('/', async (c) => {
     `SELECT job_name, last_status AS status, updated_at AS executed_at, last_summary AS result_summary
      FROM cron_job_status ORDER BY job_name`,
   );
-  // v2.28：本端点仅限 cron-secret/admin 持有者访问（路由层已有闸），失败原因
-  // 对操作者放开——'[redacted]' 让 cron 失败永远无法排障。
+  // v2.28：失败原因按信任级放开 —— 会话用户（机主本人）全显；API key 访问需
+  // admin scope，否则维持 '[redacted]'（error_message 可能含内部 URL/上游细节）。
+  // Variables 泛型未声明 apiScopes（仅 API key 中间件写入），经 unknown 双转读取
+  const apiScopes = c.get('apiScopes' as unknown as 'user') as unknown as string[] | undefined;
+  const fullTrust = !Array.isArray(apiScopes) || apiScopes.includes('admin');
   const sanitize = (row: Record<string, unknown>) => ({
     ...row,
+    error_message: row.error_message
+      ? (fullTrust ? row.error_message : '[redacted]')
+      : null,
     result_summary: row.result_summary ?? null,
   });
   return c.json({

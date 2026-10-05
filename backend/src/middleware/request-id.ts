@@ -30,7 +30,9 @@ export function createRequestIdMiddleware(baseLogger: Logger = logger) {
           event: 'http.request.completed',
           method: c.req.method,
           path: c.req.path,
-          status: c.res.status,
+          // next() 抛错时 c.res 在 onError 写响应前仍是惰性默认值（200）——
+          // 用 c.error 判定，避免 500 全部记成 200。
+          status: c.error ? 500 : c.res.status,
           durationMs: Date.now() - startedAt,
         },
         'Request completed',

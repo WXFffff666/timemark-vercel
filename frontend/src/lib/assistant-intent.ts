@@ -205,8 +205,10 @@ export function resolveAssistantIntent(text: string, ctx: AssistantIntentContext
   if (/规律|模式|行为|patterns?|我通常|平时什么/.test(raw)) {
     return { kind: 'tool', tool: 'get_patterns', args: { minEvidence: 3 }, understood: '查看系统发现的规律' };
   }
-  const find = /(?:找|搜|查|帮我找|搜索)\s*(?:一下\s*)?(?:关于\s*)?["「『]?([一-龥A-Za-z0-9 _-]{2,30})["」』]?/.exec(raw);
-  if (find && /找|搜/.test(find[1] + raw.slice(0, 2)) && /找|搜|搜索/.test(raw)) {
+  // v2.28 修复：动词形态「帮我找 / 搜索 / 找 / 查」优先长词，避免“帮我找 X”
+  // 被单字“找”先吞掉前缀、以及快捷词“帮我找 租房”路由失败。
+  const find = /(?:帮我\s*)?(?:搜索|查找|找一下|找|查)\s*(?:一下\s*)?(?:关于\s*)?["「『]?([一-龥A-Za-z0-9 _-]{2,30})["」』]?/.exec(raw);
+  if (find && /找|搜|查/.test(raw)) {
     const term = find[1].trim();
     // 排除被 create 分支更合适处理的场景（带日期的创建意图优先走 create）
     if (term && !matchDate(raw, today)) {

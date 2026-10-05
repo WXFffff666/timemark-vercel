@@ -156,7 +156,8 @@ async function getEngine(tier: WebLlmTierId, onStatus?: AiStatusCallback, signal
   // v2.28：模型加载（首次需下载/编译权重，可达数十秒）期间点「停止」立即拒绝
   // 本次等待（底层加载无法取消——WebLLM 无取消入口——但不会阻塞用户）。
   if (signal?.aborted) {
-    engines.delete(tier);
+    // 不删 engines：底层加载无法取消、仍在进行，保留共享 promise 供下一次
+    // 调用复用（否则会并发启动第二个同档位引擎，显存/内存双份）。
     throw new Error('本机模型加载已停止');
   }
   if (!signal) return promise;

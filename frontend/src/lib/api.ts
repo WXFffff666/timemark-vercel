@@ -434,11 +434,15 @@ export async function invokeAgentAction(
     });
     const json = await res.json().catch(() => null);
     if (!res.ok || !json?.success) throw new Error(json?.error || `HTTP ${res.status}`);
-    if (json.status === 'confirm_required') {
-      const pending = json as { confirmationId: string; preview: AgentToolPreview };
+    // 与 api.post 契约一致：api.post 返回的是 json.data，状态在 data.status 层
+    const data = json.data as
+      | { status?: unknown; confirmationId?: string; preview?: AgentToolPreview }
+      | unknown;
+    if (data && typeof data === 'object' && (data as { status?: unknown }).status === 'confirm_required') {
+      const pending = data as { confirmationId: string; preview: AgentToolPreview };
       return { kind: 'confirm_required', confirmationId: pending.confirmationId, preview: pending.preview };
     }
-    return { kind: 'executed', data: json.data };
+    return { kind: 'executed', data };
   }
   const data = await api.post<unknown>(`/agent/actions/${encodeURIComponent(tool)}`, { args });
   if (data && typeof data === 'object' && (data as { status?: unknown }).status === 'confirm_required') {

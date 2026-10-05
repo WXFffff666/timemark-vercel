@@ -34,6 +34,8 @@ interface Account extends NotificationAccount {
   tokenConfigured?: boolean;
   secretConfigured?: boolean;
   sessionConfigured?: boolean;
+  webhookConfigured?: boolean;
+  chatIdConfigured?: boolean;
   last_test_result?: 'success' | 'failed' | null;
   last_test_at?: string | null;
   connection_status?: string | null;
@@ -326,6 +328,10 @@ export default function Channels() {
       if (v) return false;
       if (f.name === 'token') return !selectedAccount?.tokenConfigured;
       if (f.name === 'secret') return !selectedAccount?.secretConfigured;
+      // v2.28 修复：webhook/chat_id 已配置的渠道（后端置 null + *Configured 标志）
+      // 在编辑模式下留空 = 保持不变，不能把向导锁死
+      if (f.name === 'webhook') return !selectedAccount?.webhookConfigured;
+      if (f.name === 'chat_id') return !selectedAccount?.chatIdConfigured;
       return true;
     })
     .map((f) => f.label);
@@ -385,7 +391,10 @@ export default function Channels() {
     setSelectedAccount(account);
     setConfigForm(buildConfigFormFromAccount(account, template));
     setConfigTestMessage(null);
-    
+    // v2.28 修复：编辑也要从步骤①开始，否则会落在上一次残留的测试结果页
+    setWizardStep(1);
+    setDirectTestResult(null);
+
     // Set modal back stack properly so cancel returns to main, not template
     setModalBackStack(['main', 'config']);
     setShowConfigModal(true);
