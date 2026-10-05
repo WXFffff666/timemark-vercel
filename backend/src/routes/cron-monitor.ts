@@ -19,9 +19,10 @@ cronMonitor.get('/', async (c) => {
     `SELECT job_name, last_status AS status, updated_at AS executed_at, last_summary AS result_summary
      FROM cron_job_status ORDER BY job_name`,
   );
+  // v2.28：本端点仅限 cron-secret/admin 持有者访问（路由层已有闸），失败原因
+  // 对操作者放开——'[redacted]' 让 cron 失败永远无法排障。
   const sanitize = (row: Record<string, unknown>) => ({
     ...row,
-    error_message: row.error_message ? '[redacted]' : null,
     result_summary: row.result_summary ?? null,
   });
   return c.json({

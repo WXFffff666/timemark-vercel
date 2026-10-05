@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Bell, ArrowLeft, Trash2, RefreshCw, CheckCircle2, XCircle, Calendar, AlertCircle, SkipForward } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -37,6 +37,8 @@ interface TriggerLog {
   /** JSONB：线上是已解析对象，历史 TEXT 列才是 JSON 字符串 */
   channel_results?: object | string | null;
   error_message?: string;
+  /** v2.28 C15：重试时后端写入的结构化逐渠道错误（此前前端从未展示） */
+  error_details?: string | null;
   created_at: string;
 }
 
@@ -106,20 +108,27 @@ export default function TriggerLogs() {
     setSearchParams(next === 'reminders' ? { tab: 'reminders' } : {}, { replace: true });
   };
 
-  const fetchLogs = async () => {
+  // v2.28 C15：分页游标（服务器锚定，本地删除不影响 offset 语义；本页无删除，
+  // 保留与 Inbox 同模式以防未来加入）。
+  const nextOffsetRef = useRef(0);
+
+  const fetchLogs = async (offset = 0) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: '100' });
+      const params = new URLSearchParams({ limit: '100', offset: String(offset) });
       // 状态下拉选的是「真实投递结果」（outcome）而不是裸 status：部分失败落库时
       // status='success'，按 status 筛会把绿色标签混进"成功"、且"失败"里漏掉它。
       if (statusFilter) params.set('outcome', statusFilter);
       if (channelFilter) params.set('channel', channelFilter);
       const res = await api.getRaw<TriggerLog[]>(`/trigger-logs?${params.toString()}`);
-      setLogs(res.data || []);
+      const page = res.data || [];
+      // v2.28 C15：加载更多 —— offset>0 追加
+      setLogs((prev) => (offset > 0 ? [...prev, ...page] : page));
+      nextOffsetRef.current = offset + page.length;
       setTotal((res.pagination?.total as number) || 0);
     } catch (error) {
       console.error('Failed to fetch trigger logs:', error);
-      setLogs([]);
+      if (offset === 0) setLogs([]);
     } finally {
       setLoading(false);
     }
@@ -127,6 +136,7 @@ export default function TriggerLogs() {
 
   useEffect(() => {
     fetchLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, channelFilter]);
 
   // v2.25: 渠道徽章图标（模板目录是单飞缓存，会话内只拉一次）
@@ -162,6 +172,7 @@ export default function TriggerLogs() {
       await api.delete('/trigger-logs');
       setLogs([]);
       setTotal(0);
+      nextOffsetRef.current = 0;
     } catch (error) {
       console.error('Failed to clear trigger logs:', error);
     } finally {
@@ -248,7 +259,7 @@ export default function TriggerLogs() {
               <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={exportCsv}>
                 导出 CSV
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={fetchLogs} disabled={loading} aria-label="刷新">
+              <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={() => fetchLogs()} disabled={loading} aria-label="刷新">
                 <RefreshCw size={20} className={loading ? 'animate-spin' : ''} /></Button>
               <Button variant="ghost" size="sm" className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={clearLogs} disabled={clearing || logs.length === 0}>
                 <Trash2 size={16} className="mr-1" />
@@ -290,13 +301,18 @@ export default function TriggerLogs() {
             <option value="failed">失败</option>
             <option value="skipped">跳过</option>
           </select>
-          <input
+          {/* v2.28 C15：渠道筛选从自由文本改为下拉（id 来自渠道模板目录） */}
+          <select
             value={channelFilter}
             onChange={(e) => setChannelFilter(e.target.value)}
-            placeholder="渠道筛选"
-            className="h-11 px-3 rounded-xl border text-sm"
+            className="h-11 px-3 rounded-xl border text-sm bg-white dark:bg-slate-800"
             aria-label="渠道筛选"
-          />
+          >
+            <option value="">全部渠道</option>
+            {Object.keys(templateIcons).map((id) => (
+              <option key={id} value={id}>{id}</option>
+            ))}
+          </select>
         </div>
       )}
       {tab === 'reminders' ? (
@@ -425,6 +441,16 @@ export default function TriggerLogs() {
                             {!isSuccess && log.error_message && !log.channel_results && (
                               <span className="text-red-500 text-xs">{log.error_message}</span>
                             )}
+                            {log.error_details && delivery.outcome !== 'delivered' && (
+                              <details className="text-xs">
+                                <summary className="cursor-pointer select-none text-slate-400 hover:text-slate-600">
+                                  重试错误详情
+                                </summary>
+                                <pre className="mt-1 whitespace-pre-wrap break-words rounded-lg bg-slate-50 dark:bg-slate-800/60 px-2 py-1 max-h-32 overflow-y-auto overscroll-contain text-red-400">
+                                  {log.error_details}
+                                </pre>
+                              </details>
+                            )}
                             {delivery.outcome === 'partial' && (
                               <span className="text-xs text-amber-600 dark:text-amber-400">
                                 已送达 {delivery.delivered.length} 个，未送达 {delivery.failed.length} 个
@@ -458,6 +484,19 @@ export default function TriggerLogs() {
                 );
               })}
             </div>
+            {/* v2.28 C15：加载更多（服务器锚定 offset） */}
+            {logs.length < total && (
+              <div className="text-center mt-6">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full min-h-11"
+                  onClick={() => fetchLogs(nextOffsetRef.current)}
+                >
+                  加载更多（已加载 {logs.length}/{total}）
+                </Button>
+              </div>
+            )}
           </motion.div>
         )}
       </main>

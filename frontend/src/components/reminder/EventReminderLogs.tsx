@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Bell, CheckCircle2, AlertCircle, Clock, RefreshCw, SkipForward } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -66,15 +66,22 @@ export function EventReminderLogs() {
   const [loading, setLoading] = useState(true);
   // v2.27 E-12：本地状态筛选 chips（成功/部分失败/失败/已跳过）
   const [outcomeFilter, setOutcomeFilter] = useState<'' | 'delivered' | 'partial' | 'failed' | 'skipped'>('');
+  // v2.28 C15：分页（此前永远只取默认 50 条）；total 后端分页元数据在 getRaw 才有，
+  // 该端点是裸数组 —— 用「整页 100 条未满 = 没有更多」判定。
+  const nextOffsetRef = useRef(0);
+  const hasMoreRef = useRef(true);
 
-  const fetchReminders = async () => {
+  const fetchReminders = async (offset = 0) => {
     setLoading(true);
     try {
-      const data = await api.get<ReminderLog[]>('/events/reminder-logs');
-      setReminders(data);
+      const data = await api.get<ReminderLog[]>(`/events/reminder-logs?limit=100&offset=${offset}`);
+      const page = Array.isArray(data) ? data : [];
+      hasMoreRef.current = page.length >= 100;
+      nextOffsetRef.current = offset + page.length;
+      setReminders((prev) => (offset > 0 ? [...(prev ?? []), ...page] : page));
     } catch (error) {
       console.error('Failed to fetch reminders:', error);
-      setReminders([]);
+      if (offset === 0) setReminders([]);
     } finally {
       setLoading(false);
     }
@@ -82,6 +89,7 @@ export function EventReminderLogs() {
 
   useEffect(() => {
     fetchReminders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getChannelName = (channel: string) => {
@@ -137,7 +145,7 @@ export function EventReminderLogs() {
             </button>
           ))}
         </div>
-        <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={fetchReminders} disabled={loading}>
+        <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={() => fetchReminders()} disabled={loading}>
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           刷新
         </Button>
@@ -213,6 +221,14 @@ export function EventReminderLogs() {
             );
           })}
         </motion.div>
+      )}
+      {/* v2.28 C15：加载更多 */}
+      {!loading && hasMoreRef.current && (
+        <div className="text-center mt-4">
+          <Button variant="outline" size="sm" className="rounded-full min-h-11" onClick={() => fetchReminders(nextOffsetRef.current)}>
+            加载更多
+          </Button>
+        </div>
       )}
     </div>
   );

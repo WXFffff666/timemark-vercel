@@ -331,7 +331,8 @@ export default function Settings() {
   };
 
   const clearEmailLogs = async () => {
-    if (!confirm('确定清空近30天内的邮件发送记录？')) return;
+    // v2.28 C14：文案与后端实际行为对齐（DELETE /email-logs 删除的是全部记录）
+    if (!confirm('确定清空全部邮件发送记录？此操作不可恢复。')) return;
     try {
       await api.delete('/email-logs');
       setEmailLogs([]);
@@ -904,10 +905,10 @@ export default function Settings() {
             </div>
           </section>
 
-          {/* 邮件记录（近30天） */}
+          {/* 邮件记录（全部，v2.28 对齐后端实际口径并显示失败原因） */}
           <section>
             <div className="flex items-center justify-between mb-3 px-4">
-              <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">邮件记录（近30天）</h2>
+              <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">邮件记录</h2>
               {emailLogs.length > 0 && (
                 <button type="button" onClick={clearEmailLogs} className="text-xs text-red-500">清空</button>
               )}
@@ -917,15 +918,24 @@ export default function Settings() {
                 <p className="text-sm text-slate-400 text-center py-6">暂无邮件记录</p>
               ) : (
                 <ul className="space-y-2">
-                  {emailLogs.map((log: any) => (
+                  {emailLogs.map((log: any) => {
+                    // v2.28 C14：状态枚举完整映射（'received' 此前被误显为「失败」）；
+                    // 失败原因 error_message 后端一直返回，前端此前从不渲染
+                    const statusLabel = log.status === 'sent' ? '已发送' : log.status === 'received' ? '已接收' : '失败';
+                    const statusClass = log.status === 'sent' ? 'text-emerald-600' : log.status === 'received' ? 'text-sky-500' : 'text-red-500';
+                    return (
                     <li key={log.id} className="text-sm border-b border-slate-100 dark:border-slate-800 pb-2 last:border-0">
                       <div className="flex justify-between gap-2">
                         <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{log.recipient}</span>
-                        <span className={log.status === 'sent' ? 'text-emerald-600' : 'text-red-500'}>{log.status === 'sent' ? '已发送' : '失败'}</span>
+                        <span className={statusClass}>{statusLabel}</span>
                       </div>
                       <p className="text-xs text-slate-400 truncate">{log.subject || log.channel_type} · {log.sent_at ? new Date(log.sent_at).toLocaleString('zh-CN') : ''}</p>
+                      {log.status !== 'sent' && log.status !== 'received' && log.error_message && (
+                        <p className="text-xs text-red-400 mt-1 break-words" title={log.error_message}>原因：{log.error_message}</p>
+                      )}
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
             </div>

@@ -1,4 +1,5 @@
 import { Pool, type PoolClient } from 'pg';
+import { logger } from '../utils/logger.js';
 
 export type QueryResult = {
   rows: any[];
@@ -126,10 +127,28 @@ export async function query(text: string, params: any[] = []): Promise<QueryResu
         : undefined,
     };
   } catch (error) {
-    if (LOG_QUERIES) {
-      console.error('Query failed', { text, params, error });
-    }
+    // v2.28 C12：查询失败无条件进 pino（此前仅 LOG_QUERIES=true 时记，生产查询
+    // 出错零日志）；LOG_QUERIES 仍额外带 params 供本地排障。
+    logger.warn(
+      {
+        event: 'db.query_failed',
+        text: text.slice(0, 300),
+        durationMs: Date.now() - start,
+        ...(LOG_QUERIES ? { params } : {}),
+        err: error,
+      },
+      'Database query failed',
+    );
     throw error;
+  } finally {
+    // v2.28 C12：慢查询阈值日志（>500ms），替代旧的全量 LOG_QUERIES 观测
+    const durationMs = Date.now() - start;
+    if (durationMs > 500) {
+      logger.warn(
+        { event: 'db.slow_query', text: text.slice(0, 300), durationMs },
+        'Slow database query',
+      );
+    }
   }
 }
 

@@ -22,6 +22,12 @@ export async function purgeTablesV26(options?: { now?: Date }): Promise<Retentio
     feedIngestProposals: 0,
     greetingHistory: 0,
     cronExecutionLogs: 0,
+    // v2.28 C13
+    schedulerRuns: 0,
+    rateLimits: 0,
+    collaborationActivity: 0,
+    dataHealthRepairs: 0,
+    calendarSyncEvents: 0,
   };
 
   for (const table of RETENTION_TABLES_V26) {

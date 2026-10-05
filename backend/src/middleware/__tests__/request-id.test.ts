@@ -42,11 +42,16 @@ describe('request-id middleware correlation (todo 42)', () => {
     expect(res.headers.get('X-Request-ID')).toBe('req-correlated-42');
     expect(await res.text()).toBe('req-correlated-42');
 
-    expect(lines).toHaveLength(2);
+    // v2.28 C11：新增响应侧完成日志（http.request.completed），一行请求 + 一行处理 + 一行完成
+    expect(lines).toHaveLength(3);
     const entries = parseLines(lines);
     const middlewareEntry = entries.find((entry) => entry.event === 'http.request.received');
+    const completedEntry = entries.find((entry) => entry.event === 'http.request.completed');
     const handlerEntry = entries.find((entry) => entry.event === 'handler.test');
     expect(middlewareEntry?.requestId).toBe('req-correlated-42');
+    expect(completedEntry?.requestId).toBe('req-correlated-42');
+    expect(completedEntry?.status).toBe(200);
+    expect(typeof completedEntry?.durationMs).toBe('number');
     expect(handlerEntry?.requestId).toBe('req-correlated-42');
 
     // pino duplicate-keys caveat: a single JSON line must not contain requestId twice.

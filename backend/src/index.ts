@@ -2,7 +2,24 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { cors } from 'hono/cors';
-import { logger as honoLogger } from 'hono/logger';
+import { createRequire } from 'node:module';
+
+// v2.28 C16：应用版本单一来源 = 根 package.json；读取失败回退 dev 标记
+const require = createRequire(import.meta.url);
+const APP_VERSION: string = (() => {
+  try {
+    // backend/dist → ../../package.json；ts 源 → ../../package.json 同路径
+    for (const p of ['../../package.json', '../../../package.json']) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        return String((require(p) as { version?: string }).version ?? 'dev');
+      } catch { /* try next path */ }
+    }
+    return 'dev';
+  } catch {
+    return 'dev';
+  }
+})();
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { zeroTrustGuard } from './middleware/zero-trust-guard.js';
@@ -157,7 +174,6 @@ app.onError((err, c) => {
   return c.json({ success: false, error: '服务器内部错误，请稍后重试' }, 500);
 });
 
-app.use('*', honoLogger());
 app.use('*', async (c, next) => (isTelegramWebhook(c) ? next() : zeroTrustGuard(c, next)));
 app.use('*', securityHeaders);
 app.use('/api/*', httpsEnforcement);
@@ -332,7 +348,8 @@ app.get('/api/health', async (c) => {
   const detailed = c.req.query('detailed') === '1' && c.req.header('x-health-token') === process.env.HEALTH_DETAIL_TOKEN;
   const checks: Record<string, boolean | string> = {
     platform: process.env.VERCEL ? 'vercel' : 'local',
-    version: '2.16.0',
+    // v2.28：版本从 package.json 注入（原硬编码 2.16.0 已与发布脱节）
+    version: APP_VERSION,
     database: false,
     turnstile: isTurnstileEnabled(),
   };

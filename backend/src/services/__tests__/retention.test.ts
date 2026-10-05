@@ -161,11 +161,17 @@ describe('purgeExpiredLogs (todo 41)', () => {
       if (text.includes('feed_ingest_proposals')) return { rows: [], rowCount: 11 };
       if (text.includes('greeting_history')) return { rows: [], rowCount: 12 };
       if (text.includes('cron_execution_logs')) return { rows: [], rowCount: 13 };
+      // v2.28 C13：新增 5 张
+      if (text.includes('scheduler_runs')) return { rows: [], rowCount: 14 };
+      if (text.includes('rate_limits')) return { rows: [], rowCount: 15 };
+      if (text.includes('collaboration_activity')) return { rows: [], rowCount: 16 };
+      if (text.includes('data_health_repairs')) return { rows: [], rowCount: 17 };
+      if (text.includes('calendar_sync_events')) return { rows: [], rowCount: 18 };
       return { rows: [], rowCount: 0 };
     });
   });
 
-  it('purges every logging table (v2.26: 18 tables) and returns their counts', async () => {
+  it('purges every logging table (v2.28: 23 tables) and returns their counts', async () => {
     const result = await purgeExpiredLogs({ now: NOW });
 
     expect(result).toEqual({
@@ -187,11 +193,16 @@ describe('purgeExpiredLogs (todo 41)', () => {
       feedIngestProposals: 11,
       greetingHistory: 12,
       cronExecutionLogs: 13,
+      schedulerRuns: 14,
+      rateLimits: 15,
+      collaborationActivity: 16,
+      dataHealthRepairs: 17,
+      calendarSyncEvents: 18,
     });
-    // 5 张既有表 + v2.26 新接入的 13 张 = 18 条 DELETE
-    expect(mockQuery).toHaveBeenCalledTimes(18);
+    // 5 张既有表 + v2.26 的 13 张 + v2.28 的 5 张 = 23 条 DELETE
+    expect(mockQuery).toHaveBeenCalledTimes(23);
     const tables = mockQuery.mock.calls.map(([sql]) => sql.split(' ')[2]);
-    expect(new Set(tables).size).toBe(18);
+    expect(new Set(tables).size).toBe(23);
   });
 
   it('returns zero counts and issues no DELETE when the clock is malformed', async () => {
