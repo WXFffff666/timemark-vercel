@@ -37,7 +37,7 @@ describe('migration v77 registration (email -> resend fold)', () => {
     await applyIncrementalMigrations(76);
     const updates = mockQuery.mock.calls.filter(([sql]) => String(sql).includes('UPDATE'));
     expect(updates.length).toBeGreaterThan(0);
-    expect(registeredMigrationVersions(MIGRATE_SOURCE).at(-1)).toBe(78);
+    expect(registeredMigrationVersions(MIGRATE_SOURCE).at(-1)).toBe(79);
   });
 
   it('retypes email accounts and rewrites event channel selections guarded by containment checks', () => {

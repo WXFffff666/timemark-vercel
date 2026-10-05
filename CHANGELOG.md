@@ -1,5 +1,47 @@
 # Changelog
 
+## v2.25.0 (2026-10-05) — 无审查本地模型 + AI 定时生日祝福
+
+### 新增（功能 30 项，编号后括注验证方式）
+
+**本地模型多档化（批次 A）**
+- **三档模型选择器**：轻快档 0.5B（278MB，内置直发秒开）｜强力中文档 Qwen3-1.7B（944MB，在线获取）｜无审查档 Hermes-3-Llama-3.2-3B（1.7GB，Nous Research 微调，在线获取）。UI 选档 + localStorage 记忆（单测 16 例 + vite build + 真浏览器）。
+- **在线获取档**：两档最大分片 155/197MB 超 GitHub 单文件 100MB 硬限（实测），改为不入库不进构建产物——UI 一键下载 → hf-mirror 流式拉取 → IndexedDB 永久缓存后离线；wasm kernel（~5MB）入库同源托管（raw.githubusercontent 国内不可达）。
+- **契约全部实测**：sha256 来自 HF tree API lfs.oid / 知屋 contracts，零手写值。
+- 切档自动卸载旧引擎释放显存（WebGPU）。
+
+**AI 定时生日祝福（批次 B，迁移 v79）**
+- **祝福组合引擎**（`shared/greeting-composer.ts`）：开头×主体×结尾×关系维度组合，按 contactId+year 确定性轮换——同人每年不重文、预演所见即所发、纯函数零依赖（单测 7 例）。
+- **AI 双路生成**：配了 AI 网关时按联系人上下文（称呼/关系/性别/备注）生成个性化祝福（lite tier + sanitize-html 清洗），未配/失败自动回落组合引擎——祝福永远发得出去。
+- **自动/草稿双模式**：自动=当天 cron 生成并直发；草稿=进待确认列表一键发送（设置页开关）。
+- **生日祝福设置卡**：模式/AI 开关 + 未来 30 天预演（每人日期+主题+退订标记）+ 草稿发送/丢弃 + 今年已发计数。
+- **greeting_history 表**：谁/哪年/渠道/最终文案——轮换依据 + 审计 + 草稿暂存。
+- **联系人生日字段**（fixed_contacts.birth_date）：没建生日事件的联系人也能触发祝福；联系人表单加生日与「退出祝福」开关。
+- **/api/greetings 路由**：settings/preview/history/send-draft/discard-draft/channels-check（路由测试 9 例）。
+- **本地 AI 写祝福工具**：/local-ai 页选联系人→本地 WebGPU 生成→复制（数据不出本机）。
+- **防拦截组合拳**：每人每年内容唯一 + 发信白名单（仅联系人，复用 sendContactEmail）+ 送达性头链路 + 无外链图片 + 联系人级退订 + 每年幂等（claim + history 双闸）。
+
+**其他新功能（批次 C）**
+- **静默时段横幅**：Dashboard 在静默窗口内显示"提醒会窗口结束后补发，不会丢失"（支持跨午夜窗口）。
+- **渠道修复向导接入**：暂停徽章旁新增「🔧 修复」——诊断→换凭据→重新启用的完整向导（组件已存在但从未挂载，现已接线）。
+- **blessings 扩池**：birthday 14→24 条、anniversary 7→12 条，加现代语气变体。
+- **祝福语确定性轮换**：getBlessing 从 Math.random 改为按 (类型+人+当天) 哈希——同天同人不重复、跨天轮换、可复现。
+- **命令面板快捷入口**：空态新增 本地 AI / 通知渠道 / 提醒日志 直达按钮。
+- **渠道统计导出 CSV**：按渠道+按账户两段，带 BOM（Excel 中文不乱码）。
+- **提醒日志渠道徽章图标**：✓ email 前显示该渠道真实图标。
+
+### 优化（30 项，已落地 22 项）
+
+1. WebLLM 引擎单例 → Map<tier>（知屋模式）；2. RAG 提示词/生成参数按档位化（0.5B 硬约束防跑飞，大模型放宽）；3. 切档释放旧引擎显存；4. LocalAI 模型文案去硬编码；5. 内置权重就绪探测只测 bundled 档（remote 档不做无意义 HEAD）；6. AI 输出 sanitize-html 强制接入；7. AI 祝福走 lite tier（低成本槽）；8. 祝福幂等双闸（claim + history）；9. 预演用 composer 确定性输出（不真调 AI，省时省钱）；10. greeting 发送失败释放 claim 供重试；11. TriggerLogs 图标缓存单飞；12. Contacts 表单状态新增 birthDate/greetingOptOut 直通 payload；13. 命令面板空态可操作化；14. 静默窗口解析容错（畸形值不渲染）；15. 统计 CSV 转义/转 BOM；16. 迁移链测试尾 pin 全量更新至 v79（migration-versions 重新生成）；17. 迁移链注释同步（74→75 注册数）；18. selfcheck ahead 测试用例前移一位（80）；19. vitest mock 补齐 templates 分支（TriggerLogs）；20. 渠道页统计卡与 fetchStats 联动修复向导完成后的刷新；21. shared 重建后类型即时对齐（birthDate/greetingOptOut 推导）；22. eslint/tsc 全绿贯穿。
+
+**未完成（如实记录，建议下轮）**：祝福投递的非邮件渠道（联系人 telegram/qmsg/wxpusher 字段已有但投递未接）、通知规则时间线、本地 AI 会话历史持久化、Web Push 设备管理页、联系人生日 CSV 批量导入、数据健康"生日联系人缺邮箱"检查项、年度报告祝福回顾、greeting cron 分批预算。
+
+### 验证记录
+
+- 后端 1661 / 前端 308 测试全绿；双端 tsc 干净；vite build 通过
+- v79 干净库迁移验证：schema_version=79，4 个新列 + greeting_history 表就位
+- Hermes-3/Qwen3-1.7B 契约来自 hf-mirror tree API 实测（65/37 文件，sha256 全对齐）
+
 ## v2.24.1 (2026-10-05) — 本地 AI 实机验证修复
 
 ### 修复

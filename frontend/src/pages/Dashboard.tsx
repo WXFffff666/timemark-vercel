@@ -36,6 +36,18 @@ export function Dashboard() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [conflicts, setConflicts] = useState<{ date: string; count: number; names: string[] }[]>([]);
   const [inboxUnread, setInboxUnread] = useState(0);
+  // v2.25: 静默时段状态提示——静默中的通知不丢（cron 照常投递记录），只是延迟到窗口结束
+  const [quietHours, setQuietHours] = useState<{ start: string | null; end: string | null } | null>(null);
+
+  useEffect(() => {
+    api.get<{ quiet_hours_start?: string | null; quiet_hours_end?: string | null }>('/config')
+      .then((cfg) => {
+        if (cfg?.quiet_hours_start && cfg?.quiet_hours_end) {
+          setQuietHours({ start: cfg.quiet_hours_start, end: cfg.quiet_hours_end });
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     prefetchRoute('/inbox');
@@ -237,6 +249,26 @@ export function Dashboard() {
       </header>
 
       <main id="main-content" className="max-w-7xl mx-auto px-6 py-8 mt-4" tabIndex={-1}>
+        {(() => {
+          // v2.25: 静默时段横幅（本地时间在窗口内时显示；窗口跨午夜也支持）
+          if (!quietHours?.start || !quietHours?.end) return null;
+          const toMin = (t: string): number => {
+            const [h, m] = t.split(':').map(Number);
+            if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
+            return h * 60 + m;
+          };
+          const s = toMin(quietHours.start);
+          const e = toMin(quietHours.end);
+          if (!Number.isFinite(s) || !Number.isFinite(e)) return null;
+          const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+          const inQuiet = s <= e ? nowMin >= s && nowMin < e : nowMin >= s || nowMin < e;
+          if (!inQuiet) return null;
+          return (
+            <div className="mb-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800/50 px-4 py-2.5 text-sm text-indigo-700 dark:text-indigo-300 flex items-center gap-2" role="status">
+              🌙 静默时段（{quietHours.start}–{quietHours.end}）：提醒会在窗口结束后补发，不会丢失。
+            </div>
+          );
+        })()}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">今日事件</p><p className="text-2xl font-bold">{todayCount}</p></div>
           <div

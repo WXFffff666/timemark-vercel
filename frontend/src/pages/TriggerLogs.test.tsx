@@ -60,6 +60,17 @@ function renderPage() {
 describe('提醒日志页的投递状态', () => {
   beforeEach(() => {
     getRawMock.mockReset();
+    // v2.25: 渠道徽章图标——目录接口给一个可复现的最小响应
+    vi.mocked(api.get).mockImplementation(((path: string) => {
+      if (path === '/channels/templates') {
+        return Promise.resolve([
+          { id: 'email', name: 'Resend', icon: 'Mail', configMethod: 'token', isBuiltIn: true, fields: [] },
+          { id: 'telegram', name: 'Telegram', icon: 'Send', configMethod: 'token', isBuiltIn: true, fields: [] },
+          { id: 'fcm', name: 'FCM', icon: 'Bell', configMethod: 'token', isBuiltIn: true, fields: [] },
+        ]) as never;
+      }
+      return Promise.resolve(null) as never;
+    }) as never);
   });
 
   it('部分失败显示为「部分失败」而不是绿色「成功」', async () => {

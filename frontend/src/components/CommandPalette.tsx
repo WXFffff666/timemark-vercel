@@ -305,9 +305,43 @@ export function CommandPalette() {
           </p>
         )}
         {trimmed === '' && (
-          <p data-testid="command-palette-hint" className="px-4 py-6 text-center text-sm text-hint">
-            输入关键词，搜索事件、联系人、互动、证件、到期、物品、保养、习惯、目标和收件箱
-          </p>
+          <div data-testid="command-palette-hint" className="px-4 py-4 text-center text-sm text-hint">
+            <p>输入关键词，搜索事件、联系人、互动、证件、到期、物品、保养、习惯、目标和收件箱</p>
+            {/* v2.25: 快捷入口——本地 AI */}
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                data-testid="command-palette-quick-local-ai"
+                onClick={() => {
+                  setOpen(false);
+                  navigate('/local-ai');
+                }}
+                className="rounded-full border border-violet-200 dark:border-violet-800/50 bg-violet-50 dark:bg-violet-900/30 px-3 py-1.5 text-xs text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition"
+              >
+                ✨ 本地 AI（浏览器推理）
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  navigate('/channels');
+                }}
+                className="rounded-full border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              >
+                通知渠道
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  navigate('/trigger-logs');
+                }}
+                className="rounded-full border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              >
+                提醒日志
+              </button>
+            </div>
+          </div>
         )}
 
         <div className="flex items-center justify-end gap-3 border-t border-white/40 px-4 py-2 text-xs text-hint dark:border-white/10">

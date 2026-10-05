@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { readDelivery, type DeliveryOutcome } from '@timemark/shared';
+import { ChannelIcon } from '@/components/channels/ChannelIcon';
+import { fetchChannelTemplates } from '@/lib/channel-templates';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } as const } };
@@ -77,6 +79,9 @@ import { formatRelativeTime } from '@/lib/format-time';
 
 export default function TriggerLogs() {
   const navigate = useNavigate();
+  // v2.25: 渠道徽章显示图标（模板 id → icon 名）
+  const [templateIcons, setTemplateIcons] = useState<Record<string, string>>({});
+
   const [logs, setLogs] = useState<TriggerLog[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -106,6 +111,15 @@ export default function TriggerLogs() {
   useEffect(() => {
     fetchLogs();
   }, [statusFilter, channelFilter]);
+
+  // v2.25: 渠道徽章图标（模板目录是单飞缓存，会话内只拉一次）
+  useEffect(() => {
+    fetchChannelTemplates()
+      .then((templates) => {
+        setTemplateIcons(Object.fromEntries(templates.map((t) => [t.id, t.icon])));
+      })
+      .catch(() => undefined);
+  }, []);
 
   const exportCsv = async () => {
     const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
@@ -308,9 +322,10 @@ export default function TriggerLogs() {
                                 {delivery.delivered.map((ch) => (
                                   <span
                                     key={ch}
-                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                                     title={channelResults[ch]?.error || ''}
                                   >
+                                    <ChannelIcon name={templateIcons[ch]} size={12} />
                                     ✓ {ch}
                                   </span>
                                 ))}

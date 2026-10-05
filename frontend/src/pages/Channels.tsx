@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { ChannelRepairWizard } from '@/components/channels/ChannelRepairWizard';
 import { fetchChannelTemplates, type CloudChannelTemplate } from '@/lib/channel-templates';
 import { ChannelIcon } from '@/components/channels/ChannelIcon';
 import type { NotificationAccount } from '@timemark/shared';
@@ -101,6 +102,8 @@ export default function Channels() {
   const [testAllSummary, setTestAllSummary] = useState('');
   const [channelStats, setChannelStats] = useState<Array<{ channel: string; sent: number; ok: number; failed: number; successRate: number }>>([]);
   const [accountStats, setAccountStats] = useState<Record<number, { sent: number; ok: number; failed: number; successRate: number }>>({});
+  // v2.25: 修复向导——暂停徽章的第二个动作（第一个是立即恢复）
+  const [repairAccountId, setRepairAccountId] = useState<number | null>(null);
   const [statsRuns, setStatsRuns] = useState(0);
 
   const fetchStats = () => {
@@ -611,6 +614,26 @@ export default function Channels() {
     }
   };
 
+  // v2.25: 渠道统计导出 CSV（按渠道 + 按账户两个 sheet 段）
+  const exportStatsCsv = () => {
+    const esc = (v: string | number): string => `"${String(v).replace(/"/g, '""')}"`;
+    const lines = ['section,channel_or_account,sent,ok,failed,success_rate'];
+    for (const s of channelStats) {
+      lines.push([ 'channel', esc(s.channel), s.sent, s.ok, s.failed, s.successRate ].join(','));
+    }
+    for (const [id, a] of Object.entries(accountStats)) {
+      const account = accounts.find((acc) => Number(acc.id) === Number(id));
+      lines.push([ 'account', esc(account?.name || `#${id}`), a.sent, a.ok, a.failed, a.successRate ].join(','));
+    }
+    const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `timemark-channel-stats-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const renderChannelStatsCard = () => {
     if (channelStats.length === 0) return null;
     const totals = channelStats.reduce((acc, s) => ({ sent: acc.sent + s.sent, ok: acc.ok + s.ok }), { sent: 0, ok: 0 });
@@ -627,6 +650,14 @@ export default function Channels() {
             {statsRuns > 0 && (
               <span className="text-xs text-slate-400 font-normal">共 {statsRuns} 次分发（最多统计最近 5000 条日志）</span>
             )}
+            <button
+              type="button"
+              onClick={exportStatsCsv}
+              className="ml-auto text-xs text-primary-600 dark:text-primary-400 underline hover:no-underline"
+              aria-label="导出渠道统计 CSV"
+            >
+              导出 CSV
+            </button>
           </h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-4">
             {channelStats.map((s) => {
@@ -758,14 +789,24 @@ export default function Channels() {
                     </span>
                   )}
                   {account.is_active !== false && isAccountSuspended(account) && (
-                    <button
-                      type="button"
-                      onClick={() => resumeAccount(account)}
-                      className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
-                      title="连续发送失败，已暂停投递 24 小时；点击立即恢复投递"
-                    >
-                      ⏸ 暂停中 · 点击恢复
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => resumeAccount(account)}
+                        className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
+                        title="连续发送失败，已暂停投递 24 小时；点击立即恢复投递"
+                      >
+                        ⏸ 暂停中 · 点击恢复
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRepairAccountId(Number(account.id))}
+                        className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                        title="打开渠道修复向导：诊断 → 换凭据 → 重新启用"
+                      >
+                        🔧 修复
+                      </button>
+                    </>
                   )}
                   {connectionStatus[account.id]?.timestamp && (
                     <span className="text-[10px] text-slate-400" title={connectionStatus[account.id]?.message}>
@@ -970,6 +1011,23 @@ export default function Channels() {
           </>
         )}
       </main>
+
+      {/* v2.25: 渠道修复向导（暂停徽章的「🔧 修复」动作） */}
+      {repairAccountId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-label="渠道修复向导">
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto">
+            <ChannelRepairWizard
+              accountId={repairAccountId}
+              onClose={() => setRepairAccountId(null)}
+              onDone={() => {
+                setRepairAccountId(null);
+                void fetchData();
+                fetchStats();
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Template Selection Modal */}
       <Dialog open={showTemplateModal} onOpenChange={(open) => {
