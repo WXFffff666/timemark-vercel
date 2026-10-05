@@ -658,6 +658,35 @@ export async function sendDigestForUser(
   const html = renderDigestHtml(dataWithNarrative);
   const pdf = await renderDigestPdf(dataWithNarrative);
 
+  // v2.26: AI 月报归档——"AI 把重要的留下来，不重要的清掉"。摘要（AI 叙述 +
+  // 确定性统计）写 digest_archive 永久保存，此后 90 天保留期的原始触发日志
+  // 到期删除也不丢历史；narrative 关闭时存纯文本摘要（plainSummary）。
+  try {
+    await query(
+      `INSERT INTO digest_archive (user_id, period, period_start, period_end, narrative_md, stats_json)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        userId,
+        period,
+        data.from,
+        data.to,
+        narrative ?? plainSummary(data),
+        JSON.stringify({
+          upcoming: data.upcoming.length,
+          overdue: data.overdue.length,
+          habits: data.habits.length,
+          medications: data.medications.total,
+          maintenance: data.maintenance.length,
+          goals: data.goals.length,
+          narrativeSource: narrative ? 'ai' : 'deterministic',
+        }),
+      ],
+    );
+  } catch (error) {
+    // 归档失败不阻断摘要发送（表未建/旧库）——下月再试
+    log.warn({ event: 'digest.archive_failed', userId, err: error }, 'Digest archive write failed');
+  }
+
   const base: DigestSendResult = { userId, period, from: data.from, to: data.to, emailed: false, recipients: [], inbox: false };
 
   let inbox = false;

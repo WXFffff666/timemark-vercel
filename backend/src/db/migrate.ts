@@ -3186,6 +3186,7 @@ CREATE TABLE IF NOT EXISTS cron_job_status (
   last_status TEXT NOT NULL,
   last_ok_at TIMESTAMPTZ,
   last_error TEXT,
+  last_summary TEXT,
   last_duration_ms INTEGER,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

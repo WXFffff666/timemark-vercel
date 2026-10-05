@@ -38,12 +38,30 @@ async function logCronRun(
   summary?: string,
   errorMessage?: string,
 ) {
+  const durationMs = Date.now() - startedAt;
   try {
+    // v2.26: 成功 → cron_job_status upsert（每 job 恒一行，替代每分钟一条的
+    // 无限增长；/api/health 与 cron-monitor 读这张有界表，不再全表排序）。
+    // 失败 → 保留 cron_execution_logs 明细行（30 天清理）便于排障。
     await query(
-      `INSERT INTO cron_execution_logs (job_name, status, duration_ms, result_summary, error_message)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [jobName, status, Date.now() - startedAt, summary ?? null, errorMessage ?? null],
+      `INSERT INTO cron_job_status (job_name, last_status, last_ok_at, last_error, last_summary, last_duration_ms, updated_at)
+       VALUES ($1, $2, CASE WHEN $2 = 'success' THEN NOW() ELSE NULL END, $3, $5, $4, NOW())
+       ON CONFLICT (job_name) DO UPDATE SET
+         last_status = EXCLUDED.last_status,
+         last_ok_at = CASE WHEN EXCLUDED.last_status = 'success' THEN NOW() ELSE cron_job_status.last_ok_at END,
+         last_error = EXCLUDED.last_error,
+         last_summary = EXCLUDED.last_summary,
+         last_duration_ms = EXCLUDED.last_duration_ms,
+         updated_at = NOW()`,
+      [jobName, status, errorMessage ?? null, durationMs, summary ?? null],
     );
+    if (status === 'failed') {
+      await query(
+        `INSERT INTO cron_execution_logs (job_name, status, duration_ms, result_summary, error_message)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [jobName, status, durationMs, summary ?? null, errorMessage ?? null],
+      );
+    }
   } catch (error) {
     // Table may not exist on very old DBs — log and continue, never crash the job.
     log.warn(
@@ -222,9 +240,16 @@ cronRoutes.get('/daily-maintenance', async (c) => {
     // Attachment retention (todo 57): orphan rows (no owner row) older than 30 days,
     // rows first then objects. Referenced attachments are never touched.
     const purgedAttachments = await purgeOrphanAttachments();
+    // v2.26: cron_execution_logs 只剩失败明细（成功路径迁 cron_job_status upsert）→ 30 天
     const purgedCronLogs = await query(
-      `DELETE FROM cron_execution_logs WHERE executed_at < NOW() - INTERVAL '90 days'`,
+      `DELETE FROM cron_execution_logs WHERE executed_at < NOW() - INTERVAL '30 days'`,
     );
+    // v2.26: 接线此前从未被调用的 agent jobs/events 清理（job-hardening 死代码激活）
+    const { purgeTerminalAgentJobs } = await import('../services/agent/job-hardening.service.js');
+    const purgedAgentJobs = await purgeTerminalAgentJobs().catch((err: unknown) => {
+      console.warn('[daily-maintenance] agent job purge failed:', err instanceof Error ? err.message : err);
+      return { purgedJobs: 0, purgedEvents: 0 };
+    });
     const aggregatedStats = await aggregateDailyStats();
     // Checkbox 105: deterministic behavioural-pattern miner (no LLM, no external call).
     // Replaces each user's prior rows, so a timezone change re-buckets on the next night.

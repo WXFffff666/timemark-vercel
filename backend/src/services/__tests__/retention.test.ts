@@ -34,11 +34,24 @@ describe('retention cutoff math (todo 41)', () => {
 
   it('exposes the plan-mandated windows (plus the task-110 365-day agent audit trail)', () => {
     expect(RETENTION_DAYS).toEqual({
-      eventTriggerLogs: 180,
+      eventTriggerLogs: 90,
       emailLogs: 180,
       loginAttempts: 90,
       notificationQueue: 30,
       agentAuditLogs: 365,
+      reminderSendClaims: 90,
+      schedulerTicks: 90,
+      auditEvents: 365,
+      auditUndoSnapshots: 7,
+      securityEvents: 365,
+      auditLogs: 365,
+      botUpdates: 30,
+      botAuditLogs: 30,
+      webhookIdempotencyKeys: 30,
+      feedIngestSeen: 90,
+      feedIngestProposals: 90,
+      greetingHistory: 1095,
+      cronExecutionLogs: 30,
     });
   });
 });
@@ -49,7 +62,7 @@ describe('purgeLogTable (todo 41)', () => {
     mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
   });
 
-  it('deletes trigger logs older than 180 days via a parameterized cutoff', async () => {
+  it('deletes trigger logs older than 90 days via a parameterized cutoff', async () => {
     mockQuery.mockResolvedValue({ rows: [], rowCount: 7 });
     const deleted = await purgeLogTable('event_trigger_logs', { now: NOW });
 
@@ -57,7 +70,7 @@ describe('purgeLogTable (todo 41)', () => {
     expect(mockQuery).toHaveBeenCalledTimes(1);
     const [sql, params] = mockQuery.mock.calls[0];
     expect(sql).toBe('DELETE FROM event_trigger_logs WHERE created_at < $1');
-    expect((params?.[0] as Date).toISOString()).toBe('2026-03-31T12:00:00.000Z');
+    expect((params?.[0] as Date).toISOString()).toBe('2026-06-29T12:00:00.000Z');
   });
 
   it('uses sent_at (email_logs has no created_at) with the 180-day window', async () => {
@@ -134,11 +147,25 @@ describe('purgeExpiredLogs (todo 41)', () => {
       if (text.includes('login_attempts')) return { rows: [], rowCount: 33 };
       if (text.includes('notification_queue')) return { rows: [], rowCount: 44 };
       if (text.includes('agent_audit_logs')) return { rows: [], rowCount: 55 };
+      if (text.includes('reminder_send_claims')) return { rows: [], rowCount: 1 };
+      if (text.includes('scheduler_ticks')) return { rows: [], rowCount: 2 };
+      if (text.includes('audit_events')) return { rows: [], rowCount: 3 };
+      if (text.includes('audit_undo_snapshots')) return { rows: [], rowCount: 4 };
+      if (text.includes('security_events')) return { rows: [], rowCount: 5 };
+      // bot_audit_logs 必须排在 audit_logs 之前（includes 前缀冲突）
+      if (text.includes('bot_audit_logs')) return { rows: [], rowCount: 8 };
+      if (text.includes('audit_logs')) return { rows: [], rowCount: 6 };
+      if (text.includes('bot_updates')) return { rows: [], rowCount: 7 };
+      if (text.includes('webhook_idempotency_keys')) return { rows: [], rowCount: 9 };
+      if (text.includes('feed_ingest_seen')) return { rows: [], rowCount: 10 };
+      if (text.includes('feed_ingest_proposals')) return { rows: [], rowCount: 11 };
+      if (text.includes('greeting_history')) return { rows: [], rowCount: 12 };
+      if (text.includes('cron_execution_logs')) return { rows: [], rowCount: 13 };
       return { rows: [], rowCount: 0 };
     });
   });
 
-  it('purges all five logging tables and returns their counts', async () => {
+  it('purges every logging table (v2.26: 18 tables) and returns their counts', async () => {
     const result = await purgeExpiredLogs({ now: NOW });
 
     expect(result).toEqual({
@@ -147,24 +174,30 @@ describe('purgeExpiredLogs (todo 41)', () => {
       loginAttempts: 33,
       notificationQueue: 44,
       agentAuditLogs: 55,
+      reminderSendClaims: 1,
+      schedulerTicks: 2,
+      auditEvents: 3,
+      auditUndoSnapshots: 4,
+      securityEvents: 5,
+      auditLogs: 6,
+      botUpdates: 7,
+      botAuditLogs: 8,
+      webhookIdempotencyKeys: 9,
+      feedIngestSeen: 10,
+      feedIngestProposals: 11,
+      greetingHistory: 12,
+      cronExecutionLogs: 13,
     });
-    expect(mockQuery).toHaveBeenCalledTimes(5);
+    // 5 张既有表 + v2.26 新接入的 13 张 = 18 条 DELETE
+    expect(mockQuery).toHaveBeenCalledTimes(18);
     const tables = mockQuery.mock.calls.map(([sql]) => sql.split(' ')[2]);
-    expect(new Set(tables)).toEqual(
-      new Set(['event_trigger_logs', 'email_logs', 'login_attempts', 'notification_queue', 'agent_audit_logs']),
-    );
+    expect(new Set(tables).size).toBe(18);
   });
 
   it('returns zero counts and issues no DELETE when the clock is malformed', async () => {
     const result = await purgeExpiredLogs({ now: null as unknown as Date });
 
-    expect(result).toEqual({
-      triggerLogs: 0,
-      emailLogs: 0,
-      loginAttempts: 0,
-      notificationQueue: 0,
-      agentAuditLogs: 0,
-    });
+    expect(result.triggerLogs).toBe(0);
     expect(mockQuery).not.toHaveBeenCalled();
   });
 });

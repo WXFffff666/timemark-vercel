@@ -614,7 +614,7 @@ export async function recomputePatterns(
     query(
       `SELECT DISTINCT c.trigger_date FROM reminder_send_claims c
        JOIN events e ON e.id = c.event_id
-       WHERE e.user_id = $1
+       WHERE e.user_id = $1 AND c.claimed_at > NOW() - INTERVAL '90 days'
          AND (c.trigger_date LIKE 'snooze:event#%' OR c.trigger_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}#d')`,
       [userId],
     ),

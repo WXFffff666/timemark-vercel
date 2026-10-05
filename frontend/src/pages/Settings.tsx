@@ -19,6 +19,7 @@ import { WebPushToggle } from '@/components/settings/WebPushToggle';
 import { AISettings } from '@/components/settings/AISettings';
 import { GreetingSettings } from '@/components/settings/GreetingSettings';
 import { AgentTokensSettings } from '@/components/settings/AgentTokensSettings';
+import { DataManagement } from '@/components/settings/DataManagement';
 import { buildStyledReminderEmailBodies, buildNaturalReminderText, type EmailTemplateStyle } from '@timemark/shared';
 
 function parseAlertChannels(raw: unknown): string[] {
@@ -1502,6 +1503,8 @@ export default function Settings() {
                   />
                 </div>
               </div>
+              <div className="h-px bg-slate-200/60 dark:bg-slate-700/50 mx-6"></div>
+              <DataManagement />
             </div>
           </section>
 

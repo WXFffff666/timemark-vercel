@@ -13,9 +13,11 @@ cronMonitor.get('/', async (c) => {
      FROM cron_execution_logs ORDER BY executed_at DESC LIMIT $1`,
     [limit],
   );
+  // v2.26: lastByJob 改读有界的 cron_job_status（每 job 一行 upsert）——
+  // 旧 DISTINCT ON 全表扫描随 cron_execution_logs 增长而变慢；失败明细仍在 recent。
   const lastByJob = await query(
-    `SELECT DISTINCT ON (job_name) job_name, status, executed_at, result_summary
-     FROM cron_execution_logs ORDER BY job_name, executed_at DESC`,
+    `SELECT job_name, last_status AS status, updated_at AS executed_at, last_summary AS result_summary
+     FROM cron_job_status ORDER BY job_name`,
   );
   const sanitize = (row: Record<string, unknown>) => ({
     ...row,

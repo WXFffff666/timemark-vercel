@@ -100,8 +100,15 @@ function mockQueries(rows: SeededAccount[]): void {
       updates.push({ sql, params: params ?? [] });
       return { rows: [], rowCount: 1 };
     }
+    // v2.26: logCronRun 成功路径 upsert cron_job_status
+    //（params: job,status,error,durationMs,summary），
+    // 失败才写 cron_execution_logs 明细（params: job,status,duration,summary,error）
+    if (sql.includes('cron_job_status')) {
+      if (params?.[1] === 'success') logSummaries.push(String(params?.[4] ?? ''));
+      return { rows: [], rowCount: 1 };
+    }
     if (sql.includes('cron_execution_logs')) {
-      logSummaries.push(String(params?.[3] ?? ''));
+      logSummaries.push(String(params?.[4] ?? ''));
       return { rows: [], rowCount: 1 };
     }
     return { rows: [], rowCount: 0 };

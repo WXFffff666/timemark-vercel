@@ -11,11 +11,25 @@ import { query } from '../db/index.js';
  * so nothing can leak a raw argument through retention.
  */
 export const RETENTION_DAYS = {
-  eventTriggerLogs: 180,
+  eventTriggerLogs: 90,
   emailLogs: 180,
   loginAttempts: 90,
   notificationQueue: 30,
   agentAuditLogs: 365,
+  // v2.26: previously-never-cleaned tables
+  reminderSendClaims: 90,
+  schedulerTicks: 90,
+  auditEvents: 365,
+  auditUndoSnapshots: 7,
+  securityEvents: 365,
+  auditLogs: 365,
+  botUpdates: 30,
+  botAuditLogs: 30,
+  webhookIdempotencyKeys: 30,
+  feedIngestSeen: 90,
+  feedIngestProposals: 90,
+  greetingHistory: 1095, // 3 years: final composed text is the rotation basis + audit
+  cronExecutionLogs: 30, // failed-details only since the success-path moved to cron_job_status
 } as const;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -95,11 +109,17 @@ export interface RetentionPurgeResult {
  * `/api/cron/daily-maintenance`; counts are surfaced in the JSON summary.
  */
 export async function purgeExpiredLogs(options?: { now?: Date }): Promise<RetentionPurgeResult> {
+  // v2.26: eventTriggerLogs 统一 90 天（options.days 覆盖本文件遗留的 180 声明——
+  // 此前 daily-maintenance 的另一处 30 天 DELETE 与这里的 180 天互相矛盾）。
+  // v2.26 新增的 13 张此前从未清理的表由 retention-tables-v26 接管（独立文件）。
+  const { purgeTablesV26 } = await import('./retention-tables-v26-runner.js');
+  const v26 = await purgeTablesV26(options);
   return {
-    triggerLogs: await purgeLogTable('event_trigger_logs', options),
+    triggerLogs: await purgeLogTable('event_trigger_logs', { ...options, days: 90 }),
     emailLogs: await purgeLogTable('email_logs', options),
     loginAttempts: await purgeLogTable('login_attempts', options),
     notificationQueue: await purgeLogTable('notification_queue', options),
     agentAuditLogs: await purgeLogTable('agent_audit_logs', options),
+    ...v26,
   };
 }

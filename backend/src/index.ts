@@ -275,6 +275,9 @@ app.route('/api/dedupe', dedupeRoutes);
 app.route('/api/audit', auditRoutes);
 // task 137: data-health report + one-click idempotent repairs.
 app.route('/api/data-health', dataHealthRoutes);
+// v2.26: retention policy view + manual purge + digest archive list.
+import retentionRoutes from './routes/retention.js';
+app.route('/api/retention', retentionRoutes);
 // task 139: notification-channel repair checks / actions.
 app.route('/api/channel-repair', channelRepairRoutes);
 // tasks 140/141: recurring routine templates.
@@ -353,8 +356,11 @@ app.get('/api/health', async (c) => {
     checks.timeSource = cachedTime?.source ?? 'system';
     scheduleTimeSync(DEFAULT_SYNC_TIMEZONE);
 
+    // v2.26: 读有界的 cron_job_status（每 job 一行 upsert）——旧查询在 26 万行的
+    // cron_execution_logs 上全表排序，是 /api/health 的慢路径。
     const lastCron = await query(
-      `SELECT job_name, status, executed_at FROM cron_execution_logs ORDER BY executed_at DESC LIMIT 1`,
+      `SELECT job_name, last_status AS status, updated_at AS executed_at
+       FROM cron_job_status ORDER BY updated_at DESC LIMIT 1`,
     ).catch(() => ({ rows: [] }));
     if (detailed && process.env.HEALTH_DETAIL_TOKEN && lastCron.rows[0]) {
       checks.lastCronJob = lastCron.rows[0].job_name;

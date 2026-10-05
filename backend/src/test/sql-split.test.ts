@@ -102,9 +102,9 @@ SELECT 2;`;
 
     it('不丢内容：拼回去与原文件去掉注释和分号后一致', () => {
       // 语句数应当**少于**朴素的 split(';')：注释/字面量里的分号不再切分。
-      // schema.pg.sql 里有 10 行注释含分号，所以正好少 10 条。
+      // schema.pg.sql 里有 12 行注释含分号，所以正好少 12 条（v80 新增注释含分号两行）。
       const naiveCount = SCHEMA.split(';').filter((s) => s.trim()).length;
-      expect(naiveCount - statements.length).toBe(10);
+      expect(naiveCount - statements.length).toBe(12);
 
       // 真正的「不丢内容」判据：去掉注释、分号、空白后，两者必须逐字相同。
       // 用 ';\n' 而不是 ';' 拼：schema 里有贴着分号的行尾注释（`...pgcrypto; -- ====`），

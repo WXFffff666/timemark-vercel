@@ -2097,9 +2097,10 @@ export async function cleanupSessions() {
   );
   log.info({ count: loginLogsResult.rowCount ?? 0 }, 'Cleaned up old login logs');
   
-  // 清理30天前的事件触发日志
+  // 清理90天前的事件触发日志（v2.26：与 retention.service 统一 90 天；
+  // 重要内容已由月度 digest 归档进 digest_archive，原行到期即清）
   const triggerResult = await query(
-    "DELETE FROM event_trigger_logs WHERE created_at < NOW() - INTERVAL '30 days'"
+    "DELETE FROM event_trigger_logs WHERE created_at < NOW() - INTERVAL '90 days'"
   );
   log.info({ count: triggerResult.rowCount ?? 0 }, 'Cleaned up old event trigger logs');
 }
