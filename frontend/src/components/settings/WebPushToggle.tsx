@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { BellRing } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { BellRing, Monitor, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { api } from '@/lib/api';
 import {
   getWebPushState,
   sendTestWebPush,
@@ -9,6 +10,13 @@ import {
   unsubscribeWebPush,
   type WebPushState,
 } from '@/lib/push';
+
+/** v2.27 遗留3：设备列表条目（GET /api/push/subscriptions） */
+interface PushDevice {
+  id: number;
+  endpointHost: string;
+  createdAt: string;
+}
 
 /**
  * Settings → 浏览器推送（Web Push, checkbox 84）.
@@ -20,6 +28,16 @@ export function WebPushToggle() {
   const [state, setState] = useState<WebPushState | 'loading'>('loading');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [devices, setDevices] = useState<PushDevice[] | null>(null);
+
+  const loadDevices = useCallback(async () => {
+    try {
+      const res = await api.get<{ devices: PushDevice[] }>('/push/subscriptions');
+      setDevices(res.devices);
+    } catch {
+      setDevices(null);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,10 +48,11 @@ export function WebPushToggle() {
       .catch(() => {
         if (!cancelled) setState('unsubscribed');
       });
+    void loadDevices();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadDevices]);
 
   const handleToggle = async (enabled: boolean) => {
     setBusy(true);
@@ -56,6 +75,7 @@ export function WebPushToggle() {
         setState('unsubscribed');
         setMessage('已关闭浏览器推送');
       }
+      void loadDevices();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '操作失败，请稍后重试');
     } finally {
@@ -104,6 +124,48 @@ export function WebPushToggle() {
           <Button variant="outline" size="sm" onClick={handleTest} disabled={busy}>
             {busy ? '发送中...' : '发送测试通知'}
           </Button>
+        )}
+        {devices && devices.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+              已订阅设备（{devices.length}）
+            </p>
+            <ul className="space-y-1.5 max-h-48 overflow-y-auto overscroll-contain pr-1">
+              {devices.map((d) => (
+                <li key={d.id} className="flex items-center justify-between rounded-xl border border-slate-200/70 dark:border-slate-700/50 px-3 py-2 text-xs">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <Monitor size={13} className="shrink-0 text-slate-400" />
+                    <span className="truncate text-slate-700 dark:text-slate-300" title={d.endpointHost}>
+                      {d.endpointHost}
+                    </span>
+                    <span className="shrink-0 text-slate-400">
+                      {Number.isNaN(new Date(d.createdAt).getTime()) ? '' : new Date(d.createdAt).toLocaleDateString('zh-CN')}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="删除该设备订阅"
+                    className="shrink-0 text-slate-400 hover:text-red-500 transition disabled:opacity-50"
+                    disabled={busy}
+                    onClick={async () => {
+                      if (!confirm('移除该设备的推送订阅？')) return;
+                      setBusy(true);
+                      try {
+                        await api.delete(`/push/subscriptions/${d.id}`);
+                        await loadDevices();
+                      } catch (e) {
+                        setMessage(e instanceof Error ? e.message : '删除失败');
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {message && <p className="text-xs text-slate-500 dark:text-slate-400">{message}</p>}
       </div>

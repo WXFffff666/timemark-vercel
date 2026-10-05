@@ -21,6 +21,7 @@ export const DATA_HEALTH_KINDS = [
   'expired_not_archived',
   'duplicate_contacts',
   'unset_timezone',
+  'contacts_no_email',
 ] as const;
 
 export type DataHealthKind = (typeof DATA_HEALTH_KINDS)[number];
@@ -102,6 +103,12 @@ const META: Record<DataHealthKind, {
     severity: 'info',
     repair: { label: '设置为默认时区', destructive: false, hint: '为未设置时区的配置 / 档案填入默认时区（Asia/Shanghai）。' },
   },
+  contacts_no_email: {
+    title: '祝福对象缺邮箱',
+    description: '联系人没有任何邮箱地址，AI 生日祝福的邮件主渠道无法送达（其他渠道齐全时仍可补投）。',
+    severity: 'warning',
+    repair: { label: '跳过这些联系人的生日祝福', destructive: false, hint: '给这些联系人开启「退出祝福」，让祝福管线不再尝试投递（可随时在联系人页恢复）。' },
+  },
 };
 
 /** SQL fragment: tag_links row is NOT orphaned when the referenced entity exists and is owned. */
@@ -119,6 +126,41 @@ const TAG_LINK_ENTITY_EXISTS = `(
 // Only contacts with NO cadence value are flagged: a cadence that exists but is
 // intentionally switched off (`cadence_enabled = FALSE`) is left untouched.
 const CONTACTS_NO_CADENCE_WHERE = `user_id = $1 AND (cadence_days IS NULL OR cadence_days <= 0)`;
+
+/**
+ * 祝福对象缺邮箱（v2.27 遗留5）：没有任何邮箱列/邮箱多值条目，且尚未退出祝福。
+ * contact_methods->'emails' 可能缺失/非数组（历史 TEXT 库），jsonb_typeof 守卫。
+ * 两处查询都内联同一 WHERE（Mimosa 对 ${} SQL 模板插值会误报注入，故不用常量拼接）。
+ */
+async function detectContactsNoEmail(userId: number): Promise<DetectorResult> {
+  const count = await scalarCount(
+    `SELECT count(*)::int AS count FROM fixed_contacts WHERE user_id = $1
+   AND COALESCE(greeting_opt_out, FALSE) = FALSE
+   AND (email IS NULL OR btrim(email) = '')
+   AND NOT EXISTS (
+     SELECT 1 FROM jsonb_array_elements(
+       CASE WHEN jsonb_typeof(contact_methods -> 'emails') = 'array'
+            THEN contact_methods -> 'emails'
+            ELSE '[]'::jsonb END
+     ) e WHERE COALESCE(e ->> 'value', '') <> ''
+   )`,
+    [userId],
+  );
+  const rows = await query(
+    `SELECT id, name, birth_date FROM fixed_contacts WHERE user_id = $1
+   AND COALESCE(greeting_opt_out, FALSE) = FALSE
+   AND (email IS NULL OR btrim(email) = '')
+   AND NOT EXISTS (
+     SELECT 1 FROM jsonb_array_elements(
+       CASE WHEN jsonb_typeof(contact_methods -> 'emails') = 'array'
+            THEN contact_methods -> 'emails'
+            ELSE '[]'::jsonb END
+     ) e WHERE COALESCE(e ->> 'value', '') <> ''
+   ) ORDER BY id LIMIT 8`,
+    [userId],
+  );
+  return { count, examples: rows.rows };
+}
 
 async function scalarCount(sql: string, params: unknown[]): Promise<number> {
   const result = await query(sql, params);
@@ -214,6 +256,7 @@ const DETECTORS: ReadonlyArray<{ kind: DataHealthKind; run: (userId: number) => 
   { kind: 'expired_not_archived', run: detectExpiredNotArchived },
   { kind: 'duplicate_contacts', run: detectDuplicateContacts },
   { kind: 'unset_timezone', run: detectUnsetTimezone },
+  { kind: 'contacts_no_email', run: detectContactsNoEmail },
 ];
 
 export async function getDataHealthReport(userId: number): Promise<DataHealthReport> {
@@ -360,6 +403,25 @@ async function repairUnsetTimezone(userId: number): Promise<number> {
   });
 }
 
+/** v2.27 遗留5：非破坏性修复——为缺邮箱且未退出的联系人开启「退出祝福」。 */
+async function repairContactsNoEmail(userId: number): Promise<number> {
+  const result = await query(
+    `UPDATE fixed_contacts SET greeting_opt_out = TRUE, updated_at = CURRENT_TIMESTAMP
+     WHERE user_id = $1
+       AND COALESCE(greeting_opt_out, FALSE) = FALSE
+       AND (email IS NULL OR btrim(email) = '')
+       AND NOT EXISTS (
+         SELECT 1 FROM jsonb_array_elements(
+           CASE WHEN jsonb_typeof(contact_methods -> 'emails') = 'array'
+                THEN contact_methods -> 'emails'
+                ELSE '[]'::jsonb END
+         ) e WHERE COALESCE(e ->> 'value', '') <> ''
+       )`,
+    [userId],
+  );
+  return result.rowCount ?? 0;
+}
+
 const REPAIRS: Record<DataHealthKind, (userId: number) => Promise<number>> = {
   orphan_tag_links: repairOrphanTagLinks,
   events_no_profile: repairEventsNoProfile,
@@ -367,6 +429,7 @@ const REPAIRS: Record<DataHealthKind, (userId: number) => Promise<number>> = {
   expired_not_archived: repairExpiredNotArchived,
   duplicate_contacts: repairDuplicateContacts,
   unset_timezone: repairUnsetTimezone,
+  contacts_no_email: repairContactsNoEmail,
 };
 
 export async function repairDataHealth(

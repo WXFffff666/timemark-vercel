@@ -1,5 +1,6 @@
 import { query } from '../db/index.js';
 import { sendContactEmail } from './contact-send.service.js';
+import { deliverGreetingToExtraChannels, greetingHtmlToText } from './greeting-channel-delivery.service.js';
 import { recordEventTrigger } from './trigger-log.service.js';
 import { createLogger } from '../utils/logger.js';
 import {
@@ -519,6 +520,35 @@ export async function deliverBirthdayGreeting(
       source: content.source,
       tone: content.tone,
     });
+    // v2.27 遗留1：邮件主投递成功后，把纯文本祝福补投到联系人的其他渠道
+    // （telegram/wxpusher/短信；账户与地址齐全才投）。尽力而为：补投结果
+    // 只记 greeting_history（每渠道一行），绝不改变主投递的 sent 结论。
+    const extraText = greetingHtmlToText(content.html, content.subject);
+    const extraResults = await deliverGreetingToExtraChannels(
+      event.user_id,
+      resolution.contactId,
+      extraText,
+    ).catch(() => []);
+    for (const extra of extraResults) {
+      await recordGreetingHistory({
+        userId: event.user_id,
+        contactId: resolution.contactId,
+        eventId: event.id,
+        year: yearOfDate,
+        channel: extra.channel,
+        status: extra.ok ? 'sent' : 'failed',
+        subject: content.subject,
+        bodyHtml: extraText,
+        recipients: extra.address,
+        source: content.source,
+      }).catch(() => undefined);
+    }
+    if (extraResults.length > 0) {
+      log.info(
+        { eventId: event.id, contactId: resolution.contactId, extra: extraResults.map((r) => `${r.channel}:${r.ok ? 'ok' : 'failed'}`) },
+        'Birthday greeting extra-channel delivery attempted',
+      );
+    }
     log.info(
       { eventId: event.id, contactId: resolution.contactId, recipients: result.recipients, source: content.source },
       'Birthday greeting sent to contact',

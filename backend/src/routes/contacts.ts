@@ -178,6 +178,122 @@ contacts.post('/import-vcard', async (c) => {
   return c.json({ success: true, data: { imported } });
 });
 
+/**
+ * v2.27 遗留4：联系人生日 CSV 批量导入。
+ *
+ * 表头行必须（列名不区分大小写/中英皆可）：姓名/name（必填）、生日/birth_date/
+ * birthday（必填，YYYY-MM-DD 或 YYYY/MM/DD）、邮箱/email（可选）、电话/phone（可选）。
+ * 每行：建联系人 + 复用 vCard 同款生日事件（提醒 d0/1/3/7）；同名联系人视为重复跳过。
+ * 与 events import-csv 一致的手写解析（无 CSV 依赖库）；支持双引号包裹值。
+ */
+contacts.post('/import-csv', async (c) => {
+  const userId = Number(c.get('user').id);
+  const text = await c.req.text();
+  const lines = text.split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2) {
+    return c.json({ success: false, error: 'CSV 至少需要表头行和一行数据' }, 400);
+  }
+
+  // 支持 "带,逗号" 的双引号字段：逐行状态机切分，避免砍掉第三方依赖也要解析正确。
+  const splitCsvLine = (line: string): string[] => {
+    const out: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+        else inQuotes = !inQuotes;
+      } else if (ch === ',' && !inQuotes) {
+        out.push(cur); cur = '';
+      } else cur += ch;
+    }
+    out.push(cur);
+    return out.map((v) => v.trim());
+  };
+
+  const normalizeKey = (k: string) => k.toLowerCase().replace(/[\s_]/g, '');
+  const headers = splitCsvLine(lines[0]).map(normalizeKey);
+  const col = (...names: string[]): number => {
+    for (const n of names) {
+      const idx = headers.indexOf(normalizeKey(n));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+  const nameIdx = col('姓名', 'name', '名字');
+  const birthIdx = col('生日', 'birthday', 'birthdate', 'birth_date', 'birth', 'date');
+  const emailIdx = col('邮箱', 'email', 'mail');
+  const phoneIdx = col('电话', 'phone', 'mobile', '手机');
+  if (nameIdx < 0 || birthIdx < 0) {
+    return c.json({ success: false, error: 'CSV 表头必须包含 姓名/name 与 生日/birth_date 列' }, 400);
+  }
+
+  const parseDate = (raw: string): string | null => {
+    const m = raw.match(/(\d{4})[-/年.](\d{1,2})[-/月.](\d{1,2})/);
+    if (!m) return null;
+    const date = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    return Number.isNaN(new Date(date).getTime()) ? null : date;
+  };
+
+  let imported = 0;
+  let skippedDuplicates = 0;
+  const errors: string[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    try {
+      const values = splitCsvLine(lines[i]);
+      const name = (values[nameIdx] || '').replace(/^"|"$/g, '').trim();
+      const date = parseDate((values[birthIdx] || '').replace(/^"|"$/g, ''));
+      if (!name || !date) {
+        errors.push(`第 ${i + 1} 行：缺少姓名或生日格式无效`);
+        continue;
+      }
+      const email = emailIdx >= 0 ? (values[emailIdx] || '').trim() : '';
+      const phone = phoneIdx >= 0 ? (values[phoneIdx] || '').trim() : '';
+
+      // 同名去重：同用户同名联系人跳过（与数据健康 duplicate_contacts 同口径）。
+      const existing = await query(
+        `SELECT id FROM fixed_contacts WHERE user_id = $1 AND lower(btrim(name)) = lower(btrim($2)) LIMIT 1`,
+        [userId, name],
+      );
+      if (existing.rows.length > 0) {
+        skippedDuplicates++;
+        continue;
+      }
+
+      const { createFixedContact } = await import('../services/contact.service.js');
+      await createFixedContact(userId, {
+        name,
+        email: email || undefined,
+        phone: phone || undefined,
+        birthDate: date,
+        emails: email ? [{ label: '', value: email }] : [],
+        phones: phone ? [{ label: '', value: phone }] : [],
+        telegrams: [],
+        qqs: [],
+        wxpusherUids: [],
+        channelAccountIds: [],
+        gender: 'unknown',
+      });
+      const { createEvent } = await import('../services/event.service.js');
+      await createEvent(String(userId), {
+        name: `${name} 生日`,
+        type: 'birthday',
+        date,
+        calendarType: 'gregorian',
+        personName: name,
+        reminderConfig: { enabled: true, daysBeforeList: [0, 1, 3, 7], emailRecipients: email ? [email] : [], channels: [], accountIds: [] },
+      });
+      imported++;
+    } catch (rowError) {
+      errors.push(`第 ${i + 1} 行：${rowError instanceof Error ? rowError.message : String(rowError)}`);
+    }
+  }
+
+  return c.json({ success: true, data: { imported, skippedDuplicates, errors } });
+});
+
 contacts.post('/:id/send-email', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);

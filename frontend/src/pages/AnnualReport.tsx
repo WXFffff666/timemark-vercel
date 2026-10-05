@@ -430,9 +430,82 @@ export default function AnnualReport() {
 
       </Card>
 
+      {/* v2.27 遗留6：今年祝福回顾（greeting_history，AI/组合引擎 source 徽章） */}
+
+      <GreetingReviewCard year={year} />
+
     </div>
 
   );
 
+}
+
+interface GreetingHistoryRow {
+  contact_name?: string;
+  status: string;
+  channel: string;
+  source?: string | null;
+  created_at: string;
+}
+
+function GreetingReviewCard({ year }: { year: number }) {
+  const [rows, setRows] = useState<GreetingHistoryRow[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+    api.get<{ year: number; rows: GreetingHistoryRow[] }>(`/greetings/history?year=${year}`)
+      .then((data) => setRows(Array.isArray(data?.rows) ? data.rows : []))
+      .catch(() => setFailed(true));
+  }, [year]);
+
+  if (failed) return null;
+  if (!rows) return null;
+  if (rows.length === 0) return null;
+
+  const sent = rows.filter((r) => r.status === 'sent').length;
+  const drafts = rows.filter((r) => r.status === 'draft').length;
+  const failedCount = rows.filter((r) => r.status === 'failed').length;
+  const aiCount = rows.filter((r) => r.source === 'ai').length;
+
+  return (
+    <Card className="mt-6 glass-panel border-0">
+      <CardHeader>
+        <CardTitle>🎂 {year} 年祝福回顾</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-4 text-sm text-slate-600 dark:text-slate-300 mb-4">
+          <span>共 {rows.length} 条</span>
+          <span>已发送 {sent}</span>
+          {drafts > 0 && <span>待发草稿 {drafts}</span>}
+          {failedCount > 0 && <span className="text-red-500">失败 {failedCount}</span>}
+          {aiCount > 0 && <span className="text-violet-600 dark:text-violet-400">AI 生成 {aiCount}</span>}
+        </div>
+        <ul className="space-y-2 max-h-72 overflow-y-auto overscroll-contain pr-1">
+          {rows.slice(0, 30).map((r, i) => (
+            <li key={`${r.contact_name}-${i}`} className="flex items-center justify-between rounded-xl border border-slate-200/70 dark:border-slate-700/50 px-3 py-2 text-xs">
+              <span className="font-medium text-slate-700 dark:text-slate-300 truncate">
+                {r.contact_name || '未知联系人'}
+              </span>
+              <span className="shrink-0 flex items-center gap-2">
+                {r.source === 'ai' && (
+                  <span className="rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 px-2 py-0.5">AI</span>
+                )}
+                <span className="text-slate-400">{r.channel}</span>
+                <span className={
+                  r.status === 'sent' ? 'text-emerald-600' : r.status === 'failed' ? 'text-red-500' : 'text-slate-400'
+                }>
+                  {r.status === 'sent' ? '已发送' : r.status === 'failed' ? '失败' : r.status === 'draft' ? '草稿' : r.status}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        {rows.length > 30 && (
+          <p className="text-xs text-slate-400 mt-2">仅显示最近 30 条，共 {rows.length} 条</p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 

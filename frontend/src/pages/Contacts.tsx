@@ -317,6 +317,37 @@ export default function Contacts() {
     }
   };
 
+  const importCsv = async (file: File) => {
+    setImporting(true);
+    setError('');
+    try {
+      const text = await file.text();
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const res = await fetch('/api/contacts/import-csv', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'text/csv',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: text,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || '导入失败');
+      const dup = data.data?.skippedDuplicates ? `，跳过同名 ${data.data.skippedDuplicates} 个` : '';
+      const errCount = data.data?.errors?.length ? `，${data.data.errors.length} 行失败` : '';
+      alert(
+        `已从 CSV 导入 ${data.data?.imported ?? 0} 个联系人${dup}${errCount}` +
+        (data.data?.errors?.length ? `\n${data.data.errors.slice(0, 5).join('\n')}` : ''),
+      );
+      await loadContacts();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '导入失败');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const membersFor = (groupId: number) => members.filter((m) => m.group_id === groupId);
 
   const getAccountName = (id: number) => {
@@ -371,22 +402,41 @@ export default function Contacts() {
           <Plus className="w-4 h-4 mr-1" /> 添加
         </Button>
         {tab === 'contacts' && (
-          <label className="inline-flex">
-            <input
-              type="file"
-              accept=".vcf,.vcard,text/vcard"
-              className="sr-only"
-              disabled={importing}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) importVcard(file);
-                e.target.value = '';
-              }}
-            />
-            <Button type="button" variant="outline" className="min-h-11" disabled={importing} asChild>
-              <span><Upload className="w-4 h-4 mr-1" />{importing ? '导入中…' : 'vCard'}</span>
-            </Button>
-          </label>
+          <>
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept=".vcf,.vcard,text/vcard"
+                className="sr-only"
+                disabled={importing}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) importVcard(file);
+                  e.target.value = '';
+                }}
+              />
+              <Button type="button" variant="outline" className="min-h-11" disabled={importing} asChild>
+                <span><Upload className="w-4 h-4 mr-1" />{importing ? '导入中…' : 'vCard'}</span>
+              </Button>
+            </label>
+            {/* v2.27 遗留4：生日 CSV 批量导入（姓名/生日 必填，邮箱/电话 可选） */}
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                disabled={importing}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) importCsv(file);
+                  e.target.value = '';
+                }}
+              />
+              <Button type="button" variant="outline" className="min-h-11" disabled={importing} asChild>
+                <span><Upload className="w-4 h-4 mr-1" />CSV</span>
+              </Button>
+            </label>
+          </>
         )}
       </div>
 

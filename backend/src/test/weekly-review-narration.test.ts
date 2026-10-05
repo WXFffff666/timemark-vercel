@@ -39,6 +39,7 @@ function candidate(over: Partial<TriageCandidate> = {}): TriageCandidate {
   return {
     fingerprint: 'event:1',
     title: '妈妈生日',
+    eventType: 'birthday',
     band: 'high',
     importance: 80,
     sourceKind: 'event',

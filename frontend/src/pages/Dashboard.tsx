@@ -20,6 +20,7 @@ import { getTodoEvents, isEventToday } from '@/lib/calendar-utils';
 import { useTodoCompletions } from '@/hooks/useTodoCompletions';
 import { AlmanacCard } from '@/components/almanac/AlmanacCard';
 import { TimeMachineCard } from '@/components/dashboard/TimeMachineCard';
+import { RecentNotificationsCard } from '@/components/dashboard/RecentNotifications';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -343,6 +344,8 @@ export function Dashboard() {
         <div className="mb-6">
           <TimeMachineCard />
         </div>
+        {/* v2.27 遗留2：近期通知时间线（/trigger-logs 最近 6 条，空/失败静默隐藏） */}
+        <RecentNotificationsCard />
         {conflicts.length > 0 && (
           <div className="mb-6 glass-panel rounded-2xl p-4 border border-amber-200/60 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-900/10">
             <p className="text-sm font-bold text-amber-800 dark:text-amber-200 mb-2">⚠️ 日期冲突检测（{conflicts.length} 组）</p>

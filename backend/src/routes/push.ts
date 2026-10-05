@@ -124,6 +124,56 @@ push.delete('/unsubscribe', unsubscribeHandler);
 push.post('/unsubscribe', unsubscribeHandler);
 
 /**
+ * v2.27 遗留3：设备管理。列出当前用户全部 push 订阅（endpoint 只回主机段，
+ * 不回完整 URL）；DELETE 按 id 跨设备移除——此前 unsubscribe 只能删当前浏览器。
+ */
+push.get('/subscriptions', async (c) => {
+  const userId = Number(c.get('user').id);
+  try {
+    const result = await query(
+      `SELECT id, endpoint, created_at FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at DESC`,
+      [userId],
+    );
+    const devices = result.rows.map((row) => {
+      const r = row as Record<string, unknown>;
+      let host = '';
+      try {
+        host = new URL(String(r.endpoint)).host;
+      } catch {
+        host = String(r.endpoint).slice(0, 24);
+      }
+      return { id: Number(r.id), endpointHost: host, createdAt: String(r.created_at) };
+    });
+    return c.json({ success: true, data: { devices } });
+  } catch (error) {
+    return c.json(
+      { success: false, error: error instanceof Error ? error.message : '读取设备列表失败' },
+      500,
+    );
+  }
+});
+
+push.delete('/subscriptions/:id', async (c) => {
+  const userId = Number(c.get('user').id);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) {
+    return c.json({ success: false, error: '无效的设备 ID' }, 400);
+  }
+  try {
+    const result = await query('DELETE FROM push_subscriptions WHERE user_id = $1 AND id = $2', [
+      userId,
+      id,
+    ]);
+    return c.json({ success: true, removed: result.rowCount ?? 0 });
+  } catch (error) {
+    return c.json(
+      { success: false, error: error instanceof Error ? error.message : '删除失败' },
+      500,
+    );
+  }
+});
+
+/**
  * Send a test push to every stored subscription of the current user.
  * POST /api/push/test
  *
