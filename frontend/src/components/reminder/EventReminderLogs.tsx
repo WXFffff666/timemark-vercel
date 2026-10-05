@@ -159,8 +159,12 @@ export function EventReminderLogs() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 glass-panel rounded-[2.5rem] ring-1 ring-black/5 dark:ring-white/10">
           <Bell size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
-          <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">暂无提醒记录</h3>
-          <p className="text-slate-500 dark:text-slate-400">您的提醒发送历史将在此处显示</p>
+          <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+            {outcomeFilter && reminders.length > 0 ? '没有符合筛选的记录' : '暂无提醒记录'}
+          </h3>
+          <p className="text-slate-500 dark:text-slate-400">
+            {outcomeFilter && reminders.length > 0 ? '换个筛选条件试试' : '您的提醒发送历史将在此处显示'}
+          </p>
         </div>
       ) : (
         <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-4">

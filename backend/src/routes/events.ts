@@ -122,7 +122,7 @@ events.get('/reminder-logs', async (c) => {
     `SELECT tl.id, tl.event_id, tl.trigger_type,
             CASE WHEN tl.trigger_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN LEFT(tl.trigger_date, 10) ELSE tl.trigger_date END AS trigger_date,
             tl.status,
-            tl.error_message, tl.channel_results, tl.created_at,
+            tl.error_message, tl.channel_results, to_char(tl.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
             e.name AS event_name, e.type AS event_type
      FROM event_trigger_logs tl
      LEFT JOIN events e ON e.id = tl.event_id
@@ -222,7 +222,8 @@ events.post('/:id/test-send', async (c) => {
   const { query } = await import('../db/index.js');
   
   // v2.27：列清单代替 SELECT *（只为读通知字段，省大 JSONB 列传输）
-  const result = await query('SELECT id, name, type, date, person_name, reminder_config, notification_channels, notification_account_ids, profile_id FROM events WHERE id = $1 AND user_id = $2', [id, user.id]);
+  // v2.27：列清单须覆盖 sendNotifications 渲染所需（农历标签/双历/自定义提醒时间）
+  const result = await query('SELECT id, name, type, date, person_name, calendar_type, lunar_date, reminder_time, reminder_config, notification_channels, notification_account_ids, profile_id FROM events WHERE id = $1 AND user_id = $2', [id, user.id]);
   if (result.rows.length === 0) {
     return c.json({ success: false, error: 'Event not found' }, 404);
   }

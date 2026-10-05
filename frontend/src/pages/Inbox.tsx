@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Inbox as InboxIcon, ArrowLeft, Trash2, RefreshCw, Mail, MailOpen, CheckCheck, Copy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +39,9 @@ export default function Inbox() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [pendingMarkId, setPendingMarkId] = useState<number | null>(null);
   const [actionError, setActionError] = useState('');
+  // v2.27：分页游标 = 上次成功页 offset + 该页行数（与本地删除无关，
+  // 否则删除后再加载更多会因 offset 前移造成重复行）
+  const nextOffsetRef = useRef(0);
 
 
   const fetchMessages = async (offset = 0) => {
@@ -50,6 +53,7 @@ export default function Inbox() {
       setUnreadCount((res.pagination?.unreadCount as number) || 0);
       // v2.27 A-8：加载更多 —— offset>0 时追加而不是替换
       setMessages((prev) => (offset > 0 ? [...prev, ...page] : page));
+      nextOffsetRef.current = offset + page.length;
     } catch (error) {
       console.error('Failed to fetch inbox:', error);
       if (offset === 0) setMessages([]);
@@ -235,7 +239,7 @@ export default function Inbox() {
               variant="outline"
               size="sm"
               className="rounded-full min-h-11"
-              onClick={() => fetchMessages(messages.length)}
+              onClick={() => fetchMessages(nextOffsetRef.current)}
             >
               加载更多（已加载 {messages.length}/{total}）
             </Button>

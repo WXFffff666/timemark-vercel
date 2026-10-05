@@ -453,10 +453,19 @@ function GreetingReviewCard({ year }: { year: number }) {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    // v2.27：年份快速切换时旧请求的失败不再污染新状态（cancelled 标志）
+    let cancelled = false;
     setFailed(false);
     api.get<{ year: number; rows: GreetingHistoryRow[] }>(`/greetings/history?year=${year}`)
-      .then((data) => setRows(Array.isArray(data?.rows) ? data.rows : []))
-      .catch(() => setFailed(true));
+      .then((data) => {
+        if (!cancelled) setRows(Array.isArray(data?.rows) ? data.rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [year]);
 
   if (failed) return null;

@@ -14,8 +14,8 @@ inbox.use('*', authMiddleware);
 
 inbox.get('/', async (c) => {
   const userId = Number(c.get('user').id);
-  // v2.27：limit 封顶 200（此前可一次拉全表）
-  const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1), 200);
+  // v2.27：limit 上限与服务层（100）保持一致，否则分页 offset 会跳行
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1), 100);
   const offset = Math.max(parseInt(c.req.query('offset') || '0', 10) || 0, 0);
   const unreadOnly = c.req.query('unread') === '1';
 

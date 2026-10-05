@@ -19,6 +19,9 @@ interface EventState {
   }>;
 }
 
+// v2.27：in-flight 去重按 profileId 分键——否则档案切换时旧请求的去重命中
+// 会把错误档案的事件渲染出来。
+let inFlightKey: string | null = null;
 let inFlight: Promise<void> | null = null;
 
 export const useEventStore = create<EventState>((set, get) => ({
@@ -29,13 +32,15 @@ export const useEventStore = create<EventState>((set, get) => ({
   // v2.27：in-flight 去重——Calendar/Todos/Dashboard 同屏先后调用只发一次请求；
   // 失败记入 error（此前静默吞掉，列表页渲染成"暂无事件"假空态）。
   fetchEvents: async () => {
-    if (inFlight) return inFlight;
+    const profileId = useProfileStore.getState().profileId;
+    const key = String(profileId ?? 'all');
+    if (inFlight && inFlightKey === key) return inFlight;
     set({ loading: true, error: null });
+    inFlightKey = key;
     inFlight = (async () => {
       try {
         // 档案切换器（checkbox 70）：选中档案时按 `?profileId=` 过滤；「全部档案」
         //（null）保持裸 `/events`，与引入档案前的请求形状一致。
-        const profileId = useProfileStore.getState().profileId;
         const events = await api.get<Event[]>(profileId ? `/events?profileId=${profileId}&limit=200` : '/events?limit=200');
         set({ events });
       } catch (e) {
@@ -43,6 +48,7 @@ export const useEventStore = create<EventState>((set, get) => ({
       } finally {
         set({ loading: false });
         inFlight = null;
+        inFlightKey = null;
       }
     })();
     return inFlight;

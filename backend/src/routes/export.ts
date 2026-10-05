@@ -99,7 +99,7 @@ export default exportRoutes;
 exportRoutes.get('/events.csv', async (c) => {
   const userId = Number(c.get('user').id);
   const result = await query(
-    `SELECT e.id, e.name, e.type, e.date, e.person_name, e.next_occurrence::text AS next_occurrence
+    `SELECT e.id, e.name, e.type, e.date::text AS date, e.person_name, e.next_occurrence::text AS next_occurrence
      FROM events e WHERE e.user_id = $1 ORDER BY e.date ASC, e.id ASC`,
     [userId],
   );

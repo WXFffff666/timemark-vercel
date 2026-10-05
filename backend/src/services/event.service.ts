@@ -453,7 +453,7 @@ export async function getEventsByUserIdPaginated(
        CASE WHEN $5::text = 'created_at' THEN created_at::text END ASC NULLS LAST,
        CASE WHEN $5::text = 'created_at' THEN NULL ELSE date END ASC NULLS LAST,
        id ASC
-     LIMIT $6::int OFFSET $7::int`,
+     LIMIT $6 OFFSET $7`,
     [
       numericUserId,
       profileId ?? null,

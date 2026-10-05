@@ -346,11 +346,11 @@ export async function listAuditEvents(userId: number, options: ListAuditOptions 
     where += ` AND a.entity_kind = $${params.length}`;
   }
   // v2.27：时间范围筛选（idx_audit_logs_user_created 覆盖）；格式必须为 ISO 日期前缀
-  if (options.from && /^\d{4}-\d{2}-\d{2}/.test(options.from)) {
+  if (options.from && /^\d{4}-\d{2}-\d{2}$/.test(options.from)) {
     params.push(options.from);
     where += ` AND a.created_at >= $${params.length}`;
   }
-  if (options.to && /^\d{4}-\d{2}-\d{2}/.test(options.to)) {
+  if (options.to && /^\d{4}-\d{2}-\d{2}$/.test(options.to)) {
     params.push(`${options.to}T23:59:59.999Z`);
     where += ` AND a.created_at <= $${params.length}`;
   }

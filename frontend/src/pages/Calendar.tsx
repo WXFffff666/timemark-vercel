@@ -46,30 +46,12 @@ export default function Calendar() {
   });
   const setViewMode = (v: ViewMode) => {
     setViewModeState(v);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set('view', v);
-      next.set('date', selectedKey);
-      return next;
-    }, { replace: true });
   };
 
   useEffect(() => {
     if (events.length === 0) fetchEvents();
   }, [events.length, fetchEvents]);
 
-  // v2.27：键盘快捷键（←→ 前后一天/一月，t 回今天）与手动刷新
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-      if (e.key === 'ArrowLeft') goPrev();
-      else if (e.key === 'ArrowRight') goNext();
-      else if (e.key === 't' || e.key === 'T') goToday();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
   const todayKey = getTodayDateKey(timezone);
@@ -91,16 +73,54 @@ export default function Calendar() {
     setCursor(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
   };
 
+  // v2.27 F3：URL 与 UI 单向同步（replace）——selectDate/导航不再各自写 URL，
+  // 刷新/分享始终还原当前视图与日期。
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('view', viewMode);
+        next.set('date', selectedKey);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [viewMode, selectedKey, setSearchParams]);
+
+  // v2.27 F1：键盘快捷键放在函数定义之后，依赖补全避免过期闭包；带修饰键忽略
+  //（否则 Alt+Left 等浏览器快捷键会被吞）。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (e.key === 'ArrowLeft') goPrev();
+      else if (e.key === 'ArrowRight') goNext();
+      else if (e.key === 't' || e.key === 'T') goToday();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   const goPrev = () => {
     if (viewMode === 'year') setCursor(new Date(year - 1, 0, 1));
     else if (viewMode === 'month') setCursor(new Date(year, month - 1, 1));
-    else setCursor(new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - 1));
+    else {
+      // v2.27：日视图移动的是 selectedKey（DayPanel/标题都读它），改 cursor 无效
+      const d = parseSelectedDate(selectedKey);
+      d.setDate(d.getDate() - 1);
+      selectDate(d);
+    }
   };
 
   const goNext = () => {
     if (viewMode === 'year') setCursor(new Date(year + 1, 0, 1));
     else if (viewMode === 'month') setCursor(new Date(year, month + 1, 1));
-    else setCursor(new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1));
+    else {
+      const d = parseSelectedDate(selectedKey);
+      d.setDate(d.getDate() + 1);
+      selectDate(d);
+    }
   };
 
   const headerLabel = () => {

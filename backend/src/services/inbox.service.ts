@@ -79,7 +79,7 @@ export async function listInboxMessages(
     params.push(`%${options.q.trim()}%`);
     conditions.push(`(title ILIKE $${params.length} OR body ILIKE $${params.length})`);
   }
-  if (options.since && /^\d{4}-\d{2}-\d{2}T/.test(options.since)) {
+  if (options.since && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(options.since)) {
     params.push(options.since);
     conditions.push(`created_at > $${params.length}`);
   }

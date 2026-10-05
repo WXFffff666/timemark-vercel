@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Bell, CheckCircle2, AlertCircle, SkipForward, Loader2 } from 'lucide-react';
+import { ArrowRight, Bell, CheckCircle2, AlertCircle, SkipForward } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
@@ -49,7 +49,8 @@ function relativeTime(iso: string): string {
 
 export function RecentNotificationsCard() {
   const navigate = useNavigate();
-  const [logs, setLogs] = useState<TimelineLog[] | null>(null);
+  // undefined = 加载中，null = 拉取失败，数组 = 数据（空数组隐藏整卡）
+  const [logs, setLogs] = useState<TimelineLog[] | null | undefined>(undefined);
 
   useEffect(() => {
     api.get<TimelineLog[]>('/trigger-logs?limit=6')
@@ -57,7 +58,7 @@ export function RecentNotificationsCard() {
       .catch(() => setLogs(null));
   }, []);
 
-  if (logs === null || logs.length === 0) return null;
+  if (logs === null || logs === undefined || logs.length === 0) return null;
 
   return (
     <div className="mb-6 glass-panel rounded-2xl p-4 ring-1 ring-black/5 dark:ring-white/10">
@@ -69,9 +70,7 @@ export function RecentNotificationsCard() {
           查看全部 <ArrowRight size={12} className="ml-0.5" />
         </Button>
       </div>
-      {logs === undefined ? (
-        <Loader2 size={14} className="animate-spin text-slate-400" />
-      ) : (
+      {(
         <ul className="space-y-2">
           {logs.map((log) => {
             const delivery = readDelivery({

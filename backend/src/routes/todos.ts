@@ -48,7 +48,14 @@ todos.get('/stats', async (c) => {
          CURRENT_DATE - 29, CURRENT_DATE, INTERVAL '1 day'
        ) AS d
        WHERE e.user_id = $1
-         AND e.date <= d::date
+         AND e.date::date <= d::date
+         -- 口径：一次性事件只在其日期当天应完成；daily 循环事件每天应完成；
+         -- 其他循环频率近似只按事件日期计（略低估，不虚高分母）。
+         AND (
+           d::date = e.date::date
+           OR ((e.recurring_config ->> 'enabled')::boolean IS TRUE
+               AND e.recurring_config ->> 'frequency' = 'daily')
+         )
      )
      SELECT
        (SELECT COUNT(*)::int FROM due) AS expected,
