@@ -29,6 +29,10 @@ const contactBaseSchema = z.object({
   channelAccountIds: z.array(z.number().int().positive()).default([]),
   /** 与我的关系（见 contact-relationship.ts 预设列表） */
   relationship: optionalText,
+  /** v79: 联系人生日（YYYY-MM-DD）——未建生日事件也能触发祝福 */
+  birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '生日格式应为 YYYY-MM-DD').optional().or(z.literal('')),
+  /** v79: 该联系人退出祝福（greeting_opt_out） */
+  greetingOptOut: z.boolean().optional(),
   /** 性别：用于非亲属称呼先生/女士 */
   gender: z.enum(['male', 'female', 'unknown']).optional().default('unknown'),
   notes: z.string().max(500).optional(),

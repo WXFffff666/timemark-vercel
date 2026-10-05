@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { LabeledFieldsEditor, normalizeEntriesForSave } from '@/components/contacts/LabeledFieldsEditor';
 import { ContactDetailDrawer } from '@/components/contacts/ContactDetailDrawer';
@@ -45,6 +46,10 @@ interface FixedContact {
   wxpusher_uids?: ContactLabeledEntry[];
   relationship?: string | null;
   gender?: string | null;
+  /** v79: 联系人生日（YYYY-MM-DD）——未建生日事件也能触发祝福 */
+  birth_date?: string | null;
+  /** v79: 该联系人退出生日祝福 */
+  greeting_opt_out?: boolean;
   validation_status?: string;
   channel_account_ids?: number[];
   /** D4 联系节奏（v39） */
@@ -75,6 +80,8 @@ interface ContactForm {
   nickname: string;
   relationship: string;
   gender: string;
+  birthDate: string;
+  greetingOptOut: boolean;
   emails: ContactLabeledEntry[];
   phones: ContactLabeledEntry[];
   telegrams: ContactLabeledEntry[];
@@ -88,6 +95,8 @@ const emptyForm = (): ContactForm => ({
   nickname: '',
   relationship: '',
   gender: 'unknown',
+  birthDate: '',
+  greetingOptOut: false,
   emails: [{ label: '', value: '' }],
   phones: [{ label: '', value: '' }],
   telegrams: [{ label: '', value: '' }],
@@ -196,6 +205,8 @@ export default function Contacts() {
       nickname: c.nickname || '',
       relationship: c.relationship || '',
       gender: c.gender || 'unknown',
+      birthDate: c.birth_date ? String(c.birth_date).slice(0, 10) : '',
+      greetingOptOut: c.greeting_opt_out === true,
       emails: ensureLabeledEntries(c.emails, c.email),
       phones: ensureLabeledEntries(c.phones, c.phone),
       telegrams: ensureLabeledEntries(c.telegrams, c.telegram_chat_id),
@@ -239,6 +250,8 @@ export default function Contacts() {
     name: form.name.trim(),
     nickname: form.nickname.trim() || undefined,
     relationship: form.relationship || undefined,
+    birthDate: form.birthDate || '',
+    greetingOptOut: form.greetingOptOut,
     gender: (form.gender as 'male' | 'female' | 'unknown') || 'unknown',
     emails: normalizeEntriesForSave(form.emails),
     phones: normalizeEntriesForSave(form.phones),
@@ -619,6 +632,32 @@ export default function Contacts() {
                   ))}
                 </select>
                 <p className="text-xs text-slate-400 mt-1">非亲属时用于先生/女士尊称</p>
+              </div>
+            </div>
+
+            {/* v79: 生日 + 祝福退订（生日祝福功能的数据入口之一） */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium mb-1 block">生日</label>
+                <input
+                  type="date"
+                  className="w-full rounded-xl border p-2.5 text-sm bg-transparent"
+                  value={form.birthDate}
+                  onChange={(e) => setForm((prev) => ({ ...prev, birthDate: e.target.value }))}
+                  aria-label="联系人生日"
+                />
+                <p className="text-xs text-slate-400 mt-1">填写后每年生日自动发祝福（可免建生日事件）</p>
+              </div>
+              <div className="flex items-center justify-between sm:justify-end sm:gap-3">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">退出祝福</label>
+                  <p className="text-xs text-slate-400">不为 TA 自动发生日祝福</p>
+                </div>
+                <Switch
+                  checked={form.greetingOptOut}
+                  onCheckedChange={(v) => setForm((prev) => ({ ...prev, greetingOptOut: v }))}
+                  aria-label="退出祝福开关"
+                />
               </div>
             </div>
 

@@ -37,6 +37,10 @@ export interface FixedContactRow {
   relationship?: string | null;
   gender?: string | null;
   notes?: string | null;
+  /** v79: 联系人生日（YYYY-MM-DD）——未建生日事件也能触发祝福 */
+  birth_date?: string | null;
+  /** v79: 该联系人退出生日祝福 */
+  greeting_opt_out?: boolean;
   /** D4 联系节奏（v39） */
   cadence_days?: number | null;
   last_contact_at?: string | null;
@@ -150,6 +154,7 @@ export async function listFixedContacts(userId: number, profileId?: number | nul
   const result = await query(
     `SELECT id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid,
             contact_methods, preferred_channels, relationship, gender, notes,
+            birth_date, greeting_opt_out,
             cadence_days, last_contact_at, cadence_enabled,
             validation_status, last_validated_at, created_at, updated_at
      FROM fixed_contacts WHERE user_id = $1${profileClause} ORDER BY name ASC`,
@@ -167,8 +172,8 @@ export async function createFixedContact(userId: number, input: CreateFixedConta
 
   const result = await query(
     `INSERT INTO fixed_contacts
-     (user_id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid, contact_methods, preferred_channels, relationship, gender, notes, cadence_days, cadence_enabled, validation_status, last_validated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'valid',CURRENT_TIMESTAMP)
+     (user_id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid, contact_methods, preferred_channels, relationship, gender, notes, birth_date, greeting_opt_out, cadence_days, cadence_enabled, validation_status, last_validated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'valid',CURRENT_TIMESTAMP)
      RETURNING *`,
     [
       userId,
@@ -184,6 +189,8 @@ export async function createFixedContact(userId: number, input: CreateFixedConta
       input.relationship?.trim() || null,
       input.gender || 'unknown',
       input.notes || null,
+      input.birthDate ? input.birthDate : null,
+      input.greetingOptOut ?? false,
       input.cadenceDays ?? null,
       input.cadenceEnabled ?? false,
     ],
@@ -242,6 +249,16 @@ export async function updateFixedContact(userId: number, id: number, input: Upda
     i++;
     fields.push(`gender = $${i}`);
     values.push(input.gender || 'unknown');
+  }
+  if (input.birthDate !== undefined) {
+    i++;
+    fields.push(`birth_date = $${i}`);
+    values.push(input.birthDate ? input.birthDate : null);
+  }
+  if (input.greetingOptOut !== undefined) {
+    i++;
+    fields.push(`greeting_opt_out = $${i}`);
+    values.push(Boolean(input.greetingOptOut));
   }
   if (input.cadenceDays !== undefined) {
     i++;

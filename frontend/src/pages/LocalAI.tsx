@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Cpu, Database, Download, Loader2, Send, Sparkles, Square } from 'lucide-react';
+import { ArrowLeft, Cake, Cpu, Database, Download, Loader2, Send, Sparkles, Square } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { api } from '@/lib/api';
 import { probeDeviceCapability, isLocalChatCapable } from '@/lib/local-ai/device';
-import { isTierWeightReady, unloadEngines } from '@/lib/local-ai/engine';
+import { chatWebLlm, isTierWeightReady, unloadEngines } from '@/lib/local-ai/engine';
 import { buildKbIndex } from '@/lib/local-ai/kb';
 import { answerQuestion, type RagAnswer } from '@/lib/local-ai/rag';
 import {
@@ -304,8 +305,118 @@ export function LocalAI() {
             )}
           </form>
         </section>
+
+        {/* v2.25: 本地 AI 祝福草稿——选联系人，本地模型生成，数据不出本机 */}
+        <GreetingDraftTool device={device} tier={tier} onStatus={(msg, p) => { setModelStatus(msg); setModelProgress(typeof p === 'number' ? p : null); }} onDone={() => { setModelProgress(null); setModelStatus(''); }} />
       </main>
     </div>
+  );
+}
+
+/** 祝福草稿工具：联系人下拉 + 附加语气 → 本地 WebGPU 生成 → 复制 */
+function GreetingDraftTool({
+  device,
+  tier,
+  onStatus,
+  onDone,
+}: {
+  device: 'checking' | 'ok' | 'unsupported';
+  tier: WebLlmTierId;
+  onStatus: (msg: string, progress?: number) => void;
+  onDone: () => void;
+}) {
+  const [contacts, setContacts] = useState<Array<{ id: number; name: string; relationship?: string | null; notes?: string | null }>>([]);
+  const [contactId, setContactId] = useState<string>('');
+  const [tone, setTone] = useState('');
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    api.get<Array<{ id: number; name: string; relationship?: string | null; notes?: string | null }>>('/contacts')
+      .then((list) => setContacts(list ?? []))
+      .catch(() => undefined);
+  }, []);
+
+  const generate = async () => {
+    const contact = contacts.find((c) => String(c.id) === contactId);
+    if (!contact || busy) return;
+    setBusy(true);
+    setDraft('');
+    abortRef.current = new AbortController();
+    try {
+      const relationBits = [
+        contact.relationship ? `与机主关系：${contact.relationship}。` : '',
+        contact.notes?.trim() ? `机主备注：${contact.notes.trim().slice(0, 120)}。` : '',
+        tone.trim() ? `语气要求：${tone.trim()}。` : '',
+      ].filter(Boolean).join('');
+      const messages = [
+        {
+          role: 'system' as const,
+          content: '你是机主的私人助手，为机主的好友写一条生日祝福。60-120 字中文，温暖自然像朋友写的；直接输出正文，不要标题、不要签名、不要解释。',
+        },
+        { role: 'user' as const, content: `给好友「${contact.name}」写生日祝福。${relationBits}` },
+      ];
+      const text = await chatWebLlm(messages, { tier, maxTokens: 400, onStatus, signal: abortRef.current.signal });
+      setDraft(text);
+    } catch (err) {
+      setDraft(`生成失败：${err instanceof Error ? err.message : '未知错误'}`);
+    } finally {
+      setBusy(false);
+      abortRef.current = null;
+      onDone();
+    }
+  };
+
+  if (device !== 'ok' || contacts.length === 0) return null;
+  return (
+    <section className="glass-panel rounded-[2rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
+      <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
+        <Cake size={18} className="text-pink-500" /> 写祝福（本地生成）
+      </h2>
+      <div className="grid gap-2 sm:grid-cols-2 mb-2">
+        <select
+          value={contactId}
+          onChange={(e) => setContactId(e.target.value)}
+          className="h-11 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+          aria-label="选择联系人"
+        >
+          <option value="">选择联系人…</option>
+          {contacts.map((c) => (
+            <option key={c.id} value={String(c.id)}>{c.name}{c.relationship ? `（${c.relationship}）` : ''}</option>
+          ))}
+        </select>
+        <input
+          value={tone}
+          onChange={(e) => setTone(e.target.value)}
+          placeholder="语气要求（可选，如：幽默一点）"
+          className="h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+          aria-label="语气要求"
+        />
+      </div>
+      {draft && (
+        <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/50 px-4 py-3 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300 mb-2">
+          {draft}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Button variant="secondary" size="sm" className="rounded-full" onClick={() => void generate()} disabled={!contactId || busy}>
+          {busy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Sparkles size={14} className="mr-1.5" />}
+          {busy ? '生成中…' : '生成祝福'}
+        </Button>
+        {draft && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            onClick={() => void navigator.clipboard.writeText(draft).catch(() => undefined)}
+          >
+            复制
+          </Button>
+        )}
+      </div>
+      <p className="text-xs text-slate-400 mt-2">生成在你浏览器的 GPU 上完成，内容不出本机。要直接发给联系人请用「联系人」页或设置里的祝福草稿流程。</p>
+    </section>
   );
 }
 

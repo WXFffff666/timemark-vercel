@@ -176,6 +176,8 @@ CREATE TABLE IF NOT EXISTS user_configs (
   reminder_catchup_minutes INTEGER,
   email_template_style TEXT DEFAULT 'classic',
   fallback_enabled BOOLEAN DEFAULT TRUE,
+  greeting_mode TEXT DEFAULT 'auto',
+  greeting_ai_enabled BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -233,6 +235,23 @@ CREATE TABLE IF NOT EXISTS event_trigger_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_event ON event_trigger_logs(event_id);
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_user ON event_trigger_logs(user_id);
+
+-- v79: AI birthday greetings — final composed text per contact/year/channel.
+-- Rotation basis (composeBirthdayGreeting) + audit trail + draft staging.
+CREATE TABLE IF NOT EXISTS greeting_history (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  contact_id INTEGER,
+  event_id INTEGER,
+  year TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'email',
+  status TEXT NOT NULL,
+  subject TEXT,
+  body_html TEXT,
+  recipients TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_greeting_history_user_year ON greeting_history(user_id, year DESC);
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_date ON event_trigger_logs(trigger_date);
 -- A plain btree index is still the right shape for the TEXT token: the lookup is exact
 -- equality (`WHERE trigger_date = $2`) on the full key, never a prefix/LIKE pattern.
@@ -500,6 +519,9 @@ CREATE TABLE IF NOT EXISTS fixed_contacts (
   -- v41 (todo 68): household profile assignment (nullable, ON DELETE SET NULL).
   -- The FK constraint + backfill are applied by the v41 migration.
   profile_id INTEGER,
+  -- v79: direct birthday on the contact (greetings without a linked birthday event).
+  birth_date DATE,
+  greeting_opt_out BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

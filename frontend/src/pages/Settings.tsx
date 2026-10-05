@@ -17,6 +17,7 @@ import { ProfileSettings } from '@/components/ProfileSettings';
 import { DigestSettings } from '@/components/digest/DigestSettings';
 import { WebPushToggle } from '@/components/settings/WebPushToggle';
 import { AISettings } from '@/components/settings/AISettings';
+import { GreetingSettings } from '@/components/settings/GreetingSettings';
 import { AgentTokensSettings } from '@/components/settings/AgentTokensSettings';
 import { buildStyledReminderEmailBodies, buildNaturalReminderText, type EmailTemplateStyle } from '@timemark/shared';
 
@@ -846,6 +847,9 @@ export default function Settings() {
 
           {/* AI 助手 / 本地模型（checkbox 107）：独立组件，选择供应商 + 测试连接 */}
           <AISettings />
+
+          {/* v2.25: 生日祝福（自动/草稿 + AI 个性化 + 预演/草稿/历史） */}
+          <GreetingSettings />
 
           {/* 智能体令牌（checkbox 101）：独立组件，创建 / 重命名 / 撤销受限令牌 */}
           <AgentTokensSettings />

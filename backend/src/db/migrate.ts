@@ -3131,6 +3131,31 @@ ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS reminder_catchup_minutes INTEG
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS email_template_style TEXT NOT NULL DEFAULT 'classic';
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS fallback_enabled BOOLEAN NOT NULL DEFAULT TRUE;`,
     },
+    {
+      // v79: AI birthday greetings. Per-user greeting mode (auto = send on the day,
+      // draft = stage for one-click send) and AI toggle; contacts gain a birth_date so
+      // greetings work without a linked birthday event; greeting_history stores the
+      // final composed text per contact/year/channel (rotation basis + audit).
+      version: 79,
+      name: 'ai_birthday_greetings_v79',
+      sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS greeting_mode TEXT NOT NULL DEFAULT 'auto';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS greeting_ai_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE fixed_contacts ADD COLUMN IF NOT EXISTS birth_date DATE;
+CREATE TABLE IF NOT EXISTS greeting_history (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  contact_id INTEGER,
+  event_id INTEGER,
+  year TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'email',
+  status TEXT NOT NULL,
+  subject TEXT,
+  body_html TEXT,
+  recipients TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_greeting_history_user_year ON greeting_history(user_id, year DESC);`,
+    },
   ];
 
   for (const migration of migrations) {
