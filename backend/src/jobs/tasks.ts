@@ -1738,6 +1738,12 @@ export async function sendReminders() {
     // 包含 0 表示当天也提醒
     const allDays = daysBeforeList.includes(0) ? daysBeforeList : [0, ...daysBeforeList];
 
+    // v2.26 F：生日默认加「3 天后」一条准备提醒（提醒正文自然带"3 天后"字样）。
+    // 用户已配置 d3 时不重复注入；其它事件类型不注入。
+    if (event.type === 'birthday' && !allDays.includes(3)) {
+      allDays.push(3);
+    }
+
     // checkbox 78：节假日感知调度。`keep`（默认）保留原定日并在正文附节假日名；
     // `suppress` 在法定假日抑制；`shift` 顺延到节后第一个工作日。FAIL-OPEN：日历
     // 未覆盖（如 2031）时 resolveHolidayEvalDays 返回 [today]，提醒绝不丢失。

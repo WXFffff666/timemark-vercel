@@ -120,3 +120,27 @@ Base URL，点击 **测试连接** —— 它只会发送一条极短的 `ping` 
 除 `OLLAMA_BASE_URL` 的 `localhost` 开发默认值外，**所有 AI 变量在 `.env.example` 中均为空**；
 一个变量都不配置时应用照常运行。密钥只从环境变量读取，永不写入日志，也不会出现在
 `/api/ai/status` 或错误信息中。
+
+## v2.26 专项调研：能否用 Vercel 服务器的 GPU 跑生成式 AI？
+
+> 结论先给：**不能，也不需要**。以下三条均已在 2026-10 联网核实。
+
+1. **运行时不占构建时间（核实无误）**。Vercel Functions 是运行时资源，按 Fluid
+   compute 的活跃 CPU 计费，与构建分钟完全分离。
+2. **GPU 不可用（Hobby 计划）**。Vercel 自 2026-07 起 beta 提供 serverless GPU /
+   agentic 长时计算基础设施，但相关能力（含 30 分钟函数）普遍要求 Pro 计划，
+   没有任何证据表明对 Hobby 开放。
+3. **CPU 推理不可用（生成场景）**。函数内存上限 3009MB、共享低核 CPU。0.5B q4
+   模型理论上塞得进内存，但冷启动加载 + 共享 CPU 实测每秒只有几个 token，只够
+   embeddings/分类，写祝福这类生成式输出体验不可接受。
+
+**实际分工**：生成类任务（祝福正文、周报综述、月度叙述）走外接 OpenAI 兼容 API
+（`AI_*` 网关，baseUrl 可指向 Vercel AI Gateway / 硅基流动 / DeepSeek 等任意便宜
+端点）；隐私问答与祝福草稿走浏览器本地 WebGPU 推理（LocalAI 页，数据不出本机）。
+各 AI 消费者与预算见下表。
+
+| 消费者 | 入口 | 预算 |
+| --- | --- | --- |
+| 生日祝福正文 | `composeGreetingContentWithAi` | 日上限 20 条（超限回落组合引擎）；每 tick 上限 5 条 |
+| 周报 AI 综述 | `aiNarrateWeeklyReview` | 每 user 每周至多 1 次、maxTokens 220，失败/未配置退回确定性渲染 |
+| 月度摘要叙述 | digest.service | 与周报同回落链路，正文归档进 `digest_archive` |

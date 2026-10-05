@@ -14,13 +14,23 @@ import {
   formatWeightsMB,
   type WebLlmTierId,
 } from '@/lib/local-ai/models';
+import { clearChatHistory, loadChatHistory, saveChatHistory } from '@/lib/local-ai/chat-history-db';
 
 type HistoryEntry = {
   question: string;
   answer: string;
   sources: RagAnswer['sources'];
   mode: RagAnswer['mode'];
+  at: number;
 };
+
+/** 快捷指令（v2.26 E）：一键把常用问法填进输入框，回车即问。 */
+const QUICK_PROMPTS: string[] = [
+  '我最近有什么重要的事？',
+  '下个月有哪些提醒？',
+  '快过期的物品和证件有哪些？',
+  '帮我总结一下我的联系人',
+];
 
 function loadStoredTier(): WebLlmTierId {
   try {
@@ -62,12 +72,27 @@ export function LocalAI() {
       if (isLocalChatCapable(cap)) {
         setBundledReady(await isTierWeightReady(WEBLLM_MODELS.phone).catch(() => false));
       }
+      // v2.26 E：恢复上次会话（IndexedDB），刷新/重进不丢对话
+      const saved = await loadChatHistory().catch(() => []);
+      setHistory(saved.map((e) => ({ question: e.question, answer: e.answer, sources: e.sources, mode: e.mode, at: e.at })));
     })();
     return () => {
       abortRef.current?.abort();
       // 离开页面释放 WebGPU 显存；IndexedDB 缓存仍在，下次秒级重载
       void unloadEngines();
     };
+  }, []);
+
+  // 会话快照持久化：history 一变就整包写回（低频操作，上限 100 条裁剪在库层做）
+  useEffect(() => {
+    if (history.length === 0) return;
+    void saveChatHistory(history).catch(() => undefined);
+  }, [history]);
+
+  const handleClearHistory = useCallback(async () => {
+    if (!confirm('清空本地对话记录？')) return;
+    await clearChatHistory().catch(() => undefined);
+    setHistory([]);
   }, []);
 
   const handleTierChange = useCallback((next: WebLlmTierId) => {
@@ -108,7 +133,7 @@ export function LocalAI() {
     setBusy(true);
     setQuestion('');
     abortRef.current = new AbortController();
-    setHistory((prev) => [...prev, { question: q, answer: '…', sources: [], mode: 'local-ai' }]);
+    setHistory((prev) => [...prev, { question: q, answer: '…', sources: [], mode: 'local-ai', at: Date.now() }]);
     try {
       const result = await answerQuestion(q, {
         tier,
@@ -129,7 +154,7 @@ export function LocalAI() {
       setHistory((prev) => {
         const next = [...prev];
         const last = next[next.length - 1];
-        if (last) next[next.length - 1] = { question: q, answer: result.answer, sources: result.sources, mode: result.mode };
+        if (last) next[next.length - 1] = { ...last, question: q, answer: result.answer, sources: result.sources, mode: result.mode };
         return next;
       });
     } catch (err) {
@@ -252,9 +277,20 @@ export function LocalAI() {
 
         {/* 对话 */}
         <section className="glass-panel rounded-[2rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
-          <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
-            <Sparkles size={18} className="text-blue-500" /> 问问你的数据
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <Sparkles size={18} className="text-blue-500" /> 问问你的数据
+            </h2>
+            {history.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleClearHistory()}
+                className="text-xs text-slate-400 hover:text-red-500 transition"
+              >
+                清空对话
+              </button>
+            )}
+          </div>
           <div
             ref={historyRef}
             className="space-y-4 max-h-[26rem] overflow-y-auto overscroll-contain mb-4"
@@ -286,6 +322,21 @@ export function LocalAI() {
               </div>
             ))}
           </div>
+          {/* v2.26 E：快捷指令——一键填入常用问法 */}
+          {history.length === 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {QUICK_PROMPTS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setQuestion(p)}
+                  className="text-xs px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
           <form
             className="flex gap-2"
             onSubmit={(e) => {
@@ -335,7 +386,9 @@ function GreetingDraftTool({
   const [contactId, setContactId] = useState<string>('');
   const [tone, setTone] = useState('');
   const [draft, setDraft] = useState('');
+  const [gifts, setGifts] = useState('');
   const [busy, setBusy] = useState(false);
+  const [giftBusy, setGiftBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -374,6 +427,36 @@ function GreetingDraftTool({
     }
   };
 
+  // v2.26 F：礼物建议——同样走本地模型，按关系/备注给 3-4 个带价位的点子
+  const suggestGifts = async () => {
+    const contact = contacts.find((c) => String(c.id) === contactId);
+    if (!contact || giftBusy) return;
+    setGiftBusy(true);
+    setGifts('');
+    abortRef.current = new AbortController();
+    try {
+      const relationBits = [
+        contact.relationship ? `与机主关系：${contact.relationship}。` : '',
+        contact.notes?.trim() ? `机主备注：${contact.notes.trim().slice(0, 120)}。` : '',
+      ].filter(Boolean).join('');
+      const messages = [
+        {
+          role: 'system' as const,
+          content: '你是机主的私人礼物顾问。根据关系与备注，给 3-4 个生日礼物建议，每个一行：礼物 + 一句话理由 + 大概价位（人民币）。不要开场白和总结。',
+        },
+        { role: 'user' as const, content: `给好友「${contact.name}」挑生日礼物。${relationBits}` },
+      ];
+      const text = await chatWebLlm(messages, { tier, maxTokens: 350, onStatus, signal: abortRef.current.signal });
+      setGifts(text);
+    } catch (err) {
+      setGifts(`生成失败：${err instanceof Error ? err.message : '未知错误'}`);
+    } finally {
+      setGiftBusy(false);
+      abortRef.current = null;
+      onDone();
+    }
+  };
+
   if (device !== 'ok' || contacts.length === 0) return null;
   return (
     <section className="glass-panel rounded-[2rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
@@ -405,10 +488,20 @@ function GreetingDraftTool({
           {draft}
         </div>
       )}
-      <div className="flex gap-2">
-        <Button variant="secondary" size="sm" className="rounded-full" onClick={() => void generate()} disabled={!contactId || busy}>
+      {gifts && (
+        <div className="rounded-xl bg-pink-50/60 dark:bg-pink-950/30 border border-pink-200/60 dark:border-pink-800/50 px-4 py-3 text-sm whitespace-pre-wrap text-pink-800 dark:text-pink-200 mb-2">
+          {gifts}
+        </div>
+      )}
+      <div className="flex gap-2 flex-wrap">
+        <Button variant="secondary" size="sm" className="rounded-full" onClick={() => void generate()} disabled={!contactId || busy || giftBusy}>
           {busy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Sparkles size={14} className="mr-1.5" />}
           {busy ? '生成中…' : '生成祝福'}
+        </Button>
+        {/* v2.26 F：礼物建议（本地生成） */}
+        <Button variant="outline" size="sm" className="rounded-full" onClick={() => void suggestGifts()} disabled={!contactId || busy || giftBusy}>
+          {giftBusy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Cake size={14} className="mr-1.5" />}
+          {giftBusy ? '生成中…' : '礼物建议'}
         </Button>
         {draft && (
           <Button

@@ -227,6 +227,56 @@ function daysRank(daysUntil: number | null): number {
 }
 
 // ---------------------------------------------------------------------------
+// AI narration (v2.26 E: 第一个走通预算/回落链路的真实 AI 消费者)
+// ---------------------------------------------------------------------------
+
+/**
+ * 给确定性周报加一段 2-3 句的 AI 综述。
+ *
+ * 天然预算有界：weekly_review 每 user 每周至多跑一次，这里至多 1 次调用、
+ * maxTokens 220、清单条目截断到 60 字符。AI 未配置（AiDisabledError）、
+ * 网络失败或返回空文本时返回 null —— 调用方退回纯确定性 markdown，永不阻塞周报。
+ */
+export async function aiNarrateWeeklyReview(
+  userId: number,
+  week: string,
+  items: WeeklyDigestItem[],
+): Promise<{ narrative: string; totalTokens: number } | null> {
+  if (items.length === 0) return null;
+  try {
+    const { chat, AiDisabledError } = await import('../../ai/gateway.js');
+    const list = items
+      .slice(0, WEEKLY_TOP_N)
+      .map(
+        (item) =>
+          `- ${item.title.slice(0, 60)}${item.daysUntil === null ? '' : describeDays(item.daysUntil)} · 重要性 ${item.importance}`,
+      )
+      .join('\n');
+    const messages = [
+      {
+        role: 'system' as const,
+        content:
+          '你是机主的私人周报助理。根据本周事项清单写 2-3 句中文综述：点出最紧急的 1-2 件事、' +
+          '给出一句可执行的安排建议。只输出综述正文，不要标题、不要列表、不要客套话。',
+      },
+      {
+        role: 'user' as const,
+        content: `周次：${week}\n事项清单：\n${list}`,
+      },
+    ];
+    const result = await chat(messages, { tier: 'lite', maxTokens: 220, useCache: false });
+    const narrative = result.content.trim();
+    if (!narrative) return null;
+    return { narrative, totalTokens: result.usage?.totalTokens ?? 0 };
+  } catch (error) {
+    if ((error as { name?: string })?.name !== 'AiDisabledError') {
+      log.warn({ event: 'agent.weekly_review.narrate_failed', userId, err: error }, 'AI 周报综述失败，退回确定性渲染');
+    }
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -236,6 +286,10 @@ export interface WeeklyReviewSummary {
   generatedAt: string;
   items: WeeklyDigestItem[];
   markdown: string;
+  /** v2.26 E：AI 综述（2-3 句）。AI 未配置/失败/空清单时为 null，摘要退回纯确定性渲染。 */
+  narrative: string | null;
+  /** 'ai' 当且仅当 narrative 非 null；否则 'deterministic'。 */
+  narrativeSource: 'ai' | 'deterministic';
   counts: {
     merged: number;
     stateRows: number;
@@ -254,6 +308,8 @@ export interface WeeklyReviewDeps {
   loadCandidates?: (userId: number, lookaheadDays: number) => Promise<TriageCandidate[]>;
   saveState?: (userId: number, writes: TriageStateWrite[], nowMs: number) => Promise<number>;
   markIncluded?: (userId: number, fingerprints: string[], week: string) => Promise<number>;
+  /** v2.26 E：AI 综述 seam（默认走 gateway）；测试注入 null 即可关闭 AI 路径。 */
+  narrate?: typeof aiNarrateWeeklyReview;
 }
 
 interface MergedEntry {
@@ -271,6 +327,7 @@ export function createWeeklyReviewHandler(deps: WeeklyReviewDeps = {}): AgentJob
   const loadCandidates = deps.loadCandidates ?? loadTriageCandidates;
   const saveState = deps.saveState ?? saveTriageState;
   const markIncluded = deps.markIncluded ?? markDigestIncluded;
+  const narrate = deps.narrate ?? aiNarrateWeeklyReview;
 
   return async function execute(
     job: ClaimedJob,
@@ -382,12 +439,28 @@ export function createWeeklyReviewHandler(deps: WeeklyReviewDeps = {}): AgentJob
       deduped,
       belowBar,
     });
+
+    // v2.26 E：AI 综述（可注入/可失败/空清单跳过），成功时置顶一段并计入 token 消耗。
+    let narrative: string | null = null;
+    let costTokens = 0;
+    if (selected.length > 0) {
+      const narrated = await narrate(userId, week, selected).catch(() => null);
+      if (narrated) {
+        narrative = narrated.narrative;
+        costTokens = narrated.totalTokens;
+      }
+    }
+    const finalMarkdown =
+      narrative !== null ? `> 🤖 ${narrative}\n\n${markdown}` : markdown;
+
     const summary: WeeklyReviewSummary = {
       kind: WEEKLY_REVIEW_KIND,
       week,
       generatedAt: generatedAt.toISOString(),
       items: selected,
-      markdown,
+      markdown: finalMarkdown,
+      narrative,
+      narrativeSource: narrative !== null ? 'ai' : 'deterministic',
       counts: {
         merged: merged.size,
         stateRows: stateRows.length,
@@ -410,7 +483,7 @@ export function createWeeklyReviewHandler(deps: WeeklyReviewDeps = {}): AgentJob
       },
       'Weekly review digest generated',
     );
-    return { result: summary, costTokens: 0 };
+    return { result: summary, costTokens };
   };
 }
 
