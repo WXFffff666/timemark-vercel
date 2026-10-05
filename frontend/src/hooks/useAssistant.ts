@@ -79,6 +79,14 @@ export function useAssistant() {
 
   const nextId = useCallback(() => `m${++idRef.current}`, []);
 
+  // v2.28：运行态 + 停止能力（工具调用是一次 HTTP 往返，AbortController 中止 fetch）
+  const [runningTool, setRunningTool] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, []);
+
   const patchMessage = useCallback((id: string, patch: Partial<AssistantMessage>) => {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   }, []);
@@ -101,8 +109,11 @@ export function useAssistant() {
         ...prev,
         { id, role: 'assistant', text: understood, transcript: { tool, args, status: 'pending' } },
       ]);
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setRunningTool(tool);
       try {
-        const outcome = await invokeAgentAction(tool, args);
+        const outcome = await invokeAgentAction(tool, args, controller.signal);
         if (outcome.kind === 'confirm_required') {
           patchMessage(id, {
             text: `工具 ${outcome.preview.tool} 需要你确认后才会执行。`,
@@ -116,11 +127,16 @@ export function useAssistant() {
           });
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : '执行失败';
-        patchMessage(id, {
-          text: `执行失败：${message}`,
-          transcript: { tool, args, status: 'failed', error: message },
-        });
+        const aborted = controller.signal.aborted;
+        patchMessage(id, aborted
+          ? { text: '已停止。', transcript: { tool, args, status: 'failed', error: 'aborted' } }
+          : {
+              text: `执行失败：${error instanceof Error ? error.message : '执行失败'}`,
+              transcript: { tool, args, status: 'failed', error: error instanceof Error ? error.message : String(error) },
+            });
+      } finally {
+        setRunningTool(null);
+        abortRef.current = null;
       }
     },
     [nextId, patchMessage],
@@ -196,7 +212,7 @@ export function useAssistant() {
     [patchMessage],
   );
 
-  return { messages, tools, submit, confirm, cancel, invokeManual, loadTools };
+  return { messages, tools, submit, confirm, cancel, invokeManual, loadTools, runningTool, stop };
 }
 
 export type AssistantController = ReturnType<typeof useAssistant>;

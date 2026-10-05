@@ -217,7 +217,7 @@ export const AGENT_TOOLS: readonly AgentToolDefinition[] = [
     }),
     requiredScope: 'events:write',
     destructive: false,
-    requiresConfirmation: false,
+    requiresConfirmation: true,
     handler: 'event.service.updateEvent',
   },
   {
@@ -257,7 +257,7 @@ export const AGENT_TOOLS: readonly AgentToolDefinition[] = [
     }),
     requiredScope: 'reminders:snooze',
     destructive: false,
-    requiresConfirmation: false,
+    requiresConfirmation: true,
     // Reuses the checkbox-97 snooze writer (`events.snoozed_until`, migration v51).
     handler: 'bot-data.service.snoozeTodo',
   },
@@ -319,7 +319,7 @@ export const AGENT_TOOLS: readonly AgentToolDefinition[] = [
     }),
     requiredScope: 'expiry:write',
     destructive: false,
-    requiresConfirmation: false,
+    requiresConfirmation: true,
     handler: 'expiry.service.createExpiryItem',
   },
   {
@@ -334,7 +334,7 @@ export const AGENT_TOOLS: readonly AgentToolDefinition[] = [
     }),
     requiredScope: 'contacts:write',
     destructive: false,
-    requiresConfirmation: false,
+    requiresConfirmation: true,
     handler: 'contact-crm.service.createInteraction',
   },
   {
@@ -362,7 +362,7 @@ export const AGENT_TOOLS: readonly AgentToolDefinition[] = [
     }),
     requiredScope: 'documents:write',
     destructive: false,
-    requiresConfirmation: false,
+    requiresConfirmation: true,
     handler: 'document.service.createDocument',
   },
   {

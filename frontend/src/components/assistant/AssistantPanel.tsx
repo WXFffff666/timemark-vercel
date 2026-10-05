@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Send, ShieldAlert, Sparkles, Wrench, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { stripMarkdownLight } from '@/lib/local-ai/text-clean';
 import { ASSISTANT_QUICK_PROMPTS } from '@/lib/assistant-intent';
 import type {
   AssistantConfirmation,
@@ -184,7 +185,7 @@ function MessageRow({
               : 'bg-slate-100 text-slate-800 dark:bg-white/10 dark:text-slate-100',
           )}
         >
-          {message.text}
+          {isUser ? message.text : stripMarkdownLight(message.text)}
         </div>
         {message.transcript && <TranscriptBlock transcript={message.transcript} />}
         {message.confirmation && (
@@ -282,6 +283,14 @@ export interface AssistantPanelProps {
 
 /** checkbox 109: the shared assistant surface used by both the /assistant page and the dock. */
 export function AssistantPanel({ assistant, variant = 'page', onClose, className }: AssistantPanelProps) {
+  // v2.28：消息列表自动滚底 —— 此前完全没有滚动控制，长回答尾部在可视区外
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const messageCount = assistant.messages.length;
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messageCount]);
+
   const [draft, setDraft] = useState('');
   const empty = assistant.messages.length === 0;
   const quick = useMemo(() => [...ASSISTANT_QUICK_PROMPTS], []);
@@ -325,11 +334,12 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
       </header>
 
       <div
+        ref={listRef}
         data-testid="assistant-message-list"
         role="log"
         aria-live="polite"
         aria-label="助手对话记录"
-        className="flex-1 space-y-3 overflow-y-auto overscroll-contain rounded-2xl bg-white/40 p-3 dark:bg-black/20 min-h-40"
+        className="flex-1 min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-2xl bg-white/40 p-3 dark:bg-black/20 min-h-40"
       >
         {empty ? (
           <p className="py-6 text-center text-sm text-slate-400">
@@ -375,9 +385,26 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
             autoComplete="off"
           />
         </div>
-        <Button type="submit" variant="vision" size="icon" aria-label="发送" data-testid="assistant-submit">
-          <Send size={18} aria-hidden />
-        </Button>
+        {assistant.runningTool ? (
+          /* v2.28：工具执行中提供真实停止（中止 HTTP 调用） */
+          <Button
+            type="button"
+            variant="destructive"
+            size="icon"
+            aria-label="停止"
+            data-testid="assistant-stop"
+            onClick={(e) => {
+              e.preventDefault();
+              assistant.stop();
+            }}
+          >
+            <X size={18} aria-hidden />
+          </Button>
+        ) : (
+          <Button type="submit" variant="vision" size="icon" aria-label="发送" data-testid="assistant-submit">
+            <Send size={18} aria-hidden />
+          </Button>
+        )}
       </form>
 
       {variant === 'page' && <ManualToolForm assistant={assistant} />}

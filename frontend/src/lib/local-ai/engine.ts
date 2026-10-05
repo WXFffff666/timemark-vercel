@@ -138,7 +138,7 @@ async function buildEngine(model: WebLlmModel, onStatus?: AiStatusCallback): Pro
   return engine as unknown as Engine;
 }
 
-async function getEngine(tier: WebLlmTierId, onStatus?: AiStatusCallback): Promise<Engine> {
+async function getEngine(tier: WebLlmTierId, onStatus?: AiStatusCallback, signal?: AbortSignal): Promise<Engine> {
   const existing = engines.get(tier);
   if (existing) return existing;
   const model = resolveTier(tier);
@@ -153,7 +153,19 @@ async function getEngine(tier: WebLlmTierId, onStatus?: AiStatusCallback): Promi
     throw e;
   });
   engines.set(tier, promise);
-  return promise;
+  // v2.28：模型加载（首次需下载/编译权重，可达数十秒）期间点「停止」立即拒绝
+  // 本次等待（底层加载无法取消——WebLLM 无取消入口——但不会阻塞用户）。
+  if (signal?.aborted) {
+    engines.delete(tier);
+    throw new Error('本机模型加载已停止');
+  }
+  if (!signal) return promise;
+  return Promise.race([
+    promise,
+    new Promise<Engine>((_, reject) => {
+      signal.addEventListener('abort', () => reject(new Error('本机模型加载已停止')), { once: true });
+    }),
+  ]);
 }
 
 /** WebLLM 对话：OpenAI 兼容流式接口，onToken 回传累计文本 */
@@ -162,7 +174,7 @@ export async function chatWebLlm(
   opts: WebLlmChatOptions = {},
 ): Promise<string> {
   const tier = opts.tier ?? 'phone';
-  const engine = await getEngine(tier, opts.onStatus);
+  const engine = await getEngine(tier, opts.onStatus, opts.signal);
   if (opts.signal?.aborted) throw new Error('本机模型生成已停止');
 
   let acc = '';

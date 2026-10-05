@@ -7,6 +7,7 @@ import { probeDeviceCapability, isLocalChatCapable } from '@/lib/local-ai/device
 import { chatWebLlm, isTierWeightReady, unloadEngines } from '@/lib/local-ai/engine';
 import { buildKbIndex } from '@/lib/local-ai/kb';
 import { answerQuestion, type RagAnswer } from '@/lib/local-ai/rag';
+import { stripMarkdownLight } from '@/lib/local-ai/text-clean';
 import {
   WEBLLM_MODELS,
   WEBLLM_TIER_IDS,
@@ -103,10 +104,17 @@ export function LocalAI() {
   }, []);
 
   useEffect(() => {
-    // 修复：scrollIntoView 会滚动所有可滚祖先（整页），导致发消息后页面跳走、
-    // 对话区无法正常上下滑。改为只滚对话容器自身。
+    // 双层滚动策略（v2.28）：容器自身滚底（新消息/流式输出始终可见）；
+    // 若整个对话卡在视口外（页面太长把它顶下去），用受控 window.scrollTo
+    // 把卡片顶部带进视口——不用 scrollIntoView，它会把所有可滚祖先一起滚走。
     const container = historyRef.current;
-    if (container) container.scrollTop = container.scrollHeight;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+    const rect = container.getBoundingClientRect();
+    if (rect.bottom < 120 || rect.top > window.innerHeight - 80) {
+      const target = window.scrollY + rect.top - 88;
+      window.scrollTo({ top: Math.max(target, 0), behavior: 'smooth' });
+    }
   }, [history]);
 
   const handleBuildIndex = useCallback(async () => {
@@ -190,7 +198,137 @@ export function LocalAI() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-5">
-        {/* 设备与权重状态 */}
+        {/* 对话（v2.28：提升为首卡 —— 此前排第 3，移动端被顶出视口，是"看不到后续对话"的主因） */}
+        <section className="glass-panel rounded-[2rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <Sparkles size={18} className="text-blue-500" /> 问问你的数据
+            </h2>
+            {history.length > 0 && (
+              <div className="flex items-center gap-3">
+                {/* v2.27：导出全部对话为 Markdown（复制到剪贴板） */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const md = history
+                      .map((h) => `## ${h.question}\n\n${h.answer}\n\n${h.sources.length ? `> 来源：${h.sources.map((x) => x.title).join('、')}\n` : ''}`)
+                      .join('\n---\n\n');
+                    // v2.27 F48：下载为 .md 文件（复制版之外的可归档形态）
+                    const blob = new Blob([`# 本地 AI 对话导出\n\n${md}`], { type: 'text/markdown;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `local-ai-chat-${new Date().toISOString().slice(0, 10)}.md`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="text-xs text-slate-400 hover:text-indigo-500 transition"
+                >
+                  下载对话
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const md = history
+                      .map((h) => `## ${h.question}\n\n${h.answer}\n\n${h.sources.length ? `> 来源：${h.sources.map((x) => x.title).join('、')}\n` : ''}`)
+                      .join('\n---\n\n');
+                    navigator.clipboard.writeText(`# 本地 AI 对话导出\n\n${md}`).catch(() => undefined);
+                  }}
+                  className="text-xs text-slate-400 hover:text-indigo-500 transition"
+                >
+                  导出对话
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleClearHistory()}
+                  className="text-xs text-slate-400 hover:text-red-500 transition"
+                >
+                  清空对话
+                </button>
+              </div>
+            )}
+          </div>
+          <div
+            ref={historyRef}
+            className="space-y-4 max-h-[26rem] overflow-y-auto overscroll-contain mb-4"
+            aria-live="polite"
+          >
+            {history.length === 0 && (
+              <p className="text-sm text-slate-400">
+                示例：「妈妈的生日是什么时候」「下个月有什么到期」「总结一下我的事件」。回答只依据你的知识库，末尾带来源编号。
+              </p>
+            )}
+            {history.map((h, i) => (
+              <div key={i} className="space-y-2">
+                <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{h.question}</div>
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/50 px-4 py-3 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                  {stripMarkdownLight(h.answer)}
+                  {h.sources.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/50 flex flex-wrap gap-1.5">
+                      {h.sources.map((s) => (
+                        <span key={s.id} className="text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500" title={s.snippet}>
+                          {s.title}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {h.mode === 'retrieval-only' && (
+                    <p className="mt-1.5 text-[11px] text-amber-600 dark:text-amber-400">（仅检索结果——本机对话模型不可用）</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* v2.26 E：快捷指令——一键填入常用问法 */}
+          {history.length === 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {QUICK_PROMPTS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setQuestion(p)}
+                  className="text-xs px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleAsk();
+            }}
+          >
+            <input
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder={device === 'ok' ? '问点关于你自己的事…' : '检索你的知识库（对话模型不可用）'}
+              className="flex-1 h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+              aria-label="问题"
+            />
+            {busy ? (
+              <Button type="button" variant="outline" size="icon" className="rounded-xl min-h-11 min-w-11" onClick={() => abortRef.current?.abort()} aria-label="停止生成">
+                <Square size={16} />
+              </Button>
+            ) : (
+              <Button type="submit" variant="vision" size="icon" className="rounded-xl min-h-11 min-w-11" disabled={!question.trim()} aria-label="发送">
+                <Send size={16} />
+              </Button>
+            )}
+          </form>
+        </section>
+
+        {/* v2.25: 本地 AI 祝福草稿——选联系人，本地模型生成，数据不出本机 */}
+
+        {/* v2.28：模型与知识库折叠为次级卡，把首屏留给对话 */}
+        <details className="glass-panel rounded-[2rem] ring-1 ring-black/5 dark:ring-white/10 overflow-hidden">
+          <summary className="px-6 py-4 cursor-pointer select-none flex items-center gap-2 text-base font-semibold">
+            <Cpu size={18} className="text-violet-500" /> 模型与知识库设置
+          </summary>
+          <div className="space-y-5 p-6 pt-2">
+        {/* 设备与权重状态（v2.28：移到对话之后） */}
         <section className="glass-panel rounded-[2rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
           <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
             <Cpu size={18} className="text-violet-500" /> 运行环境与模型档位
@@ -275,129 +413,9 @@ export function LocalAI() {
           {indexSummary && <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">{indexSummary}</p>}
         </section>
 
-        {/* 对话 */}
-        <section className="glass-panel rounded-[2rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold flex items-center gap-2">
-              <Sparkles size={18} className="text-blue-500" /> 问问你的数据
-            </h2>
-            {history.length > 0 && (
-              <div className="flex items-center gap-3">
-                {/* v2.27：导出全部对话为 Markdown（复制到剪贴板） */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const md = history
-                      .map((h) => `## ${h.question}\n\n${h.answer}\n\n${h.sources.length ? `> 来源：${h.sources.map((x) => x.title).join('、')}\n` : ''}`)
-                      .join('\n---\n\n');
-                    // v2.27 F48：下载为 .md 文件（复制版之外的可归档形态）
-                    const blob = new Blob([`# 本地 AI 对话导出\n\n${md}`], { type: 'text/markdown;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `local-ai-chat-${new Date().toISOString().slice(0, 10)}.md`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="text-xs text-slate-400 hover:text-indigo-500 transition"
-                >
-                  下载对话
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const md = history
-                      .map((h) => `## ${h.question}\n\n${h.answer}\n\n${h.sources.length ? `> 来源：${h.sources.map((x) => x.title).join('、')}\n` : ''}`)
-                      .join('\n---\n\n');
-                    navigator.clipboard.writeText(`# 本地 AI 对话导出\n\n${md}`).catch(() => undefined);
-                  }}
-                  className="text-xs text-slate-400 hover:text-indigo-500 transition"
-                >
-                  导出对话
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleClearHistory()}
-                  className="text-xs text-slate-400 hover:text-red-500 transition"
-                >
-                  清空对话
-                </button>
-              </div>
-            )}
           </div>
-          <div
-            ref={historyRef}
-            className="space-y-4 max-h-[26rem] overflow-y-auto overscroll-contain mb-4"
-            aria-live="polite"
-          >
-            {history.length === 0 && (
-              <p className="text-sm text-slate-400">
-                示例：「妈妈的生日是什么时候」「下个月有什么到期」「总结一下我的事件」。回答只依据你的知识库，末尾带来源编号。
-              </p>
-            )}
-            {history.map((h, i) => (
-              <div key={i} className="space-y-2">
-                <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{h.question}</div>
-                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/50 px-4 py-3 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
-                  {h.answer}
-                  {h.sources.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/50 flex flex-wrap gap-1.5">
-                      {h.sources.map((s) => (
-                        <span key={s.id} className="text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500" title={s.snippet}>
-                          {s.title}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {h.mode === 'retrieval-only' && (
-                    <p className="mt-1.5 text-[11px] text-amber-600 dark:text-amber-400">（仅检索结果——本机对话模型不可用）</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          {/* v2.26 E：快捷指令——一键填入常用问法 */}
-          {history.length === 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {QUICK_PROMPTS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setQuestion(p)}
-                  className="text-xs px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          )}
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void handleAsk();
-            }}
-          >
-            <input
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder={device === 'ok' ? '问点关于你自己的事…' : '检索你的知识库（对话模型不可用）'}
-              className="flex-1 h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-              aria-label="问题"
-            />
-            {busy ? (
-              <Button type="button" variant="outline" size="icon" className="rounded-xl min-h-11 min-w-11" onClick={() => abortRef.current?.abort()} aria-label="停止生成">
-                <Square size={16} />
-              </Button>
-            ) : (
-              <Button type="submit" variant="vision" size="icon" className="rounded-xl min-h-11 min-w-11" disabled={!question.trim()} aria-label="发送">
-                <Send size={16} />
-              </Button>
-            )}
-          </form>
-        </section>
+        </details>
 
-        {/* v2.25: 本地 AI 祝福草稿——选联系人，本地模型生成，数据不出本机 */}
         <GreetingDraftTool device={device} tier={tier} onStatus={(msg, p) => { setModelStatus(msg); setModelProgress(typeof p === 'number' ? p : null); }} onDone={() => { setModelProgress(null); setModelStatus(''); }} />
       </main>
     </div>
@@ -528,15 +546,33 @@ function GreetingDraftTool({
         </div>
       )}
       <div className="flex gap-2 flex-wrap">
-        <Button variant="secondary" size="sm" className="rounded-full" onClick={() => void generate()} disabled={!contactId || busy || giftBusy}>
-          {busy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Sparkles size={14} className="mr-1.5" />}
-          {busy ? '生成中…' : '生成祝福'}
-        </Button>
-        {/* v2.26 F：礼物建议（本地生成） */}
-        <Button variant="outline" size="sm" className="rounded-full" onClick={() => void suggestGifts()} disabled={!contactId || busy || giftBusy}>
-          {giftBusy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Cake size={14} className="mr-1.5" />}
-          {giftBusy ? '生成中…' : '礼物建议'}
-        </Button>
+        {(busy || giftBusy) && (
+          /* v2.28 A：生成期间提供真实可用的停止（此前 abortRef 存在但没有任何 UI 触发） */
+          <Button
+            variant="destructive"
+            size="sm"
+            className="rounded-full"
+            onClick={() => {
+              abortRef.current?.abort();
+              abortRef.current = null;
+            }}
+          >
+            <Square size={14} className="mr-1.5 fill-current" /> 停止
+          </Button>
+        )}
+        {!busy && (
+          <Button variant="secondary" size="sm" className="rounded-full" onClick={() => void generate()} disabled={!contactId || giftBusy}>
+            <Sparkles size={14} className="mr-1.5" />
+            生成祝福
+          </Button>
+        )}
+        {!giftBusy && (
+          /* v2.26 F：礼物建议（本地生成） */
+          <Button variant="outline" size="sm" className="rounded-full" onClick={() => void suggestGifts()} disabled={!contactId || busy}>
+            <Cake size={14} className="mr-1.5" />
+            礼物建议
+          </Button>
+        )}
         {draft && (
           <Button
             variant="outline"

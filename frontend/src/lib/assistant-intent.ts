@@ -194,6 +194,25 @@ export function resolveAssistantIntent(text: string, ctx: AssistantIntentContext
     return { kind: 'tool', tool: 'list_expiry', args: { days: 30 }, understood: '查看近 30 天的续费 / 支出' };
   }
 
+  // v2.28：联系/习惯/模式/搜索四类读操作的路由（此前 intent 只覆盖 5 个工具）
+  if (/该联系|联系谁|该打电话|多久没联系|联系人清单|stale/.test(raw)) {
+    return { kind: 'tool', tool: 'list_contacts_due', args: { withinDays: 14 }, understood: '查看该联系的人（未来 14 天节奏）' };
+  }
+  if (/习惯|打卡|连续|streak/.test(raw) && !CREATE_MARKER.test(raw)) {
+    return { kind: 'tool', tool: 'get_habits', args: { active: true }, understood: '查看习惯与连续打卡' };
+  }
+  if (/规律|模式|行为|patterns?|我通常|平时什么/.test(raw)) {
+    return { kind: 'tool', tool: 'get_patterns', args: { minEvidence: 3 }, understood: '查看系统发现的规律' };
+  }
+  const find = /(?:找|搜|查|帮我找|搜索)\s*(?:一下\s*)?(?:关于\s*)?["「『]?([一-龥A-Za-z0-9 _-]{2,30})["」』]?/.exec(raw);
+  if (find && /找|搜/.test(find[1] + raw.slice(0, 2)) && /找|搜|搜索/.test(raw)) {
+    const term = find[1].trim();
+    // 排除被 create 分支更合适处理的场景（带日期的创建意图优先走 create）
+    if (term && !matchDate(raw, today)) {
+      return { kind: 'tool', tool: 'search', args: { text: term }, understood: `搜索「${term}」` };
+    }
+  }
+
   // 3. Create with a resolvable date.
   const date = matchDate(raw, today);
   if (date) {

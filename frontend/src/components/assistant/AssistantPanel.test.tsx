@@ -69,7 +69,8 @@ describe('AssistantPanel (checkbox 109)', () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
 
     // The args the backend actually received...
-    expect(invokeMock).toHaveBeenCalledWith('create_event', { name: '交报告', date: '2026-10-05' });
+    // v2.28：runTool 现在传第三个参数 AbortSignal（可停止）
+    expect(invokeMock).toHaveBeenCalledWith('create_event', { name: '交报告', date: '2026-10-05' }, expect.any(AbortSignal));
     const [tool, args] = invokeMock.mock.calls[0];
 
     // ...are the args the transcript shows, verbatim (no paraphrase).
@@ -171,7 +172,7 @@ describe('AssistantPanel (checkbox 109)', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
-    expect(invokeMock).toHaveBeenCalledWith('get_today', { includeCompleted: false });
+    expect(invokeMock).toHaveBeenCalledWith('get_today', { includeCompleted: false }, expect.any(AbortSignal));
   });
 
   it('labels the input and announces the message list', () => {

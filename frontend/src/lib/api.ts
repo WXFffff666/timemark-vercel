@@ -413,7 +413,33 @@ export function fetchAgentTools() {
  * A 202 `confirm_required` outcome is returned unchanged - nothing has executed, and the caller
  * must obtain explicit user consent before `confirmAgentAction`.
  */
-export async function invokeAgentAction(tool: string, args: unknown): Promise<AgentActionOutcome> {
+export async function invokeAgentAction(
+  tool: string,
+  args: unknown,
+  signal?: AbortSignal,
+): Promise<AgentActionOutcome> {
+  if (signal) {
+    // v2.28：可中止变体（dock 助手「停止」）——api.post 不支持 signal，这里走裸 fetch
+    const { accessToken } = getTokens();
+    const res = await fetch(`${API_BASE}/agent/actions/${encodeURIComponent(tool)}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
+      },
+      body: JSON.stringify({ args }),
+      signal,
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.success) throw new Error(json?.error || `HTTP ${res.status}`);
+    if (json.status === 'confirm_required') {
+      const pending = json as { confirmationId: string; preview: AgentToolPreview };
+      return { kind: 'confirm_required', confirmationId: pending.confirmationId, preview: pending.preview };
+    }
+    return { kind: 'executed', data: json.data };
+  }
   const data = await api.post<unknown>(`/agent/actions/${encodeURIComponent(tool)}`, { args });
   if (data && typeof data === 'object' && (data as { status?: unknown }).status === 'confirm_required') {
     const pending = data as { confirmationId: string; preview: AgentToolPreview };
