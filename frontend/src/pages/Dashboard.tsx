@@ -36,6 +36,8 @@ export function Dashboard() {
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [conflicts, setConflicts] = useState<{ date: string; count: number; names: string[] }[]>([]);
+  // v2.27：冲突列表默认只显 3 组，可展开
+  const [showAllConflicts, setShowAllConflicts] = useState(false);
   const [inboxUnread, setInboxUnread] = useState(0);
   // v2.25: 静默时段状态提示——静默中的通知不丢（cron 照常投递记录），只是延迟到窗口结束
   const [quietHours, setQuietHours] = useState<{ start: string | null; end: string | null } | null>(null);
@@ -286,7 +288,7 @@ export function Dashboard() {
           );
         })()}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-          <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">今日事件</p><p className="text-2xl font-bold">{todayCount}</p></div>
+          <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500 dark:text-slate-400">今日事件</p><p className="text-2xl font-bold">{todayCount}</p></div>
           <div
             className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-amber-400/50 transition"
             onClick={() => navigate('/todos')}
@@ -294,21 +296,21 @@ export function Dashboard() {
             tabIndex={0}
             onKeyDown={(e) => e.key === 'Enter' && navigate('/todos')}
           >
-            <p className="text-xs text-slate-500">近期待办</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">近期待办</p>
             <p className="text-2xl font-bold">{todoCount}</p>
             <p className="text-[10px] text-slate-400 mt-1">进入提醒窗口的事件</p>
           </div>
-          <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500">总事件</p><p className="text-2xl font-bold">{events.length}</p></div>
+          <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500 dark:text-slate-400">总事件</p><p className="text-2xl font-bold">{events.length}</p></div>
           <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-emerald-400/50 transition" onClick={() => navigate('/contacts')} role="button" tabIndex={0} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/contacts')}>
-            <p className="text-xs text-slate-500 flex items-center gap-1"><Users size={12} />固定联系人</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Users size={12} />固定联系人</p>
             <p className="text-sm font-medium text-emerald-600">管理 →</p>
           </div>
           <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-blue-400/50 transition" onClick={() => navigate('/broadcast')} role="button" tabIndex={0} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/broadcast')}>
-            <p className="text-xs text-slate-500 flex items-center gap-1"><Mail size={12} />批量邮件</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Mail size={12} />批量邮件</p>
             <p className="text-sm font-medium text-blue-600">群发 →</p>
           </div>
           <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition" onClick={() => navigate('/calendar')} role="button" tabIndex={0} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/calendar')}>
-            <p className="text-xs text-slate-500 flex items-center gap-1"><Calendar size={12} />日历视图</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Calendar size={12} />日历视图</p>
             <p className="text-sm font-medium text-indigo-600">查看 →</p>
           </div>
           <div
@@ -318,7 +320,7 @@ export function Dashboard() {
             tabIndex={0}
             onKeyDown={(e) => e.key === 'Enter' && navigate('/expiry')}
           >
-            <p className="text-xs text-slate-500 flex items-center gap-1"><AlarmClock size={12} />到期中心</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><AlarmClock size={12} />到期中心</p>
             <p className="text-sm font-medium text-rose-600">管理 →</p>
           </div>
           <div
@@ -328,7 +330,7 @@ export function Dashboard() {
             tabIndex={0}
             onKeyDown={(e) => e.key === 'Enter' && navigate('/inventory')}
           >
-            <p className="text-xs text-slate-500 flex items-center gap-1"><Package size={12} />库存</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Package size={12} />库存</p>
             <p className="text-sm font-medium text-teal-600">管理 →</p>
           </div>
           <div
@@ -338,7 +340,7 @@ export function Dashboard() {
             tabIndex={0}
             onKeyDown={(e) => e.key === 'Enter' && navigate('/maintenance')}
           >
-            <p className="text-xs text-slate-500 flex items-center gap-1"><Wrench size={12} />保养</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Wrench size={12} />保养</p>
             <p className="text-sm font-medium text-orange-600">管理 →</p>
           </div>
           <div
@@ -349,7 +351,7 @@ export function Dashboard() {
             data-testid="nav-goals"
             onKeyDown={(e) => e.key === 'Enter' && navigate('/goals')}
           >
-            <p className="text-xs text-slate-500 flex items-center gap-1"><Target size={12} />目标</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Target size={12} />目标</p>
             <p className="text-sm font-medium text-violet-600">管理 →</p>
           </div>
         </div>
@@ -365,12 +367,20 @@ export function Dashboard() {
           <div className="mb-6 glass-panel rounded-2xl p-4 border border-amber-200/60 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-900/10">
             <p className="text-sm font-bold text-amber-800 dark:text-amber-200 mb-2">⚠️ 日期冲突检测（{conflicts.length} 组）</p>
             <div className="space-y-1">
-              {conflicts.slice(0, 3).map((c) => (
+              {(showAllConflicts ? conflicts : conflicts.slice(0, 3)).map((c) => (
                 <p key={c.date} className="text-xs text-amber-700 dark:text-amber-300">
                   {c.date}：{c.names?.join('、') || `${c.count} 个事件`}
                 </p>
               ))}
-              {conflicts.length > 3 && <p className="text-xs text-amber-600">还有 {conflicts.length - 3} 组冲突…</p>}
+              {conflicts.length > 3 && (
+                <button
+                  type="button"
+                  className="text-xs text-amber-600 dark:text-amber-400 underline"
+                  onClick={() => setShowAllConflicts((v) => !v)}
+                >
+                  {showAllConflicts ? '收起' : `查看全部 ${conflicts.length} 组`}
+                </button>
+              )}
             </div>
           </div>
         )}

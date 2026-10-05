@@ -51,7 +51,7 @@ export function StaticSearchBox() {
 
   return (
     <section className="glass-panel rounded-2xl p-3 ring-1 ring-black/5 dark:ring-white/10" data-testid="static-search">
-      <label className="flex items-center gap-2 text-sm text-slate-500">
+      <label className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
         <Search size={16} className="shrink-0" />
         <span className="sr-only">搜索静态数据</span>
         <input
@@ -65,8 +65,14 @@ export function StaticSearchBox() {
         />
         {loading && <span className="text-[10px] text-slate-400 shrink-0">搜索中…</span>}
       </label>
-      {open && hits.length > 0 && (
+      {open && (
         <ul className="mt-2 space-y-1 max-h-48 overflow-y-auto overscroll-contain" role="listbox" aria-label="静态搜索结果">
+          {/* v2.27 A-12：无结果空态（此前有结果才渲染，无结果时列表静默消失） */}
+          {!loading && hits.length === 0 && (
+            <li className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400" role="option" aria-selected={false}>
+              未找到匹配项
+            </li>
+          )}
           {hits.map((hit) => (
             <li
               key={hit.id}

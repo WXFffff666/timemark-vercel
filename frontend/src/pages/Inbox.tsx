@@ -41,16 +41,18 @@ export default function Inbox() {
   const [actionError, setActionError] = useState('');
 
 
-  const fetchMessages = async () => {
+  const fetchMessages = async (offset = 0) => {
     setLoading(true);
     try {
-      const res = await api.getRaw<InboxMessage[]>('/inbox?limit=100');
-      setMessages(res.data || []);
+      const res = await api.getRaw<InboxMessage[]>(`/inbox?limit=100&offset=${offset}`);
+      const page = res.data || [];
       setTotal((res.pagination?.total as number) || 0);
       setUnreadCount((res.pagination?.unreadCount as number) || 0);
+      // v2.27 A-8：加载更多 —— offset>0 时追加而不是替换
+      setMessages((prev) => (offset > 0 ? [...prev, ...page] : page));
     } catch (error) {
       console.error('Failed to fetch inbox:', error);
-      setMessages([]);
+      if (offset === 0) setMessages([]);
     } finally {
       setLoading(false);
     }
@@ -123,7 +125,7 @@ export default function Inbox() {
               <CheckCheck size={16} className="mr-1" />
               全部已读
             </Button>
-            <Button variant="ghost" size="icon" className="rounded-full" aria-label="刷新收件箱" onClick={fetchMessages} disabled={loading}>
+            <Button variant="ghost" size="icon" className="rounded-full" aria-label="刷新收件箱" onClick={() => fetchMessages()} disabled={loading}>
               <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
             </Button>
           </div>
@@ -225,6 +227,19 @@ export default function Inbox() {
               ))}
             </div>
           </motion.div>
+        )}
+        {/* v2.27 A-8：分页加载更多 */}
+        {!loading && messages.length < total && (
+          <div className="text-center mt-6">
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full min-h-11"
+              onClick={() => fetchMessages(messages.length)}
+            >
+              加载更多（已加载 {messages.length}/{total}）
+            </Button>
+          </div>
         )}
       </main>
     </motion.div>

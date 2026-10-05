@@ -261,7 +261,7 @@ export default function Security() {
               <p>初始密码: {deployInfo.passwordChangedAt ? '已修改' : '尚未修改（建议尽快改）'}</p>
               <p>Turnstile: {deployInfo.turnstileConfigured ? '已配置' : '未配置（可选）'}</p>
               <p>Cron Secret: {deployInfo.cronSecretConfigured ? '已配置' : '未配置'}</p>
-              <p className="text-xs text-slate-500 pt-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 pt-1">
                 登录会话令牌由系统自动轮换（约 15 分钟续期 access、30 天 refresh），无需手动操作。
                 Vercel 环境变量（JWT_SECRET、MASTER_KEY、CRON_SECRET）配置一次即可，无需定期更换。
               </p>
@@ -279,7 +279,7 @@ export default function Security() {
               <div key={s.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-sm">
                 <div>
                   <p>{s.deviceFingerprint?.slice(0, 20) || '未知设备'} {s.isCurrent && <span className="text-green-600">(当前)</span>}</p>
-                  <p className="text-xs text-slate-500">{new Date(s.createdAt).toLocaleString()}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(s.createdAt).toLocaleString()}</p>
                 </div>
                 {!s.isCurrent && <Button size="sm" variant="ghost" onClick={() => revokeSession(s.id)}><Trash2 className="w-4 h-4" /></Button>}
               </div>
@@ -314,7 +314,7 @@ export default function Security() {
                   <div key={pk.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-sm">
                     <div>
                       <p className="font-medium">{pk.deviceName || 'Passkey'}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         注册于 {new Date(pk.createdAt).toLocaleString()}
                         {pk.lastUsedAt ? ` · 最近使用 ${new Date(pk.lastUsedAt).toLocaleString()}` : ''}
                       </p>
@@ -326,7 +326,7 @@ export default function Security() {
                 ))}
               </div>
             )}
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               可在安全中心注册 Passkey 备用，当前登录默认仅需用户名和密码。若在安全中心启用了 TOTP，登录时需额外输入验证码。需 HTTPS（生产域名已支持）。
             </p>
           </CardContent>
@@ -370,7 +370,7 @@ export default function Security() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-xs text-slate-500">签发需要验证账号密码和当前验证器上的 6 位验证码。</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">签发需要验证账号密码和当前验证器上的 6 位验证码。</p>
                     <Input
                       type="password"
                       placeholder="账号密码"
@@ -390,7 +390,7 @@ export default function Security() {
             )}
             {totpEnabled && (
               <div className="space-y-2">
-                <p className="text-xs text-slate-500">关闭需要账号密码和当前验证码。关闭后已签发的恢复码会一并作废。</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">关闭需要账号密码和当前验证码。关闭后已签发的恢复码会一并作废。</p>
                 <Button size="sm" variant="destructive" onClick={disableTotp} disabled={recoveryBusy}>关闭双因素认证</Button>
               </div>
             )}
@@ -412,7 +412,7 @@ export default function Security() {
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><Ban className="w-4 h-4" />IP 封禁列表</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {ipBans.length === 0 ? <p className="text-sm text-slate-500">当前无封禁 IP</p> : ipBans.map((b) => (
+            {ipBans.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">当前无封禁 IP</p> : ipBans.map((b) => (
               <div key={b.ip} className="flex justify-between items-center text-sm p-2 bg-red-50 dark:bg-red-900/20 rounded">
                 <span>{b.ip} · {b.geo} · 至 {new Date(b.lockedUntil).toLocaleString()}</span>
                 <Button size="sm" variant="outline" onClick={() => unbanIp(b.ip)}>解封</Button>
@@ -436,7 +436,7 @@ export default function Security() {
             {events.map((e) => (
               <div key={e.id} className="text-sm border-l-2 border-blue-400 pl-3 py-1">
                 <p className="font-medium">{e.event_type}</p>
-                <p className="text-xs text-slate-500">{e.ip_address} · {new Date(e.created_at).toLocaleString()}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{e.ip_address} · {new Date(e.created_at).toLocaleString()}</p>
               </div>
             ))}
           </CardContent>

@@ -112,16 +112,15 @@ export default function Calendar() {
     return `${year}年${month + 1}月`;
   };
 
+  // v2.27：列表类型筛选 chips（'' = 全部类型）
+  const [listType, setListType] = useState<'' | 'birthday' | 'anniversary' | 'exam' | 'holiday' | 'other'>('');
   const listEvents = useMemo(() => {
-    if (listScope === 'year') {
-      return events
-        .filter((e) => e.date.startsWith(`${year}-`))
-        .sort((a, b) => a.date.localeCompare(b.date));
-    }
+    const prefix = listScope === 'year' ? `${year}-` : `${year}-${pad(month + 1)}`;
     return events
-      .filter((e) => e.date.startsWith(`${year}-${pad(month + 1)}`))
+      .filter((e) => e.date.startsWith(prefix))
+      .filter((e) => (listType ? e.type === listType : true))
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [events, listScope, year, month]);
+  }, [events, listScope, year, month, listType]);
 
   const selectedEvents = eventsByDate.get(selectedKey) || [];
 
@@ -246,28 +245,46 @@ export default function Calendar() {
 
         <section className="space-y-2">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
+            <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               {listScope === 'month' ? '本月事件' : '本年事件'}
             </h2>
             <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden text-xs">
               <button
                 type="button"
-                className={`px-3 py-1 ${listScope === 'month' ? 'bg-primary-500 text-white' : 'bg-transparent text-slate-500'}`}
+                className={`px-3 py-1 ${listScope === 'month' ? 'bg-primary-500 text-white' : 'bg-transparent text-slate-500 dark:text-slate-400'}`}
                 onClick={() => setListScope('month')}
               >
                 本月
               </button>
               <button
                 type="button"
-                className={`px-3 py-1 ${listScope === 'year' ? 'bg-primary-500 text-white' : 'bg-transparent text-slate-500'}`}
+                className={`px-3 py-1 ${listScope === 'year' ? 'bg-primary-500 text-white' : 'bg-transparent text-slate-500 dark:text-slate-400'}`}
                 onClick={() => setListScope('year')}
               >
                 本年
               </button>
             </div>
           </div>
+          {/* v2.27：类型筛选 chips */}
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {([['', '全部'], ['birthday', '生日'], ['anniversary', '纪念日'], ['exam', '考试'], ['holiday', '节日'], ['other', '其他']] as const).map(([v, label]) => (
+              <button
+                key={v || 'all'}
+                type="button"
+                aria-pressed={listType === v}
+                onClick={() => setListType(v as typeof listType)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition ${
+                  listType === v
+                    ? 'bg-primary-500 text-white border-primary-500'
+                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           {listEvents.length === 0 ? (
-            <p className="text-sm text-slate-500 px-1">
+            <p className="text-sm text-slate-500 dark:text-slate-400 px-1">
               {listScope === 'month' ? '本月暂无事件' : '本年暂无事件'}
             </p>
           ) : (
@@ -287,8 +304,14 @@ export default function Calendar() {
 }
 
 function parseSelectedDate(key: string) {
-  const [y, m, d] = key.split('-').map(Number);
-  return new Date(y, m - 1, d);
+  // v2.27 C-7：脏 key 守卫——此前 'x' 之类会渲染成 Invalid Date NaN年NaN月
+  const parts = key.split('-').map(Number);
+  const [y, m, d] = parts;
+  if (parts.length === 3 && [y, m, d].every((n) => Number.isFinite(n))) {
+    const date = new Date(y, m - 1, d);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return new Date();
 }
 
 function YearGrid({
@@ -321,7 +344,7 @@ function YearGrid({
             }`}
           >
             <p className="font-bold text-sm">{m + 1}月</p>
-            <p className="text-xs text-slate-500 mt-1">{count > 0 ? `${count} 个事件` : '无事件'}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{count > 0 ? `${count} 个事件` : '无事件'}</p>
             {count > 0 && (
               <div className="flex gap-0.5 mt-2 flex-wrap">
                 {Array.from({ length: Math.min(count, 5) }).map((_, i) => (
@@ -361,7 +384,7 @@ function MonthGrid({
 
   return (
     <div className="glass-panel rounded-3xl p-4 ring-1 ring-black/5 dark:ring-white/10">
-      <div className="grid grid-cols-7 gap-1 mb-2 text-center text-xs font-semibold text-slate-500">
+      <div className="grid grid-cols-7 gap-1 mb-2 text-center text-xs font-semibold text-slate-500 dark:text-slate-400">
         {['日', '一', '二', '三', '四', '五', '六'].map((w) => (
           <div key={w}>{w}</div>
         ))}
@@ -410,7 +433,7 @@ function MonthGrid({
       </div>
       <p className="text-[10px] text-slate-400 mt-2 text-center">单击选日期 · 双击进入日视图</p>
       {isYearCovered(year) && (
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 text-[10px] text-slate-500" data-testid="holiday-legend">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 text-[10px] text-slate-500 dark:text-slate-400" data-testid="holiday-legend">
           <span className="inline-flex items-center gap-1">
             <span className="rounded px-1 font-bold bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300">休</span>
             法定节假日
@@ -445,7 +468,7 @@ function DayPanel({
 
   return (
     <div className="glass-panel rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10 text-center">
-      <p className="text-sm text-slate-500">星期{weekdays[d.getDay()]}</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">星期{weekdays[d.getDay()]}</p>
       <p className={`text-5xl font-bold mt-1 ${isToday ? 'text-primary-600' : ''}`}>{d.getDate()}</p>
       <p className="text-lg text-slate-600 dark:text-slate-300 mt-1">
         {d.getFullYear()}年{d.getMonth() + 1}月
@@ -456,13 +479,13 @@ function DayPanel({
         </p>
       )}
       {diff === 0 && <p className="text-sm text-primary-600 font-medium mt-2">今天</p>}
-      {diff > 0 && <p className="text-sm text-slate-500 mt-2">{diff} 天后</p>}
+      {diff > 0 && <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">{diff} 天后</p>}
       <div className="mt-4 text-left">
         <AlmanacCard dateKey={key} variant="detail" />
       </div>
       <div className="mt-6 text-left space-y-2">
         {events.length === 0 ? (
-          <p className="text-sm text-slate-500 text-center py-4">当天暂无事件</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">当天暂无事件</p>
         ) : (
           <EventListCompact events={events} />
         )}
@@ -480,7 +503,7 @@ function EventListCompact({ events, showDate }: { events: Event[]; showDate?: bo
           <div key={e.id} className="glass-panel rounded-2xl px-4 py-3 flex justify-between items-center gap-2">
             <div className="min-w-0">
               <p className="font-semibold truncate">{e.name}</p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {showDate ? `${e.date.slice(0, 10)} · ` : ''}
                 {eventTypeLabel(e.type)}
                 {lunar.label ? ` · ${lunar.label}` : ''}

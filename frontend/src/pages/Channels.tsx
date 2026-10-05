@@ -692,7 +692,7 @@ export default function Channels() {
             if (accountEntries.length === 0) return null;
             return (
               <div className="mt-4 pt-4 border-t border-slate-200/60 dark:border-slate-700/50">
-                <p className="text-xs font-semibold text-slate-500 mb-2">按账户</p>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">按账户</p>
                 <div className="flex flex-wrap gap-2">
                   {accountEntries.map(([id, stat]) => {
                     const account = accounts.find((a) => Number(a.id) === Number(id));
@@ -1212,7 +1212,7 @@ export default function Channels() {
                           <p>SMTP: {preset.servers.smtp}</p>
                           {preset.servers.pop3 && <p>POP3: {preset.servers.pop3}</p>}
                           {preset.servers.imap && <p>IMAP: {preset.servers.imap}</p>}
-                          {preset.servers.sslNote && <p className="font-sans text-slate-500 pt-1">{preset.servers.sslNote}</p>}
+                          {preset.servers.sslNote && <p className="font-sans text-slate-500 dark:text-slate-400 pt-1">{preset.servers.sslNote}</p>}
                         </div>
                       )}
                       {preset.cloudWarning && (

@@ -195,7 +195,7 @@ export function LocalAI() {
           <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
             <Cpu size={18} className="text-violet-500" /> 运行环境与模型档位
           </h2>
-          {device === 'checking' && <p className="text-sm text-slate-500">正在探测 WebGPU 能力…</p>}
+          {device === 'checking' && <p className="text-sm text-slate-500 dark:text-slate-400">正在探测 WebGPU 能力…</p>}
           {device === 'unsupported' && (
             <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
               当前浏览器不支持 WebGPU（或缺少 shader-f16）。本地对话需要 Chrome/Edge 113+ 且显卡支持
@@ -282,13 +282,28 @@ export function LocalAI() {
               <Sparkles size={18} className="text-blue-500" /> 问问你的数据
             </h2>
             {history.length > 0 && (
-              <button
-                type="button"
-                onClick={() => void handleClearHistory()}
-                className="text-xs text-slate-400 hover:text-red-500 transition"
-              >
-                清空对话
-              </button>
+              <div className="flex items-center gap-3">
+                {/* v2.27：导出全部对话为 Markdown（复制到剪贴板） */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const md = history
+                      .map((h) => `## ${h.question}\n\n${h.answer}\n\n${h.sources.length ? `> 来源：${h.sources.map((x) => x.title).join('、')}\n` : ''}`)
+                      .join('\n---\n\n');
+                    navigator.clipboard.writeText(`# 本地 AI 对话导出\n\n${md}`).catch(() => undefined);
+                  }}
+                  className="text-xs text-slate-400 hover:text-indigo-500 transition"
+                >
+                  导出对话
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleClearHistory()}
+                  className="text-xs text-slate-400 hover:text-red-500 transition"
+                >
+                  清空对话
+                </button>
+              </div>
             )}
           </div>
           <div

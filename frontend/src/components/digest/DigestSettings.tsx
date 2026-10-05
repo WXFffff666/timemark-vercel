@@ -263,7 +263,7 @@ export function DigestSettings() {
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">启用周期摘要</h3>
-              <p className="text-xs text-slate-500">关闭后定时任务不再发送；手动「立即发送」仍可用</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">关闭后定时任务不再发送；手动「立即发送」仍可用</p>
             </div>
           </div>
           <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="启用周期摘要" />
@@ -271,7 +271,7 @@ export function DigestSettings() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">摘要周期</label>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">摘要周期</label>
             <select
               data-testid="digest-period"
               aria-label="摘要周期"
@@ -284,7 +284,7 @@ export function DigestSettings() {
             </select>
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">投递渠道</label>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">投递渠道</label>
             <select
               data-testid="digest-channel"
               aria-label="投递渠道"
@@ -306,7 +306,7 @@ export function DigestSettings() {
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-500 mb-1 block">收件人覆盖（留空则使用通知默认邮箱）</label>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">收件人覆盖（留空则使用通知默认邮箱）</label>
           <Input
             data-testid="digest-recipients"
             aria-label="摘要收件人"
@@ -319,10 +319,10 @@ export function DigestSettings() {
 
         <div>
           <div className="flex items-center justify-between mb-2 gap-3">
-            <label className="text-xs font-semibold text-slate-500">包含的区块</label>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">包含的区块</label>
             <div className="flex gap-3">
               <button type="button" data-testid="digest-sections-all" onClick={() => setSections([...SECTION_KEYS])} className="text-xs text-primary-600 dark:text-primary-400">全选</button>
-              <button type="button" data-testid="digest-sections-none" onClick={() => setSections([])} className="text-xs text-slate-500">清空</button>
+              <button type="button" data-testid="digest-sections-none" onClick={() => setSections([])} className="text-xs text-slate-500 dark:text-slate-400">清空</button>
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -410,7 +410,7 @@ export function DigestSettings() {
               </div>
 
               {preview.isEmpty ? (
-                <p data-testid="digest-preview-empty" className="text-sm text-slate-500">本期无记录</p>
+                <p data-testid="digest-preview-empty" className="text-sm text-slate-500 dark:text-slate-400">本期无记录</p>
               ) : (
                 <div className="space-y-3">
                   {previewSections.has('upcoming') && (
@@ -462,7 +462,7 @@ export function DigestSettings() {
               </p>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">正在生成预览…</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">正在生成预览…</p>
           )}
         </DialogContent>
       </Dialog>

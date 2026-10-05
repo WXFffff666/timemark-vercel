@@ -51,7 +51,10 @@ audit.get('/', async (c) => {
     return c.json({ success: false, code: 'invalid_request', error: '无效的 entityKind 过滤值' }, 400);
   }
 
-  const page = await listAuditEvents(userId, { limit, offset, action, entityKind });
+  // v2.27：时间范围参数（非法值忽略，不报错——筛选是可选增强）
+  const from = /^\d{4}-\d{2}-\d{2}/.test(c.req.query('from') ?? '') ? c.req.query('from') as string : undefined;
+  const to = /^\d{4}-\d{2}-\d{2}/.test(c.req.query('to') ?? '') ? c.req.query('to') as string : undefined;
+  const page = await listAuditEvents(userId, { limit, offset, action, entityKind, from, to });
   return c.json({
     success: true,
     data: {

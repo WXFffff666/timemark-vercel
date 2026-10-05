@@ -121,18 +121,21 @@ function streakFor(habit: HabitRow, logs: HabitLogRow[], now: Date, timeZone: st
 
 export async function listHabits(
   userId: number,
-  opts: { active?: boolean; now?: Date; profileId?: number | null } = {},
+  opts: { active?: boolean; now?: Date; profileId?: number | null; sort?: 'created_at' | 'name' } = {},
 ): Promise<HabitWithStreak[]> {
   const activeClause = opts.active === undefined ? '' : opts.active ? ' AND is_active = TRUE' : ' AND is_active = FALSE';
   // 可选档案过滤（checkbox 69）：省略 = 全部档案。只加谓词，不改写原查询。
-  const params: number[] = [userId];
+  const params: (number | string)[] = [userId];
   let profileClause = '';
   if (opts.profileId != null) {
     params.push(opts.profileId);
     profileClause = ' AND profile_id = $2';
   }
+  // v2.27：可选按名称排序——排序键走 CASE 白名单参数，不拼 SQL 字符串
+  params.push(opts.sort === 'name' ? 'name' : 'created_at');
   const result = await query(
-    `SELECT * FROM habits WHERE user_id = $1${activeClause}${profileClause} ORDER BY created_at ASC, id ASC`,
+    `SELECT * FROM habits WHERE user_id = $1${activeClause}${profileClause}
+     ORDER BY CASE WHEN $${params.length}::text = 'name' THEN name END ASC NULLS LAST, created_at ASC, id ASC`,
     params,
   );
   const habits = result.rows.map(mapHabit);

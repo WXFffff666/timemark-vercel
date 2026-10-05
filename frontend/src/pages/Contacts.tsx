@@ -393,7 +393,7 @@ export default function Contacts() {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold">固定联系人</h1>
-          <p className="text-sm text-slate-500">支持多个邮箱/手机，绑定通知渠道后可快捷发信</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">支持多个邮箱/手机，绑定通知渠道后可快捷发信</p>
         </div>
         <Button
           onClick={() => (tab === 'contacts' ? openCreate() : setGroupOpen(true))}
@@ -446,7 +446,7 @@ export default function Contacts() {
           <TabsTrigger value="groups" className="text-slate-600 dark:text-slate-300">分组</TabsTrigger>
         </TabsList>
 
-        {loading && <p className="text-slate-500 mt-4">加载中…</p>}
+        {loading && <p className="text-slate-500 dark:text-slate-400 mt-4">加载中…</p>}
 
         {/*
           forceMount keeps both TabsContent nodes in the DOM so the Radix trigger's
@@ -454,7 +454,7 @@ export default function Contacts() {
         */}
         <TabsContent value="contacts" forceMount className={tab === 'contacts' ? 'mt-4' : 'hidden'}>
           {loading ? null : contacts.length === 0 ? (
-          <div className="text-center py-16 text-slate-500">
+          <div className="text-center py-16 text-slate-500 dark:text-slate-400">
             <UserPlus className="w-12 h-12 mx-auto mb-3 opacity-40" />
             <p>暂无联系人，点击右上角添加</p>
             {accounts.length === 0 && (
@@ -471,7 +471,7 @@ export default function Contacts() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold">{formatContactListLabel(c)}</span>
                     {c.nickname && c.relationship && (
-                      <span className="text-sm text-slate-500">昵称 {c.nickname}</span>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">昵称 {c.nickname}</span>
                     )}
                     {c.relationship && resolveRelationshipOption(c.relationship, c.name, c.nickname) && (
                       <Badge variant="outline" className="text-xs">
@@ -532,7 +532,7 @@ export default function Contacts() {
 
         <TabsContent value="groups" forceMount className={tab === 'groups' ? 'mt-4' : 'hidden'}>
           {loading ? null : groups.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
+        <div className="text-center py-16 text-slate-500 dark:text-slate-400">
           <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
           <p>暂无分组，用于批量邮件收件人</p>
         </div>
@@ -680,7 +680,7 @@ export default function Contacts() {
             {accounts.length > 0 && (
               <div className="rounded-xl border p-3 space-y-2">
                 <p className="text-sm font-medium">绑定通知渠道</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   勾选后，提醒与快捷发信将通过对应渠道发送。邮件类渠道使用上方邮箱作为收件地址。
                 </p>
                 <div className="space-y-2 max-h-40 overflow-y-auto overscroll-contain">

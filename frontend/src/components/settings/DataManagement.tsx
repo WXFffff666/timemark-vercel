@@ -94,7 +94,7 @@ export function DataManagement() {
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-base font-bold text-slate-900 dark:text-white">数据管理</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {loading ? (
               '加载保留策略…'
             ) : data ? (
@@ -168,7 +168,7 @@ export function DataManagement() {
           </div>
 
           {data && (
-            <details className="mt-3 text-xs text-slate-500">
+            <details className="mt-3 text-xs text-slate-500 dark:text-slate-400">
               <summary className="cursor-pointer select-none">查看保留策略明细</summary>
               <ul className="mt-2 space-y-1">
                 {POLICY_LABELS.filter(([key]) => typeof data.policy[key] === 'number').map(

@@ -800,7 +800,7 @@ export default function Settings() {
                   )}
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">{user?.username || 'Admin'}</h3>
-                    <p className="text-sm text-slate-500 font-medium">点击修改资料</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">点击修改资料</p>
                   </div>
                 </div>
                 <ChevronRight className="text-slate-400" />
@@ -835,7 +835,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">应用内提醒声音</h3>
-                    <p className="text-xs text-slate-500">倒计时结束时播放提示音</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">倒计时结束时播放提示音</p>
                   </div>
                 </div>
                 <Switch checked={soundEnabled} onCheckedChange={handleSoundToggle} aria-label="应用内提醒声音" />
@@ -865,7 +865,7 @@ export default function Settings() {
                 事件未单独填写收件邮箱时，优先使用下方默认邮箱（高于通知渠道里填的联系人邮箱）。渠道账号上的收件人仅作最后兜底。
               </p>
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">默认测试/收件邮箱</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">默认测试/收件邮箱</label>
                 <Input
                   type="email"
                   placeholder="you@example.com"
@@ -874,7 +874,7 @@ export default function Settings() {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">默认提醒收件人（多个用逗号分隔）</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">默认提醒收件人（多个用逗号分隔）</label>
                 <Input
                   placeholder="a@example.com, b@example.com"
                   value={defaultReminderEmails}
@@ -925,7 +925,7 @@ export default function Settings() {
               </p>
 
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">收件箱接收 URL</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">收件箱接收 URL</label>
                 <SecretUrlField
                   value={inboxReceiveUrl}
                   label="收件箱接收 URL"
@@ -935,7 +935,7 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">Webhook 入站 URL</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">Webhook 入站 URL</label>
                 <SecretUrlField
                   value={webhookUrl}
                   label="Webhook 入站 URL"
@@ -945,7 +945,7 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">日历 Feed URL（ICS）</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">日历 Feed URL（ICS）</label>
                 <SecretUrlField
                   value={calendarFeedUrl}
                   label="日历 Feed URL（ICS）"
@@ -956,7 +956,7 @@ export default function Settings() {
                   <ul className="mt-2 space-y-1 text-xs font-mono">
                     {calendarFeedTokens.map((t) => (
                       <li key={t.url} className="flex gap-2 items-center">
-                        <span className="text-slate-500 shrink-0">{t.name}:</span>
+                        <span className="text-slate-500 dark:text-slate-400 shrink-0">{t.name}:</span>
                         <span className="truncate">{maskCredentialInUrl(t.url)}</span>
                         <Button variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={() => copyToClipboard(t.url, t.name)} aria-label="复制 Feed Token">
                           <Copy size={14} />
@@ -970,7 +970,7 @@ export default function Settings() {
 
               {/* 公开订阅源（checkbox 89）：令牌只存哈希；正文不含证件号/备注/金额 */}
               <div data-testid="ics-feeds-section">
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">公开订阅源（按分类 / 档案 / 联系人）</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">公开订阅源（按分类 / 档案 / 联系人）</label>
                 <p className="text-xs text-slate-400 mb-2">
                   生成带令牌的公开 ICS 地址，可添加到 Google / Apple 日历。令牌仅存 SHA-256 哈希，正文只含标题与日期，不含证件号、备注或金额。
                 </p>
@@ -1054,7 +1054,7 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-2 block">Google 日历 OAuth 同步（可选 · 只读）</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 block">Google 日历 OAuth 同步（可选 · 只读）</label>
                 {!googleOAuth.configured ? (
                   <p className="text-xs text-slate-400">
                     未启用。不配置不影响提醒、ICS 订阅等现有功能；仅需从 Google 主日历自动导入时，由管理员在 Vercel 配置 OAuth 环境变量后 redeploy。
@@ -1083,7 +1083,7 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-2 block">CalDAV 只读订阅</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 block">CalDAV 只读订阅</label>
                 <Input placeholder="CalDAV / ICS URL" value={caldavUrl} onChange={(e) => setCaldavUrl(e.target.value)} className="mb-2" />
                 <div className="flex gap-2 mb-2">
                   <Input placeholder="用户名" value={caldavUsername} onChange={(e) => setCaldavUsername(e.target.value)} />
@@ -1093,7 +1093,7 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-2 block">外部 ICS 同步策略</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 block">外部 ICS 同步策略</label>
                 <select
                   value={syncStrategy}
                   onChange={(e) => setSyncStrategy(e.target.value as 'add_only' | 'replace')}
@@ -1103,7 +1103,7 @@ export default function Settings() {
                   <option value="add_only">只增不删</option>
                   <option value="replace">替换同步</option>
                 </select>
-                <label className="text-xs font-semibold text-slate-500 mb-2 block">外部 ICS 订阅 URL（最多 5 个）</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 block">外部 ICS 订阅 URL（最多 5 个）</label>
                 <div className="space-y-2">
                   {externalCalendarUrls.map((url, idx) => (
                     <div key={idx} className="flex gap-2">
@@ -1146,7 +1146,7 @@ export default function Settings() {
                   </Button>
                 </div>
                 {syncResult && (
-                  <p className="text-xs text-slate-500 mt-2" role="status">{syncResult}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2" role="status">{syncResult}</p>
                 )}
               </div>
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -1168,7 +1168,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">系统时区</h3>
-                    <p className="text-xs text-slate-500">用于提醒、倒计时与免打扰；与首页时钟旁时区选择同步</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">用于提醒、倒计时与免打扰；与首页时钟旁时区选择同步</p>
                   </div>
                 </div>
                 <select
@@ -1189,12 +1189,12 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">免打扰时段</h3>
-                    <p className="text-xs text-slate-500">该时段内不发送提醒通知（基于上方时区）</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">该时段内不发送提醒通知（基于上方时区）</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-end gap-3">
                   <div>
-                    <label className="text-xs font-semibold text-slate-500 mb-1 block">开始</label>
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">开始</label>
                     <Input
                       type="time"
                       value={quietHoursStart}
@@ -1204,7 +1204,7 @@ export default function Settings() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-slate-500 mb-1 block">结束</label>
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">结束</label>
                     <Input
                       type="time"
                       value={quietHoursEnd}
@@ -1225,14 +1225,14 @@ export default function Settings() {
                   </div>
                   <div className="flex-1">
                     <h3 className="text-base font-bold">提醒规则与套餐</h3>
-                    <p className="text-xs text-slate-500">按提前天数分级渠道、条件规则</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">按提前天数分级渠道、条件规则</p>
                   </div>
                   <Button variant="outline" size="sm" className="min-h-11" onClick={() => navigate('/notification-rules')}>
                     管理
                   </Button>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 mb-1 block">Markdown 邮件模板</label>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">Markdown 邮件模板</label>
                   <textarea
                     value={markdownTemplate}
                     onChange={(e) => setMarkdownTemplate(e.target.value)}
@@ -1243,7 +1243,7 @@ export default function Settings() {
                   <p className="text-xs text-slate-400 mt-1">变量：name, date, type, blessing, message</p>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 mb-1 block">邮件模板风格</label>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">邮件模板风格</label>
                   <select
                     value={emailTemplateStyle}
                     onChange={(e) => setEmailTemplateStyle(e.target.value)}
@@ -1271,7 +1271,7 @@ export default function Settings() {
                   </details>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 mb-1 block">提醒补发窗口（分钟）</label>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">提醒补发窗口（分钟）</label>
                   <input
                     type="number"
                     min={0}
@@ -1286,7 +1286,7 @@ export default function Settings() {
                 </div>
                 <div className="flex items-center justify-between max-w-xs">
                   <div>
-                    <label className="text-xs font-semibold text-slate-500 block">渠道自动回退</label>
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block">渠道自动回退</label>
                     <p className="text-xs text-slate-400 mt-1">指定渠道发送失败时，自动改用其他已绑定渠道发送</p>
                   </div>
                   <button
@@ -1301,7 +1301,7 @@ export default function Settings() {
                   </button>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 mb-1 block">API Key 权限范围</label>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">API Key 权限范围</label>
                   <select
                     value={apiScopes}
                     onChange={(e) => setApiScopes(e.target.value)}
@@ -1313,7 +1313,7 @@ export default function Settings() {
                   </select>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Languages size={18} className="text-slate-500" />
+                  <Languages size={18} className="text-slate-500 dark:text-slate-400" />
                   <span className="text-sm">界面语言</span>
                   <Button variant={uiLang === 'zh' ? 'default' : 'outline'} size="sm" className="min-h-11" onClick={() => handleLangChange('zh')}>中文</Button>
                   <Button variant={uiLang === 'en' ? 'default' : 'outline'} size="sm" className="min-h-11" onClick={() => handleLangChange('en')}>English</Button>
@@ -1336,7 +1336,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">法定节假日提醒策略</h3>
-                    <p className="text-xs text-slate-500">非关键提醒命中法定节假日时：默认保留原时间并在内容中标注节日名，也可顺延到节后工作日或不提醒。用药与证件到期提醒不受影响。</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">非关键提醒命中法定节假日时：默认保留原时间并在内容中标注节日名，也可顺延到节后工作日或不提醒。用药与证件到期提醒不受影响。</p>
                   </div>
                 </div>
                 <select
@@ -1354,7 +1354,7 @@ export default function Settings() {
                 <div className="flex items-center justify-between mb-3 gap-3">
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">节气提醒（默认关闭）</h3>
-                    <p className="text-xs text-slate-500">勾选想被告知的节气；当天将以现有提醒渠道发送一条通知</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">勾选想被告知的节气；当天将以现有提醒渠道发送一条通知</p>
                   </div>
                   <Button variant="outline" size="sm" className="min-h-11" onClick={() => setJieqiReminderList([])}>清空</Button>
                 </div>
@@ -1404,7 +1404,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">修改密码</h3>
-                    <p className="text-xs text-slate-500">定期更新密码保护账户安全</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">定期更新密码保护账户安全</p>
                   </div>
                 </div>
                 <ChevronRight className="text-slate-400" />
@@ -1420,7 +1420,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">安全中心</h3>
-                    <p className="text-xs text-slate-500">2FA、会话、IP 白名单与封禁</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">2FA、会话、IP 白名单与封禁</p>
                   </div>
                 </div>
                 <ChevronRight className="text-slate-400" />
@@ -1436,7 +1436,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">部署向导</h3>
-                    <p className="text-xs text-slate-500">环境检查与 Cron 配置</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">环境检查与 Cron 配置</p>
                   </div>
                 </div>
                 <ChevronRight className="text-slate-400" />
@@ -1452,7 +1452,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">登录日志</h3>
-                    <p className="text-xs text-slate-500">查看近期登录历史与设备</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">查看近期登录历史与设备</p>
                   </div>
                 </div>
                 <ChevronRight className="text-slate-400" />
@@ -1465,7 +1465,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">数据备份</h3>
-                    <p className="text-xs text-slate-500">导出或导入全部事件与配置</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">导出或导入全部事件与配置</p>
                   </div>
                 </div>
                 <div className="flex gap-2 mt-3 flex-wrap">
@@ -1514,7 +1514,7 @@ export default function Settings() {
               <Shield className="w-4 h-4" /> 安全告警渠道
             </h2>
             <div className="glass-panel rounded-[2.5rem] p-6 ring-1 ring-black/5 dark:ring-white/10 space-y-4">
-              <p className="text-sm text-slate-500">接收登录失败、账户锁定等安全告警。可独立填写邮箱，也可绑定通知渠道账号。</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">接收登录失败、账户锁定等安全告警。可独立填写邮箱，也可绑定通知渠道账号。</p>
               <div>
                 <label className="text-sm font-medium">告警邮箱（逗号分隔）</label>
                 <Input
@@ -1535,7 +1535,7 @@ export default function Settings() {
                     if (typeAccounts.length === 0) return null;
                     return (
                       <div key={type} className="rounded-xl border p-3 space-y-2">
-                        <p className="text-xs font-semibold text-slate-500 uppercase">{type}</p>
+                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">{type}</p>
                         {typeAccounts.map((account: any) => (
                           <label key={account.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
                             <input
@@ -1570,7 +1570,7 @@ export default function Settings() {
                   <div className="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center"><User size={22} /></div>
                   <div>
                     <h3 className="text-base font-bold">固定联系人</h3>
-                    <p className="text-xs text-slate-500">快捷用于提醒与批量邮件</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">快捷用于提醒与批量邮件</p>
                   </div>
                 </div>
                 <ChevronRight className="text-slate-400" />
@@ -1580,7 +1580,7 @@ export default function Settings() {
                   <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center"><Mail size={22} /></div>
                   <div>
                     <h3 className="text-base font-bold">批量邮件</h3>
-                    <p className="text-xs text-slate-500">向联系人或指定邮箱群发</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">向联系人或指定邮箱群发</p>
                   </div>
                 </div>
                 <ChevronRight className="text-slate-400" />
@@ -1602,7 +1602,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">管理事件模板</h3>
-                    <p className="text-xs text-slate-500">创建常用事件模板（如驾照到期、保险续费）</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">创建常用事件模板（如驾照到期、保险续费）</p>
                   </div>
                 </div>
                 <ChevronRight className="text-slate-400" />
@@ -1662,7 +1662,7 @@ export default function Settings() {
                 onChange={(e) => handleAvatarUrlChange(e.target.value)}
                 className="h-12"
               />
-              <p className="text-xs text-slate-500 mt-1">输入图片链接即可更新头像</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">输入图片链接即可更新头像</p>
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">用户名</label>

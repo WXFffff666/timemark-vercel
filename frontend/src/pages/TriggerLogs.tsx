@@ -248,9 +248,8 @@ export default function TriggerLogs() {
               <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={exportCsv}>
                 导出 CSV
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={fetchLogs} disabled={loading}>
-                <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={fetchLogs} disabled={loading} aria-label="刷新">
+                <RefreshCw size={20} className={loading ? 'animate-spin' : ''} /></Button>
               <Button variant="ghost" size="sm" className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={clearLogs} disabled={clearing || logs.length === 0}>
                 <Trash2 size={16} className="mr-1" />
                 清空

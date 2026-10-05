@@ -202,7 +202,7 @@ export default function Todos() {
 
             <h1 className="text-lg font-bold">近期待办</h1>
 
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
 
               待办 {pending.length} · 已完成 {completed.length} · 历史 {historyItems.length}
 
@@ -262,7 +262,7 @@ export default function Todos() {
 
                 <p className="font-semibold text-slate-700 dark:text-slate-200">暂无待办</p>
 
-                <p className="text-sm text-slate-500 mt-1">事件进入提醒窗口后会自动显示在这里</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">事件进入提醒窗口后会自动显示在这里</p>
 
                 <Button className="mt-4 rounded-full" variant="outline" onClick={() => navigate('/calendar')}>
 
@@ -280,7 +280,7 @@ export default function Todos() {
 
                   <section className="space-y-2">
 
-                    <h2 className="text-sm font-bold text-slate-500 px-1">待处理 · {pending.length}</h2>
+                    <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 px-1">待处理 · {pending.length}</h2>
 
                     {pending.map((e) => (
 
@@ -376,7 +376,7 @@ export default function Todos() {
 
                 <p className="font-semibold text-slate-700 dark:text-slate-200">暂无历史记录</p>
 
-                <p className="text-sm text-slate-500 mt-1">完成待办且事件过期后会自动归档到这里</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">完成待办且事件过期后会自动归档到这里</p>
 
               </div>
 
@@ -398,13 +398,13 @@ export default function Todos() {
 
                     <div className="flex-1 min-w-0">
 
-                      <p className="font-semibold truncate text-slate-600">
+                      <p className="font-semibold truncate text-slate-600 dark:text-slate-400">
 
                         {item.event?.name ?? `事件 #${item.eventId}`}
 
                       </p>
 
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
 
                         {item.occurrenceDate}
 
@@ -522,13 +522,13 @@ function TodoRow({
 
         <div className="min-w-0">
 
-          <p className={`font-semibold truncate ${completed ? 'line-through text-slate-500' : ''}`}>
+          <p className={`font-semibold truncate ${completed ? 'line-through text-slate-500 dark:text-slate-400' : ''}`}>
 
             {event.name}
 
           </p>
 
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
 
             {dateStr} · {eventTypeLabel(event.type)}
 

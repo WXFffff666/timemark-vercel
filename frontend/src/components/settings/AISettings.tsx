@@ -129,7 +129,7 @@ export function AISettings() {
         </p>
 
         <div>
-          <label className="text-xs font-semibold text-slate-500 mb-1 block">供应商</label>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">供应商</label>
           <Select
             value={provider}
             onChange={(e) => setProvider(e.target.value as AiProviderName)}
@@ -148,7 +148,7 @@ export function AISettings() {
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-500 mb-1 block">模型</label>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">模型</label>
           <Input
             placeholder={provider === 'local' ? 'qwen3:8b' : 'provider-model'}
             value={model}
@@ -158,7 +158,7 @@ export function AISettings() {
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-500 mb-1 block">Base URL</label>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">Base URL</label>
           <Input
             placeholder={provider === 'local' ? LOCAL_DEFAULT_BASE_URL : '由服务器环境变量配置'}
             value={baseUrl}

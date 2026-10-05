@@ -222,9 +222,9 @@ export function ProfileSettings() {
             勾选该档案提醒可用的通知账户；一个都不勾 = 未配置，回退为全部启用账户。
           </p>
           {routingLoading ? (
-            <p className="text-sm text-slate-500">读取中…</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">读取中…</p>
           ) : accounts.length === 0 ? (
-            <p className="text-sm text-slate-500">还没有通知账户，请先在「通知渠道」中配置。</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">还没有通知账户，请先在「通知渠道」中配置。</p>
           ) : (
             <ul className="space-y-1 mb-3">
               {accounts.map((account) => (

@@ -227,12 +227,13 @@ feeds.get('/proposals', async (c) => {
   const statusParam = c.req.query('status');
   const status: FeedProposalStatus | undefined =
     statusParam === 'pending' || statusParam === 'accepted' || statusParam === 'rejected' ? statusParam : undefined;
+  // v2.27：limit 封顶 200
   const limit = Number(c.req.query('limit') ?? '50');
   const proposals = await listProposals(userId, {
     ...(status ? { status } : {}),
-    limit: Number.isInteger(limit) ? limit : 50,
+    limit: Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 200) : 50,
   });
-  return c.json({ success: true, data: proposals });
+  return c.json({ success: true, data: proposals, pagination: { total: proposals.length, limit: Math.min(Number.isInteger(limit) ? limit : 50, 200) } });
 });
 
 feeds.post('/proposals/:id/accept', async (c) => {

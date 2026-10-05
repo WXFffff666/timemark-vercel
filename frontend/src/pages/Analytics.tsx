@@ -60,13 +60,13 @@ export default function Analytics() {
   }, [stats]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-500">加载统计数据...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-slate-500 dark:text-slate-400">加载统计数据...</div>;
   }
 
   if (!stats) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p className="text-slate-500">无法加载统计数据</p>
+        <p className="text-slate-500 dark:text-slate-400">无法加载统计数据</p>
         <Button onClick={() => navigate('/dashboard')}>返回首页</Button>
       </div>
     );
@@ -85,7 +85,7 @@ export default function Analytics() {
                 <BarChart3 size={20} className="text-indigo-500" />
                 数据看板
               </h1>
-              <p className="text-xs text-slate-500">近 30 天提醒与事件概览</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">近 30 天提醒与事件概览</p>
             </div>
           </div>
         </div>
@@ -146,7 +146,7 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               {monthlyChartData.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-12">暂无通知记录</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-12">暂无通知记录</p>
               ) : (
                 <div className="h-[260px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -171,7 +171,7 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               {stats.eventsByType.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-12">暂无事件数据</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-12">暂无事件数据</p>
               ) : (
                 <div className="h-[260px] w-full">
                   <ResponsiveContainer width="100%" height="100%">

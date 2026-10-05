@@ -31,7 +31,12 @@ events.get('/', async (c) => {
   const sort = c.req.query('sort') === 'created_at' ? 'created_at' as const : 'date' as const;
 
   // 获取分页数据
-  const result = await getEventsByUserIdPaginated(user.id, limit, offset, profileFilter, { type, upcoming, sort });
+  // v2.27：tag 子串筛选（trgm GIN 索引使 ILIKE 高效）；非法长输入拒绝
+  const tagRaw = (c.req.query('tag') || '').trim();
+  if (tagRaw.length > 50) {
+    return c.json({ success: false, error: 'tag 过滤值过长' }, 400);
+  }
+  const result = await getEventsByUserIdPaginated(user.id, limit, offset, profileFilter, { type, upcoming, sort, tag: tagRaw || null });
   
   return c.json({
     success: true,
@@ -102,7 +107,8 @@ events.post('/', async (c) => {
 events.get('/reminder-logs', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);
-  const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 200);
+  const limit = Math.min(parseInt(c.req.query('limit') || '50', 10) || 50, 200);
+  const format = c.req.query('format');
 
   // Display contract: trigger_date is TEXT since migration 51 and holds two families of ids.
   // A row's first 10 chars are a calendar day `YYYY-MM-DD` ONLY for legacy rows (exactly
@@ -125,6 +131,27 @@ events.get('/reminder-logs', async (c) => {
      LIMIT $2`,
     [userId, limit],
   );
+
+  // v2.27 E-9：?format=csv —— 事件维度提醒历史一键导出（与 /trigger-logs/export.csv 同款响应）
+  if (format === 'csv') {
+    const header = 'event_name,event_type,trigger_type,trigger_date,status,error_message,created_at';
+    const esc = (v: unknown) => {
+      const str = v == null ? '' : String(v);
+      return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const lines = result.rows.map((row: Record<string, unknown>) =>
+      [row.event_name, row.event_type, row.trigger_type, row.trigger_date, row.status, row.error_message, row.created_at]
+        .map(esc)
+        .join(','),
+    );
+    const csv = `\uFEFF${[header, ...lines].join('\n')}`;
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="reminder-logs-${new Date().toISOString().slice(0, 10)}.csv"`,
+      },
+    });
+  }
 
   return c.json({ success: true, data: result.rows });
 });

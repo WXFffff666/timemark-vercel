@@ -263,7 +263,7 @@ export function ChannelRepairWizard({ accountId, onClose, onDone, className }: C
                 {failures.lastError}
               </pre>
             ) : (
-              <p className="mt-1 text-slate-500">暂无失败记录。</p>
+              <p className="mt-1 text-slate-500 dark:text-slate-400">暂无失败记录。</p>
             )}
           </div>
 
@@ -278,7 +278,7 @@ export function ChannelRepairWizard({ accountId, onClose, onDone, className }: C
                     <XCircle className={cn('h-4 w-4', field.required ? 'text-red-500' : 'text-slate-400')} />
                   )}
                   <span>{field.label}</span>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
                     {field.present ? '已保存' : field.required ? '缺失（必填）' : '未设置（可选）'}
                   </span>
                 </li>

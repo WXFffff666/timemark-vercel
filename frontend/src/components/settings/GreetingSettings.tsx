@@ -196,7 +196,7 @@ export function GreetingSettings() {
 
       {/* 未来 30 天预演 */}
       <div>
-        <p className="text-xs font-semibold text-slate-500 mb-2">未来 30 天预演（{rows.length} 人）</p>
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">未来 30 天预演（{rows.length} 人）</p>
         {rows.length === 0 && <p className="text-xs text-slate-400">窗口内没有生日。</p>}
         <div className="space-y-2">
           {rows.map((r) => (
@@ -249,7 +249,7 @@ export function GreetingSettings() {
       {/* 草稿（draft 模式下生成） */}
       {drafts.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-slate-500 mb-2">待确认草稿（{drafts.length}）</p>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">待确认草稿（{drafts.length}）</p>
           <div className="space-y-2">
             {drafts.map((d) => (
               <div key={`d-${d.id}`} className="rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10 px-4 py-3">

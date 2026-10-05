@@ -63,7 +63,7 @@ export function MobileBottomNav() {
               onTouchStart={() => prefetchRoute(path)}
               onClick={() => navigate(path)}
               aria-current={active ? 'page' : undefined}
-              className={`flex flex-col items-center gap-0.5 text-xs px-2 min-h-11 min-w-11 justify-center ${active ? 'text-blue-600' : 'text-slate-500'}`}
+              className={`flex flex-col items-center gap-0.5 text-xs px-2 min-h-11 min-w-11 justify-center ${active ? 'text-blue-600' : 'text-slate-500 dark:text-slate-400'}`}
             >
               <Icon className="w-5 h-5" aria-hidden />
               {t(labelKey)}
@@ -75,7 +75,8 @@ export function MobileBottomNav() {
           onClick={() => setMoreOpen(true)}
           aria-expanded={moreOpen}
           aria-haspopup="dialog"
-          className="flex flex-col items-center gap-0.5 text-xs px-2 min-h-11 min-w-11 justify-center text-slate-500"
+          aria-controls="nav-more-drawer"
+          className="flex flex-col items-center gap-0.5 text-xs px-2 min-h-11 min-w-11 justify-center text-slate-500 dark:text-slate-400"
         >
           <LayoutGrid className="w-5 h-5" aria-hidden />
           {t('nav.more')}
@@ -94,6 +95,7 @@ export function MobileBottomNav() {
             onClick={() => setMoreOpen(false)}
           >
             <motion.div
+              id="nav-more-drawer"
               role="dialog"
               aria-modal="true"
               aria-label={t('nav.more')}

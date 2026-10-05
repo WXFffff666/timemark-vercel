@@ -204,7 +204,7 @@ export function TagManager() {
       </form>
 
       {loading ? (
-        <p className="flex items-center gap-2 text-xs text-slate-500" data-testid="tag-loading">
+        <p className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400" data-testid="tag-loading">
           <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> 加载中…
         </p>
       ) : (

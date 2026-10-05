@@ -162,7 +162,7 @@ export default function Broadcast() {
         </Button>
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Mail className="w-6 h-6" />批量邮件</h1>
-          <p className="text-sm text-slate-500">选模板 → 选问候语 → 选收件人 → 发送</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">选模板 → 选问候语 → 选收件人 → 发送</p>
         </div>
       </div>
 
@@ -188,7 +188,7 @@ export default function Broadcast() {
               >
                 <span className="text-lg">{cat.emoji}</span>
                 <p className="text-sm font-medium mt-1">{cat.name}</p>
-                <p className="text-[10px] text-slate-500 line-clamp-2">{cat.description}</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2">{cat.description}</p>
               </button>
             ))}
           </div>
@@ -319,7 +319,7 @@ export default function Broadcast() {
         </Button>
 
         {message && (
-          <p className={`text-sm text-center whitespace-pre-wrap ${message.includes('失败') || message.includes('0/') ? 'text-red-600' : 'text-slate-600'}`}>
+          <p className={`text-sm text-center whitespace-pre-wrap ${message.includes('失败') || message.includes('0/') ? 'text-red-600' : 'text-slate-600 dark:text-slate-400'}`}>
             {message}
           </p>
         )}
@@ -332,7 +332,7 @@ export default function Broadcast() {
             {campaigns.map((c) => (
               <div key={c.id} className="text-sm rounded-lg border p-3 flex justify-between gap-2">
                 <span className="truncate">{c.subject}</span>
-                <span className="text-slate-500 shrink-0">{c.success_count}/{c.recipient_count} · {c.status}</span>
+                <span className="text-slate-500 dark:text-slate-400 shrink-0">{c.success_count}/{c.recipient_count} · {c.status}</span>
               </div>
             ))}
           </div>

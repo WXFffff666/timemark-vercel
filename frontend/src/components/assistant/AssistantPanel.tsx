@@ -79,7 +79,7 @@ function ConfirmationCard({
             已确认并执行
           </p>
         ) : state === 'cancelled' ? (
-          <p data-testid="assistant-confirmation-cancelled" className="mt-3 text-sm font-semibold text-slate-500">
+          <p data-testid="assistant-confirmation-cancelled" className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">
             已取消（未执行）
           </p>
         ) : (
@@ -231,7 +231,7 @@ function ManualToolForm({ assistant }: { assistant: AssistantController }) {
         手动调用工具（解析失败时的兜底）
       </summary>
       <div className="mt-2 space-y-2">
-        <label className="block text-xs text-slate-500" htmlFor="assistant-manual-tool">
+        <label className="block text-xs text-slate-500 dark:text-slate-400" htmlFor="assistant-manual-tool">
           工具
         </label>
         <select
@@ -249,7 +249,7 @@ function ManualToolForm({ assistant }: { assistant: AssistantController }) {
             </option>
           ))}
         </select>
-        <label className="block text-xs text-slate-500" htmlFor="assistant-manual-args">
+        <label className="block text-xs text-slate-500 dark:text-slate-400" htmlFor="assistant-manual-args">
           参数（JSON）
         </label>
         <textarea

@@ -85,7 +85,17 @@ goals.get('/', async (c) => {
     status: statusRaw as (typeof GOAL_STATUSES)[number] | undefined,
     profileId: profileFilter,
   });
-  return c.json({ success: true, data });
+
+  // v2.27 A-7：?sort=title|status|created_at（默认 created_at）+ ?order=asc|desc。
+  // 结果集很小，排序在应用层做，避免触碰 service 的 SQL。
+  const sortKey = c.req.query('sort');
+  const order = c.req.query('order') === 'desc' ? -1 : 1;
+  const sorted = [...data];
+  if (sortKey === 'title') sorted.sort((a, b) => a.title.localeCompare(b.title) * order);
+  else if (sortKey === 'status') sorted.sort((a, b) => a.status.localeCompare(b.status) * order);
+  else if (sortKey === 'created_at') sorted.sort((a, b) => (String(a.created_at).localeCompare(String(b.created_at))) * order);
+
+  return c.json({ success: true, data: sorted });
 });
 
 goals.post('/', async (c) => {

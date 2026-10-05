@@ -147,9 +147,8 @@ export default function LoginHistory() {
           <div className="flex items-center gap-2">
             <input className="text-xs px-2 py-1 rounded-full border bg-transparent w-24" placeholder="筛选IP" value={ipFilter} onChange={(e) => setIpFilter(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchLogs()} />
             <Button variant="ghost" size="sm" className="rounded-full" onClick={() => window.open('/api/auth/login-history/export', '_blank')}>导出</Button>
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={fetchLogs} disabled={loading}>
-              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-            </Button>
+            <Button variant="ghost" size="icon" className="rounded-full" onClick={fetchLogs} disabled={loading} aria-label="刷新">
+              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} /></Button>
             <Button variant="ghost" size="sm" className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={clearLogs} disabled={clearing || logs.length === 0}>
               <Trash2 size={16} className="mr-1" />
               清空

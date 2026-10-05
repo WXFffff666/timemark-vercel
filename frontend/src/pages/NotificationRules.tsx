@@ -98,13 +98,13 @@ export default function NotificationRules() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <GitBranch className="w-6 h-6" /> 提醒规则
           </h1>
-          <p className="text-sm text-slate-500">按提前天数指定渠道；规则优先于套餐预设</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">按提前天数指定渠道；规则优先于套餐预设</p>
         </div>
       </div>
 
       <section className="glass-panel rounded-2xl p-5 mb-6 space-y-3">
         <h2 className="font-semibold">通知套餐（分级告警）</h2>
-        <p className="text-xs text-slate-500">无自定义规则时，按套餐在不同提前天数选用渠道</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">无自定义规则时，按套餐在不同提前天数选用渠道</p>
         <div className="grid gap-2">
           <label className="flex items-center gap-2 text-sm">
             <input type="radio" checked={!preset} onChange={() => setPreset('')} />
@@ -115,7 +115,7 @@ export default function NotificationRules() {
               <input type="radio" checked={preset === p.id} onChange={() => setPreset(p.id)} className="mt-1" />
               <span>
                 <span className="font-medium">{p.label}</span>
-                <span className="block text-xs text-slate-500">{p.description}</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">{p.description}</span>
               </span>
             </label>
           ))}
@@ -129,7 +129,7 @@ export default function NotificationRules() {
         <h2 className="font-semibold">条件规则</h2>
         <div className="flex flex-wrap gap-2 items-end">
           <div>
-            <label className="text-xs text-slate-500">提前天数</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400">提前天数</label>
             <Input
               type="number"
               min={0}
@@ -140,7 +140,7 @@ export default function NotificationRules() {
             />
           </div>
           <div className="flex-1">
-            <p className="text-xs text-slate-500 mb-1">渠道</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">渠道</p>
             <div className="flex flex-wrap gap-1">
               {CHANNEL_OPTIONS.map((ch) => (
                 <button
@@ -166,9 +166,9 @@ export default function NotificationRules() {
       </section>
 
       {loading ? (
-        <p className="text-center text-slate-500">加载中...</p>
+        <p className="text-center text-slate-500 dark:text-slate-400">加载中...</p>
       ) : rules.length === 0 ? (
-        <p className="text-center text-slate-500">暂无条件规则</p>
+        <p className="text-center text-slate-500 dark:text-slate-400">暂无条件规则</p>
       ) : (
         <ul className="space-y-3">
           {rules.map((r) => {

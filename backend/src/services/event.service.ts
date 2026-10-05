@@ -431,7 +431,7 @@ export async function getEventsByUserIdPaginated(
   limit: number,
   offset: number,
   profileId?: number | null,
-  options: { type?: string | null; upcoming?: boolean; sort?: 'date' | 'created_at' } = {},
+  options: { type?: string | null; upcoming?: boolean; sort?: 'date' | 'created_at'; tag?: string | null } = {},
 ): Promise<{ events: Event[]; total: number }> {
   const numericUserId = parseInt(userId, 10);
   if (isNaN(numericUserId)) {
@@ -448,6 +448,7 @@ export async function getEventsByUserIdPaginated(
        AND profile_id = COALESCE($2::int, profile_id)
        AND ($3::text IS NULL OR type = $3::text)
        AND ($4::boolean = FALSE OR next_occurrence IS NOT NULL)
+       AND ($8::text IS NULL OR tags::text ILIKE '%' || $8::text || '%')
      ORDER BY
        CASE WHEN $5::text = 'created_at' THEN created_at::text END ASC NULLS LAST,
        CASE WHEN $5::text = 'created_at' THEN NULL ELSE date END ASC NULLS LAST,
@@ -461,6 +462,7 @@ export async function getEventsByUserIdPaginated(
       options.sort === 'created_at' ? 'created_at' : 'date',
       limit,
       offset,
+      options.tag ?? null,
     ],
   );
   const total = Number((result.rows[0] as Record<string, unknown> | undefined)?.total_count ?? 0);

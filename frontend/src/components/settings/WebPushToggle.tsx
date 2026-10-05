@@ -110,7 +110,7 @@ export function WebPushToggle() {
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">浏览器通知</h3>
-              <p className="text-xs text-slate-500">不打开网页也能收到提醒（Web Push / VAPID）</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">不打开网页也能收到提醒（Web Push / VAPID）</p>
             </div>
           </div>
           <Switch
@@ -127,7 +127,7 @@ export function WebPushToggle() {
         )}
         {devices && devices.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2">
               已订阅设备（{devices.length}）
             </p>
             <ul className="space-y-1.5 max-h-48 overflow-y-auto overscroll-contain pr-1">

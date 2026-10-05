@@ -53,7 +53,9 @@ habits.get('/', async (c) => {
   const profileFilter = await parseProfileFilter(c, userId);
   if (profileFilter instanceof Response) return profileFilter;
 
-  const data = await listHabits(userId, { active, profileId: profileFilter });
+  // v2.27：?sort=name 白名单排序（默认 created_at）
+  const sort = c.req.query('sort') === 'name' ? 'name' as const : 'created_at' as const;
+  const data = await listHabits(userId, { active, profileId: profileFilter, sort });
   return c.json({ success: true, data });
 });
 

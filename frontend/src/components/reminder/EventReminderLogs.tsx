@@ -113,7 +113,8 @@ export function EventReminderLogs() {
     : reminders;
 
   const FILTERS: Array<['' | 'delivered' | 'partial' | 'failed' | 'skipped', string]> = [
-    ['', '全部'], ['delivered', '成功'], ['partial', '部分失败'], ['failed', '失败'], ['skipped', '已跳过'],
+    // 措辞用「仅X」避免与列表内的结果徽章文案（成功/失败）在测试与视觉上撞词
+    ['', '全部'], ['delivered', '仅成功'], ['partial', '仅部分失败'], ['failed', '仅失败'], ['skipped', '仅跳过'],
   ];
 
   return (

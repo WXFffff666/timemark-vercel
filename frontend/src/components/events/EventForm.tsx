@@ -1587,12 +1587,12 @@ export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
               </DialogTitle>
             </DialogHeader>
             {accountsLoading ? (
-              <div className="flex items-center justify-center py-8 gap-2 text-slate-500">
+              <div className="flex items-center justify-center py-8 gap-2 text-slate-500 dark:text-slate-400">
                 <div className="w-5 h-5 border-2 border-slate-300 border-t-primary-500 rounded-full animate-spin" />
                 加载中...
               </div>
             ) : pickerAccounts.length === 0 ? (
-              <div className="py-8 text-center text-slate-500">
+              <div className="py-8 text-center text-slate-500 dark:text-slate-400">
                 <p>暂无可用账号</p>
                 <p className="text-xs text-slate-400 mt-1">请在设置中添加账户后重试</p>
               </div>
