@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.28.0 (2026-10-06) — AI 对话体验 + 渠道向导(51 渠道) + 日志治理
+
+### AI 对话（用户反馈的三大痛点全部修复，根因均为实查定位）
+
+- **「看不到后续对话」**：真因是对话卡排页面第 3、移动端被顶出视口 + overscroll-contain 吞手势——对话卡提升为首卡，模型/知识库设置折叠为次级 details；双层滚动（容器内滚底 + 卡片出视口时受控 window.scrollTo）。
+- **「不能停止」**：三个缺口全补——模型首次加载可中止（getEngine 监听 abort 即刻拒绝）；祝福草稿/礼物建议补停止按钮（abortRef 存在但无 UI）；Dock 助手工具调用可中止（AbortController + 运行态停止键）。
+- **「输出 markdown 而非自然汉字」**：RAG 提示词明令禁止 markdown + 渲染层 stripMarkdownLight 清洗（去 #/**/-/` 等标记，保留换行与来源编号）。
+- **AI 权限**：update_event/snooze_reminder/create_expiry/create_document/log_interaction 五个敏感写操作加入确认闸（registry hash 同步）；意图路由扩至 该联系谁/习惯/行为规律/关键词搜索。
+
+### 通知渠道：46 → 51
+
+- **三步绑定向导**：选渠道 → 填写（逐字段帮助 + 「去官方获取 Token」直达链接 + 必填即时校验）→ 测试并保存（**保存前真实直测** + 脱敏摘要 + 结果横幅）。
+- **新增 5 渠道**（纯 HTTP、零新依赖、全带专属连接测试）：PushBullet、Join、PushSafer、Webex、Notifiarr。
+- 文档全量重生成：CHANNEL_MATRIX（51 渠道 × 字段→列映射 × 测试路径）、README/CHANNEL_COMPATIBILITY/FREE_TIER_DEPLOY/INTEGRATIONS 锚点同步（schema v80）。
+
+### 日志治理
+
+- cron 失败原因不再 '[redacted]'（会话用户全显 / API key 需 admin scope）；CronMonitor 补渲染各任务最新状态与耗时。
+- 请求完成日志（status+耗时）+ 移除双轨日志；DB 查询失败无条件记录 + 慢查询 >500ms 阈值。
+- 5 张零清理表补保留期（scheduler_runs/rate_limits/collaboration_activity/data_health_repairs/calendar_sync_events，清理注册表 18→23）。
+- 邮件日志卡显示失败原因、'received' 状态修正、文案对齐；提醒日志渠道下拉/重试错误详情/分页；/api/health 版本号从 package.json 注入。
+
+### 自查与实测
+
+- 审查代理 7 项真实 bug 全修（确认流判定错层、搜索意图路由、向导编辑锁死、cron 脱敏信任级、向导状态残留、完成日志 500 记 200、双引擎并发加载）。
+- Playwright 真浏览器实测：AI 新布局/会话持久化、渠道向导全流程（真实调用 PushBullet API 验证 401 回显）、全部通过。
+- 后端 1665 / 前端 308 测试全绿；账本 docs/v2.28-LEDGER.md 逐项可核对。
+
 ## v2.26.0 (2026-10-05) — 祝福链修复 + 日志保留 + UI 合并 + 全站动画
 
 ### 批次 A：祝福链修复（v80 前置）
