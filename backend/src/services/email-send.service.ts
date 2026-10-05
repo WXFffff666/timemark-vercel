@@ -91,6 +91,17 @@ export async function sendRawEmail(
     throw new Error('没有可用的收件人邮箱');
   }
 
+  // v2.26: 送达性头——此前这条裸链（greeting/broadcast/联系人单发共用）完全没有
+  // Reply-To/List-Unsubscribe，是 Gmail/Yahoo 批量发件三支柱（认证/投诉率/一键退订）
+  // 里唯一能从代码侧补齐的缺口。Reply-To 指回发件地址（好友回信直达机主）。
+  const fromAddress = creds.fromEmail;
+  const deliverabilityHeaders: Record<string, string> = {
+    'Reply-To': fromAddress.includes('@') ? fromAddress : 'noreply@timemark.app',
+    'List-Unsubscribe': `<mailto:${fromAddress.includes('@') ? fromAddress : 'noreply@timemark.app'}?subject=unsubscribe>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    'Message-ID': `<${Date.now()}-${Math.random().toString(36).slice(2, 12)}@timemark.app>`,
+  };
+
   if (creds.type === 'resend' || creds.type === 'email') {
     const resend = new Resend(creds.apiKey!);
     const { error } = await resend.emails.send({
@@ -99,6 +110,7 @@ export async function sendRawEmail(
       subject,
       html: body,
       text,
+      headers: deliverabilityHeaders,
       ...(attachments && attachments.length > 0
         ? { attachments: attachments.map((file) => ({ filename: file.filename, content: Buffer.from(file.content) })) }
         : {}),
@@ -122,6 +134,7 @@ export async function sendRawEmail(
       subject,
       html: body,
       text,
+      headers: deliverabilityHeaders,
       ...(attachments && attachments.length > 0
         ? { attachments: attachments.map((file) => ({ filename: file.filename, content: Buffer.from(file.content), contentType: file.contentType })) }
         : {}),

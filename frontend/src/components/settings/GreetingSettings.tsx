@@ -16,7 +16,7 @@ type PreviewRow = {
   daysUntil: number;
   dateLine: string;
   optedOut: boolean;
-  preview?: { subject: string };
+  preview?: { subject: string; source?: 'ai' | 'composer' };
 };
 
 type HistoryRow = {
@@ -29,6 +29,7 @@ type HistoryRow = {
   body_preview: string | null;
   recipients: string | null;
   created_at: string;
+  source?: string;
 };
 
 /**
@@ -110,6 +111,24 @@ export function GreetingSettings() {
 
   const drafts = history.filter((h) => h.status === 'draft');
   const sentCount = history.filter((h) => h.status === 'sent').length;
+  // v2.26: 单条 AI 预览/换一版（用户点按触发，受服务端 AI 日预算闸约束）
+  const [aiPreviewing, setAiPreviewing] = useState<number | null>(null);
+  const [aiPreview, setAiPreview] = useState<{ contactId: number; subject: string; source: string } | null>(null);
+
+  const generateAiPreview = async (row: PreviewRow) => {
+    setAiPreviewing(row.contactId);
+    try {
+      const res = await api.post<{ subject: string; source: string }>(
+        '/greetings/preview-ai',
+        { contactId: row.contactId, date: `${new Date().getFullYear()}-${row.dateLine}` },
+      );
+      setAiPreview({ contactId: row.contactId, subject: res.subject, source: res.source });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'AI 预览失败');
+    } finally {
+      setAiPreviewing(null);
+    }
+  };
 
   return (
     <div className="glass-panel rounded-[2.5rem] p-6 space-y-4 ring-1 ring-black/5 dark:ring-white/10">
@@ -190,13 +209,37 @@ export function GreetingSettings() {
                       {r.daysUntil === 0 ? '今天' : `${r.daysUntil} 天后`} · {r.dateLine}
                     </span>
                   </p>
-                  <p className="text-xs text-slate-400 truncate">{r.preview?.subject ?? ''}</p>
+                  <p className="text-xs text-slate-400 truncate">
+                    {aiPreview?.contactId === r.contactId ? aiPreview.subject : r.preview?.subject ?? ''}
+                  </p>
+                  {(() => {
+                    const source = aiPreview?.contactId === r.contactId ? aiPreview.source : r.preview?.source;
+                    if (source === 'ai') {
+                      return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">AI 生成</span>;
+                    }
+                    if (source === 'composer') {
+                      return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">组合引擎</span>;
+                    }
+                    return null;
+                  })()}
                 </div>
-                {r.optedOut && (
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0">
-                    已退订
-                  </span>
-                )}
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  {r.optedOut && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">
+                      已退订
+                    </span>
+                  )}
+                  {settings?.greetingAiEnabled && !r.optedOut && (
+                    <button
+                      type="button"
+                      onClick={() => void generateAiPreview(r)}
+                      disabled={aiPreviewing === r.contactId}
+                      className="text-[11px] text-violet-600 dark:text-violet-400 underline hover:no-underline disabled:opacity-50"
+                    >
+                      {aiPreviewing === r.contactId ? '生成中…' : 'AI 预览 / 换一版'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -210,7 +253,12 @@ export function GreetingSettings() {
           <div className="space-y-2">
             {drafts.map((d) => (
               <div key={`d-${d.id}`} className="rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10 px-4 py-3">
-                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{d.contact_name ?? `联系人 #${d.contact_id}`}</p>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {d.contact_name ?? `联系人 #${d.contact_id}`}
+                  {d.source === 'ai' && (
+                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">AI</span>
+                  )}
+                </p>
                 <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{d.subject}</p>
                 <div className="flex gap-2 mt-2">
                   <Button size="sm" variant="secondary" className="rounded-full" onClick={() => void sendDraft(d.id)} disabled={operating === `send-${d.id}`}>

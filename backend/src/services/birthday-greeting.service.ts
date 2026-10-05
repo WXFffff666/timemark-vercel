@@ -233,14 +233,40 @@ export function composeGreetingContentFallback(
  * 任何失败（未配置 AiDisabledError / 超时 / 空输出）返回 null —— 调用方回落组合引擎，
  * 祝福永远发得出去。AI 输出只取纯文本正文（HTML 由本地拼装），并过 sanitize-html。
  */
+/** v2.26: 单日 AI 祝福上限——超限自动回落组合引擎（防 API 额度被打爆/函数超时） */
+export const GREETING_AI_DAILY_LIMIT = 20;
+
+/** 当日已生成的 AI 祝福条数（greeting_history.source='ai' 且今天创建） */
+export async function countAiGreetingsToday(userId: number): Promise<number> {
+  try {
+    const result = await query(
+      `SELECT COUNT(*) AS n FROM greeting_history
+       WHERE user_id = $1 AND source = 'ai' AND status IN ('sent','draft')
+         AND created_at > date_trunc('day', NOW())`,
+      [userId],
+    );
+    return Number((result.rows[0] as { n?: unknown })?.n ?? 0);
+  } catch {
+    return Number.MAX_SAFE_INTEGER; // 表不可用时保守视为超限
+  }
+}
+
 export async function composeGreetingContentWithAi(
   userId: number,
   contact: GreetingContactContext,
   event: BirthdayGreetingEvent,
+  options: { tone?: string | null } = {},
 ): Promise<{ subject: string; html: string; source: 'ai' } | null> {
+  // 预算闸（v2.26）：当日 AI 条数超限直接回落组合引擎，调用方无感
+  if ((await countAiGreetingsToday(userId)) >= GREETING_AI_DAILY_LIMIT) {
+    log.info({ userId, contactId: contact.contactId }, 'AI greeting daily budget exhausted; falling back to composer');
+    return null;
+  }
   try {
     const { chat, AiDisabledError } = await import('./ai/gateway.js');
     const name = contact.nickname?.trim() || contact.name;
+    const tone = options.tone?.trim() || '';
+    const toneLine = tone ? `5. 语气要求：${tone.slice(0, 40)}。` : '';
     const relationBits = [
       contact.relationship ? `与机主关系：${contact.relationship}` : '',
       contact.gender && contact.gender !== 'unknown' ? `性别：${contact.gender === 'male' ? '男' : contact.gender === 'female' ? '女' : ''}` : '',
@@ -255,14 +281,15 @@ export async function composeGreetingContentWithAi(
           '2. 结合给出的关系与备注信息个性化；备注是机主与对方的私事，可自然化用但不要照抄；',
           '3. 直接输出祝福正文，不要标题、不要称呼行重复姓名超过一次、不要签名、不要解释；',
           '4. 输出一行正文即可。',
-        ].join('\n'),
+          toneLine,
+        ].filter(Boolean).join('\n'),
       },
       {
         role: 'user' as const,
         content: `给好友「${name}」写生日祝福。${relationBits.join('；')}`,
       },
     ];
-    const result = await chat(messages, { tier: 'lite', maxTokens: 300 });
+    const result = await chat(messages, { tier: 'lite', maxTokens: 300, useCache: false });
     const trimmed = result.content.trim().slice(0, 600);
     if (!trimmed) return null;
     const composed = composeBirthdayGreeting({
@@ -329,13 +356,16 @@ export async function composeFinalGreeting(
   contact: GreetingContactContext,
   event: BirthdayGreetingEvent,
   prefs?: GreetingUserPrefs,
-): Promise<{ subject: string; html: string; source: 'ai' | 'composer' }> {
+  options: { tone?: string | null; aiEnabledOverride?: boolean } = {},
+): Promise<{ subject: string; html: string; source: 'ai' | 'composer'; tone?: string | null }> {
   const resolved = prefs ?? await getGreetingUserPrefs(userId);
-  if (resolved.greetingAiEnabled) {
-    const ai = await composeGreetingContentWithAi(userId, contact, event);
-    if (ai) return ai;
+  // v2.26: 分批——tasks.ts 每 tick 传入 aiEnabledOverride=false 可把本条让给组合引擎
+  const aiAllowed = resolved.greetingAiEnabled && options.aiEnabledOverride !== false;
+  if (aiAllowed) {
+    const ai = await composeGreetingContentWithAi(userId, contact, event, { tone: options.tone });
+    if (ai) return { ...ai, tone: options.tone ?? null };
   }
-  return composeGreetingContentFallback(userId, contact, event);
+  return { ...composeGreetingContentFallback(userId, contact, event), tone: options.tone ?? null };
 }
 
 /** 当年是否已有同联系人的 greeting 记录（draft 去重 / 发送幂等的第二道闸） */
@@ -364,11 +394,13 @@ export async function recordGreetingHistory(input: {
   subject: string;
   bodyHtml: string;
   recipients?: string;
+  source?: 'ai' | 'composer';
+  tone?: string | null;
 }): Promise<void> {
   await query(
-    `INSERT INTO greeting_history (user_id, contact_id, event_id, year, channel, status, subject, body_html, recipients)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [input.userId, input.contactId, input.eventId, input.year, input.channel, input.status, input.subject, input.bodyHtml, input.recipients ?? null],
+    `INSERT INTO greeting_history (user_id, contact_id, event_id, year, channel, status, subject, body_html, recipients, source, tone)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [input.userId, input.contactId, input.eventId, input.year, input.channel, input.status, input.subject, input.bodyHtml, input.recipients ?? null, input.source ?? 'composer', input.tone ?? null],
   );
 }
 
@@ -384,6 +416,7 @@ export async function deliverBirthdayGreeting(
   event: BirthdayGreetingEvent,
   resolution: BirthdayGreetingResolution,
   year: string,
+  options: { aiEnabledOverride?: boolean } = {},
 ): Promise<'sent' | 'skipped' | 'draft' | 'duplicate' | 'failed'> {
   const claimEventId = resolution.action === 'send'
     ? resolution.contactId
@@ -428,7 +461,9 @@ export async function deliverBirthdayGreeting(
     if (await hasGreetingHistory(event.user_id, resolution.contactId, yearOfDate, ['draft', 'sent'])) {
       return 'duplicate';
     }
-    const content = await composeFinalGreeting(event.user_id, contactContext, event, prefs);
+    const content = await composeFinalGreeting(event.user_id, contactContext, event, prefs, {
+      aiEnabledOverride: options.aiEnabledOverride,
+    });
     await recordGreetingHistory({
       userId: event.user_id,
       contactId: resolution.contactId,
@@ -439,6 +474,8 @@ export async function deliverBirthdayGreeting(
       subject: content.subject,
       bodyHtml: content.html,
       recipients: resolution.recipients.join(', '),
+      source: content.source,
+      tone: content.tone,
     });
     log.info({ eventId: event.id, contactId: resolution.contactId, source: content.source }, 'Birthday greeting staged as draft');
     return 'draft';
@@ -448,7 +485,9 @@ export async function deliverBirthdayGreeting(
   if (await hasGreetingHistory(event.user_id, resolution.contactId, yearOfDate, ['sent'])) {
     return 'duplicate';
   }
-  const content = await composeFinalGreeting(event.user_id, contactContext, event, prefs);
+  const content = await composeFinalGreeting(event.user_id, contactContext, event, prefs, {
+    aiEnabledOverride: options.aiEnabledOverride,
+  });
   try {
     const result = await sendContactEmail(event.user_id, resolution.contactId, {
       subject: content.subject,
@@ -477,6 +516,8 @@ export async function deliverBirthdayGreeting(
       subject: content.subject,
       bodyHtml: content.html,
       recipients: result.recipients.join(', '),
+      source: content.source,
+      tone: content.tone,
     });
     log.info(
       { eventId: event.id, contactId: resolution.contactId, recipients: result.recipients, source: content.source },
@@ -503,6 +544,7 @@ export async function deliverBirthdayGreeting(
       subject: content.subject,
       bodyHtml: content.html,
       recipients: resolution.recipients.join(', '),
+      source: content.source,
     }).catch(() => undefined);
     log.error({ eventId: event.id, contactId: resolution.contactId, err: error }, 'Birthday greeting send failed; claim released for retry');
     return 'failed';

@@ -249,9 +249,37 @@ CREATE TABLE IF NOT EXISTS greeting_history (
   subject TEXT,
   body_html TEXT,
   recipients TEXT,
+  -- v80: AI budget gate + per-draft regeneration
+  source TEXT NOT NULL DEFAULT 'composer',
+  tone TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_greeting_history_user_year ON greeting_history(user_id, year DESC);
+
+-- v80: AI monthly digest archive ("AI keeps what matters") — raw trigger logs expire
+-- at 90 days; the AI narrative + deterministic stats JSON stay forever.
+CREATE TABLE IF NOT EXISTS digest_archive (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  period TEXT NOT NULL,
+  period_start DATE,
+  period_end DATE,
+  narrative_md TEXT,
+  stats_json JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_digest_archive_user_period ON digest_archive(user_id, period_start DESC);
+
+-- v80: bounded cron status — one row per job (upsert), replacing every-minute
+-- success rows; failed details stay in cron_execution_logs with 30d retention.
+CREATE TABLE IF NOT EXISTS cron_job_status (
+  job_name TEXT PRIMARY KEY,
+  last_status TEXT NOT NULL,
+  last_ok_at TIMESTAMPTZ,
+  last_error TEXT,
+  last_duration_ms INTEGER,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 CREATE INDEX IF NOT EXISTS idx_trigger_logs_date ON event_trigger_logs(trigger_date);
 -- A plain btree index is still the right shape for the TEXT token: the lookup is exact
 -- equality (`WHERE trigger_date = $2`) on the full key, never a prefix/LIKE pattern.

@@ -53,7 +53,7 @@ export function LocalAI() {
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const abortRef = useRef<AbortController | null>(null);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const historyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -78,7 +78,10 @@ export function LocalAI() {
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // 修复：scrollIntoView 会滚动所有可滚祖先（整页），导致发消息后页面跳走、
+    // 对话区无法正常上下滑。改为只滚对话容器自身。
+    const container = historyRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
   }, [history]);
 
   const handleBuildIndex = useCallback(async () => {
@@ -252,7 +255,11 @@ export function LocalAI() {
           <h2 className="text-base font-semibold flex items-center gap-2 mb-3">
             <Sparkles size={18} className="text-blue-500" /> 问问你的数据
           </h2>
-          <div className="space-y-4 max-h-[26rem] overflow-y-auto mb-4" aria-live="polite">
+          <div
+            ref={historyRef}
+            className="space-y-4 max-h-[26rem] overflow-y-auto overscroll-contain mb-4"
+            aria-live="polite"
+          >
             {history.length === 0 && (
               <p className="text-sm text-slate-400">
                 示例：「妈妈的生日是什么时候」「下个月有什么到期」「总结一下我的事件」。回答只依据你的知识库，末尾带来源编号。
@@ -278,7 +285,6 @@ export function LocalAI() {
                 </div>
               </div>
             ))}
-            <div ref={bottomRef} />
           </div>
           <form
             className="flex gap-2"

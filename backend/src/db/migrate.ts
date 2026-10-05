@@ -3156,6 +3156,42 @@ CREATE TABLE IF NOT EXISTS greeting_history (
 );
 CREATE INDEX IF NOT EXISTS idx_greeting_history_user_year ON greeting_history(user_id, year DESC);`,
     },
+    {
+      // v80: log retention & bounded cron status.
+      // - greeting_history gains source (ai|composer) and tone for the greeting AI budget
+      //   gate and per-draft regeneration;
+      // - digest_archive stores the AI monthly digest narrative so raw trigger logs can
+      //   expire at 90 days without losing history ("AI keeps what matters");
+      // - cron_job_status is a one-row-per-job upsert (last outcome) replacing the
+      //   every-minute success rows; failed details stay in cron_execution_logs (30d);
+      // - indexes for the two hot paths: /api/health's cron status lookup and the
+      //   trigger-logs list ordering.
+      version: 80,
+      name: 'log_retention_and_ai_greetings_v80',
+      sql: `ALTER TABLE greeting_history ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'composer';
+ALTER TABLE greeting_history ADD COLUMN IF NOT EXISTS tone TEXT;
+CREATE TABLE IF NOT EXISTS digest_archive (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  period TEXT NOT NULL,
+  period_start DATE,
+  period_end DATE,
+  narrative_md TEXT,
+  stats_json JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_digest_archive_user_period ON digest_archive(user_id, period_start DESC);
+CREATE TABLE IF NOT EXISTS cron_job_status (
+  job_name TEXT PRIMARY KEY,
+  last_status TEXT NOT NULL,
+  last_ok_at TIMESTAMPTZ,
+  last_error TEXT,
+  last_duration_ms INTEGER,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cron_executed_at ON cron_execution_logs(executed_at);
+CREATE INDEX IF NOT EXISTS idx_trigger_user_created ON event_trigger_logs(user_id, created_at);`,
+    },
   ];
 
   for (const migration of migrations) {

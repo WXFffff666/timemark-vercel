@@ -1995,12 +1995,17 @@ export async function sendReminders() {
 
   // checkbox 168：生日祝福投递。与机主提醒的发送结果完全无关（机主提醒不依赖联系人渠道，
   // 祝福也不依赖机主提醒是否成功）；每个联系人每年至多一条，claim 去重（重复 tick 只打 debug）。
+  // v2.26 分批：每个 tick 最多 5 条走 AI 生成（AI 调用串行且慢，防止 50 人同天把函数拖过
+  // maxDuration）；超出的让给组合引擎兜底（祝福仍会发出），次日 tick 再尝试 AI。
+  let greetingAiBudget = 5;
   for (const event of eventsToRemind.slice(0, 50)) {
     const greeting = birthdayGreetings.get(event.id);
     if (!greeting) continue;
     const year = getTodayString(now, getEventTimezone(event.user_id, event.profile_id)).slice(0, 4);
+    const aiEnabledOverride = greetingAiBudget > 0;
     try {
-      await deliverBirthdayGreeting(event as unknown as BirthdayGreetingEvent, greeting, year);
+      const result = await deliverBirthdayGreeting(event as unknown as BirthdayGreetingEvent, greeting, year, { aiEnabledOverride });
+      if (result === 'sent' || result === 'draft') greetingAiBudget -= 1;
     } catch (error) {
       log.warn({ eventId: event.id, err: error }, 'Birthday greeting delivery failed');
     }

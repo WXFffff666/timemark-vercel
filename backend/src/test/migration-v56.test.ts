@@ -71,7 +71,7 @@ describe('migration v56 registration (checkbox 102)', () => {
   it('is idempotent: a recorded v56 row makes the runner skip v56 entirely', async () => {
     await applyIncrementalMigrations(56);
     expect(callsMatching('agent_confirmations')).toHaveLength(0);
-    expect(versionInserts()).toEqual([57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79]);
+    expect(versionInserts()).toEqual([57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80]);
   });
 
   it('does not record v56 when its SQL fails, so a later cold start retries', async () => {
@@ -87,7 +87,7 @@ describe('migration v56 registration (checkbox 102)', () => {
     const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.filter((v) => v === 56)).toHaveLength(1);
     expect(versions.indexOf(56)).toBe(versions.indexOf(55) + 1);
-    expect(versions[versions.length - 1]).toBe(79);
+    expect(versions[versions.length - 1]).toBe(80);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }

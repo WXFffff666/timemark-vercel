@@ -5,7 +5,6 @@ import { query } from '../db/index.js';
 import type { User } from '@timemark/shared';
 import {
   getGreetingUserPrefs,
-  composeGreetingContentFallback,
   composeFinalGreeting,
   hasGreetingHistory,
   recordGreetingHistory,
@@ -124,7 +123,9 @@ greetings.get('/preview', async (c) => {
     if (daysUntil === null || seenContacts.has(contactId)) continue;
     seenContacts.add(contactId);
     const event = e as unknown as BirthdayGreetingEvent;
-    const composed = composeGreetingContentFallback(
+    // v2.26 预演一致性：走 composeFinalGreeting 单入口（AI 开=真实 AI 文案，关/超限=组合引擎），
+    // 消除"所见非所发"；AI 日预算闸在 service 内生效，预演不会打爆额度。
+    const composed = await composeFinalGreeting(
       userId,
       { contactId, name: String(e.name ?? ''), nickname: e.nickname as string | null, relationship: e.relationship as string | null, notes: e.notes as string | null },
       event,
@@ -147,7 +148,7 @@ greetings.get('/preview', async (c) => {
     const daysUntil = dateWithinWindow(md, days);
     if (daysUntil === null) continue;
     seenContacts.add(contactId);
-    const composed = composeGreetingContentFallback(
+    const composed = await composeFinalGreeting(
       userId,
       { contactId, name: String(fc.name ?? ''), nickname: fc.nickname as string | null, relationship: fc.relationship as string | null, notes: fc.notes as string | null },
       { id: 0, user_id: userId, date: `${yearOfToday()}-${md}` },
@@ -185,7 +186,7 @@ greetings.get('/history', async (c) => {
   }
   const result = await query(
     `SELECT g.id, g.contact_id, g.event_id, g.year, g.channel, g.status, g.subject,
-            left(g.body_html, 400) AS body_preview, g.recipients, g.created_at,
+            left(g.body_html, 400) AS body_preview, g.recipients, g.source, g.created_at,
             fc.name AS contact_name
      FROM greeting_history g
      LEFT JOIN fixed_contacts fc ON fc.id = g.contact_id
@@ -195,6 +196,62 @@ greetings.get('/history', async (c) => {
     [Number(user.id), year],
   );
   return c.json({ success: true, data: { year, rows: result.rows } });
+});
+
+const aiPreviewSchema = z.object({
+  contactId: z.number().int().positive(),
+  eventId: z.number().int().nonnegative().optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  tone: z.string().max(40).optional(),
+});
+
+// POST /preview-ai — 单条 AI 预览 / 草稿换一版（用户点按触发，单次一条，
+// 受 AI 日预算闸约束；预演列表自动部分仍是 composeFinalGreeting 单入口）。
+greetings.post('/preview-ai', async (c) => {
+  const user = c.get('user');
+  const userId = Number(user.id);
+  const parsed = aiPreviewSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ success: false, error: formatZodError(parsed.error) }, 400);
+  }
+  const { contactId, tone } = parsed.data;
+  const date = parsed.data.date || `${yearOfToday()}-01-01`;
+  const eventId = parsed.data.eventId ?? 0;
+
+  const contactRes = await query(
+    `SELECT id, name, nickname, relationship, gender, notes, greeting_opt_out
+     FROM fixed_contacts WHERE id = $1 AND user_id = $2`,
+    [contactId, userId],
+  );
+  const contact = contactRes.rows[0] as Record<string, unknown> | undefined;
+  if (!contact) return c.json({ success: false, error: '联系人不存在' }, 404);
+  if (contact.greeting_opt_out === true) {
+    return c.json({ success: false, error: '该联系人已退出祝福' }, 400);
+  }
+
+  const prefs = await getGreetingUserPrefs(userId);
+  if (!prefs.greetingAiEnabled) {
+    return c.json({ success: false, error: 'AI 个性化生成未开启（设置 → 生日祝福）' }, 400);
+  }
+
+  const content = await composeFinalGreeting(
+    userId,
+    {
+      contactId,
+      name: String(contact.name ?? ''),
+      nickname: contact.nickname as string | null,
+      relationship: contact.relationship as string | null,
+      gender: contact.gender as string | null,
+      notes: contact.notes as string | null,
+    },
+    { id: eventId, user_id: userId, date },
+    prefs,
+    { tone },
+  );
+  return c.json({
+    success: true,
+    data: { subject: content.subject, html: content.html, source: content.source, tone: tone ?? null },
+  });
 });
 
 const sendDraftSchema = z.object({ draftId: z.number().int().positive() });

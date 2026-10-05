@@ -45,7 +45,7 @@ const VERSIONS = registeredMigrationVersions(MIGRATE_SOURCE);
 
 describe('migration chain (single source of truth)', () => {
   it('registers every version from 2 to MAX_MIGRATION_VERSION except the unallocated ones', () => {
-    // 79 - the 4 never-allocated numbers = the 75 real registrations.
+    // 80 - the 4 never-allocated numbers = the 76 real registrations.
     expect(VERSIONS).toHaveLength(MAX_MIGRATION_VERSION - UNALLOCATED_VERSIONS.length);
     expect(VERSIONS[0]).toBe(2);
   });
@@ -89,7 +89,7 @@ describe('migration chain (single source of truth)', () => {
     // invented phantom duplicates of 61, 67, 69, 70 and 74 plus phantom order
     // violations. If this ever regresses to 71 for both, the parser is naive again.
     const naive = [...MIGRATE_SOURCE.matchAll(/version:\s*(\d+)\s*,/g)].map((m) => Number(m[1]));
-    expect(VERSIONS).toHaveLength(75);
+    expect(VERSIONS).toHaveLength(76);
     expect(naive.length).toBeGreaterThan(VERSIONS.length);
   });
 });
