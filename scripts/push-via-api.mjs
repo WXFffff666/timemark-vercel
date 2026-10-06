@@ -32,7 +32,8 @@ const api = (path, input, method) => {
   return JSON.parse(gh(args, input));
 };
 
-const remoteCommitSha = api(`/repos/${REPO}/git/${ref}`).object.sha;
+// 循环里会随 ref 推进而更新（const 会 crash 在多提交推送的收尾）
+let remoteCommitSha = api(`/repos/${REPO}/git/${ref}`).object.sha;
 const remoteCommit = api(`/repos/${REPO}/git/commits/${remoteCommitSha}`);
 const remoteTree = remoteCommit.tree.sha;
 
