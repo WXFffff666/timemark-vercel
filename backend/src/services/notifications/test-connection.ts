@@ -18,6 +18,14 @@ import {
   testPushBulletChannel,
   testJoinChannel,
   testPushSaferChannel,
+  testIftttChannel,
+  testRevoltChannel,
+  testOneSignalChannel,
+  testSendgridChannel,
+  testMailgunChannel,
+  testVonageSmsChannel,
+  testMessagebirdChannel,
+  testAlertzyChannel,
 } from './extended-channels.service.js';
 
 export interface TestConnectionResult {
@@ -323,6 +331,33 @@ async function testWebhookChannel(type: string, webhook: string, secret?: string
         return { success: false, message: `Notifiarr 返回状态码: ${response.status}`, latency };
       }
 
+      // v2.29 batch (wave4): Guilded 收 { content }（Discord 同构）；Awtrix 调 /api/notify
+      case 'guilded': {
+        const response = await axios.post(
+          webhook,
+          { content: `${WEBHOOK_TEST_TEXT}（Guilded 渠道）` },
+          { headers: jsonHeaders, timeout: 10000 },
+        );
+        const latency = Date.now() - start;
+        if (response.status >= 200 && response.status < 300) {
+          return { success: true, message: 'Guilded 连接成功，请到频道确认测试消息', latency };
+        }
+        return { success: false, message: `Guilded 返回状态码: ${response.status}`, latency };
+      }
+
+      case 'awtrix': {
+        const response = await axios.post(
+          `${webhook.replace(/\/$/, '')}/api/notify`,
+          { title: 'TimeMark', text: WEBHOOK_TEST_TEXT },
+          { headers: jsonHeaders, timeout: 10000 },
+        );
+        const latency = Date.now() - start;
+        if (response.status >= 200 && response.status < 300) {
+          return { success: true, message: 'Awtrix 连接成功，请看设备屏幕确认测试消息', latency };
+        }
+        return { success: false, message: `Awtrix 返回状态码: ${response.status}`, latency };
+      }
+
       case 'generic_webhook':
       default: {
         const response = await axios.post(
@@ -471,6 +506,24 @@ async function testTokenChannel(
       return await testJoinChannel(token!, chatId!);
     case 'pushsafer':
       return await testPushSaferChannel(token!);
+
+    // v2.29 batch (wave4)
+    case 'ifttt':
+      return await testIftttChannel(token!, webhook!);
+    case 'revolt':
+      return await testRevoltChannel(token!, chatId!);
+    case 'onesignal':
+      return await testOneSignalChannel(token!, secret!);
+    case 'sendgrid':
+      return await testSendgridChannel(token!, secret!, chatId!);
+    case 'mailgun':
+      return await testMailgunChannel(token!, webhook!, chatId!);
+    case 'vonage_sms':
+      return await testVonageSmsChannel(token!, secret!, chatId!);
+    case 'messagebird':
+      return await testMessagebirdChannel(token!, chatId!);
+    case 'alertzy':
+      return await testAlertzyChannel(token!);
 
     default:
       return { success: false, message: `暂不支持测试 ${type} 渠道` };

@@ -142,7 +142,7 @@ describe('channel integrity: supported channels are fully wired (checkbox 27)', 
 
   it('(f) the supported catalogue and the blocklist still have their authoritative sizes', async () => {
     const supported = await loadSupportedTemplates();
-    expect(supported.length, 'supported channel count').toBe(51);
+    expect(supported.length, 'supported channel count').toBe(61);
     expect(UNSUPPORTED_CHANNEL_IDS.size, 'blocked channel count').toBe(8);
   });
 });

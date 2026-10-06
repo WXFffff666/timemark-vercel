@@ -35,6 +35,8 @@ export interface ChannelTemplate {
   docsUrl?: string;
   /** 官方集成页面（优先于 docsUrl，v2.28 渠道向导直达链接用） */
   officialUrl?: string;
+  /** 渠道分类（后端统一注入：im/push/email/sms/smart/automation/other） */
+  category?: string;
 }
 
 /**

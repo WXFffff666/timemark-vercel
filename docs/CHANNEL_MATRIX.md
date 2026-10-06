@@ -4,9 +4,9 @@
 > 唯一数据源：`backend/src/services/notifications/channels.config.ts`（`getSupportedChannelTemplates()`）。
 > 连接测试列由 `test-connection.ts` 的真实分支解析得到；官方地址优先取模板 `officialUrl`，缺省回退 `docsUrl`。
 
-**云端可用渠道：51 个**（webhook 15 · token 36）· **Serverless 不可用：8 个** · **当前 schema：v80**
+**云端可用渠道：61 个**（webhook 17 · token 44）· **Serverless 不可用：8 个** · **当前 schema：v80**
 
-## 1. 云端渠道总表（51）
+## 1. 云端渠道总表（61）
 
 | # | ID | 名称 | configMethod | 必填字段 → DB 列 | 真实连接测试 | 官方地址 |
 |---|----|------|--------------|------------------|--------------|----------|
@@ -61,8 +61,18 @@
 | 49 | `pushbullet` | PushBullet / PushBullet | `token` | `token` → `token` | ✅ `test-connection.ts` → `testTokenChannel` | <https://www.pushbullet.com/#settings/account> |
 | 50 | `join` | Join / Join | `token` | `token` → `token` | ✅ `test-connection.ts` → `testTokenChannel` | <https://joinjoaomgcd.appspot.com/> |
 | 51 | `pushsafer` | PushSafer / PushSafer | `token` | `token` → `token` | ✅ `test-connection.ts` → `testTokenChannel` | <https://www.pushsafer.com/> |
+| 52 | `guilded` | Guilded / Guilded | `webhook` | `webhook` → `webhook` | ✅ `test-connection.ts` → `testWebhookChannel` | <https://www.guilded.gg/> |
+| 53 | `ifttt` | IFTTT / IFTTT | `token` | `token` → `token`、`webhook` → `webhook` | ✅ `test-connection.ts` → `testTokenChannel` | <https://ifttt.com/maker_webhooks> |
+| 54 | `revolt` | Revolt / Revolt | `token` | `token` → `token`、`chat_id` → `chat_id` | ✅ `test-connection.ts` → `testTokenChannel` | <https://revolt.chat/> |
+| 55 | `onesignal` | OneSignal / OneSignal | `token` | `token` → `token`、`secret` → `secret` | ✅ `test-connection.ts` → `testTokenChannel` | <https://onesignal.com/> |
+| 56 | `sendgrid` | SendGrid / SendGrid | `token` | `token` → `token`、`secret` → `secret`、`chat_id` → `chat_id` | ✅ `test-connection.ts` → `testTokenChannel` | <https://sendgrid.com/> |
+| 57 | `mailgun` | Mailgun / Mailgun | `token` | `token` → `token`、`webhook` → `webhook`、`chat_id` → `chat_id` | ✅ `test-connection.ts` → `testTokenChannel` | <https://www.mailgun.com/> |
+| 58 | `vonage_sms` | Vonage SMS / Vonage SMS | `token` | `token` → `token`、`secret` → `secret`、`chat_id` → `chat_id` | ✅ `test-connection.ts` → `testTokenChannel` | <https://www.vonage.com/communications-apis/sms/> |
+| 59 | `messagebird` | MessageBird / MessageBird | `token` | `token` → `token`、`chat_id` → `chat_id` | ✅ `test-connection.ts` → `testTokenChannel` | <https://www.messagebird.com/> |
+| 60 | `alertzy` | Alertzy / Alertzy | `token` | `token` → `token` | ✅ `test-connection.ts` → `testTokenChannel` | <https://alertzy.app/> |
+| 61 | `awtrix` | Awtrix 3 / Awtrix 3 | `webhook` | `webhook` → `webhook` | ✅ `test-connection.ts` → `testWebhookChannel` | <https://blueforcer.github.io/awtrix3/> |
 
-## 2. 字段 → notification_accounts 列（含可选字段，共 102 项）
+## 2. 字段 → notification_accounts 列（含可选字段，共 123 项）
 
 | 渠道 | 字段 | → DB 列 | 必填 | 标签 | 英文标签 |
 |------|------|---------|------|------|----------|
@@ -168,6 +178,27 @@
 | `join` | `token` | `token` | 是 | Api Key | Api Key |
 | `join` | `chat_id` | `chat_id` | 否 | Device ID（可选） | Device ID |
 | `pushsafer` | `token` | `token` | 是 | Private Key | Private Key |
+| `guilded` | `webhook` | `webhook` | 是 | Webhook URL | Webhook URL |
+| `ifttt` | `token` | `token` | 是 | Webhooks Key | Webhooks Key |
+| `ifttt` | `webhook` | `webhook` | 是 | 触发事件名 | Event Name |
+| `revolt` | `token` | `token` | 是 | Bot Token | Bot Token |
+| `revolt` | `chat_id` | `chat_id` | 是 | 频道 ID | Channel ID |
+| `onesignal` | `token` | `token` | 是 | REST API Key | REST API Key |
+| `onesignal` | `secret` | `secret` | 是 | App ID | App ID |
+| `onesignal` | `chat_id` | `chat_id` | 否 | Subscription ID（可选） | Subscription ID |
+| `sendgrid` | `token` | `token` | 是 | API Key | API Key |
+| `sendgrid` | `secret` | `secret` | 是 | 发件人邮箱 | From Email |
+| `sendgrid` | `chat_id` | `chat_id` | 是 | 收件人邮箱 | To Email |
+| `mailgun` | `token` | `token` | 是 | API Key | Private API Key |
+| `mailgun` | `webhook` | `webhook` | 是 | 发信域名 | Sending Domain |
+| `mailgun` | `chat_id` | `chat_id` | 是 | 收件人邮箱 | To Email |
+| `vonage_sms` | `token` | `token` | 是 | API Key | API Key |
+| `vonage_sms` | `secret` | `secret` | 是 | API Secret | API Secret |
+| `vonage_sms` | `chat_id` | `chat_id` | 是 | 收件人手机号 | To Phone Number |
+| `messagebird` | `token` | `token` | 是 | Access Key | Access Key |
+| `messagebird` | `chat_id` | `chat_id` | 是 | 收件人手机号 | To Phone Number |
+| `alertzy` | `token` | `token` | 是 | Account Key | Account Key |
+| `awtrix` | `webhook` | `webhook` | 是 | 设备地址 | Device URL |
 
 ## 3. Serverless 不可用渠道（8）
 
@@ -186,9 +217,9 @@
 
 | 项 | 值 |
 |----|----|
-| 云端渠道总数 | 51 |
-| webhook 渠道 | 15 |
-| token 渠道 | 36 |
-| 有 provider 专属连接测试 | 51 |
+| 云端渠道总数 | 61 |
+| webhook 渠道 | 17 |
+| token 渠道 | 44 |
+| 有 provider 专属连接测试 | 61 |
 | Serverless 不可用 | 8 |
 | schema 版本 | v80 |

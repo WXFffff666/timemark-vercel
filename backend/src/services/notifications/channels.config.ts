@@ -46,6 +46,8 @@ export interface ChannelTemplate {
   descriptionEn?: string;
   /** 官方集成页面（同来源；缺省时使用 docsUrl） */
   officialUrl?: string;
+  /** 渠道分类（applyChannelMetadata 统一注入，用于前端分组展示） */
+  category?: ChannelCategory;
 }
 
 // ============ Webhook-based Channels ============
@@ -1439,8 +1441,331 @@ const tokenChannels: ChannelTemplate[] = [
       }
     ],
     docsUrl: 'https://www.pushsafer.com/en/pushapi'
+  },
+  // ============ v2.29 batch（wave4）：Guilded / IFTTT / Revolt / OneSignal / SendGrid /
+  // Mailgun / Vonage SMS / MessageBird / Alertzy / Awtrix ============
+  {
+    id: 'guilded',
+    name: 'Guilded',
+    description: 'Guilded 服务器频道消息推送（Incoming Webhook，Discord 同构）',
+    icon: 'Hash',
+    configMethod: 'webhook',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: 'Webhook URL',
+        type: 'text',
+        required: true,
+        placeholder: 'https://media.guilded.gg/webhooks/xxx/yyy',
+        description: '服务器 → 频道设置 → 集成 → Webhook 创建后复制的完整 URL'
+      }
+    ],
+    docsUrl: 'https://www.guilded.gg/docs/api/webhook/Webhook'
+  },
+  {
+    id: 'ifttt',
+    name: 'IFTTT',
+    description: 'IFTTT Webhooks 触发器（联动数千个 Applet）',
+    icon: 'Zap',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Webhooks Key',
+        type: 'password',
+        required: true,
+        description: 'ifttt.com/maker_webhooks 页面 Documentation 标签下的 Key'
+      },
+      {
+        name: 'webhook',
+        label: '触发事件名',
+        type: 'text',
+        required: true,
+        placeholder: 'timemark_reminder',
+        description: 'Applet 中 Webhooks 触发器配置的事件名（Event Name）',
+        column: 'webhook'
+      }
+    ],
+    docsUrl: 'https://ifttt.com/maker_webhooks'
+  },
+  {
+    id: 'revolt',
+    name: 'Revolt',
+    description: 'Revolt 开源聊天平台频道消息推送（Bot Token）',
+    icon: 'MessagesSquare',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Bot Token',
+        type: 'password',
+        required: true,
+        description: 'Revolt 开发者后台创建 Bot 后的 Token（需授予机器人发消息权限）'
+      },
+      {
+        name: 'chat_id',
+        label: '频道 ID',
+        type: 'text',
+        required: true,
+        placeholder: '01HXXXXXXXXXXXXXXXXXXXXXXX',
+        description: '目标频道的 ID（Revolt 客户端频道设置 → 复制 ID）',
+        column: 'chat_id'
+      }
+    ],
+    docsUrl: 'https://developers.revolt.chat/'
+  },
+  {
+    id: 'onesignal',
+    name: 'OneSignal',
+    description: 'OneSignal 跨平台推送（REST API Key + App ID）',
+    icon: 'Radio',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'REST API Key',
+        type: 'password',
+        required: true,
+        description: 'OneSignal 后台 Settings → Keys & IDs 的 REST API Key'
+      },
+      {
+        name: 'secret',
+        label: 'App ID',
+        type: 'password',
+        required: true,
+        description: 'OneSignal 后台 Settings → Keys & IDs 的 OneSignal App ID',
+        column: 'secret'
+      },
+      {
+        name: 'chat_id',
+        label: 'Subscription ID（可选）',
+        type: 'text',
+        required: false,
+        placeholder: '留空 = 发给全部 Subscribed Users',
+        description: '目标订阅的 Subscription ID',
+        column: 'chat_id'
+      }
+    ],
+    docsUrl: 'https://documentation.onesignal.com/docs/onesignal-api'
+  },
+  {
+    id: 'sendgrid',
+    name: 'SendGrid',
+    description: 'SendGrid 事务邮件发送（API Key）',
+    icon: 'Mail',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'API Key',
+        type: 'password',
+        required: true,
+        description: 'SendGrid 后台 Settings → API Keys 生成的密钥（需 Mail Send 权限）'
+      },
+      {
+        name: 'secret',
+        label: '发件人邮箱',
+        type: 'text',
+        required: true,
+        placeholder: 'noreply@example.com',
+        description: '已在 SendGrid 完成验证的发件人地址（Sender Authentication）',
+        column: 'secret'
+      },
+      {
+        name: 'chat_id',
+        label: '收件人邮箱',
+        type: 'text',
+        required: true,
+        placeholder: 'you@example.com',
+        description: '接收提醒邮件的地址',
+        column: 'chat_id'
+      }
+    ],
+    docsUrl: 'https://www.twilio.com/docs/sendgrid/for-developers/sending-email/api-getting-started'
+  },
+  {
+    id: 'mailgun',
+    name: 'Mailgun',
+    description: 'Mailgun 事务邮件发送（API Key + 发信域名）',
+    icon: 'Mail',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'API Key',
+        type: 'password',
+        required: true,
+        description: 'Mailgun 后台 Settings → API Security 的 Private API Key'
+      },
+      {
+        name: 'webhook',
+        label: '发信域名',
+        type: 'text',
+        required: true,
+        placeholder: 'mg.example.com（或沙箱域名 sandbox-xxx.mailgun.org）',
+        description: 'Mailgun 已验证的发信域名',
+        column: 'webhook'
+      },
+      {
+        name: 'chat_id',
+        label: '收件人邮箱',
+        type: 'text',
+        required: true,
+        placeholder: 'you@example.com',
+        description: '接收提醒邮件的地址',
+        column: 'chat_id'
+      }
+    ],
+    docsUrl: 'https://documentation.mailgun.com/docs/mailgun/user-manual/sending-messages/'
+  },
+  {
+    id: 'vonage_sms',
+    name: 'Vonage SMS',
+    description: 'Vonage (Nexmo) 国际短信发送（API Key + Secret）',
+    icon: 'Phone',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'API Key',
+        type: 'password',
+        required: true,
+        description: 'Vonage 控制台首页的 API Key'
+      },
+      {
+        name: 'secret',
+        label: 'API Secret',
+        type: 'password',
+        required: true,
+        description: 'Vonage 控制台首页的 API Secret',
+        column: 'secret'
+      },
+      {
+        name: 'chat_id',
+        label: '收件人手机号',
+        type: 'text',
+        required: true,
+        placeholder: '8613800138000',
+        description: 'E.164 格式（含国家码，不带 + 号）',
+        column: 'chat_id'
+      }
+    ],
+    docsUrl: 'https://developer.vonage.com/en/messaging/sms/guides/inbound-sms'
+  },
+  {
+    id: 'messagebird',
+    name: 'MessageBird',
+    description: 'MessageBird 国际短信发送（Access Key）',
+    icon: 'Phone',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Access Key',
+        type: 'password',
+        required: true,
+        description: 'MessageBird 后台 Developers → API Access 的 Live Key'
+      },
+      {
+        name: 'chat_id',
+        label: '收件人手机号',
+        type: 'text',
+        required: true,
+        placeholder: '8613800138000',
+        description: 'E.164 格式（含国家码，不带 + 号）',
+        column: 'chat_id'
+      }
+    ],
+    docsUrl: 'https://developers.messagebird.com/quickstarts/sms-overview/'
+  },
+  {
+    id: 'alertzy',
+    name: 'Alertzy',
+    description: 'Alertzy 手机推送（单 Account Key，iOS/Android）',
+    icon: 'BellRing',
+    configMethod: 'token',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'token',
+        label: 'Account Key',
+        type: 'password',
+        required: true,
+        description: 'Alertzy 官网注册后 Dashboard 显示的 Account Key'
+      }
+    ],
+    docsUrl: 'https://alertzy.app/'
+  },
+  {
+    id: 'awtrix',
+    name: 'Awtrix 3',
+    description: 'Awtrix 3 像素时钟显示提醒（局域网设备地址）',
+    icon: 'MonitorSmartphone',
+    configMethod: 'webhook',
+    isBuiltIn: true,
+    fields: [
+      {
+        name: 'webhook',
+        label: '设备地址',
+        type: 'text',
+        required: true,
+        placeholder: 'http://192.168.1.50',
+        description: 'Awtrix 3 固件的局域网地址（Ulanzi TC001 等设备），需与 TimeMark 服务同网络可达',
+        helpText: '填设备 IP 或主机名，无需路径；系统会自动调用 /api/notify 接口'
+      }
+    ],
+    docsUrl: 'https://blueforcer.github.io/awtrix3/'
   }
 ];
+
+// ============ 渠道分类（v2.29）：前端向导按类分组展示 ============
+
+export type ChannelCategory = 'im' | 'push' | 'email' | 'sms' | 'smart' | 'automation' | 'other';
+
+export const CHANNEL_CATEGORY_LABELS: Record<ChannelCategory, string> = {
+  im: '即时通讯',
+  push: '推送通知',
+  email: '邮件',
+  sms: '短信 / 电话',
+  smart: '智能家居 / 自托管',
+  automation: '自动化平台',
+  other: '其他',
+};
+
+/** 渠道 id → 分类。新增渠道时必须登记，未登记的落入 other。 */
+const CHANNEL_CATEGORY_MAP: Record<string, ChannelCategory> = {
+  // 即时通讯
+  discord: 'im', slack: 'im', feishu: 'im', wecom: 'im', dingtalk: 'im', googlechat: 'im',
+  irc: 'im', synologychat: 'im', twitch: 'im', rocketchat: 'im', webex: 'im', matrix: 'im',
+  mattermost: 'im', msteams: 'im', nextcloud_talk: 'im', line: 'im', telegram: 'im',
+  guilded: 'im', revolt: 'im', kook: 'im', fanbook: 'im', zulip: 'im', qmsg: 'im',
+  // 推送通知
+  wxpusher: 'push', serverchan: 'push', serverchan3: 'push', pushplus: 'push', bark: 'push',
+  gotify: 'push', meow: 'push', pushme: 'push', pushdeer: 'push', ntfy: 'push',
+  pushover: 'push', pushbullet: 'push', join: 'push', pushsafer: 'push', chanify: 'push',
+  pushback: 'push', simplepush: 'push', xizhi: 'push', anpush: 'push', alertzy: 'push',
+  fcm: 'push', wecomapp: 'push', onesignal: 'push',
+  // 邮件
+  resend: 'email', smtp: 'email', sendgrid: 'email', mailgun: 'email',
+  // 短信 / 电话
+  twilio: 'sms', twilio_whatsapp: 'sms', whatsapp_cloud: 'sms', vonage_sms: 'sms', messagebird: 'sms',
+  // 智能家居 / 自托管
+  homeassistant: 'smart', apprise: 'smart', awtrix: 'smart', generic_webhook: 'smart',
+  // 自动化平台
+  ifttt: 'automation', notifiarr: 'automation',
+};
+
+export function getChannelCategory(id: string): ChannelCategory {
+  return CHANNEL_CATEGORY_MAP[id] ?? 'other';
+}
 
 // ============ All Channel Templates ============
 
@@ -1451,9 +1776,11 @@ const tokenChannels: ChannelTemplate[] = [
  */
 function applyChannelMetadata(template: ChannelTemplate): ChannelTemplate {
   const meta = CHANNEL_METADATA[template.id];
-  if (!meta) return template;
+  const category = getChannelCategory(template.id);
+  if (!meta) return { ...template, category };
   return {
     ...template,
+    category,
     nameEn: meta.nameEn ?? template.nameEn,
     descriptionEn: meta.descriptionEn ?? template.descriptionEn,
     officialUrl: meta.officialUrl ?? template.officialUrl,

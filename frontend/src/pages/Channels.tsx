@@ -18,6 +18,7 @@ import { api } from '@/lib/api';
 import { ChannelRepairWizard } from '@/components/channels/ChannelRepairWizard';
 import { fetchChannelTemplates, type CloudChannelTemplate } from '@/lib/channel-templates';
 import { ChannelIcon } from '@/components/channels/ChannelIcon';
+import { ChannelQr } from '@/components/channels/ChannelQr';
 import type { NotificationAccount } from '@timemark/shared';
 
 // Channel configuration method types (cloud deploy: webhook + token only)
@@ -78,6 +79,7 @@ export default function Channels() {
   /** 请求进行中又来了一次刷新：排一次尾随刷新，而不是丢掉它 */
   const trailingRef = useRef(false);
   const [activeTab, setActiveTab] = useState<ConfigMethod>('webhook');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   
   // Modal navigation state - track the flow: list -> template -> config -> qr
   const [modalBackStack, setModalBackStack] = useState<string[]>([]);
@@ -636,6 +638,21 @@ export default function Channels() {
 
   const filteredTemplates = templates.filter(t => t.configMethod === activeTab);
 
+  // 分类过滤 + 分组（v2.29）：61 个渠道平铺已经翻不动了，按类分组 + 类别筛选
+  const categoryOrder = ['im', 'push', 'email', 'sms', 'smart', 'automation', 'other'] as const;
+  const CATEGORY_LABELS: Record<string, string> = {
+    im: '即时通讯', push: '推送通知', email: '邮件', sms: '短信 / 电话',
+    smart: '智能家居 / 自托管', automation: '自动化平台', other: '其他',
+  };
+  const groupedTemplates = categoryOrder
+    .map((cat) => ({
+      category: cat,
+      label: CATEGORY_LABELS[cat],
+      items: filteredTemplates.filter((t) => (t.category ?? 'other') === cat),
+    }))
+    .filter((group) => group.items.length > 0)
+    .filter((group) => categoryFilter === 'all' || group.category === categoryFilter);
+
   const connectedAccounts = accounts.filter(a => getAccountStatus(a) === 'connected');
   const failedAccounts = accounts.filter(a => getAccountStatus(a) === 'failed');
   const untestedAccounts = accounts.filter(a => getAccountStatus(a) === 'untested');
@@ -1125,51 +1142,89 @@ export default function Channels() {
                 </TabsTrigger>
               </TabsList>
 
+              {/* 分类筛选 chips：61 个渠道翻不动，先按类收敛 */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button
+                  onClick={() => setCategoryFilter('all')}
+                  className={`text-xs px-3 py-1.5 rounded-full transition-colors min-h-11 flex items-center ${categoryFilter === 'all'
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                >
+                  全部（{filteredTemplates.length}）
+                </button>
+                {Object.entries(CATEGORY_LABELS).map(([cat, label]) => {
+                  const count = filteredTemplates.filter((t) => (t.category ?? 'other') === cat).length;
+                  if (count === 0) return null;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setCategoryFilter(categoryFilter === cat ? 'all' : cat)}
+                      className={`text-xs px-3 py-1.5 rounded-full transition-colors min-h-11 flex items-center ${categoryFilter === cat
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                    >
+                      {label}（{count}）
+                    </button>
+                  );
+                })}
+              </div>
+
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={activeTab}
+                  key={activeTab + categoryFilter}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto overscroll-contain pr-2"
+                  className="space-y-5 max-h-[50vh] overflow-y-auto overscroll-contain pr-2"
                 >
-                  {filteredTemplates.map((template) => {
-                    return (
-                      <button
-                        key={template.id}
-                        onClick={() => selectTemplate(template)}
-                        className="text-left p-4 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-all group min-h-11"
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center group-hover:bg-primary-100 dark:group-hover:bg-primary-900/50 group-hover:text-primary-600 transition-colors">
-<ChannelIcon name={template?.icon} size={24} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold text-slate-900 dark:text-white">
-                                {template.name}
-                              </h3>
-                            </div>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-                              {template.description}
-                            </p>
-                            <div className="flex items-center gap-2 mt-3">
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${getMethodColor(template.configMethod)}`}>
-                                {getMethodLabel(template.configMethod)}
-                              </span>
-                              {template.docsUrl && (
-                                <span className="text-xs text-primary-500 flex items-center gap-1">
-                                  <BookOpen size={10} />
-                                  文档
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-primary-500 transition-colors" />
-                        </div>
-                      </button>
-                    );
-                  })}
+                  {groupedTemplates.map((group) => (
+                    <div key={group.category}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{group.label}</span>
+                        <span className="text-xs text-slate-400 dark:text-slate-500">{group.items.length}</span>
+                        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {group.items.map((template) => {
+                          return (
+                            <button
+                              key={template.id}
+                              onClick={() => selectTemplate(template)}
+                              className="text-left p-4 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-all group min-h-11"
+                            >
+                              <div className="flex items-start gap-4">
+                                <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center group-hover:bg-primary-100 dark:group-hover:bg-primary-900/50 group-hover:text-primary-600 transition-colors">
+                                  <ChannelIcon name={template?.icon} size={24} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="font-semibold text-slate-900 dark:text-white">
+                                      {template.name}
+                                    </h3>
+                                  </div>
+                                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                                    {template.description}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-3">
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${getMethodColor(template.configMethod)}`}>
+                                      {getMethodLabel(template.configMethod)}
+                                    </span>
+                                    {template.docsUrl && (
+                                      <span className="text-xs text-primary-500 flex items-center gap-1">
+                                        <BookOpen size={10} />
+                                        文档
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-primary-500 transition-colors" />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </motion.div>
               </AnimatePresence>
             </Tabs>
@@ -1432,6 +1487,14 @@ export default function Channels() {
                 前往 {selectedTemplate?.name} 官方页面获取 Token / Webhook
                 <ExternalLink size={12} />
               </a>
+            )}
+
+            {/* v2.29：官方页二维码 —— 凭据要在手机上取的渠道（扫码关注/注册），扫一下就行 */}
+            {(selectedTemplate?.officialUrl ?? selectedTemplate?.docsUrl) && (
+              <ChannelQr
+                url={selectedTemplate?.officialUrl ?? selectedTemplate?.docsUrl!}
+                name={selectedTemplate?.name}
+              />
             )}
 
             {selectedTemplate?.id === 'smtp' && (

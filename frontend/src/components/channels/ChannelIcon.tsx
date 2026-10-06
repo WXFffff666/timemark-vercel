@@ -1,7 +1,8 @@
 import {
-  MessageCircle, MessageSquare, Mail, Webhook, Gamepad2, Hash, Building2,
+  MessageCircle, MessageSquare, MessagesSquare, Mail, Webhook, Gamepad2, Hash, Building2,
   Terminal, Server, Video, Smartphone, Send, Grid3X3, Cloud, Zap, Phone,
-  Shield, BookOpen, Plus, Settings, Loader2, Bell,
+  Shield, BookOpen, Plus, Settings, Loader2, Bell, BellRing, Radio,
+  MonitorSmartphone, Bot, Home, Flame, Cat, Speaker, Watch, Boxes, Rss,
 } from 'lucide-react';
 import type { ElementType } from 'react';
 
@@ -10,9 +11,10 @@ import type { ElementType } from 'react';
  * 变成组件。缺名字就退回传入的 fallback——渠道是可选的，缺个图标不该让整个选择器崩掉。
  */
 const ICON_MAP: Record<string, ElementType> = {
-  MessageCircle, MessageSquare, Mail, Webhook, Gamepad2, Hash, Building2,
+  MessageCircle, MessageSquare, MessagesSquare, Mail, Webhook, Gamepad2, Hash, Building2,
   Terminal, Server, Video, Smartphone, Send, Grid3X3, Cloud, Zap, Phone,
-  Shield, BookOpen, Plus, Settings, Loader2, Bell,
+  Shield, BookOpen, Plus, Settings, Loader2, Bell, BellRing, Radio,
+  MonitorSmartphone, Bot, Home, Flame, Cat, Speaker, Watch, Boxes, Rss,
 };
 
 export function ChannelIcon({

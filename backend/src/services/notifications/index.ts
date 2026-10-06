@@ -286,6 +286,17 @@ export const channelToAccountType: Record<string, string> = {
   'pushsafer': 'pushsafer',
   'webex': 'webex',
   'notifiarr': 'notifiarr',
+  // v2.29 batch (wave4)
+  'guilded': 'guilded',
+  'ifttt': 'ifttt',
+  'revolt': 'revolt',
+  'onesignal': 'onesignal',
+  'sendgrid': 'sendgrid',
+  'mailgun': 'mailgun',
+  'vonage_sms': 'vonage_sms',
+  'messagebird': 'messagebird',
+  'alertzy': 'alertzy',
+  'awtrix': 'awtrix',
 };
 
 /**
@@ -348,6 +359,17 @@ export const DISPATCHABLE_CHANNELS = new Set<string>([
   'pushsafer',
   'webex',
   'notifiarr',
+  // v2.29 batch (wave4)
+  'guilded',
+  'ifttt',
+  'revolt',
+  'onesignal',
+  'sendgrid',
+  'mailgun',
+  'vonage_sms',
+  'messagebird',
+  'alertzy',
+  'awtrix',
   // Browser Web Push (checkbox 84) — VAPID, per-user subscriptions
   'web_push',
   // Legacy aliases（旧事件里可能仍存有这些渠道 ID）
@@ -416,6 +438,17 @@ export const FALLBACK_DISPATCHABLE_CHANNELS = new Set<string>([
   'pushsafer',
   'webex',
   'notifiarr',
+  // v2.29 batch (wave4)
+  'guilded',
+  'ifttt',
+  'revolt',
+  'onesignal',
+  'sendgrid',
+  'mailgun',
+  'vonage_sms',
+  'messagebird',
+  'alertzy',
+  'awtrix',
   // Browser Web Push (checkbox 84) — VAPID, per-user subscriptions
   'web_push',
   // Legacy aliases（旧事件里可能仍存有这些渠道 ID）
@@ -638,6 +671,48 @@ function getChannelConfigFromAccount(
     case 'webex':
     case 'notifiarr':
       return account.webhook ? { webhook: account.webhook } : null;
+
+    // v2.29 batch (wave4)
+    case 'guilded':
+    case 'awtrix':
+      return account.webhook ? { webhook: account.webhook } : null;
+    case 'ifttt':
+      // token = Webhooks Key, webhook = 触发事件名
+      return (account.token && account.webhook)
+        ? { token: account.token, webhook: account.webhook }
+        : null;
+    case 'revolt':
+      // token = Bot Token, chat_id = 频道 ID
+      return (account.token && account.chat_id)
+        ? { token: account.token, chat_id: account.chat_id }
+        : null;
+    case 'onesignal':
+      // token = REST API Key, secret = App ID, chat_id = Subscription ID（可选）
+      return (account.token && account.secret)
+        ? { token: account.token, secret: account.secret, chat_id: account.chat_id }
+        : null;
+    case 'sendgrid':
+      // token = API Key, secret = 发件人邮箱, chat_id = 收件人邮箱
+      return (account.token && account.secret && account.chat_id)
+        ? { token: account.token, secret: account.secret, chat_id: account.chat_id }
+        : null;
+    case 'mailgun':
+      // token = API Key, webhook = 发信域名, chat_id = 收件人邮箱
+      return (account.token && account.webhook && account.chat_id)
+        ? { token: account.token, webhook: account.webhook, chat_id: account.chat_id }
+        : null;
+    case 'vonage_sms':
+      // token = API Key, secret = API Secret, chat_id = 收件人手机号
+      return (account.token && account.secret && account.chat_id)
+        ? { token: account.token, secret: account.secret, chat_id: account.chat_id }
+        : null;
+    case 'messagebird':
+      // token = Access Key, chat_id = 收件人手机号
+      return (account.token && account.chat_id)
+        ? { token: account.token, chat_id: account.chat_id }
+        : null;
+    case 'alertzy':
+      return account.token ? { token: account.token } : null;
 
     default:
       return null;
@@ -1194,6 +1269,27 @@ export async function sendNotifications(
           await retryWithBackoff(() => sendWebexNotification(mappedEvent, chConfig.webhook));
         else if (ch === 'notifiarr' && chConfig.webhook)
           await retryWithBackoff(() => sendNotifiarrNotification(mappedEvent, chConfig.webhook));
+        // v2.29 batch (wave4)
+        else if (ch === 'guilded' && chConfig.webhook)
+          await retryWithBackoff(() => sendGuildedNotification(mappedEvent, chConfig.webhook));
+        else if (ch === 'ifttt' && chConfig.token && chConfig.webhook)
+          await retryWithBackoff(() => sendIftttNotification(mappedEvent, chConfig.token, chConfig.webhook));
+        else if (ch === 'revolt' && chConfig.token && chConfig.chat_id)
+          await retryWithBackoff(() => sendRevoltNotification(mappedEvent, chConfig.token, chConfig.chat_id));
+        else if (ch === 'onesignal' && chConfig.token && chConfig.secret)
+          await retryWithBackoff(() => sendOneSignalNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id));
+        else if (ch === 'sendgrid' && chConfig.token && chConfig.secret && chConfig.chat_id)
+          await retryWithBackoff(() => sendSendgridNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id));
+        else if (ch === 'mailgun' && chConfig.token && chConfig.webhook && chConfig.chat_id)
+          await retryWithBackoff(() => sendMailgunNotification(mappedEvent, chConfig.token, chConfig.webhook, chConfig.chat_id));
+        else if (ch === 'vonage_sms' && chConfig.token && chConfig.secret && chConfig.chat_id)
+          await retryWithBackoff(() => sendVonageSmsNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id));
+        else if (ch === 'messagebird' && chConfig.token && chConfig.chat_id)
+          await retryWithBackoff(() => sendMessagebirdNotification(mappedEvent, chConfig.token, chConfig.chat_id));
+        else if (ch === 'alertzy' && chConfig.token)
+          await retryWithBackoff(() => sendAlertzyNotification(mappedEvent, chConfig.token));
+        else if (ch === 'awtrix' && chConfig.webhook)
+          await retryWithBackoff(() => sendAwtrixNotification(mappedEvent, chConfig.webhook));
         // Browser Web Push (checkbox 84): VAPID, per-user subscriptions.
         else if (ch === 'web_push' && chConfig.subscriptions) {
           const delivery = await deliverWebPush(chConfig.subscriptions, buildWebPushPayload(mappedEvent), userId);
@@ -1469,6 +1565,27 @@ async function sendSingleChannel(ch: string, chConfig: any, mappedEvent: any, ev
     await sendWebexNotification(mappedEvent, chConfig.webhook);
   else if (ch === 'notifiarr' && chConfig.webhook)
     await sendNotifiarrNotification(mappedEvent, chConfig.webhook);
+  // v2.29 batch (wave4)
+  else if (ch === 'guilded' && chConfig.webhook)
+    await sendGuildedNotification(mappedEvent, chConfig.webhook);
+  else if (ch === 'ifttt' && chConfig.token && chConfig.webhook)
+    await sendIftttNotification(mappedEvent, chConfig.token, chConfig.webhook);
+  else if (ch === 'revolt' && chConfig.token && chConfig.chat_id)
+    await sendRevoltNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'onesignal' && chConfig.token && chConfig.secret)
+    await sendOneSignalNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id);
+  else if (ch === 'sendgrid' && chConfig.token && chConfig.secret && chConfig.chat_id)
+    await sendSendgridNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id);
+  else if (ch === 'mailgun' && chConfig.token && chConfig.webhook && chConfig.chat_id)
+    await sendMailgunNotification(mappedEvent, chConfig.token, chConfig.webhook, chConfig.chat_id);
+  else if (ch === 'vonage_sms' && chConfig.token && chConfig.secret && chConfig.chat_id)
+    await sendVonageSmsNotification(mappedEvent, chConfig.token, chConfig.secret, chConfig.chat_id);
+  else if (ch === 'messagebird' && chConfig.token && chConfig.chat_id)
+    await sendMessagebirdNotification(mappedEvent, chConfig.token, chConfig.chat_id);
+  else if (ch === 'alertzy' && chConfig.token)
+    await sendAlertzyNotification(mappedEvent, chConfig.token);
+  else if (ch === 'awtrix' && chConfig.webhook)
+    await sendAwtrixNotification(mappedEvent, chConfig.webhook);
   else if (ch === 'generic_webhook' && chConfig.webhook)
     await sendGenericWebhookNotification(mappedEvent, chConfig.webhook, ch);
   else if (ch === 'synologychat' && chConfig.webhook)
@@ -1542,4 +1659,14 @@ import {
   sendPushSaferNotification,
   sendWebexNotification,
   sendNotifiarrNotification,
+  sendGuildedNotification,
+  sendIftttNotification,
+  sendRevoltNotification,
+  sendOneSignalNotification,
+  sendSendgridNotification,
+  sendMailgunNotification,
+  sendVonageSmsNotification,
+  sendMessagebirdNotification,
+  sendAlertzyNotification,
+  sendAwtrixNotification,
 } from './extended-channels.service.js';

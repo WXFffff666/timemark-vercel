@@ -33,6 +33,20 @@ const NEW_CHANNEL_IDS = [
   'twilio_whatsapp',
 ];
 
+// v2.29 batch (wave4)：确保新批次渠道全部出现在模板接口里
+const WAVE4_CHANNEL_IDS = [
+  'guilded',
+  'ifttt',
+  'revolt',
+  'onesignal',
+  'sendgrid',
+  'mailgun',
+  'vonage_sms',
+  'messagebird',
+  'alertzy',
+  'awtrix',
+];
+
 const { default: channelsRoutes } = await import('../../../routes/channels.js');
 
 describe('GET /api/channels/templates (checkbox 22)', () => {
@@ -43,9 +57,9 @@ describe('GET /api/channels/templates (checkbox 22)', () => {
     const body = (await response.json()) as { success: boolean; data: Array<{ id: string }> };
     expect(body.success).toBe(true);
     const ids = body.data.map((template) => template.id);
-    for (const id of NEW_CHANNEL_IDS) {
+    for (const id of [...NEW_CHANNEL_IDS, ...WAVE4_CHANNEL_IDS]) {
       expect(ids, `templates endpoint is missing ${id}`).toContain(id);
     }
-    expect(ids).toHaveLength(51);
+    expect(ids).toHaveLength(61);
   });
 });

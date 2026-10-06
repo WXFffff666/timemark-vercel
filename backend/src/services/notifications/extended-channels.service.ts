@@ -257,3 +257,256 @@ export async function sendNotifiarrNotification(event: any, webhook: string): Pr
   );
 }
 
+// ============ v2.29 batch（wave4）：Guilded / IFTTT / Revolt / OneSignal / SendGrid /
+// Mailgun / Vonage SMS / MessageBird / Alertzy / Awtrix。同一约定：send* 抛错 = 失败；
+// test* 永不抛错。全部纯 axios 单次请求，零新依赖。 ============
+
+// ---- Guilded：account.webhook = Incoming Webhook 完整 URL（Discord 同构）----
+
+export async function sendGuildedNotification(event: any, webhook: string): Promise<void> {
+  await axios.post(
+    webhook,
+    { content: buildMessage(event) },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+
+// ---- IFTTT Webhooks：account.token = Webhooks Key，account.webhook = 触发事件名 ----
+
+export async function sendIftttNotification(event: any, key: string, eventName: string): Promise<void> {
+  await axios.post(
+    `https://maker.ifttt.com/trigger/${encodeURIComponent(eventName)}/with/key/${encodeURIComponent(key)}`,
+    { value1: event.name ?? 'TimeMark 提醒', value2: event.date ?? '', value3: buildMessage(event) },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+
+export async function testIftttChannel(key: string, eventName: string): Promise<TestConnectionResult> {
+  if (!key || !eventName) return { success: false, message: 'Webhooks Key 和触发事件名都不能为空' };
+  try {
+    await axios.post(
+      `https://maker.ifttt.com/trigger/${encodeURIComponent(eventName)}/with/key/${encodeURIComponent(key)}`,
+      { value1: 'TimeMark 渠道测试', value2: '', value3: '如果你看到这条消息，说明 IFTTT 渠道已通。' },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
+    );
+    return { success: true, message: '测试请求已发送（请在 IFTTT Applet 确认触发）' };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    return { success: false, message: status ? `IFTTT 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+  }
+}
+
+// ---- Revolt：account.token = Bot Token，account.chat_id = 频道 ID ----
+
+export async function sendRevoltNotification(event: any, botToken: string, channelId: string): Promise<void> {
+  await axios.post(
+    `https://api.revolt.chat/channels/${encodeURIComponent(channelId)}/messages`,
+    { content: buildMessage(event) },
+    { headers: { 'x-bot-token': botToken, 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+
+export async function testRevoltChannel(botToken: string, channelId: string): Promise<TestConnectionResult> {
+  if (!botToken || !channelId) return { success: false, message: 'Bot Token 和频道 ID 都不能为空' };
+  try {
+    await axios.post(
+      `https://api.revolt.chat/channels/${encodeURIComponent(channelId)}/messages`,
+      { content: 'TimeMark 渠道测试：如果你看到这条消息，说明 Revolt 渠道已通。' },
+      { headers: { 'x-bot-token': botToken, 'Content-Type': 'application/json' }, timeout: 10000 },
+    );
+    return { success: true, message: '测试消息已发送（请在 Revolt 频道确认）' };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    return { success: false, message: status ? `Revolt 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+  }
+}
+
+// ---- OneSignal：account.token = REST API Key，account.secret = App ID，
+//      account.chat_id = Subscription ID（可选，留空发给 Subscribed Users 分段）----
+
+export async function sendOneSignalNotification(event: any, apiKey: string, appId: string, subscriptionId: string): Promise<void> {
+  const body: Record<string, unknown> = {
+    app_id: appId,
+    headings: { en: event.name ?? 'TimeMark 提醒' },
+    contents: { en: buildMessage(event) },
+  };
+  if (subscriptionId) body.include_subscription_ids = [subscriptionId];
+  else body.included_segments = ['Subscribed Users'];
+  await axios.post('https://api.onesignal.com/notifications', body, {
+    headers: { Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}`, 'Content-Type': 'application/json' },
+    timeout: 10000,
+  });
+}
+
+export async function testOneSignalChannel(apiKey: string, appId: string): Promise<TestConnectionResult> {
+  if (!apiKey || !appId) return { success: false, message: 'REST API Key 和 App ID 都不能为空' };
+  try {
+    await axios.get(`https://api.onesignal.com/apps/${appId}`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}` },
+      timeout: 10000,
+    });
+    return { success: true, message: 'OneSignal 凭据有效（App 可访问）' };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    const message = error?.response?.data?.errors?.join?.('; ') || error?.message || '连接失败';
+    return { success: false, message: status ? `OneSignal 错误（HTTP ${status}）：${message}` : `连接失败：${message}` };
+  }
+}
+
+// ---- SendGrid：account.token = API Key，account.secret = 发件人邮箱，account.chat_id = 收件人邮箱 ----
+
+export async function sendSendgridNotification(event: any, apiKey: string, from: string, to: string): Promise<void> {
+  await axios.post(
+    'https://api.sendgrid.com/v3/mail/send',
+    {
+      personalizations: [{ to: [{ email: to }] }],
+      from: { email: from },
+      subject: event.name ?? 'TimeMark 提醒',
+      content: [{ type: 'text/plain', value: buildMessage(event) }],
+    },
+    { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+
+export async function testSendgridChannel(apiKey: string, from: string, to: string): Promise<TestConnectionResult> {
+  if (!apiKey || !from || !to) return { success: false, message: 'API Key、发件人邮箱和收件人邮箱都不能为空' };
+  try {
+    await axios.post(
+      'https://api.sendgrid.com/v3/mail/send',
+      {
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: from },
+        subject: 'TimeMark 渠道测试',
+        content: [{ type: 'text/plain', value: '如果你看到这封邮件，说明 SendGrid 渠道已通。' }],
+        mail_settings: { sandbox_mode: { enable: true } },
+      },
+      { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 10000 },
+    );
+    return { success: true, message: 'SendGrid 凭据有效（沙箱模式验证通过，未真实发信）' };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    const message = error?.response?.data?.errors?.[0]?.message || error?.message || '连接失败';
+    return { success: false, message: status ? `SendGrid 错误（HTTP ${status}）：${message}` : `连接失败：${message}` };
+  }
+}
+
+// ---- Mailgun：account.token = API Key，account.webhook = 发信域名，account.chat_id = 收件人邮箱 ----
+
+export async function sendMailgunNotification(event: any, apiKey: string, domain: string, to: string): Promise<void> {
+  const params = new URLSearchParams({
+    from: `TimeMark <postmaster@${domain}>`,
+    to,
+    subject: event.name ?? 'TimeMark 提醒',
+    text: buildMessage(event),
+  });
+  await axios.post(`https://api.mailgun.net/v3/${encodeURIComponent(domain)}/messages`, params, {
+    auth: { username: 'api', password: apiKey },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 10000,
+  });
+}
+
+export async function testMailgunChannel(apiKey: string, domain: string, to: string): Promise<TestConnectionResult> {
+  if (!apiKey || !domain || !to) return { success: false, message: 'API Key、发信域名和收件人邮箱都不能为空' };
+  try {
+    const params = new URLSearchParams({ from: `TimeMark <postmaster@${domain}>`, to, subject: 'TimeMark 渠道测试', text: '如果你看到这封邮件，说明 Mailgun 渠道已通。' });
+    await axios.post(`https://api.mailgun.net/v3/${encodeURIComponent(domain)}/messages`, params, {
+      auth: { username: 'api', password: apiKey },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 10000,
+    });
+    return { success: true, message: '测试邮件已发送（请查收邮箱确认）' };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    return { success: false, message: status ? `Mailgun 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+  }
+}
+
+// ---- Vonage SMS：account.token = API Key，account.secret = API Secret，account.chat_id = 收件人手机号 ----
+
+export async function sendVonageSmsNotification(event: any, apiKey: string, apiSecret: string, to: string): Promise<void> {
+  const params = new URLSearchParams({ api_key: apiKey, api_secret: apiSecret, to: String(to).replace(/[^\d+]/g, ''), from: 'TimeMark', text: buildMessage(event) });
+  await axios.post('https://rest.nexmo.com/sms/json', params, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 10000,
+  });
+}
+
+export async function testVonageSmsChannel(apiKey: string, apiSecret: string, to: string): Promise<TestConnectionResult> {
+  if (!apiKey || !apiSecret || !to) return { success: false, message: 'API Key、API Secret 和收件人手机号都不能为空' };
+  try {
+    const params = new URLSearchParams({ api_key: apiKey, api_secret: apiSecret });
+    await axios.post('https://rest.nexmo.com/account/get-balance', params, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 10000,
+    });
+    return { success: true, message: 'Vonage 凭据有效（账户余额可查询，未消耗短信条数）' };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    return { success: false, message: status ? `Vonage 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+  }
+}
+
+// ---- MessageBird SMS：account.token = Access Key，account.chat_id = 收件人手机号 ----
+
+export async function sendMessagebirdNotification(event: any, accessKey: string, to: string): Promise<void> {
+  await axios.post(
+    'https://rest.messagebird.com/messages',
+    { recipients: [String(to).replace(/[^\d+]/g, '')], originator: 'TimeMark', body: buildMessage(event) },
+    { headers: { Authorization: `AccessKey ${accessKey}`, 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+
+export async function testMessagebirdChannel(accessKey: string, to: string): Promise<TestConnectionResult> {
+  if (!accessKey || !to) return { success: false, message: 'Access Key 和收件人手机号都不能为空' };
+  try {
+    await axios.get('https://rest.messagebird.com/balance', {
+      headers: { Authorization: `AccessKey ${accessKey}` },
+      timeout: 10000,
+    });
+    return { success: true, message: 'MessageBird 凭据有效（账户余额可查询，未消耗短信条数）' };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    return { success: false, message: status ? `MessageBird 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+  }
+}
+
+// ---- Alertzy：account.token = Account Key ----
+
+export async function sendAlertzyNotification(event: any, accountKey: string): Promise<void> {
+  await axios.post(
+    'https://alertzy.app/send',
+    { accountKey, title: event.name ?? 'TimeMark 提醒', body: buildMessage(event) },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+
+export async function testAlertzyChannel(accountKey: string): Promise<TestConnectionResult> {
+  if (!accountKey) return { success: false, message: 'Account Key 不能为空' };
+  try {
+    const res = await axios.post(
+      'https://alertzy.app/send',
+      { accountKey, title: 'TimeMark 渠道测试', body: '如果你看到这条消息，说明 Alertzy 渠道已通。' },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
+    );
+    // Alertzy 成功返回 response: 'success'（HTTP 200 也可能带错误信息）
+    if (res?.data?.response === 'success') {
+      return { success: true, message: '测试消息已发送（请在 Alertzy 客户端确认）' };
+    }
+    return { success: false, message: `Alertzy 返回错误：${res?.data?.error ?? JSON.stringify(res?.data ?? {})}` };
+  } catch (error: any) {
+    const status = error?.response?.status;
+    return { success: false, message: status ? `Alertzy 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+  }
+}
+
+// ---- Awtrix 3 像素时钟：account.webhook = 设备地址（如 http://192.168.1.50）----
+
+export async function sendAwtrixNotification(event: any, baseUrl: string): Promise<void> {
+  await axios.post(
+    `${baseUrl.replace(/\/$/, '')}/api/notify`,
+    { title: event.name ?? 'TimeMark 提醒', text: buildMessage(event) },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
+  );
+}
+

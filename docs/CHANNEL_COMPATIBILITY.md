@@ -1,7 +1,7 @@
 # Channel Compatibility Matrix
 
 > Audit of notification channel services across **Vercel** (cloud, HTTP-only) and the separate **Docker** edition.
-> 云端渠道的权威清单由 `scripts/gen-channel-matrix.mjs` 生成 → [CHANNEL_MATRIX.md](./CHANNEL_MATRIX.md)（51 个渠道，含字段 → 数据库列映射与连接测试路径）。
+> 云端渠道的权威清单由 `scripts/gen-channel-matrix.mjs` 生成 → [CHANNEL_MATRIX.md](./CHANNEL_MATRIX.md)（61 个渠道，含字段 → 数据库列映射与连接测试路径）。
 
 ## Vercel Cloud Deploy (HTTP channels only)
 
@@ -19,7 +19,7 @@ On Vercel serverless, only **Webhook / Token** channels are available. The follo
 | `nostr` | ✅ | ❌ | Relay long connection |
 | Web Push (browser) | partial | ❌ | Not in Vercel Settings UI |
 
-**51 channels** remain available on cloud (Feishu, DingTalk, Telegram, email, Bark, ServerChan, …). The authoritative list — IDs, `configMethod`, required fields → `notification_accounts` column mapping, connection-test path and official URL — is generated into [CHANNEL_MATRIX.md](./CHANNEL_MATRIX.md). Do not hand-maintain channel lists in this document.
+**61 channels** remain available on cloud (Feishu, DingTalk, Telegram, email, Bark, ServerChan, …). The authoritative list — IDs, `configMethod`, required fields → `notification_accounts` column mapping, connection-test path and official URL — is generated into [CHANNEL_MATRIX.md](./CHANNEL_MATRIX.md). Do not hand-maintain channel lists in this document.
 
 ---
 

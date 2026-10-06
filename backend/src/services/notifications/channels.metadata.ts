@@ -351,4 +351,159 @@ export const CHANNEL_METADATA: Record<string, ChannelMetadata> = {
       },
     },
   },
+  // ============ v2.29 batch (wave4) ============
+  guilded: {
+    nameEn: 'Guilded',
+    descriptionEn: 'Guilded server channel messages via incoming webhook',
+    officialUrl: 'https://www.guilded.gg/',
+    fields: {
+      webhook: {
+        labelEn: 'Webhook URL',
+        helpText: '服务器 → 频道设置 → 集成 → Webhook 创建后复制完整 URL',
+      },
+    },
+  },
+  ifttt: {
+    nameEn: 'IFTTT',
+    descriptionEn: 'Trigger IFTTT Applets via Maker Webhooks',
+    officialUrl: 'https://ifttt.com/maker_webhooks',
+    fields: {
+      token: {
+        labelEn: 'Webhooks Key',
+        helpText: '打开官方页面 → Documentation 标签即可看到你的 Key（可用手机扫码直达）',
+      },
+      webhook: {
+        labelEn: 'Event Name',
+        helpText: 'Applet 中 Webhooks 触发器的事件名，需与这里完全一致',
+      },
+    },
+  },
+  revolt: {
+    nameEn: 'Revolt',
+    descriptionEn: 'Revolt open-source chat channel messages via bot token',
+    officialUrl: 'https://revolt.chat/',
+    fields: {
+      token: {
+        labelEn: 'Bot Token',
+        helpText: 'developers.revolt.chat 创建 Bot 后的 Token；把 Bot 拉进目标频道',
+      },
+      chat_id: {
+        labelEn: 'Channel ID',
+        helpText: '目标频道 ID（客户端频道设置里可复制）',
+      },
+    },
+  },
+  onesignal: {
+    nameEn: 'OneSignal',
+    descriptionEn: 'Cross-platform push via OneSignal REST API',
+    officialUrl: 'https://onesignal.com/',
+    fields: {
+      token: {
+        labelEn: 'REST API Key',
+        helpText: 'OneSignal 后台 Settings → Keys & IDs',
+      },
+      secret: {
+        labelEn: 'App ID',
+        helpText: 'OneSignal App 的唯一 ID，同一页面可查',
+      },
+      chat_id: {
+        labelEn: 'Subscription ID',
+        helpText: '可选；留空发给全部 Subscribed Users',
+      },
+    },
+  },
+  sendgrid: {
+    nameEn: 'SendGrid',
+    descriptionEn: 'Transactional email via SendGrid API',
+    officialUrl: 'https://sendgrid.com/',
+    fields: {
+      token: {
+        labelEn: 'API Key',
+        helpText: '需要 Mail Send 权限的 API Key',
+      },
+      secret: {
+        labelEn: 'From Email',
+        helpText: '已在 SendGrid 完成验证的发件人地址',
+      },
+      chat_id: {
+        labelEn: 'To Email',
+        helpText: '接收提醒的邮箱',
+      },
+    },
+  },
+  mailgun: {
+    nameEn: 'Mailgun',
+    descriptionEn: 'Transactional email via Mailgun API',
+    officialUrl: 'https://www.mailgun.com/',
+    fields: {
+      token: {
+        labelEn: 'Private API Key',
+        helpText: 'Mailgun 后台 Settings → API Security',
+      },
+      webhook: {
+        labelEn: 'Sending Domain',
+        helpText: '已验证的发信域名，沙箱域名也可用',
+      },
+      chat_id: {
+        labelEn: 'To Email',
+        helpText: '接收提醒的邮箱',
+      },
+    },
+  },
+  vonage_sms: {
+    nameEn: 'Vonage SMS',
+    descriptionEn: 'International SMS via Vonage (Nexmo)',
+    officialUrl: 'https://www.vonage.com/communications-apis/sms/',
+    fields: {
+      token: {
+        labelEn: 'API Key',
+        helpText: 'Vonage 控制台首页',
+      },
+      secret: {
+        labelEn: 'API Secret',
+        helpText: 'Vonage 控制台首页',
+      },
+      chat_id: {
+        labelEn: 'To Phone Number',
+        helpText: 'E.164 格式，含国家码不带 + 号',
+      },
+    },
+  },
+  messagebird: {
+    nameEn: 'MessageBird',
+    descriptionEn: 'International SMS via MessageBird',
+    officialUrl: 'https://www.messagebird.com/',
+    fields: {
+      token: {
+        labelEn: 'Access Key',
+        helpText: 'Developers → API Access 的 Live Key',
+      },
+      chat_id: {
+        labelEn: 'To Phone Number',
+        helpText: 'E.164 格式，含国家码不带 + 号',
+      },
+    },
+  },
+  alertzy: {
+    nameEn: 'Alertzy',
+    descriptionEn: 'Mobile push via Alertzy',
+    officialUrl: 'https://alertzy.app/',
+    fields: {
+      token: {
+        labelEn: 'Account Key',
+        helpText: '官网注册后 Dashboard 显示的 Account Key（手机扫码直达注册页）',
+      },
+    },
+  },
+  awtrix: {
+    nameEn: 'Awtrix 3',
+    descriptionEn: 'Awtrix 3 pixel clock notifications over LAN',
+    officialUrl: 'https://blueforcer.github.io/awtrix3/',
+    fields: {
+      webhook: {
+        labelEn: 'Device URL',
+        helpText: '设备局域网地址（如 http://192.168.1.50），无需路径',
+      },
+    },
+  },
 };
