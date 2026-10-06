@@ -193,6 +193,30 @@ auth.post('/login', loginRateLimit, async (c) => {
         ip,
         userAgent,
       }),
+      // v2.30：新设备登录提醒（fire-and-forget，不阻塞登录响应）。
+      // alertType 一直存在但从未接线——死代码转活；首登（无历史指纹）也提醒。
+      (async () => {
+        if (!deviceFingerprint) return;
+        const known = await query(
+          `SELECT 1 FROM login_logs
+           WHERE user_id = $1 AND success = TRUE AND device_fingerprint = $2
+           LIMIT 1`,
+          [numericUserId, deviceFingerprint],
+        );
+        if (known.rows.length > 0) return;
+        await sendSecurityAlert({
+          userId: numericUserId,
+          adminEmails: [],
+          username: user.username,
+          ip,
+          userAgent,
+          failureCount: 0,
+          locked: false,
+          alertType: 'new_device',
+        });
+      })().catch((err) => {
+        logFireAndForget('auth.new_device_alert_failed', 'New-device alert failed')(err);
+      }),
     ]).catch(
       logFireAndForget('auth.login_post_success_failed', 'Login post-success side effects failed'),
     );

@@ -5,6 +5,7 @@ import { LayoutGrid } from 'lucide-react';
 import { prefetchRoute } from '@/lib/prefetch-routes';
 import { NAV_GROUPS, NAV_PRIMARY } from '@/lib/nav-groups';
 import { getLang, t } from '@/i18n';
+import { api } from '@/lib/api';
 
 /**
  * 应用导航栏。底栏只放 5 个高频入口，其余全部收进「更多」面板并按四组分区。
@@ -25,6 +26,9 @@ export function MobileBottomNav() {
   // v2.27 F47：抽屉焦点管理 —— 打开时焦点移入第一项，关闭时还原到触发按钮
   const drawerFirstItemRef = useRef<HTMLButtonElement | null>(null);
   const moreButtonRef = useRef<HTMLButtonElement | null>(null);
+  // v2.30：收件箱未读徽标（轻量轮询，仅取 1 条只为读 pagination.unreadCount）
+  const [inboxUnread, setInboxUnread] = useState(0);
+
   useEffect(() => {
     if (moreOpen) drawerFirstItemRef.current?.focus();
     else moreButtonRef.current?.focus();
@@ -46,12 +50,40 @@ export function MobileBottomNav() {
     return () => window.removeEventListener('keydown', onKey);
   }, [moreOpen]);
 
+  // v2.30：未读徽标轮询。401（未登录）静默；页面隐藏时不查。
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () => {
+      if (document.hidden) return;
+      api
+        .getRaw<unknown>('/inbox?limit=1')
+        .then((res) => {
+          if (!cancelled) setInboxUnread(Number((res.pagination as { unreadCount?: number } | undefined)?.unreadCount ?? 0));
+        })
+        .catch(() => undefined);
+    };
+    poll();
+    const timer = window.setInterval(poll, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [location.pathname]);
+
   void getLang();
 
   const go = (path: string) => {
     setMoreOpen(false);
     navigate(path);
   };
+
+  // v2.30：/inbox 入口上的未读徽标
+  const UnreadDot = ({ path }: { path: string }) =>
+    path === '/inbox' && inboxUnread > 0 ? (
+      <span className="absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-4 text-center">
+        {inboxUnread > 99 ? '99+' : inboxUnread}
+      </span>
+    ) : null;
 
   return (
     <>
@@ -70,8 +102,9 @@ export function MobileBottomNav() {
               onTouchStart={() => prefetchRoute(path)}
               onClick={() => navigate(path)}
               aria-current={active ? 'page' : undefined}
-              className={`flex flex-col items-center gap-0.5 text-xs px-2 min-h-11 min-w-11 justify-center ${active ? 'text-blue-600' : 'text-slate-500 dark:text-slate-400'}`}
+              className={`relative flex flex-col items-center gap-0.5 text-xs px-2 min-h-11 min-w-11 justify-center ${active ? 'text-blue-600' : 'text-slate-500 dark:text-slate-400'}`}
             >
+              <UnreadDot path={path} />
               <Icon className="w-5 h-5" aria-hidden />
               {t(labelKey)}
             </button>
@@ -133,12 +166,13 @@ export function MobileBottomNav() {
                           onTouchStart={() => prefetchRoute(path)}
                           onClick={() => go(path)}
                           aria-current={active ? 'page' : undefined}
-                          className={`flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm ${
+                          className={`relative flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm ${
                             active
                               ? 'bg-blue-50 font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                               : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                           }`}
                         >
+                          <UnreadDot path={path} />
                           <Icon className="h-4 w-4 shrink-0" aria-hidden />
                           <span className="truncate">{t(labelKey)}</span>
                         </button>

@@ -674,6 +674,8 @@ export default function Channels() {
   const failedAccounts = accounts.filter(a => getAccountStatus(a) === 'failed');
   const untestedAccounts = accounts.filter(a => getAccountStatus(a) === 'untested');
   const disabledAccounts = accounts.filter(a => getAccountStatus(a) === 'disabled');
+  // v2.30：24h 失败暂停中的账户（3 连败自动暂停，健康总览里一眼看出谁在休眠）
+  const suspendedAccounts = accounts.filter(isAccountSuspended);
 
   /**
    * 邮件送达健康检查卡（v78）：邮件进垃圾箱的根因几乎都在发件域名的认证配置，
@@ -1043,6 +1045,49 @@ export default function Channels() {
           </div>
         ) : (
           <>
+            {/* v2.30：渠道健康总览条 —— 四色计数 + 暂停中账户提醒 */}
+            {accounts.length > 0 && (
+              <section className="mb-10">
+                <div className="glass-panel rounded-[2rem] px-6 py-4 ring-1 ring-black/5 dark:ring-white/10 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">健康总览</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    正常 <strong className="text-emerald-600 dark:text-emerald-400">{connectedAccounts.length}</strong>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    未测试 <strong className="text-amber-600 dark:text-amber-400">{untestedAccounts.length}</strong>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                    失败 <strong className="text-red-600 dark:text-red-400">{failedAccounts.length}</strong>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                    已停用 <strong className="text-slate-500">{disabledAccounts.length}</strong>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-orange-400" />
+                    暂停中 <strong className="text-orange-500">{suspendedAccounts.length}</strong>
+                  </span>
+                  {suspendedAccounts.length > 0 && (
+                    <span className="text-xs text-orange-600 dark:text-orange-300 basis-full flex flex-wrap items-center gap-2">
+                      <span>
+                        ⏸ {suspendedAccounts.map((a) => a.name).join('、')} 因连续失败被暂停 24h——测试成功或从提醒日志重发即可恢复。
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full h-6 px-2 text-xs"
+                        onClick={() => suspendedAccounts.forEach((a) => resumeAccount(a))}
+                      >
+                        立即恢复全部
+                      </Button>
+                    </span>
+                  )}
+                </div>
+              </section>
+            )}
             {renderChannelStatsCard()}
             {renderDeliverabilityCard()}
             {[

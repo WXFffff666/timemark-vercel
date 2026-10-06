@@ -6,6 +6,8 @@ import {
   markInboxRead,
   markAllInboxRead,
   deleteInboxMessage,
+  batchMarkInboxRead,
+  batchDeleteInboxMessages,
   getInboxReceiveTokens,
 } from '../services/inbox.service.js';
 
@@ -18,6 +20,9 @@ inbox.get('/', async (c) => {
   const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '50', 10) || 50, 1), 100);
   const offset = Math.max(parseInt(c.req.query('offset') || '0', 10) || 0, 0);
   const unreadOnly = c.req.query('unread') === '1';
+  // v2.30：来源标签页（all/inbound/broadcast，默认 all）
+  const sourceParam = c.req.query('source');
+  const source = sourceParam === 'inbound' || sourceParam === 'broadcast' ? sourceParam : 'all';
 
   // v2.27 A-13：文本搜索 + since 增量拉取
   const data = await listInboxMessages(userId, {
@@ -26,8 +31,30 @@ inbox.get('/', async (c) => {
     unreadOnly,
     q: c.req.query('q') || undefined,
     since: c.req.query('since') || undefined,
+    source,
   });
   return c.json({ success: true, data: data.messages, pagination: { total: data.total, unreadCount: data.unreadCount, limit, offset } });
+});
+
+// v2.30：批量已读 / 批量删除（ids 全量做 user_id 归属过滤）
+inbox.post('/batch-read', async (c) => {
+  const userId = Number(c.get('user').id);
+  const body = await c.req.json().catch(() => ({}));
+  const ids = Array.isArray(body?.ids) ? body.ids.map(Number).filter(Number.isInteger) : [];
+  if (ids.length === 0) return c.json({ success: false, error: 'ids 不能为空' }, 400);
+  if (ids.length > 200) return c.json({ success: false, error: '单次最多 200 条' }, 400);
+  const affected = await batchMarkInboxRead(userId, ids);
+  return c.json({ success: true, data: { affected } });
+});
+
+inbox.post('/batch-delete', async (c) => {
+  const userId = Number(c.get('user').id);
+  const body = await c.req.json().catch(() => ({}));
+  const ids = Array.isArray(body?.ids) ? body.ids.map(Number).filter(Number.isInteger) : [];
+  if (ids.length === 0) return c.json({ success: false, error: 'ids 不能为空' }, 400);
+  if (ids.length > 200) return c.json({ success: false, error: '单次最多 200 条' }, 400);
+  const affected = await batchDeleteInboxMessages(userId, ids);
+  return c.json({ success: true, data: { affected } });
 });
 
 inbox.get('/info', async (c) => {

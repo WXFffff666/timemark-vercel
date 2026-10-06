@@ -246,7 +246,20 @@ test.describe.serial('全链路真发真收', () => {
     expect(send.ok(), `收信端点应接受（${send.status()}）`).toBeTruthy();
 
     await page.goto('/inbox');
-    await expect(page.getByText('全链路收件箱验证')).toBeVisible({ timeout: 15_000 });
+    const inboxRow = page.getByText('全链路收件箱验证').first();
+    await expect(inboxRow).toBeVisible({ timeout: 15_000 });
+
+    // v2.30：来源标签页——切到「外部推送」仍可见；「广播」为空但可切换不报错
+    await page.getByRole('tab', { name: '外部推送' }).click();
+    await expect(page.getByText('全链路收件箱验证').first()).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('tab', { name: '广播' }).click();
+    await page.getByRole('tab', { name: '全部' }).click();
+
+    // v2.30：批量操作——勾选第一条 → 批量已读
+    const firstCheckbox = page.getByLabel(/^选择消息：/).first();
+    await firstCheckbox.check();
+    await page.getByRole('button', { name: '批量已读' }).click();
+    await expect(page.getByText('已选 1 条')).toBeHidden({ timeout: 10_000 });
   });
 
   test('Cron 监控：reminder-check 有运行记录且 UI 可见', async () => {

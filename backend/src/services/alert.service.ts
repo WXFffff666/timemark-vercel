@@ -14,16 +14,24 @@ function buildAlertHtml(params: {
   locked: boolean;
   lockMinutes?: number;
   timezone?: string;
+  alertType?: AlertType;
 }): { subject: string; body: string } {
   const lockInfo = params.locked
     ? `已锁定 ${params.lockMinutes ?? Math.floor(params.failureCount / 5) * 5} 分钟`
     : '未锁定';
-  const subject = params.locked ? '🔒 账户锁定告警' : '⚠️ 登录失败告警';
+  // v2.30：new_device 分支——之前该类型只存在于类型定义里，渲染会落进"登录失败告警"
+  const subject =
+    params.alertType === 'new_device'
+      ? '🆕 新设备登录提醒'
+      : params.locked
+        ? '🔒 账户锁定告警'
+        : '⚠️ 登录失败告警';
   const body = [
     `用户名: ${params.username}`,
     `IP: ${params.ip}`,
-    `失败次数: ${params.failureCount}`,
-    `状态: ${lockInfo}`,
+    ...(params.alertType === 'new_device'
+      ? ['类型: 来自新设备的成功登录（未识别的设备指纹）']
+      : [`失败次数: ${params.failureCount}`, `状态: ${lockInfo}`]),
     `时间: ${new Date().toLocaleString('zh-CN', { timeZone: params.timezone || 'Asia/Shanghai' })}`,
     `设备: ${params.userAgent}`,
   ].join('\n');
