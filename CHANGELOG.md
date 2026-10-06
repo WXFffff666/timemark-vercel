@@ -1,5 +1,45 @@
 # Changelog
 
+## v2.30.0 (2026-10-06) — 生产救活 + AI 日报/周报 + 对外 API 门户 + 全链路真发真收
+
+### 生产救活（恶性 bug）
+- 修复 v2.28 起**整个后端在生产不可用**的冷启动崩溃：`createRequire(import.meta.url)` 在 esbuild CJS bundle 中 `import.meta` 为空，模块求值即抛错，全部 `/api/*` 返回 Vercel 裸 500（登录页 Turnstile 消失只是症状，环境变量一直正常）
+- 构建期冷启动冒烟门禁：bundle 生成后立即 `require()` 验证，此类回归永远进不了生产
+- Turnstile 加固：`misconfigured` 配置不对称显式暴露、前端告警横幅（消灭静默 `.catch(() => {})`）、health/Security/DeployWizard 三维体检
+
+### 全链路真发真收（FULLCHAIN harness，8/8 绿）
+- 新增 `e2e/fullchain.spec.ts`：登录 → 绑渠道 → 建事件 → webhook/SMTP 真发真收 → 触发日志 → 收件箱 → Cron 监控 → **自动路由验证**（不绑渠道不填邮箱的事件经"全部启用账户"兜底真实投递）
+- harness 首跑即抓出并修复 6 个 mock 测不出的生产 bug：
+  - pg-rate-limit SQL 参数错位（42P18）→ 限流静默失效（fail-open）+ 时区 8h 偏移
+  - 收件箱收件 token 只在历史迁移生成过一次（新装用户永远没有收件地址）
+  - 收件箱签名密钥从未展示（验签强制但无人可用）
+  - cron 间隔告警写 broadcast 源（收件箱永不可见的死信）
+  - SMTP 强制 STARTTLS 硬编码（内网无 TLS relay 不可用，新增 `SMTP_REQUIRE_TLS` 开关）
+  - 渠道发送链一次 fromPromise unhandledRejection 击穿进程（shadow catch + 进程级兜底）
+
+### 方向 A：AI 日报/周报自动化
+- 日/周粒度摘要（24h 快照 / 7 天对比），复用月/年引擎（AI 叙述 + PDF + 收件箱归档）
+- 设置页独立排程（开关 + 时刻/星期），本地时区到点判断 + digest_archive 同期号查重
+- `GET /api/cron/digest?period=daily|weekly` + 迁移 v81
+
+### 方向 B：对外 REST API + Token 门户
+- `/api/v1/*` 六端点（事件/到期/习惯/日统计 + 新建事件），与 MCP 共用 tmt_ Token：逐调用鉴权、scope 门槛、120/min 限流、逐调用审计
+- API 门户页：Token 创建/回收/调用流水 + 端点文档（系统组新导航入口）
+
+### 收件箱 / Cron 监控 / 渠道 / 其他
+- 收件箱：来源标签页（广播不再死信）、批量已读/删除、收件地址二维码、保留期展示、未读跨源统计
+- Cron 监控：任务健康分 + 迷你运行历史 + 「立即运行」（白名单幂等任务）+ 总体健康徽标
+- 渠道：健康总览五色计数 + 暂停账户一键恢复
+- 安全：新设备登录提醒接线（原 alertType 死代码）+ 模板 🆕 分支
+- 导航：收件箱未读徽标（底栏/抽屉/标签页标题）
+- Broadcast：发送确认闸门 + 服务端渲染预览接线
+- Habits：一键打卡未达标
+- AI 对话：修复"截断/滑不动"（dvh 自适应高度 + 移除 overscroll-contain + 流式滚底）+ 清空按钮显性化
+
+### 质量基线
+- 后端 1724 测试 / 前端 316 测试全绿，双端 tsc 干净
+- 逐项账本：docs/v2.30-LEDGER.md（F 54 项功能 / O 14 项优化，如实计数）
+
 ## v2.29.0 (2026-10-06) — 渠道 61 + 分类/二维码 + 全站 UI 统一 + AI 追问上下文
 
 ### 通知渠道：51 → 61（分类 + 扫码绑定）
