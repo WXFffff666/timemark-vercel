@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Webhook, MessageSquare, AlertCircle, CheckCircle2,
   Link2Off, ArrowLeft, Plus, ExternalLink, Settings,
-  BookOpen, ChevronRight,
+  BookOpen, ChevronRight, Search,
   Loader2, Activity
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -360,8 +360,10 @@ export default function Channels() {
         else if (dest === 'chat_id') payload.chatId = value;
       }
       if (selectedAccount?.id) payload.accountId = Number(selectedAccount.id);
-      const result = await api.post<{ success: boolean; message: string }>('/channels/test', payload);
-      setDirectTestResult({ ok: true, message: result?.message || '测试连接成功' });
+      // v2.29：后端回传 latency（毫秒），成功提示里顺带展示响应速度
+      const result = await api.post<{ success: boolean; message: string; latency?: number }>('/channels/test', payload);
+      const latencySuffix = typeof result?.latency === 'number' ? `（${result.latency}ms）` : '';
+      setDirectTestResult({ ok: true, message: `${result?.message || '测试连接成功'}${latencySuffix}` });
     } catch (error: any) {
       setDirectTestResult({ ok: false, message: error?.message || '测试连接失败' });
     } finally {
@@ -640,6 +642,19 @@ export default function Channels() {
 
   const filteredTemplates = templates.filter(t => t.configMethod === activeTab);
 
+  // v2.29：61 个渠道靠翻已经翻不动，加名称/描述/ID 实时搜索；与分类筛选叠加
+  const [templateSearch, setTemplateSearch] = useState('');
+  const searchedTemplates = templateSearch.trim()
+    ? filteredTemplates.filter((t) => {
+        const kw = templateSearch.trim().toLowerCase();
+        return (
+          t.name.toLowerCase().includes(kw) ||
+          t.description.toLowerCase().includes(kw) ||
+          t.id.toLowerCase().includes(kw)
+        );
+      })
+    : filteredTemplates;
+
   // 分类过滤 + 分组（v2.29）：61 个渠道平铺已经翻不动了，按类分组 + 类别筛选
   const categoryOrder = ['im', 'push', 'email', 'sms', 'smart', 'automation', 'other'] as const;
   const CATEGORY_LABELS: Record<string, string> = {
@@ -650,7 +665,7 @@ export default function Channels() {
     .map((cat) => ({
       category: cat,
       label: CATEGORY_LABELS[cat],
-      items: filteredTemplates.filter((t) => (t.category ?? 'other') === cat),
+      items: searchedTemplates.filter((t) => (t.category ?? 'other') === cat),
     }))
     .filter((group) => group.items.length > 0)
     .filter((group) => categoryFilter === 'all' || group.category === categoryFilter);
@@ -900,6 +915,12 @@ export default function Channels() {
           <div className="flex items-center justify-between pt-4 border-t border-slate-200/60 dark:border-slate-700/50">
             <span className="text-xs text-slate-500 dark:text-slate-400">
               类型: {template?.name || account.type}
+              {/* v2.29：账户卡上直接标渠道分类，61 个渠道里一眼看出归属 */}
+              {template?.category && (
+                <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                  {CATEGORY_LABELS[template.category] ?? '其他'}
+                </span>
+              )}
               {(() => {
                 // v79: 账户维度的真实发送统计 + 上次测试时间
                 const stat = accountStats[Number(account.id)];
@@ -1130,6 +1151,18 @@ export default function Channels() {
                 </TabsTrigger>
               </TabsList>
 
+              {/* v2.29：渠道搜索（61 个渠道按名称/描述/ID 实时过滤） */}
+              <div className="relative mb-4">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={templateSearch}
+                  onChange={(e) => setTemplateSearch(e.target.value)}
+                  placeholder="搜索渠道名称 / 描述 / ID…"
+                  className="pl-9"
+                  aria-label="搜索通知渠道"
+                />
+              </div>
+
               {/* 分类筛选 chips：61 个渠道翻不动，先按类收敛 */}
               <div className="flex flex-wrap gap-2 mb-4">
                 <button
@@ -1138,10 +1171,10 @@ export default function Channels() {
                     ? 'bg-primary-500 text-white'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                 >
-                  全部（{filteredTemplates.length}）
+                  全部（{searchedTemplates.length}）
                 </button>
                 {Object.entries(CATEGORY_LABELS).map(([cat, label]) => {
-                  const count = filteredTemplates.filter((t) => (t.category ?? 'other') === cat).length;
+                  const count = searchedTemplates.filter((t) => (t.category ?? 'other') === cat).length;
                   if (count === 0) return null;
                   return (
                     <button
@@ -1159,12 +1192,24 @@ export default function Channels() {
 
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={activeTab + categoryFilter}
+                  key={activeTab + categoryFilter + templateSearch}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   className="space-y-5 max-h-[50vh] overflow-y-auto overscroll-contain pr-2"
                 >
+                  {groupedTemplates.length === 0 && (
+                    <div className="text-center py-10 text-sm text-slate-500 dark:text-slate-400">
+                      没有匹配「{templateSearch || CATEGORY_LABELS[categoryFilter]}」的渠道
+                      <button
+                        type="button"
+                        onClick={() => { setTemplateSearch(''); setCategoryFilter('all'); }}
+                        className="ml-2 text-primary-500 hover:text-primary-600 underline underline-offset-2"
+                      >
+                        清除筛选
+                      </button>
+                    </div>
+                  )}
                   {groupedTemplates.map((group) => (
                     <div key={group.category}>
                       <div className="flex items-center gap-2 mb-2">

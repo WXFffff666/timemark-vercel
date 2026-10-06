@@ -175,13 +175,13 @@ channels.post('/test', async (c) => {
       return c.json({
         success: false,
         error: result.message,
-        data: { success: false, message: result.message, details: result.details },
+        data: { success: false, message: result.message, details: result.details, latency: result.latency },
       }, 400);
     }
 
     return c.json({
       success: true,
-      data: { success: true, message: result.message, details: result.details },
+      data: { success: true, message: result.message, details: result.details, latency: result.latency },
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '测试连接失败';
