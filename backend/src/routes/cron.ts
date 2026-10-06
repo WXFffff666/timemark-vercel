@@ -154,7 +154,9 @@ export async function checkCronGapAlert(jobName: string): Promise<void> {
           userId: admins.rows[0].user_id as number,
           title: 'Cron 执行间隔异常',
           body: `${jobName} 距上次成功已超过 ${Math.round(gapMs / 60000)} 分钟`,
-          source: 'broadcast',
+          // v2.30 修复：收件箱列表只展示 source='inbound'，写成 broadcast 的告警
+          // 在 UI 里永远不可见（摸底发现的断点）。
+          source: 'inbound',
         });
       }
     }

@@ -175,6 +175,7 @@ export default function Settings() {
 
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
   const [inboxReceiveUrl, setInboxReceiveUrl] = useState<string | null>(null);
+  const [inboxReceiveSecret, setInboxReceiveSecret] = useState<string | null>(null);
   const [calendarFeedUrl, setCalendarFeedUrl] = useState<string | null>(null);
   const [externalCalendarUrls, setExternalCalendarUrls] = useState<string[]>([]);
   const [calendarFeedTokens, setCalendarFeedTokens] = useState<Array<{ name: string; url: string }>>([]);
@@ -218,6 +219,7 @@ export default function Settings() {
       api.get<{
         webhookUrl?: string | null;
         inboxReceiveUrl?: string | null;
+        inboxReceiveSecret?: string | null;
         calendarFeedUrl?: string | null;
         calendarFeedTokens?: Array<{ name: string; url: string }>;
         externalCalendarUrls?: string[];
@@ -259,6 +261,7 @@ export default function Settings() {
         if (integrations) {
           setWebhookUrl(integrations.webhookUrl ?? null);
           setInboxReceiveUrl(integrations.inboxReceiveUrl ?? null);
+          setInboxReceiveSecret(integrations.inboxReceiveSecret ?? null);
           setCalendarFeedUrl(integrations.calendarFeedUrl ?? null);
           setExternalCalendarUrls(Array.isArray(integrations.externalCalendarUrls) ? integrations.externalCalendarUrls : []);
           setCalendarFeedTokens(Array.isArray(integrations.calendarFeedTokens) ? integrations.calendarFeedTokens : []);
@@ -953,7 +956,19 @@ export default function Settings() {
                   label="收件箱接收 URL"
                   onCopy={(v) => copyToClipboard(v, '收件箱接收 URL')}
                 />
-                <p className="text-xs text-slate-400 mt-1">POST JSON: {"{ title, body, sender? }"}；可配置 X-Timemark-Signature 签名</p>
+                {inboxReceiveSecret && (
+                  <div className="mt-2">
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">收件箱签名密钥</label>
+                    <SecretUrlField
+                      value={inboxReceiveSecret}
+                      label="收件箱签名密钥"
+                      onCopy={(v) => copyToClipboard(v, '收件箱签名密钥')}
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-slate-400 mt-1">
+                  POST JSON: {"{ title, body, sender? }"}；带密钥时必须携带 X-Timemark-Signature = HMAC-SHA256(原始请求体, 密钥) 的 hex（兼容 x-hub-signature-256）
+                </p>
               </div>
 
               <div>

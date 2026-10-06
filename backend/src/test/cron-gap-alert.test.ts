@@ -95,7 +95,9 @@ describe('checkCronGapAlert - existing >3 minute gap alert', () => {
     expect(call.title).toBe('Cron 执行间隔异常');
     expect(call.body).toContain('reminder-check');
     expect(call.body).toContain('5');
-    expect(call.source).toBe('broadcast');
+    // v2.30：收件箱列表只展示 source='inbound'，写成 broadcast 的告警在 UI 里
+    // 永远不可见——告警改为 inbound（原 broadcast 是个用户看不见的死信）。
+    expect(call.source).toBe('inbound');
   });
 
   it('does NOT alert for a healthy gap (2 minutes)', async () => {

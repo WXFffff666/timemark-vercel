@@ -150,8 +150,21 @@ export async function getInboxReceiveTokens(userId: number): Promise<{
     [userId],
   );
   const r = row.rows[0] || {};
-  return {
-    inboxReceiveToken: r.inbox_receive_token ?? null,
-    inboxReceiveSecret: r.inbox_receive_secret ?? null,
-  };
+  if (r.inbox_receive_token) {
+    return { inboxReceiveToken: r.inbox_receive_token, inboxReceiveSecret: r.inbox_receive_secret ?? null };
+  }
+  // v2.30 修复：v23 迁移只为当时已存在的 user_configs 行补过一次 token，
+  // 之后才创建的用户（全新安装的 admin bootstrap 正是这样）永远拿不到收件地址。
+  // 改为按需生成，幂等补齐；COALESCE 防并发双写。
+  const { randomBytes } = await import('crypto');
+  const token = randomBytes(24).toString('hex');
+  const secret = randomBytes(32).toString('hex');
+  await query(
+    `UPDATE user_configs SET
+       inbox_receive_token = COALESCE(inbox_receive_token, $1),
+       inbox_receive_secret = COALESCE(inbox_receive_secret, $2)
+     WHERE user_id = $3`,
+    [token, secret, userId],
+  );
+  return { inboxReceiveToken: token, inboxReceiveSecret: secret };
 }

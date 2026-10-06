@@ -25,11 +25,14 @@ export function buildSmtpTransportOptions(
 ): SmtpTransportOptions {
   const resolvedPort = Number(port) || 587;
   const useSsl = resolvedPort === 465;
+  // SMTP_REQUIRE_TLS=false 供内网无 TLS 的 relay / 本地 MailHog 类服务器使用；
+  // 默认保持强制 STARTTLS（公网 587 端口的正确姿态）。
+  const requireTls = process.env.SMTP_REQUIRE_TLS !== 'false';
   return {
     host: host.trim(),
     port: resolvedPort,
     secure: useSsl,
-    ...(useSsl ? {} : { requireTLS: true }),
+    ...(useSsl || !requireTls ? {} : { requireTLS: true }),
     auth: {
       user: fromEmail.trim(),
       pass: password,

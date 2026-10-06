@@ -44,6 +44,10 @@ inbox.get('/info', async (c) => {
     data: {
       receiveUrl,
       hasSecret: !!tokens.inboxReceiveSecret,
+      // v2.30：签名强制时外部发送方必须拿到密钥才能计算 X-Timemark-Signature，
+      // 而此前密钥从未对用户展示过——收件功能实际上无人可用。密钥属于所有者，
+      // 在鉴权后的 /info 里下发（与 API Token 管理同一暴露级别）。
+      receiveSecret: tokens.inboxReceiveSecret,
       retentionDays: 30,
     },
   });

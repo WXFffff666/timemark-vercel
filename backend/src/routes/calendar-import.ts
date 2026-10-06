@@ -71,7 +71,7 @@ calendarImport.get('/integrations', async (c) => {
   const user = c.get('user');
   const row = await query(
     `SELECT webhook_inbound_token, calendar_feed_token, calendar_feed_tokens,
-            external_calendar_urls, external_calendar_sync_strategy, inbox_receive_token
+            external_calendar_urls, external_calendar_sync_strategy
      FROM user_configs WHERE user_id = $1`,
     [Number(user.id)],
   );
@@ -81,12 +81,18 @@ calendarImport.get('/integrations', async (c) => {
   const webhookToken = r.webhook_inbound_token as string | undefined;
   const feedToken = r.calendar_feed_token as string | undefined;
   const feedTokens = Array.isArray(r.calendar_feed_tokens) ? r.calendar_feed_tokens : [];
-  const inboxToken = r.inbox_receive_token as string | undefined;
+  // v2.30：按需补齐收件 token（全新安装的用户此前永远没有收件地址），
+  // 密钥下发给所有者用于计算 X-Timemark-Signature。
+  const { getInboxReceiveTokens } = await import('../services/inbox.service.js');
+  const inboxTokens = await getInboxReceiveTokens(Number(user.id));
   return c.json({
     success: true,
     data: {
       webhookUrl: webhookToken ? `${protocol}://${host}/api/webhook/receive/${webhookToken}` : null,
-      inboxReceiveUrl: inboxToken ? `${protocol}://${host}/api/inbox/receive/${inboxToken}` : null,
+      inboxReceiveUrl: inboxTokens.inboxReceiveToken
+        ? `${protocol}://${host}/api/inbox/receive/${inboxTokens.inboxReceiveToken}`
+        : null,
+      inboxReceiveSecret: inboxTokens.inboxReceiveSecret,
       calendarFeedUrl: feedToken ? `${protocol}://${host}/api/calendar/feed/${feedToken}.ics` : null,
       calendarFeedTokens: feedTokens.map((t: { name?: string; token: string }) => ({
         name: t.name || '默认',
