@@ -495,6 +495,16 @@ async function bootstrap() {
   serve({ fetch: app.fetch, port });
 }
 
+// v2.30 硬化（全链路实测踩坑）：渠道发送链出过一次 fromPromise unhandledRejection
+// 直接击穿本地进程。进程级兜底只记日志不退出——单条通知的意外拒绝不该拖死
+// 正在服务的其他请求；真正的缺陷仍要沿日志里的 event/stack 修。
+process.on('unhandledRejection', (reason) => {
+  log.error({ event: 'process.unhandled_rejection', err: reason }, 'Unhandled rejection (logged, process kept alive)');
+});
+process.on('uncaughtException', (err) => {
+  log.fatal(err, 'Uncaught exception (logged, process kept alive)');
+});
+
 // Local/Docker: bootstrap the full app (DB init, scheduler, HTTP server)
 if (!process.env.VERCEL) {
   bootstrap().catch((err) => {

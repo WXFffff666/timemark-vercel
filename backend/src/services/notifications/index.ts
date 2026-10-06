@@ -1071,11 +1071,9 @@ export async function sendNotifications(
   const sendTasks: Array<{ channel: string; accountId?: number; promise: Promise<void> }> = channels.flatMap((ch) => {
     const configs = channelConfigsMap[ch];
     if (!configs || configs.length === 0) return [];
-    
-    return configs.map((chConfig) => ({
-      channel: ch,
-      accountId: configToAccountId.get(chConfig),
-      promise: (async () => {
+
+    return configs.map((chConfig) => {
+      const raw = (async () => {
         try {
         if (!DISPATCHABLE_CHANNELS.has(ch)) {
           throw new Error(`渠道 ${ch} 未注册主分发分支（DISPATCHABLE_CHANNELS）`);
@@ -1306,8 +1304,14 @@ export async function sendNotifications(
         log.warn({ event: 'notification.channel_send_failed', channel: ch, err: e }, `Channel ${ch} send failed`);
         throw e;
       }
-      })(),
-    }));
+      })();
+      // v2.30 硬化：生产实测出过一次 fromPromise unhandledRejection 击穿进程
+      // （SMTP 无收件人 throw；理论上 mapWithConcurrency 会同步接上处理器，
+      // 但任何微妙的时序都不该让进程死掉）。shadow no-op catch 让 raw 永远
+      // "已处理"；拒绝语义仍由 raw 本身原样传给并发消费方。
+      void raw.catch(() => undefined);
+      return { channel: ch, accountId: configToAccountId.get(chConfig), promise: raw };
+    });
   });
   
   // B23: 渠道发送并发限制 5

@@ -34,7 +34,7 @@ test.skip(!process.env.FULLCHAIN, 'FULLCHAIN=1 时才对真后端运行');
 let context: BrowserContext;
 let page: Page;
 
-/** 以真实前端身份（cookie + 同源）调 API。 */
+/** 以真实前端身份（cookie + 同源）调 API。响应体非 JSON（空/网关错误）时原样返回文本。 */
 async function api<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   return page.evaluate(
     async ({ url, method, body }) => {
@@ -44,7 +44,12 @@ async function api<T>(path: string, init?: { method?: string; body?: unknown }):
         body: body !== undefined ? JSON.stringify(body) : undefined,
         credentials: 'include',
       });
-      return (await res.json()) as T;
+      const text = await res.text();
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        return { success: false, error: `non-json response (${res.status}): ${text.slice(0, 120)}` } as T;
+      }
     },
     { url: `${API}${path}`, method: init?.method, body: init?.body },
   );
@@ -172,6 +177,44 @@ test.describe.serial('全链路真发真收', () => {
       await page.waitForTimeout(3000);
     }
     expect(items.length, '本地 webhook 接收器应收到至少一次真实投递').toBeGreaterThan(0);
+  });
+
+  // v2.30：用户问的关键场景——事件不勾渠道、不填邮箱，提醒会不会自动路由到
+  // 已配置的通知渠道？解析链：条件规则 > 套餐 > 事件渠道 > **全部启用账户兜底**。
+  test('自动路由：不绑渠道/不填邮箱的事件仍路由到已启用渠道', async () => {
+    test.setTimeout(120_000);
+    const before = await (await page.request.get(`${RECEIVER}/_received`)).json() as { count: number };
+
+    const triggerAt = new Date(Date.now() + 60_000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const created = await api<{ success: boolean; data?: { id: number }; error?: string }>('/events', {
+      method: 'POST',
+      body: {
+        name: `自动路由验证 ${Date.now()}`,
+        type: 'other',
+        date: `${triggerAt.getFullYear()}-${pad(triggerAt.getMonth() + 1)}-${pad(triggerAt.getDate())}`,
+        calendarType: 'gregorian',
+        // 关键：不传 accountIds、emailRecipients 为空
+        reminderConfig: {
+          enabled: true,
+          daysBeforeList: [0],
+          reminderTimes: [`${pad(triggerAt.getHours())}:${pad(triggerAt.getMinutes())}`],
+          emailRecipients: [],
+        },
+      },
+    });
+    expect(created.success, created.error).toBeTruthy();
+
+    let received = false;
+    for (let i = 0; i < 25; i++) {
+      const after = await (await page.request.get(`${RECEIVER}/_received`)).json() as { count: number };
+      if (after.count > before.count) { received = true; break; }
+      await page.request.get(`http://localhost:5189${API}/cron/reminder-check`, {
+        headers: { Authorization: `Bearer ${CRON_SECRET}` },
+      });
+      await page.waitForTimeout(3000);
+    }
+    expect(received, '未绑定渠道的事件应经「全部启用账户」兜底真实投递到 webhook').toBe(true);
   });
 
   test('SMTP 真发 → 本地 SMTP 接收器真收', async () => {
