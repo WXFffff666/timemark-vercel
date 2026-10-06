@@ -50,11 +50,14 @@ export function MobileBottomNav() {
     return () => window.removeEventListener('keydown', onKey);
   }, [moreOpen]);
 
-  // v2.30：未读徽标轮询。401（未登录）静默；页面隐藏时不查。
+  // v2.30：未读徽标轮询。401（未登录）静默；登录页不轮询；页面隐藏时不查。
   useEffect(() => {
+    if (location.pathname === '/login') return;
     let cancelled = false;
     const poll = () => {
       if (document.hidden) return;
+      // 测试环境的 api mock 可能只实现部分方法——缺 getRaw 时静默跳过
+      if (typeof api.getRaw !== 'function') return;
       api
         .getRaw<unknown>('/inbox?limit=1')
         .then((res) => {
@@ -69,6 +72,15 @@ export function MobileBottomNav() {
       window.clearInterval(timer);
     };
   }, [location.pathname]);
+
+  // v2.30：未读数同步到标签页标题（浏览器标签页/手机任务切换器里也能看到）
+  useEffect(() => {
+    const base = 'TimeMark';
+    document.title = inboxUnread > 0 ? `(${inboxUnread}) ${base}` : base;
+    return () => {
+      document.title = base;
+    };
+  }, [inboxUnread]);
 
   void getLang();
 

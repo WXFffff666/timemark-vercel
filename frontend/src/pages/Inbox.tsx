@@ -68,13 +68,18 @@ export default function Inbox() {
       .catch(() => undefined);
   }, []);
 
+  // v2.30：竞态守卫——快速切换筛选（搜索防抖/未读/标签页）时旧响应后到会覆盖新状态
+  const fetchSeqRef = useRef(0);
+
   const fetchMessages = async (offset = 0, q = debouncedSearch, unread = unreadOnly, source = sourceTab) => {
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: '100', offset: String(offset), source });
       if (q.trim()) params.set('q', q.trim());
       if (unread) params.set('unread', '1');
       const res = await api.getRaw<InboxMessage[]>(`/inbox?${params.toString()}`);
+      if (seq !== fetchSeqRef.current) return; // 已有更新的请求，丢弃旧响应
       const page = res.data || [];
       setTotal((res.pagination?.total as number) || 0);
       setUnreadCount((res.pagination?.unreadCount as number) || 0);
@@ -82,10 +87,11 @@ export default function Inbox() {
       setMessages((prev) => (offset > 0 ? [...prev, ...page] : page));
       nextOffsetRef.current = offset + page.length;
     } catch (error) {
+      if (seq !== fetchSeqRef.current) return;
       console.error('Failed to fetch inbox:', error);
       if (offset === 0) setMessages([]);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   };
 
