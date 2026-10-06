@@ -8,7 +8,7 @@ import { logSecurityEvent } from '../services/security-event.service.js';
 import { deleteSessionById, deleteAllUserSessions } from '../services/session.service.js';
 import { lookupGeoLabel } from '../utils/geoip.js';
 import type { User } from '@timemark/shared';
-import { isTurnstileEnabled } from '../utils/turnstile.js';
+import { isTurnstileEnabled, getTurnstileSiteKey } from '../utils/turnstile.js';
 import { getCronSecret } from '../utils/heartbeat.js';
 import { getAccessTokenFromCookie } from '../utils/auth-cookies.js';
 import { readBuildInfo } from '../utils/build-info.js';
@@ -316,6 +316,8 @@ security.get('/deploy-info', async (c) => {
   const schemaHealth = computeSchemaHealth(recordedSchemaVersions);
 
   const turnstileConfigured = isTurnstileEnabled();
+  // v2.30：SiteKey 与 Secret 分开体检——只有 Secret 时登录页验证消失且登录被拒
+  const turnstileSiteKeyConfigured = !!getTurnstileSiteKey();
   const cronSecretConfigured = !!getCronSecret();
   const jwtConfigured = !!process.env.JWT_SECRET?.trim();
   const masterKeyConfigured = !!process.env.MASTER_KEY?.trim();
@@ -411,6 +413,7 @@ security.get('/deploy-info', async (c) => {
       platform: build.platform,
       vercelUrl: build.vercelUrl,
       turnstileConfigured,
+      turnstileSiteKeyConfigured,
       cronSecretConfigured,
       jwtConfigured,
       masterKeyConfigured,
@@ -482,12 +485,23 @@ security.get('/deploy-info', async (c) => {
           hint: '外部 Cron 调用 /api/cron/* 时的 Bearer 令牌（Vercel 可用 CRONSECRET）',
         },
         {
-          id: 'turnstile',
-          label: 'Cloudflare Turnstile（人机验证）',
+          id: 'turnstileSecret',
+          label: 'Turnstile Secret Key（人机验证）',
           ok: turnstileConfigured,
           hint: turnstileConfigured
             ? 'SecretKey / TURNSTILE_SECRET_KEY 已配置'
             : '可选：在 Vercel 配置 SecretKey 与 SiteKey；未配置则登录不启用人机验证',
+        },
+        {
+          id: 'turnstileSiteKey',
+          label: 'Turnstile Site Key（与 Secret 配套）',
+          ok: !turnstileConfigured || turnstileSiteKeyConfigured,
+          severity: turnstileConfigured && !turnstileSiteKeyConfigured ? 'error' : undefined,
+          hint: turnstileSiteKeyConfigured
+            ? 'TURNSTILE_SITE_KEY 已配置'
+            : turnstileConfigured
+              ? '必需：已配置 Secret 但缺 SiteKey，登录页验证组件不会出现且无法登录（生产事故复盘 v2.28）'
+              : '与 SecretKey 成对配置后登录页才启用人机验证',
         },
         ...optionalEnvChecks.filter(() => fullTrust),
       ],

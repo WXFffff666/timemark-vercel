@@ -29,6 +29,8 @@ interface DeployInfo {
   schemaFutureVersions: number[];
   passwordChangedAt: string | null;
   turnstileConfigured: boolean;
+  /** v2.30：SiteKey 单独体检——只有 Secret 时登录页验证消失且登录被拒 */
+  turnstileSiteKeyConfigured: boolean;
   cronSecretConfigured: boolean;
   /** v2.29：环境变量体检（必填 + 可选功能），只含布尔与提示，绝无变量值 */
   envChecks?: Array<{ id: string; label: string; ok: boolean; hint: string; severity?: string }>;
@@ -262,7 +264,14 @@ export default function Security() {
                 </p>
               )}
               <p>初始密码: {deployInfo.passwordChangedAt ? '已修改' : '尚未修改（建议尽快改）'}</p>
-              <p>Turnstile: {deployInfo.turnstileConfigured ? '已配置' : '未配置（可选）'}</p>
+              <p>
+                Turnstile:{' '}
+                {deployInfo.turnstileConfigured
+                  ? deployInfo.turnstileSiteKeyConfigured
+                    ? '已配置（SiteKey + Secret）'
+                    : '缺 Site Key（登录页验证不可用！）'
+                  : '未配置（可选）'}
+              </p>
               <p>Cron Secret: {deployInfo.cronSecretConfigured ? '已配置' : '未配置'}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400 pt-1">
                 登录会话令牌由系统自动轮换（约 15 分钟续期 access、30 天 refresh），无需手动操作。

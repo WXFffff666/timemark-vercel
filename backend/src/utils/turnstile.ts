@@ -26,6 +26,18 @@ export function isTurnstileEnabled(): boolean {
   return !!getTurnstileSecretKey();
 }
 
+/** GET /auth/turnstile-config 的载荷。misconfigured = 服务端要求验证但前端拿不到 siteKey，
+ *  此时登录页验证组件消失且登录必被拒——必须显式暴露给前端，不能静默。 */
+export function turnstileConfigPayload(): {
+  siteKey: string | null;
+  enabled: boolean;
+  misconfigured: boolean;
+} {
+  const siteKey = getTurnstileSiteKey() || null;
+  const enabled = isTurnstileEnabled();
+  return { siteKey, enabled, misconfigured: enabled && !siteKey };
+}
+
 type SiteVerifyResponse = {
   success?: boolean;
   'error-codes'?: string[];

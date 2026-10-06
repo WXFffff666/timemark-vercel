@@ -62,8 +62,13 @@ export default function DeployWizard() {
               {
                 id: 'turnstile',
                 label: 'Cloudflare Turnstile',
+                // v2.30：checks.turnstile 只在 SiteKey+Secret 齐全时为 true
                 ok: !!data.checks?.turnstile,
-                hint: data.checks?.turnstile ? '已配置' : '可选，未配置不影响核心功能',
+                hint: data.checks?.turnstile
+                  ? 'SiteKey + Secret 均已配置'
+                  : data.checks?.turnstileSecret && !data.checks?.turnstileSiteKey
+                    ? '缺 TURNSTILE_SITE_KEY：登录页验证组件不会出现且无法登录'
+                    : '可选，未配置不影响核心功能',
               },
             ]);
           }
@@ -80,7 +85,11 @@ export default function DeployWizard() {
               id: 'turnstile',
               label: 'Cloudflare Turnstile',
               ok: !!data.checks?.turnstile,
-              hint: data.checks?.turnstile ? '已配置' : '可选',
+              hint: data.checks?.turnstile
+                ? 'SiteKey + Secret 均已配置'
+                : data.checks?.turnstileSecret && !data.checks?.turnstileSiteKey
+                  ? '缺 TURNSTILE_SITE_KEY：登录页验证组件不会出现且无法登录'
+                  : '可选，未配置不影响核心功能',
             },
           ]);
         }

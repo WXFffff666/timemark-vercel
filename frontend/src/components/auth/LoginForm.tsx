@@ -62,6 +62,8 @@ export function LoginForm() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
   const [turnstileReady, setTurnstileReady] = useState(false);
+  // v2.30：验证配置异常不再静默——加载失败/服务端开启但站点密钥缺失都要可见
+  const [turnstileConfigError, setTurnstileConfigError] = useState('');
   const turnstileRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const pendingSubmitRef = useRef(false);
@@ -194,11 +196,19 @@ export function LoginForm() {
   }, []);
 
   useEffect(() => {
-    api.get<{ siteKey: string | null; enabled: boolean }>('/auth/turnstile-config')
+    api.get<{ siteKey: string | null; enabled: boolean; misconfigured?: boolean }>('/auth/turnstile-config')
       .then((cfg) => {
-        if (cfg.enabled && cfg.siteKey) setTurnstileSiteKey(cfg.siteKey);
+        if (cfg.enabled && cfg.siteKey) {
+          setTurnstileSiteKey(cfg.siteKey);
+        } else if (cfg.enabled && !cfg.siteKey) {
+          // v2.30 事故教训：服务端要求验证但站点密钥缺失时，widget 会凭空消失，
+          // 用户对着空表单反复重试还以为自己密码错了——必须显式说明。
+          setTurnstileConfigError('服务端已开启人机验证，但站点密钥（TURNSTILE_SITE_KEY）未配置，暂时无法登录。请联系管理员在部署平台补齐后重试。');
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        setTurnstileConfigError('人机验证配置加载失败（网络异常或服务暂不可用）。可尝试刷新页面；若持续出现，登录可能暂时不可用。');
+      });
   }, []);
 
   const mountWidget = useCallback(() => {
@@ -397,6 +407,11 @@ export function LoginForm() {
               <p className="text-xs text-hint text-center">
                 验证器丢了？用安全中心签发的恢复码之一登录（格式 xxxxx-xxxxx，每个只能用一次）。
               </p>
+            </motion.div>
+          )}
+          {turnstileConfigError && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} role="alert" className="text-sm text-amber-700 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-900/30 px-4 py-3 rounded-2xl border border-amber-200 dark:border-amber-800/50">
+              {turnstileConfigError}
             </motion.div>
           )}
           {turnstileSiteKey && (

@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import { verifyUserForLogin, getUserByUsername, createLoginLog, trackLoginFailure, getAccountLockStatus, clearAccountLock, getIpBlockStatus, evaluateIpBlock, checkIpWhitelistFromUser, verifyTotpCode, verifyUserPassword } from '../services/auth.service.js';
 import { getClientIp, getClientIpInfo } from '../utils/client-ip.js';
-import { getTurnstileSiteKey, isTurnstileEnabled, verifyTurnstileToken } from '../utils/turnstile.js';
+import { verifyTurnstileToken, turnstileConfigPayload } from '../utils/turnstile.js';
 import { isSafePublicUrl } from '../utils/url-safety.js';
 import { lookupGeoLabel } from '../utils/geoip.js';
 import { logSecurityEvent } from '../services/security-event.service.js';
@@ -419,13 +419,7 @@ function toIsoLoginTime(value: unknown): string | null {
 }
 
 auth.get('/turnstile-config', async (c) => {
-  return c.json({
-    success: true,
-    data: {
-      siteKey: getTurnstileSiteKey() || null,
-      enabled: isTurnstileEnabled(),
-    },
-  });
+  return c.json({ success: true, data: turnstileConfigPayload() });
 });
 
 auth.get('/login-history', authMiddleware, async (c) => {

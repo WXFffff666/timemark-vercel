@@ -37,7 +37,7 @@ import { createLogger } from './utils/logger.js';
 import { waitForDb, query } from './db/index.js';
 import { runMigrations, migrateEncryptionKey } from './db/migrate.js';
 import { initSecretKeys } from './utils/secrets.js';
-import { isTurnstileEnabled } from './utils/turnstile.js';
+import { isTurnstileEnabled, getTurnstileSiteKey } from './utils/turnstile.js';
 import { getClockOffsetMs, getLastTimeSyncResult, scheduleTimeSync, DEFAULT_SYNC_TIMEZONE } from './utils/ntp.js';
 import { getCronSecret } from './utils/heartbeat.js';
 import { inferDatabaseRegionHint, isPreferredCnVercelRegion } from './utils/infra-region.js';
@@ -356,7 +356,11 @@ app.get('/api/health', async (c) => {
     // v2.28：版本从 package.json 注入（原硬编码 2.16.0 已与发布脱节）
     version: APP_VERSION,
     database: false,
-    turnstile: isTurnstileEnabled(),
+    // v2.30：拆成三维——只看 Secret 时，SiteKey 丢失会让面板全绿而登录页验证
+    // 消失、登录被拒（生产事故复盘）。`turnstile` 现在只在"完整可用"时为 true。
+    turnstile: !!getTurnstileSiteKey() && isTurnstileEnabled(),
+    turnstileSiteKey: !!getTurnstileSiteKey(),
+    turnstileSecret: isTurnstileEnabled(),
   };
   if (process.env.VERCEL) {
     const fnRegion = process.env.VERCEL_REGION || 'unknown';

@@ -48,3 +48,4 @@ frontend/public/search-index.json
 
 # Mimosa security scanner state
 .mimosa/
+*.tsbuildinfo
