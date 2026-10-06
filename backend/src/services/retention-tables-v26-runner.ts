@@ -28,6 +28,19 @@ export async function purgeTablesV26(options?: { now?: Date }): Promise<Retentio
     collaborationActivity: 0,
     dataHealthRepairs: 0,
     calendarSyncEvents: 0,
+    // v2.29
+    interactions: 0,
+    maintenanceLogs: 0,
+    ocrResults: 0,
+    agentFeedback: 0,
+    agentDecisionCards: 0,
+    agentRoutineArtifacts: 0,
+    agentDigestFolds: 0,
+    agentNotificationClaims: 0,
+    agentConfirmations: 0,
+    agentWorkers: 0,
+    botLinkCodes: 0,
+    webauthnChallenges: 0,
   };
 
   for (const table of RETENTION_TABLES_V26) {

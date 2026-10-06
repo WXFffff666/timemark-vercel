@@ -52,6 +52,19 @@ describe('retention cutoff math (todo 41)', () => {
       feedIngestProposals: 90,
       greetingHistory: 1095,
       cronExecutionLogs: 30,
+      // v2.29 第三轮 12 张
+      interactions: 730,
+      maintenanceLogs: 730,
+      ocrResults: 90,
+      agentFeedback: 365,
+      agentDecisionCards: 180,
+      agentRoutineArtifacts: 90,
+      agentDigestFolds: 30,
+      agentNotificationClaims: 30,
+      agentConfirmations: 7,
+      agentWorkers: 30,
+      botLinkCodes: 7,
+      webauthnChallenges: 1,
     });
   });
 });
@@ -167,11 +180,24 @@ describe('purgeExpiredLogs (todo 41)', () => {
       if (text.includes('collaboration_activity')) return { rows: [], rowCount: 16 };
       if (text.includes('data_health_repairs')) return { rows: [], rowCount: 17 };
       if (text.includes('calendar_sync_events')) return { rows: [], rowCount: 18 };
+      // v2.29：新增 12 张
+      if (text.includes('interactions')) return { rows: [], rowCount: 19 };
+      if (text.includes('maintenance_logs')) return { rows: [], rowCount: 20 };
+      if (text.includes('ocr_results')) return { rows: [], rowCount: 21 };
+      if (text.includes('agent_feedback')) return { rows: [], rowCount: 22 };
+      if (text.includes('agent_decision_cards')) return { rows: [], rowCount: 23 };
+      if (text.includes('agent_routine_artifacts')) return { rows: [], rowCount: 24 };
+      if (text.includes('agent_digest_folds')) return { rows: [], rowCount: 25 };
+      if (text.includes('agent_notification_claims')) return { rows: [], rowCount: 26 };
+      if (text.includes('agent_confirmations')) return { rows: [], rowCount: 27 };
+      if (text.includes('agent_workers')) return { rows: [], rowCount: 28 };
+      if (text.includes('bot_link_codes')) return { rows: [], rowCount: 29 };
+      if (text.includes('webauthn_challenges')) return { rows: [], rowCount: 30 };
       return { rows: [], rowCount: 0 };
     });
   });
 
-  it('purges every logging table (v2.28: 23 tables) and returns their counts', async () => {
+  it('purges every logging table (v2.29: 35 tables) and returns their counts', async () => {
     const result = await purgeExpiredLogs({ now: NOW });
 
     expect(result).toEqual({
@@ -198,11 +224,23 @@ describe('purgeExpiredLogs (todo 41)', () => {
       collaborationActivity: 16,
       dataHealthRepairs: 17,
       calendarSyncEvents: 18,
+      interactions: 19,
+      maintenanceLogs: 20,
+      ocrResults: 21,
+      agentFeedback: 22,
+      agentDecisionCards: 23,
+      agentRoutineArtifacts: 24,
+      agentDigestFolds: 25,
+      agentNotificationClaims: 26,
+      agentConfirmations: 27,
+      agentWorkers: 28,
+      botLinkCodes: 29,
+      webauthnChallenges: 30,
     });
-    // 5 张既有表 + v2.26 的 13 张 + v2.28 的 5 张 = 23 条 DELETE
-    expect(mockQuery).toHaveBeenCalledTimes(23);
+    // 5 张既有表 + v2.26 的 13 张 + v2.28 的 5 张 + v2.29 的 12 张 = 35 条 DELETE
+    expect(mockQuery).toHaveBeenCalledTimes(35);
     const tables = mockQuery.mock.calls.map(([sql]) => sql.split(' ')[2]);
-    expect(new Set(tables).size).toBe(23);
+    expect(new Set(tables).size).toBe(35);
   });
 
   it('returns zero counts and issues no DELETE when the clock is malformed', async () => {

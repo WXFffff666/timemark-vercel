@@ -320,6 +320,65 @@ security.get('/deploy-info', async (c) => {
   const poolerRecommended = dbUrl.includes('neon.tech') || dbUrl.includes('supabase');
   const poolerDetected = dbUrl.includes('-pooler') || dbUrl.includes('pooler.');
 
+  // v2.29：可选功能的环境变量体检（只报配置与否，绝不回显值）。
+  const env = (name: string) => !!process.env[name]?.trim();
+  const optionalEnvChecks = [
+    {
+      id: 'telegramBot',
+      label: 'Telegram Bot',
+      ok: env('TELEGRAM_BOT_TOKEN'),
+      hint: '可选：配置 TELEGRAM_BOT_TOKEN 后可用 Telegram Bot 查询/提醒',
+    },
+    {
+      id: 'webPush',
+      label: 'Web Push（浏览器推送）',
+      ok: env('PUSH_VAPID_PUBLIC_KEY') && env('PUSH_VAPID_PRIVATE_KEY'),
+      hint: '可选：配置 PUSH_VAPID_PUBLIC_KEY / PRIVATE_KEY 后支持浏览器订阅推送',
+    },
+    {
+      id: 'googleOauth',
+      label: 'Google 日历 OAuth',
+      ok: env('GOOGLE_OAUTH_CLIENT_ID') && env('GOOGLE_OAUTH_CLIENT_SECRET'),
+      hint: '可选：配置 CLIENT_ID / CLIENT_SECRET 后可自动导入 Google 日历',
+    },
+    {
+      id: 'blobStorage',
+      label: 'Vercel Blob 附件存储',
+      ok: env('BLOB_READ_WRITE_TOKEN'),
+      hint: '可选：配置后证件附件可上传；未配置则附件功能降级',
+    },
+    {
+      id: 'embeddings',
+      label: 'AI 语义搜索（pgvector）',
+      ok: process.env.EMBEDDINGS_ENABLED === 'true' && env('EMBEDDINGS_BASE_URL') && env('EMBEDDINGS_API_KEY'),
+      hint: '可选：EMBEDDINGS_ENABLED=true 且配置 BASE_URL / API_KEY / MODEL 后启用语义搜索',
+    },
+    {
+      id: 'webauthn',
+      label: 'WebAuthn 无密码登录',
+      ok: env('WEBAUTHN_RP_ID') && env('WEBAUTHN_ORIGIN'),
+      hint: '可选：配置 WEBAUTHN_RP_ID / WEBAUTHN_ORIGIN 后支持 Passkey 登录',
+    },
+    {
+      id: 'appBaseUrl',
+      label: 'APP_BASE_URL（深链基址）',
+      ok: env('APP_BASE_URL'),
+      hint: '可选：Telegram 深链与 Webhook 回调的对外基址；未配置时按请求头推断',
+    },
+    {
+      id: 'deployToken',
+      label: 'DEPLOY_TOKEN（密钥轮换门）',
+      ok: env('DEPLOY_TOKEN'),
+      hint: '可选：配置后可用 /api/security/rotate-master-key 轮换 MASTER_KEY',
+    },
+    {
+      id: 'healthDetail',
+      label: 'HEALTH_DETAIL_TOKEN',
+      ok: env('HEALTH_DETAIL_TOKEN'),
+      hint: '可选：配置后 /api/health?detailed=1 返回组件级明细',
+    },
+  ];
+
   // Whether the bootstrap password has ever been changed. `null` means the admin is
   // still on the initial `DEFAULT_ADMIN_PASSWORD` and must change it on first login.
   //
@@ -422,6 +481,7 @@ security.get('/deploy-info', async (c) => {
             ? 'SecretKey / TURNSTILE_SECRET_KEY 已配置'
             : '可选：在 Vercel 配置 SecretKey 与 SiteKey；未配置则登录不启用人机验证',
         },
+        ...optionalEnvChecks,
       ],
       channelNote:
         'Resend / Telegram 等通知渠道的 API Key 在「通知渠道」页面按账户填写，不属于此处环境变量检查。',

@@ -30,6 +30,19 @@ export const RETENTION_DAYS = {
   feedIngestProposals: 90,
   greetingHistory: 1095, // 3 years: final composed text is the rotation basis + audit
   cronExecutionLogs: 30, // failed-details only since the success-path moved to cron_job_status
+  // v2.29: third-wave never-cleaned tables (authoritative days live in retention-tables-v26.ts)
+  interactions: 730,
+  maintenanceLogs: 730,
+  ocrResults: 90,
+  agentFeedback: 365,
+  agentDecisionCards: 180,
+  agentRoutineArtifacts: 90,
+  agentDigestFolds: 30,
+  agentNotificationClaims: 30,
+  agentConfirmations: 7,
+  agentWorkers: 30,
+  botLinkCodes: 7,
+  webauthnChallenges: 1,
 } as const;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

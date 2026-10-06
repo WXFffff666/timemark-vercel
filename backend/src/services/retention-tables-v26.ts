@@ -36,6 +36,19 @@ export const RETENTION_TABLES_V26 = [
   'collaboration_activity',
   'data_health_repairs',
   'calendar_sync_events',
+  // v2.29：第三轮审查确认仍无清理的 12 张
+  'interactions',
+  'maintenance_logs',
+  'ocr_results',
+  'agent_feedback',
+  'agent_decision_cards',
+  'agent_routine_artifacts',
+  'agent_digest_folds',
+  'agent_notification_claims',
+  'agent_confirmations',
+  'agent_workers',
+  'bot_link_codes',
+  'webauthn_challenges',
 ] as const;
 
 export type RetentionTableV26 = (typeof RETENTION_TABLES_V26)[number];
@@ -79,6 +92,31 @@ export const PURGE_SQL_V26: Record<RetentionTableV26, PurgeEntryV26> = {
   data_health_repairs: { days: 365, sql: "DELETE FROM data_health_repairs WHERE created_at < $1" },
   // 日历同步流水 90 天（对账问题一般两周内提出）
   calendar_sync_events: { days: 90, sql: "DELETE FROM calendar_sync_events WHERE created_at < $1" },
+  // ============ v2.29：第三轮 12 张 ============
+  // CRM 互动流水 730 天：联系人关系史有回查价值，但两年前的互动基本不再使用
+  interactions: { days: 730, sql: "DELETE FROM interactions WHERE created_at < $1" },
+  // 保养完成日志 730 天（设备报废后日志无意义）
+  maintenance_logs: { days: 730, sql: "DELETE FROM maintenance_logs WHERE created_at < $1" },
+  // OCR 结果 90 天：识别文本已写入业务表，这里只是处理记录
+  ocr_results: { days: 90, sql: "DELETE FROM ocr_results WHERE created_at < $1" },
+  // agent 反馈 365 天：调优证据保留一年
+  agent_feedback: { days: 365, sql: "DELETE FROM agent_feedback WHERE created_at < $1" },
+  // 决策卡片 180 天：生成物，过期即无用
+  agent_decision_cards: { days: 180, sql: "DELETE FROM agent_decision_cards WHERE created_at < $1" },
+  // 例行任务产出物 90 天
+  agent_routine_artifacts: { days: 90, sql: "DELETE FROM agent_routine_artifacts WHERE created_at < $1" },
+  // 被折叠的通知全文 30 天（对齐 bot_updates 窗口）
+  agent_digest_folds: { days: 30, sql: "DELETE FROM agent_digest_folds WHERE created_at < $1" },
+  // 通知预算 claim 账本 30 天：每窗口 bucket 一行，纯计数用
+  agent_notification_claims: { days: 30, sql: "DELETE FROM agent_notification_claims WHERE claimed_at < $1" },
+  // 确认令牌 7 天：TTL 只有分钟级，过期行纯垃圾
+  agent_confirmations: { days: 7, sql: "DELETE FROM agent_confirmations WHERE created_at < $1" },
+  // 失联 worker 心跳行 30 天（活跃 worker 会不断刷新 last_seen_at）
+  agent_workers: { days: 30, sql: "DELETE FROM agent_workers WHERE last_seen_at < $1" },
+  // Telegram 绑定链接码 7 天：expires_at 一过即失效
+  bot_link_codes: { days: 7, sql: "DELETE FROM bot_link_codes WHERE expires_at < $1" },
+  // WebAuthn challenge 1 天：登录瞬间已消费，未消费的也早已失效
+  webauthn_challenges: { days: 1, sql: "DELETE FROM webauthn_challenges WHERE expires_at < $1" },
 };
 
 /** 单表清理返回的行数；query 不可用时返回 0（与既有 purgeLogTable 同契约） */
@@ -112,4 +150,17 @@ export interface RetentionPurgeResultV26 {
   collaborationActivity: number;
   dataHealthRepairs: number;
   calendarSyncEvents: number;
+  /** v2.29 新接入的 12 张 */
+  interactions: number;
+  maintenanceLogs: number;
+  ocrResults: number;
+  agentFeedback: number;
+  agentDecisionCards: number;
+  agentRoutineArtifacts: number;
+  agentDigestFolds: number;
+  agentNotificationClaims: number;
+  agentConfirmations: number;
+  agentWorkers: number;
+  botLinkCodes: number;
+  webauthnChallenges: number;
 }

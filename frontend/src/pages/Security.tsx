@@ -30,6 +30,8 @@ interface DeployInfo {
   passwordChangedAt: string | null;
   turnstileConfigured: boolean;
   cronSecretConfigured: boolean;
+  /** v2.29：环境变量体检（必填 + 可选功能），只含布尔与提示，绝无变量值 */
+  envChecks?: Array<{ id: string; label: string; ok: boolean; hint: string; severity?: string }>;
 }
 
 function formatDeployTime(iso: string): string {
@@ -266,6 +268,29 @@ export default function Security() {
                 登录会话令牌由系统自动轮换（约 15 分钟续期 access、30 天 refresh），无需手动操作。
                 Vercel 环境变量（JWT_SECRET、MASTER_KEY、CRON_SECRET）配置一次即可，无需定期更换。
               </p>
+              {/* v2.29：环境变量体检 —— 哪些已配置、哪些可选功能还差变量，一目了然 */}
+              {deployInfo.envChecks && deployInfo.envChecks.length > 0 && (
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/50">
+                  <p className="font-medium text-slate-700 dark:text-slate-200 pb-1.5">环境变量体检</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {deployInfo.envChecks.map((check) => (
+                      <div
+                        key={check.id}
+                        title={check.hint}
+                        className="flex items-start gap-2 text-xs p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/50"
+                      >
+                        <span className={`mt-0.5 shrink-0 ${check.ok ? 'text-green-600 dark:text-green-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                          {check.ok ? '✓' : '○'}
+                        </span>
+                        <span>
+                          <span className={check.ok ? 'text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}>{check.label}</span>
+                          {!check.ok && <span className="block text-slate-400 dark:text-slate-500">{check.hint}</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
