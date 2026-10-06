@@ -289,6 +289,10 @@ security.post('/totp/recovery-codes', async (c) => {
 
 security.get('/deploy-info', async (c) => {
   const jwtAge = process.env.JWT_SECRET_ROTATED_AT || null;
+  // v2.29：可选功能体检（optionalEnvChecks）只对会话用户 / admin scope 的 API key 开放，
+  // 避免「实例启用了哪些能力」这一部署指纹泄露给受限 token。
+  const apiScopes = c.get('apiScopes' as unknown as 'user') as unknown as string[] | undefined;
+  const fullTrust = !Array.isArray(apiScopes) || apiScopes.includes('admin');
 
   let schemaVersion = 0;
   let databaseOk = false;
@@ -435,6 +439,7 @@ security.get('/deploy-info', async (c) => {
           id: 'database',
           label: '数据库连接',
           ok: databaseOk,
+          severity: databaseOk ? undefined : 'error',
           hint: databaseOk ? 'PostgreSQL 连接正常' : '检查 Vercel 中的 DATABASE_URL',
         },
         ...(poolerRecommended ? [{
@@ -459,18 +464,21 @@ security.get('/deploy-info', async (c) => {
           id: 'jwtSecret',
           label: 'JWT_SECRET',
           ok: jwtConfigured,
+          severity: jwtConfigured ? undefined : 'error',
           hint: '登录会话签名密钥，须在 Vercel 环境变量中配置',
         },
         {
           id: 'masterKey',
           label: 'MASTER_KEY',
           ok: masterKeyConfigured,
+          severity: masterKeyConfigured ? undefined : 'error',
           hint: '加密渠道 Token 等敏感数据的密钥',
         },
         {
           id: 'cronSecret',
           label: 'CRON_SECRET / CRONSECRET',
           ok: cronSecretConfigured,
+          severity: cronSecretConfigured ? undefined : 'error',
           hint: '外部 Cron 调用 /api/cron/* 时的 Bearer 令牌（Vercel 可用 CRONSECRET）',
         },
         {
@@ -481,7 +489,7 @@ security.get('/deploy-info', async (c) => {
             ? 'SecretKey / TURNSTILE_SECRET_KEY 已配置'
             : '可选：在 Vercel 配置 SecretKey 与 SiteKey；未配置则登录不启用人机验证',
         },
-        ...optionalEnvChecks,
+        ...optionalEnvChecks.filter(() => fullTrust),
       ],
       channelNote:
         'Resend / Telegram 等通知渠道的 API Key 在「通知渠道」页面按账户填写，不属于此处环境变量检查。',

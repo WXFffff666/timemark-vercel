@@ -8,7 +8,11 @@ process.env.MASTER_KEY ||= 'wave4-test-master-key';
 process.env.JWT_SECRET ||= 'wave4-test-jwt-secret';
 process.env.DATABASE_URL ||= 'postgres://127.0.0.1:5432/wave4_test';
 
-const axiosPost = vi.hoisted(() => vi.fn().mockResolvedValue({ status: 200, data: { response: 'success' } }));
+const axiosPost = vi.hoisted(() => vi.fn().mockResolvedValue({
+  status: 200,
+  // 同一 mock 同时满足 Alertzy(response==='success') / OneSignal(id) / Vonage(messages[0].status==='0') 的响应体校验
+  data: { response: 'success', id: 'notif-1', messages: [{ status: '0' }] },
+}));
 vi.mock('axios', () => ({
   default: { post: axiosPost, get: vi.fn().mockResolvedValue({ status: 200, data: {} }) },
 }));
@@ -110,5 +114,21 @@ describe('wave4 senders', () => {
     const [url, body] = axiosPost.mock.lastCall!;
     expect(url).toBe('http://192.168.1.50/api/notify');
     expect(body).toMatchObject({ title: '测试事件', text: '你好，这是提醒内容' });
+  });
+
+  // v2.29 审查修复：这三家失败走 HTTP 200 + 错误响应体，send 必须识别而不是当成功
+  it('vonage throws on 200 + non-zero message status', async () => {
+    axiosPost.mockResolvedValueOnce({ status: 200, data: { messages: [{ status: '4', 'error-text': 'Bad Credentials' }] } });
+    await expect(sendVonageSmsNotification(event, 'K', 'S', '8613800138000')).rejects.toThrow('Vonage 发送失败');
+  });
+
+  it('alertzy throws on 200 + response=fail', async () => {
+    axiosPost.mockResolvedValueOnce({ status: 200, data: { response: 'fail', error: { invalid: 'Invalid Account Key' } } });
+    await expect(sendAlertzyNotification(event, 'BADKEY')).rejects.toThrow('Alertzy 发送失败');
+  });
+
+  it('onesignal throws on 200 + errors payload', async () => {
+    axiosPost.mockResolvedValueOnce({ status: 200, data: { id: '', errors: ['All included subscribers are not subscribed'] } });
+    await expect(sendOneSignalNotification(event, 'K', 'APP', 'SUB')).rejects.toThrow('OneSignal 发送失败');
   });
 });

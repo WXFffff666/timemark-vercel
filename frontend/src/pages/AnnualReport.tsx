@@ -195,6 +195,7 @@ export default function AnnualReport() {
       <PageHeader
         title={`${data.year} 年度提醒报告`}
         backTo="/dashboard"
+        className="-mx-4"
         actions={
           <div className="flex gap-2 items-center">
 

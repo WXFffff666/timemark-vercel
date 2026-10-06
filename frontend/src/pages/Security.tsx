@@ -279,8 +279,8 @@ export default function Security() {
                         title={check.hint}
                         className="flex items-start gap-2 text-xs p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/50"
                       >
-                        <span className={`mt-0.5 shrink-0 ${check.ok ? 'text-green-600 dark:text-green-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                          {check.ok ? '✓' : '○'}
+                        <span className={`mt-0.5 shrink-0 ${check.ok ? 'text-green-600 dark:text-green-400' : check.severity === 'error' ? 'text-red-500 font-bold' : 'text-slate-400 dark:text-slate-500'}`}>
+                          {check.ok ? '✓' : check.severity === 'error' ? '✗' : '○'}
                         </span>
                         <span>
                           <span className={check.ok ? 'text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}>{check.label}</span>

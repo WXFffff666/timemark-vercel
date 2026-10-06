@@ -139,9 +139,12 @@ export function LocalAI() {
     setBusy(true);
     setQuestion('');
     abortRef.current = new AbortController();
-    // v2.29：带最近 3 轮问答进上下文——"它呢？""第二个是什么"这类追问才答得上
+    // v2.29：带最近 3 轮问答进上下文——"它呢？""第二个是什么"这类追问才答得上。
+    // retrieval-only 的有效检索回答也参与（生成失败/中止的降级文案要排除）
     const priorHistory = history
-      .filter((h) => h.mode === 'local-ai' && !h.answer.startsWith('失败：'))
+      .filter((h) => h.mode !== 'no-engine'
+        && !h.answer.startsWith('失败：')
+        && !h.answer.startsWith('本机模型生成失败'))
       .slice(-3)
       .map((h) => ({ question: h.question, answer: h.answer }));
     setHistory((prev) => [...prev, { question: q, answer: '…', sources: [], mode: 'local-ai', at: Date.now() }]);

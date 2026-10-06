@@ -1,5 +1,40 @@
 # Changelog
 
+## v2.29.0 (2026-10-06) — 渠道 61 + 分类/二维码 + 全站 UI 统一 + AI 追问上下文
+
+### 通知渠道：51 → 61（分类 + 扫码绑定）
+
+- **wave4 新增 10 渠道**（纯 HTTP、零新依赖、全带专属连接测试）：Guilded、IFTTT、Revolt、OneSignal、SendGrid、Mailgun、Vonage SMS、MessageBird、Alertzy、Awtrix 3（像素时钟）。
+- **渠道分类体系**：即时通讯 / 推送通知 / 邮件 / 短信 / 智能家居 / 自动化六类注入全部 61 渠道；模板选择器分组展示 + 分类筛选 chips + 实时搜索（名称/描述/ID）+ 空结果态；账户卡标注分类徽标。
+- **二维码扫码绑定**：官方集成页转二维码（纯前端生成，链接不出本机），凭据要在手机上取的渠道（WxPusher/Server酱/IFTTT Key…）扫码直达。
+- **测试连接延迟回传**：/channels/test 返回 latency，向导成功提示附耗时（wave4 全部 test 函数覆盖）。
+- 审查修复：Vonage/Alertzy/OneSignal「HTTP 200 + 错误响应体」不再被当成功（此前短信/推送静默丢失）；Vonage 测试改 GET get-balance（原 POST form 恒 400）；envChecks 加信任级门控。
+- 文档：CHANNEL_MATRIX 61 渠道重生成；README/CHANNEL_COMPATIBILITY 计数同步；README 渠道表补 v2.28 漏掉的 5 行。
+
+### 全站 UI 统一重设计（流光背景保留，只统一组件层）
+
+- **PageHeader 组件收口 22 页**手写 sticky header（三种变体 + Security/CronMonitor/Contacts/AnnualReport 四个离群样式全消），返回逻辑三套（navigate(-1)/useSmartBack/硬编码）统一为 props。
+- **EmptyState** 统一 21 处空态（4 种写法归一）；**SkeletonCard** 统一 7 处骨架屏；**delivery-outcome-ui** 共享映射收口 3 处重复的投递结果样式表。
+- CronMonitor 同页双展示去重；删除无引用的 ExportPanel + print-export.css；ChannelIcon 图标映射 23→33（修 Radio/Bot/BellRing 等静默回退）。
+- 视觉验收代理 3/3 pass（药丸 header 统一、无截断错位）。
+
+### AI 全链路
+
+- **多轮追问上下文**：RAG 注入最近 3 轮问答（答案截断防上下文爆炸），"它呢/第二个是什么"可答；有效检索回答（retrieval-only）也参与。
+- **输出禁令**：SYSTEM_PROMPT 明令自然中文短句、禁止 Markdown 记号、只答最后一问。
+- 前端审查修复：搜索防整卡重挂载、priorHistory 过滤放宽、空态兜底文案。
+
+### 运维
+
+- **环境变量体检**：deploy-info envChecks 扩 9 项可选功能（Telegram Bot / Web Push / Google OAuth / Blob / 语义搜索 / WebAuthn / APP_BASE_URL / DEPLOY_TOKEN / HEALTH_DETAIL_TOKEN），只报布尔绝不回显值；Security 页三态网格（✓/○/✗，必填缺失红 ✗）。
+- **日志防撑爆**：保留期第三轮 12 张表接入（interactions/maintenance_logs/ocr_results/agent_feedback/agent_decision_cards/agent_routine_artifacts/agent_digest_folds/agent_notification_claims/agent_confirmations/agent_workers/bot_link_codes/webauthn_challenges），清理注册表 23→35。
+
+### 自查与实测
+
+- 双端审查代理 12 项发现（2 P1 / 2 P2 / 8 P3）全部修复；后端审查同时确认三集合同步、凭据列映射、12 张表列名、SQL 零拼接、无值泄漏。
+- Playwright 实测：分类 chips/搜索/Awtrix 二维码/环境变量卡/LocalAI 首卡；wave4-dispatch 新增 3 个「200 带错误体必须抛错」反向测试。
+- 后端 1678 / 前端 310 测试全绿；tsc 双端零错误；账本 docs/v2.29-LEDGER.md 逐项可核对（20 功能 / 100 优化）。
+
 ## v2.28.0 (2026-10-06) — AI 对话体验 + 渠道向导(51 渠道) + 日志治理
 
 ### AI 对话（用户反馈的三大痛点全部修复，根因均为实查定位）

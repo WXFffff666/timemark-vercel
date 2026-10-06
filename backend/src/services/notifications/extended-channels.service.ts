@@ -85,7 +85,7 @@ export async function sendHomeAssistantNotification(event: any, baseUrl: string,
   );
 }
 
-export type TestConnectionResult = { success: boolean; message: string; details?: string };
+export type TestConnectionResult = { success: boolean; message: string; details?: string; latency?: number };
 
 export async function testWhatsAppCloudChannel(token: string, phoneNumberId: string, to: string): Promise<TestConnectionResult> {
   if (!token || !phoneNumberId || !to) {
@@ -283,16 +283,17 @@ export async function sendIftttNotification(event: any, key: string, eventName: 
 
 export async function testIftttChannel(key: string, eventName: string): Promise<TestConnectionResult> {
   if (!key || !eventName) return { success: false, message: 'Webhooks Key 和触发事件名都不能为空' };
+  const start = Date.now();
   try {
     await axios.post(
       `https://maker.ifttt.com/trigger/${encodeURIComponent(eventName)}/with/key/${encodeURIComponent(key)}`,
       { value1: 'TimeMark 渠道测试', value2: '', value3: '如果你看到这条消息，说明 IFTTT 渠道已通。' },
       { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
     );
-    return { success: true, message: '测试请求已发送（请在 IFTTT Applet 确认触发）' };
+    return { success: true, message: '测试请求已发送（请在 IFTTT Applet 确认触发）', latency: Date.now() - start };
   } catch (error: any) {
     const status = error?.response?.status;
-    return { success: false, message: status ? `IFTTT 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+    return { success: false, message: status ? `IFTTT 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}`, latency: Date.now() - start };
   }
 }
 
@@ -308,16 +309,17 @@ export async function sendRevoltNotification(event: any, botToken: string, chann
 
 export async function testRevoltChannel(botToken: string, channelId: string): Promise<TestConnectionResult> {
   if (!botToken || !channelId) return { success: false, message: 'Bot Token 和频道 ID 都不能为空' };
+  const start = Date.now();
   try {
     await axios.post(
       `https://api.revolt.chat/channels/${encodeURIComponent(channelId)}/messages`,
       { content: 'TimeMark 渠道测试：如果你看到这条消息，说明 Revolt 渠道已通。' },
       { headers: { 'x-bot-token': botToken, 'Content-Type': 'application/json' }, timeout: 10000 },
     );
-    return { success: true, message: '测试消息已发送（请在 Revolt 频道确认）' };
+    return { success: true, message: '测试消息已发送（请在 Revolt 频道确认）', latency: Date.now() - start };
   } catch (error: any) {
     const status = error?.response?.status;
-    return { success: false, message: status ? `Revolt 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+    return { success: false, message: status ? `Revolt 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}`, latency: Date.now() - start };
   }
 }
 
@@ -332,24 +334,30 @@ export async function sendOneSignalNotification(event: any, apiKey: string, appI
   };
   if (subscriptionId) body.include_subscription_ids = [subscriptionId];
   else body.included_segments = ['Subscribed Users'];
-  await axios.post('https://api.onesignal.com/notifications', body, {
+  const res = await axios.post('https://api.onesignal.com/notifications', body, {
     headers: { Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}`, 'Content-Type': 'application/json' },
     timeout: 10000,
   });
+  // 目标无效时 OneSignal 回 200 + errors/空 id，必须查 body
+  const data = res.data as { id?: string; errors?: string[] } | undefined;
+  if (data?.errors?.length || !data?.id) {
+    throw new Error(`OneSignal 发送失败：${data?.errors?.join('; ') ?? '未创建通知'}`);
+  }
 }
 
 export async function testOneSignalChannel(apiKey: string, appId: string): Promise<TestConnectionResult> {
   if (!apiKey || !appId) return { success: false, message: 'REST API Key 和 App ID 都不能为空' };
+  const start = Date.now();
   try {
     await axios.get(`https://api.onesignal.com/apps/${appId}`, {
       headers: { Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}` },
       timeout: 10000,
     });
-    return { success: true, message: 'OneSignal 凭据有效（App 可访问）' };
+    return { success: true, message: 'OneSignal 凭据有效（App 可访问）', latency: Date.now() - start };
   } catch (error: any) {
     const status = error?.response?.status;
     const message = error?.response?.data?.errors?.join?.('; ') || error?.message || '连接失败';
-    return { success: false, message: status ? `OneSignal 错误（HTTP ${status}）：${message}` : `连接失败：${message}` };
+    return { success: false, message: status ? `OneSignal 错误（HTTP ${status}）：${message}` : `连接失败：${message}`, latency: Date.now() - start };
   }
 }
 
@@ -370,6 +378,7 @@ export async function sendSendgridNotification(event: any, apiKey: string, from:
 
 export async function testSendgridChannel(apiKey: string, from: string, to: string): Promise<TestConnectionResult> {
   if (!apiKey || !from || !to) return { success: false, message: 'API Key、发件人邮箱和收件人邮箱都不能为空' };
+  const start = Date.now();
   try {
     await axios.post(
       'https://api.sendgrid.com/v3/mail/send',
@@ -382,11 +391,11 @@ export async function testSendgridChannel(apiKey: string, from: string, to: stri
       },
       { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 10000 },
     );
-    return { success: true, message: 'SendGrid 凭据有效（沙箱模式验证通过，未真实发信）' };
+    return { success: true, message: 'SendGrid 凭据有效（沙箱模式验证通过，未真实发信）', latency: Date.now() - start };
   } catch (error: any) {
     const status = error?.response?.status;
     const message = error?.response?.data?.errors?.[0]?.message || error?.message || '连接失败';
-    return { success: false, message: status ? `SendGrid 错误（HTTP ${status}）：${message}` : `连接失败：${message}` };
+    return { success: false, message: status ? `SendGrid 错误（HTTP ${status}）：${message}` : `连接失败：${message}`, latency: Date.now() - start };
   }
 }
 
@@ -408,6 +417,7 @@ export async function sendMailgunNotification(event: any, apiKey: string, domain
 
 export async function testMailgunChannel(apiKey: string, domain: string, to: string): Promise<TestConnectionResult> {
   if (!apiKey || !domain || !to) return { success: false, message: 'API Key、发信域名和收件人邮箱都不能为空' };
+  const start = Date.now();
   try {
     const params = new URLSearchParams({ from: `TimeMark <postmaster@${domain}>`, to, subject: 'TimeMark 渠道测试', text: '如果你看到这封邮件，说明 Mailgun 渠道已通。' });
     await axios.post(`https://api.mailgun.net/v3/${encodeURIComponent(domain)}/messages`, params, {
@@ -415,10 +425,10 @@ export async function testMailgunChannel(apiKey: string, domain: string, to: str
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       timeout: 10000,
     });
-    return { success: true, message: '测试邮件已发送（请查收邮箱确认）' };
+    return { success: true, message: '测试邮件已发送（请查收邮箱确认）', latency: Date.now() - start };
   } catch (error: any) {
     const status = error?.response?.status;
-    return { success: false, message: status ? `Mailgun 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+    return { success: false, message: status ? `Mailgun 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}`, latency: Date.now() - start };
   }
 }
 
@@ -426,24 +436,30 @@ export async function testMailgunChannel(apiKey: string, domain: string, to: str
 
 export async function sendVonageSmsNotification(event: any, apiKey: string, apiSecret: string, to: string): Promise<void> {
   const params = new URLSearchParams({ api_key: apiKey, api_secret: apiSecret, to: String(to).replace(/[^\d+]/g, ''), from: 'TimeMark', text: buildMessage(event) });
-  await axios.post('https://rest.nexmo.com/sms/json', params, {
+  const res = await axios.post('https://rest.nexmo.com/sms/json', params, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     timeout: 10000,
   });
+  // Vonage 失败也回 HTTP 200，业务结果在 messages[0].status（'0' = 成功）
+  const m = (res.data as { messages?: Array<{ status?: string; 'error-text'?: string }> } | undefined)?.messages?.[0];
+  if (!m || m.status !== '0') {
+    throw new Error(`Vonage 发送失败（status ${m?.status ?? 'unknown'}）：${m?.['error-text'] ?? 'unknown'}`);
+  }
 }
 
 export async function testVonageSmsChannel(apiKey: string, apiSecret: string, to: string): Promise<TestConnectionResult> {
   if (!apiKey || !apiSecret || !to) return { success: false, message: 'API Key、API Secret 和收件人手机号都不能为空' };
+  const start = Date.now();
   try {
-    const params = new URLSearchParams({ api_key: apiKey, api_secret: apiSecret });
-    await axios.post('https://rest.nexmo.com/account/get-balance', params, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    // get-balance 只接受 GET 查询串，POST form 会 400
+    await axios.get('https://rest.nexmo.com/account/get-balance', {
+      params: { api_key: apiKey, api_secret: apiSecret },
       timeout: 10000,
     });
-    return { success: true, message: 'Vonage 凭据有效（账户余额可查询，未消耗短信条数）' };
+    return { success: true, message: 'Vonage 凭据有效（账户余额可查询，未消耗短信条数）', latency: Date.now() - start };
   } catch (error: any) {
     const status = error?.response?.status;
-    return { success: false, message: status ? `Vonage 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+    return { success: false, message: status ? `Vonage 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}`, latency: Date.now() - start };
   }
 }
 
@@ -459,30 +475,36 @@ export async function sendMessagebirdNotification(event: any, accessKey: string,
 
 export async function testMessagebirdChannel(accessKey: string, to: string): Promise<TestConnectionResult> {
   if (!accessKey || !to) return { success: false, message: 'Access Key 和收件人手机号都不能为空' };
+  const start = Date.now();
   try {
     await axios.get('https://rest.messagebird.com/balance', {
       headers: { Authorization: `AccessKey ${accessKey}` },
       timeout: 10000,
     });
-    return { success: true, message: 'MessageBird 凭据有效（账户余额可查询，未消耗短信条数）' };
+    return { success: true, message: 'MessageBird 凭据有效（账户余额可查询，未消耗短信条数）', latency: Date.now() - start };
   } catch (error: any) {
     const status = error?.response?.status;
-    return { success: false, message: status ? `MessageBird 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+    return { success: false, message: status ? `MessageBird 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}`, latency: Date.now() - start };
   }
 }
 
 // ---- Alertzy：account.token = Account Key ----
 
 export async function sendAlertzyNotification(event: any, accountKey: string): Promise<void> {
-  await axios.post(
+  const res = await axios.post(
     'https://alertzy.app/send',
     { accountKey, title: event.name ?? 'TimeMark 提醒', body: buildMessage(event) },
     { headers: { 'Content-Type': 'application/json' }, timeout: 10000 },
   );
+  // Alertzy 失败也回 HTTP 200（{response:'fail', error:{...}}），必须查 body
+  if ((res.data as { response?: string } | undefined)?.response !== 'success') {
+    throw new Error(`Alertzy 发送失败：${JSON.stringify((res.data as { error?: unknown } | undefined)?.error ?? res.data ?? {})}`);
+  }
 }
 
 export async function testAlertzyChannel(accountKey: string): Promise<TestConnectionResult> {
   if (!accountKey) return { success: false, message: 'Account Key 不能为空' };
+  const start = Date.now();
   try {
     const res = await axios.post(
       'https://alertzy.app/send',
@@ -491,12 +513,12 @@ export async function testAlertzyChannel(accountKey: string): Promise<TestConnec
     );
     // Alertzy 成功返回 response: 'success'（HTTP 200 也可能带错误信息）
     if (res?.data?.response === 'success') {
-      return { success: true, message: '测试消息已发送（请在 Alertzy 客户端确认）' };
+      return { success: true, message: '测试消息已发送（请在 Alertzy 客户端确认）', latency: Date.now() - start };
     }
-    return { success: false, message: `Alertzy 返回错误：${res?.data?.error ?? JSON.stringify(res?.data ?? {})}` };
+    return { success: false, message: `Alertzy 返回错误：${res?.data?.error ?? JSON.stringify(res?.data ?? {})}`, latency: Date.now() - start };
   } catch (error: any) {
     const status = error?.response?.status;
-    return { success: false, message: status ? `Alertzy 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}` };
+    return { success: false, message: status ? `Alertzy 错误（HTTP ${status}）：${error?.message || 'unknown'}` : `连接失败：${error?.message || 'unknown'}`, latency: Date.now() - start };
   }
 }
 

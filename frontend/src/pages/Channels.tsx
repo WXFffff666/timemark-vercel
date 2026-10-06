@@ -1192,7 +1192,7 @@ export default function Channels() {
 
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={activeTab + categoryFilter + templateSearch}
+                  key={activeTab + categoryFilter}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
@@ -1200,14 +1200,20 @@ export default function Channels() {
                 >
                   {groupedTemplates.length === 0 && (
                     <div className="text-center py-10 text-sm text-slate-500 dark:text-slate-400">
-                      没有匹配「{templateSearch || CATEGORY_LABELS[categoryFilter]}」的渠道
-                      <button
-                        type="button"
-                        onClick={() => { setTemplateSearch(''); setCategoryFilter('all'); }}
-                        className="ml-2 text-primary-500 hover:text-primary-600 underline underline-offset-2"
-                      >
-                        清除筛选
-                      </button>
+                      {templateSearch || categoryFilter !== 'all' ? (
+                        <>
+                          没有匹配「{templateSearch || CATEGORY_LABELS[categoryFilter]}」的渠道
+                          <button
+                            type="button"
+                            onClick={() => { setTemplateSearch(''); setCategoryFilter('all'); }}
+                            className="ml-2 text-primary-500 hover:text-primary-600 underline underline-offset-2"
+                          >
+                            清除筛选
+                          </button>
+                        </>
+                      ) : (
+                        '该类型下暂无渠道'
+                      )}
                     </div>
                   )}
                   {groupedTemplates.map((group) => (
