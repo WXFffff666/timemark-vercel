@@ -102,9 +102,12 @@ export function LocalAI() {
   }, []);
 
   useEffect(() => {
-    // 双层滚动策略（v2.28）：容器自身滚底（新消息/流式输出始终可见）；
+    // 双层滚动策略（v2.28，v2.30 修订）：容器自身滚底（新消息/流式输出始终可见）；
     // 若整个对话卡在视口外（页面太长把它顶下去），用受控 window.scrollTo
     // 把卡片顶部带进视口——不用 scrollIntoView，它会把所有可滚祖先一起滚走。
+    // v2.30：busy 也进依赖——开始生成时立刻把输入区滚进视口；
+    // 移除容器 overscroll-contain（滚到边界后手势被吞是"滑不动"的元凶），
+    // 滚到底后自然链到页面滚动。
     const container = historyRef.current;
     if (!container) return;
     container.scrollTop = container.scrollHeight;
@@ -113,7 +116,7 @@ export function LocalAI() {
       const target = window.scrollY + rect.top - 88;
       window.scrollTo({ top: Math.max(target, 0), behavior: 'smooth' });
     }
-  }, [history]);
+  }, [history, busy]);
 
   const handleBuildIndex = useCallback(async () => {
     setIndexBuilding(true);
@@ -195,12 +198,13 @@ export function LocalAI() {
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-5">
         {/* 对话（v2.28：提升为首卡 —— 此前排第 3，移动端被顶出视口，是"看不到后续对话"的主因） */}
         <section className="glass-panel rounded-[2rem] p-6 ring-1 ring-black/5 dark:ring-white/10">
-          <div className="flex items-center justify-between mb-3">
+          {/* v2.30：头部按钮行 flex-wrap——窄屏上"清空对话"不再被挤出画面 */}
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h2 className="text-base font-semibold flex items-center gap-2">
               <Sparkles size={18} className="text-blue-500" /> 问问你的数据
             </h2>
             {history.length > 0 && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 {/* v2.27：导出全部对话为 Markdown（复制到剪贴板） */}
                 <button
                   type="button"
@@ -233,10 +237,12 @@ export function LocalAI() {
                 >
                   导出对话
                 </button>
+                {/* v2.30：清空从"隐形 hover 文字"改为可见描边按钮——移动端没有 hover，
+                    此前用户找不到清理入口；确认文案写明后果 */}
                 <button
                   type="button"
                   onClick={() => void handleClearHistory()}
-                  className="text-xs text-slate-400 hover:text-red-500 transition"
+                  className="text-xs px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-red-400 hover:text-red-500 transition"
                 >
                   清空对话
                 </button>
@@ -245,7 +251,9 @@ export function LocalAI() {
           </div>
           <div
             ref={historyRef}
-            className="space-y-4 max-h-[26rem] overflow-y-auto overscroll-contain mb-4"
+            // v2.30：高度自适应视口（dvh）+ 移除 overscroll-contain——固定 26rem 加
+            // 边界手势吞掉，是"对话框被截断、往下滑不动"的两个叠加原因
+            className="space-y-4 max-h-[min(32rem,60dvh)] min-h-[8rem] overflow-y-auto mb-4"
             aria-live="polite"
           >
             {history.length === 0 && (
