@@ -2,24 +2,29 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { cors } from 'hono/cors';
-import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 
 // v2.28 C16：应用版本单一来源 = 根 package.json；读取失败回退 dev 标记
-const require = createRequire(import.meta.url);
-const APP_VERSION: string = (() => {
-  try {
-    // backend/dist → ../../package.json；ts 源 → ../../package.json 同路径
-    for (const p of ['../../package.json', '../../../package.json']) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-        return String((require(p) as { version?: string }).version ?? 'dev');
-      } catch { /* try next path */ }
+// v2.30 修复：Vercel 生产 bundle 是 esbuild CJS，`import.meta` 为空对象——
+// 原先的 `createRequire(import.meta.url)` 在模块求值期即抛错，整个函数冷启动
+// 崩溃（500 FUNCTION_INVOCATION_FAILED，v2.28 部署后全站 API 不可用的根因）。
+// bundle 由 build-vercel-api.mjs banner 注入 process.env.APP_VERSION，优先取之；
+// 本地 dev（tsx ESM）无该值，按 cwd 回退读 package.json。
+const APP_VERSION: string =
+  process.env.APP_VERSION ||
+  (() => {
+    try {
+      // pnpm dev:backend 的 cwd = backend/ → 根 package.json 在上一级
+      for (const p of ['../package.json', '../../package.json', 'package.json']) {
+        try {
+          return String((JSON.parse(readFileSync(p, 'utf8')) as { version?: string }).version ?? 'dev');
+        } catch { /* try next path */ }
+      }
+      return 'dev';
+    } catch {
+      return 'dev';
     }
-    return 'dev';
-  } catch {
-    return 'dev';
-  }
-})();
+  })();
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { zeroTrustGuard } from './middleware/zero-trust-guard.js';

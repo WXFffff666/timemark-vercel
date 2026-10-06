@@ -11,8 +11,7 @@
  * Nothing in this module enables AI; the default is off.
  */
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import type { DigestData } from '../digest.service.js';
 import {
   EmbeddingsDisabledError,
@@ -102,11 +101,13 @@ export const AI_DEPENDENT_SURFACES: ReadonlyArray<{ name: string; gate: string; 
 ];
 
 function envExampleCandidates(): string[] {
-  const here = dirname(fileURLToPath(import.meta.url));
+  // v2.30 修复：bundle 为 esbuild CJS，`import.meta.url` 为空——fileURLToPath 会抛错。
+  // 一律按 cwd 推导：本地 dev cwd=backend/，仓库根在上一级；Vercel 函数 cwd=/var/task/。
+  const here = process.cwd();
   return [
-    resolve(here, '../../../../.env.example'), // backend/src/services/ai -> repo root
-    resolve(process.cwd(), '.env.example'),
-    resolve(process.cwd(), '../../.env.example'),
+    resolve(here, '../.env.example'), // backend/ -> repo root
+    resolve(here, '.env.example'),
+    resolve(here, '../../.env.example'),
   ];
 }
 

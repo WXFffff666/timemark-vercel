@@ -65,3 +65,20 @@ await esbuild.build({
 
 console.log(`[build-vercel-api] Wrote ${outfile}`)
 console.log(`[build-vercel-api] ${version} @ ${commitSha || 'unknown sha'}`)
+
+// Cold-start smoke gate: a bundle that throws at require() time kills EVERY /api route
+// in production with an opaque Vercel `500 FUNCTION_INVOCATION_FAILED` (v2.28 regression
+// `c61a3c2`: top-level `createRequire(import.meta.url)` — empty `import.meta` under esbuild
+// CJS). Fail the build here instead of discovering it via a dead site.
+try {
+  execFileSync(
+    process.execPath,
+    ['-e', 'require("./api/handler.cjs")'],
+    { cwd: root, env: { ...process.env, VERCEL: '1' }, stdio: 'pipe' },
+  )
+  console.log('[build-vercel-api] cold-start smoke: OK')
+} catch (err) {
+  console.error('[build-vercel-api] COLD-START SMOKE FAILED — bundle throws at require():')
+  console.error(err?.stderr?.toString() || err?.message || err)
+  process.exit(1)
+}
