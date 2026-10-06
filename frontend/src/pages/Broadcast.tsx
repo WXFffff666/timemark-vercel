@@ -188,8 +188,8 @@ export default function Broadcast() {
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24">
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={goBack}>
-          <ArrowLeft className="w-5 h-5" />
+        <Button variant="ghost" size="icon" onClick={goBack} aria-label="返回">
+          <ArrowLeft className="w-5 h-5" aria-hidden />
         </Button>
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Mail className="w-6 h-6" />批量邮件</h1>

@@ -56,6 +56,8 @@ export default function Inbox() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [showReceiveCard, setShowReceiveCard] = useState(false);
+  // v2.30：复制成功反馈（2s 自动清除）
+  const [copiedLabel, setCopiedLabel] = useState('');
   const [receiveUrl, setReceiveUrl] = useState<string | null>(null);
   const [retentionDays, setRetentionDays] = useState<number | null>(null);
 
@@ -216,9 +218,14 @@ export default function Inbox() {
                     variant="outline"
                     size="sm"
                     className="rounded-full mt-3"
-                    onClick={() => navigator.clipboard.writeText(receiveUrl).catch(() => undefined)}
+                    onClick={() => {
+                      navigator.clipboard.writeText(receiveUrl).then(() => {
+                        setCopiedLabel('收件地址');
+                        setTimeout(() => setCopiedLabel(''), 2000);
+                      }).catch(() => undefined);
+                    }}
                   >
-                    <Copy size={14} className="mr-1" /> 复制地址
+                    <Copy size={14} className="mr-1" /> {copiedLabel === '收件地址' ? '已复制 ✓' : '复制地址'}
                   </Button>
                 </div>
               </>
@@ -350,9 +357,15 @@ export default function Inbox() {
                             className="rounded-full text-xs text-slate-400"
                             aria-label="复制正文"
                             title="复制正文"
-                            onClick={() => navigator.clipboard.writeText(msg.body).catch(() => undefined)}
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.body).then(() => {
+                                setCopiedLabel(`msg-${msg.id}`);
+                                setTimeout(() => setCopiedLabel(''), 2000);
+                              }).catch(() => undefined);
+                            }}
                           >
                             <Copy size={14} />
+                            {copiedLabel === `msg-${msg.id}` && <span className="sr-only">已复制</span>}
                           </Button>
                           <Button size="sm" variant="ghost" className="rounded-full text-xs text-red-500" aria-label="删除消息" onClick={() => deleteMessage(msg.id)}>
                             <Trash2 size={14} />
