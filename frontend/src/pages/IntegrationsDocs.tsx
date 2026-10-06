@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Copy, Send, Smartphone } from 'lucide-react';
+import { ArrowLeft, Code2, Copy, Send, Smartphone } from 'lucide-react';
 import { api } from '@/lib/api';
 
 const SITE = typeof window !== 'undefined' ? window.location.origin : 'https://your-timemark.vercel.app';
@@ -174,6 +174,26 @@ export default function IntegrationsDocs() {
 Content-Type: application/json
 
 {"name":"会议","date":"2026-08-01","type":"meeting","daysBefore":[1]}`}</pre>
+      </section>
+
+      <section className="mb-8 glass-panel p-6 rounded-2xl" aria-labelledby="rest-api-heading">
+        <h2 id="rest-api-heading" className="text-lg font-semibold mb-2 flex items-center gap-2">
+          <Code2 size={20} aria-hidden /> REST API（v2.30 新增）
+        </h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+          在 <strong>API 门户</strong> 创建 Token（默认只读，write 才能新建事件）后，用 <code className="font-mono text-xs">Authorization: Bearer tmt_…</code> 调用以下只读端点：
+        </p>
+        <pre className="text-xs bg-slate-100 dark:bg-slate-800 p-3 rounded overflow-x-auto mb-3" tabIndex={0}>{`GET  /api/v1/events?from=2026-01-01&to=2026-12-31&limit=50
+GET  /api/v1/events/:id
+GET  /api/v1/expiry?within=30
+GET  /api/v1/habits
+GET  /api/v1/stats/daily?from=&to=
+POST /api/v1/events          # write scope`}</pre>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+          响应统一 <code className="font-mono">{'{ success, data | error }'}</code>；每 Token 限速 120 次/分钟（429 带 Retry-After）；每次调用可在 API 门户看到审计流水。
+        </p>
+        <pre className="text-xs bg-slate-100 dark:bg-slate-800 p-3 rounded overflow-x-auto" tabIndex={0}>{`curl -H "Authorization: Bearer tmt_xxx" \\
+  "${SITE}/api/v1/events?limit=10"`}</pre>
       </section>
 
       <section className="glass-panel p-6 rounded-2xl" aria-labelledby="bookmarklet-heading">

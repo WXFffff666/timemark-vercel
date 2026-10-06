@@ -213,6 +213,31 @@ export default function Habits() {
     }
   };
 
+  // v2.30：今日一键打卡——把「今日应打卡且未达标」的习惯全部打上
+  const [bulkLogging, setBulkLogging] = useState(false);
+  const logAllDueToday = async () => {
+    const due = habits.filter((h) => isHabitScheduledOn(today, h.schedule_days) && !h.streak.targetMet);
+    if (due.length === 0) {
+      setStatus('今日全部达标，无需打卡 🎉');
+      return;
+    }
+    if (!confirm(`一键打卡 ${due.length} 个未达标的习惯？`)) return;
+    setBulkLogging(true);
+    setError('');
+    try {
+      for (const h of due) {
+        await api.post(`/habits/${h.id}/log`, {});
+      }
+      setStatus(`已批量打卡 ${due.length} 个习惯`);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '批量打卡失败（部分可能已成功）');
+      await refresh();
+    } finally {
+      setBulkLogging(false);
+    }
+  };
+
   const openCreate = () => {
     setEditingId(null);
     setForm(emptyForm());
@@ -331,7 +356,14 @@ export default function Habits() {
         ) : (
           <>
             <section aria-label="今日习惯" className="space-y-2">
-              <h2 className="text-sm font-bold px-1 text-hint">今日习惯 · {habits.length}</h2>
+              <div className="flex items-center justify-between px-1">
+                <h2 className="text-sm font-bold text-hint">今日习惯 · {habits.length}</h2>
+                {habits.some((h) => isHabitScheduledOn(today, h.schedule_days) && !h.streak.targetMet) && (
+                  <Button size="sm" variant="outline" className="rounded-full h-7 text-xs" disabled={bulkLogging} onClick={logAllDueToday}>
+                    {bulkLogging ? '打卡中…' : '一键打卡未达标'}
+                  </Button>
+                )}
+              </div>
               {habits.map((habit) => {
                 const scheduled = isHabitScheduledOn(today, habit.schedule_days);
                 const met = habit.streak.targetMet;
