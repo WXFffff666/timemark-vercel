@@ -18,6 +18,11 @@ import {
   type DigestSectionKey,
 } from './digest-sections.js';
 import { isDigestNarrativeEnabled, summarizeDigestNarrative } from './ai/summarize.js';
+import {
+  getLocalDayKey,
+  readNotificationBudgetConfig,
+  tryConsumeDailyBudget,
+} from './agent/notification-budget.service.js';
 
 /**
  * 周期性图文摘要（checkbox 79）。
@@ -34,9 +39,20 @@ import { isDigestNarrativeEnabled, summarizeDigestNarrative } from './ai/summari
 
 const log = createLogger('digest');
 
-export type DigestPeriod = 'monthly' | 'yearly';
+/**
+ * v2.30 方向 A：period 扩展到日/周粒度。
+ * - daily  → 刚结束的那个 UTC 日（过去 24h）
+ * - weekly → 过去 7 天（不含今天）
+ * monthly/yearly 语义不变。
+ */
+export type DigestPeriod = 'monthly' | 'yearly' | 'daily' | 'weekly';
 
-const PERIOD_LABEL: Record<DigestPeriod, string> = { monthly: '月度', yearly: '年度' };
+const PERIOD_LABEL: Record<DigestPeriod, string> = {
+  monthly: '月度',
+  yearly: '年度',
+  daily: '每日',
+  weekly: '每周',
+};
 
 /** 无 AI 叙述时逐字节复用的说明文案（task 79 原样）。 */
 const DETERMINISTIC_NOTE = '本摘要由 TimeMark 确定性生成，不含 AI 叙述。';
@@ -53,6 +69,37 @@ export interface DigestHabitRow { name: string; logged: number; target: number; 
 export interface DigestMedicationRow { name: string; taken: number; skipped: number; missed: number; total: number; percentage: number }
 export interface DigestMaintenanceRow { assetName: string; due: string; overdue: boolean }
 export interface DigestGoalRow { title: string; status: string; progress: number | null; milestonesDone: number; milestonesTotal: number }
+
+/**
+ * 日报（daily）补充快照：月/年摘要聚合不到的「过去 24h」计数。
+ * 全部来自一次 SQL 多子查询；任一子查询失败整体降级为 0（不阻断摘要）。
+ */
+export interface DigestDailyStats {
+  /** 昨日事件数（ occurrence 落在区间内的事件）。 */
+  eventsCount: number;
+  /** 完成待办/提醒数（todo_completions）。 */
+  todosCompleted: number;
+  /** 新增待办/事项数（区间内新建的事件）。 */
+  todosAdded: number;
+  /** 已服药次数（medication_doses.status='taken'）。 */
+  dosesTaken: number;
+  /** 错过/漏服次数（status='missed'）。 */
+  dosesMissed: number;
+  /** 今日到期（expiry_items + 保养 + 证件）。 */
+  dueToday: number;
+  /** 习惯打卡率（区间内有目标的习惯的平均完成率，0-100；无目标习惯为 null）。 */
+  habitRate: number | null;
+}
+
+/** 周报（weekly）周对比行：本期 vs 上期。 */
+export interface DigestComparisonRow { label: string; current: number; previous: number }
+
+/** 周报周对比：只比较区间型聚合（时点型指标如「未来 30 天」不参与）。 */
+export interface DigestComparison {
+  from: string;
+  to: string;
+  rows: DigestComparisonRow[];
+}
 
 export interface DigestSpend {
   from: string;
@@ -95,6 +142,10 @@ export interface DigestData {
    * 仅在 `AI_DIGEST_NARRATIVE=true` 且模型输出通过数字校验时才有值。
    */
   narrative?: string;
+  /** 日报（daily）专属的过去 24h 快照；其余 period 不带此字段。 */
+  daily?: DigestDailyStats;
+  /** 周报（weekly）专属的上期对比；其余 period 不带此字段。 */
+  comparison?: DigestComparison | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -119,13 +170,23 @@ function addDaysYmd(ymd: string, delta: number): string {
  * 摘要覆盖区间：
  * - monthly → 刚结束的那个自然月（例如 2026-09-01 .. 2026-09-30）
  * - yearly  → 刚结束的那个自然年
+ * - daily   → 刚结束的那个 UTC 日（过去 24h，from = to = 昨天）
+ * - weekly  → 过去 7 天（今天 -7 .. 今天 -1）
  * 「未来 30 天 / 逾期」始终相对 `now` 当天。
  */
 export function digestPeriodBounds(period: DigestPeriod, now: Date): { from: string; to: string } {
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth();
+  const today = toYmd(now);
   if (period === 'yearly') {
     return { from: `${year - 1}-01-01`, to: `${year - 1}-12-31` };
+  }
+  if (period === 'daily') {
+    const yesterday = addDaysYmd(today, -1);
+    return { from: yesterday, to: yesterday };
+  }
+  if (period === 'weekly') {
+    return { from: addDaysYmd(today, -7), to: addDaysYmd(today, -1) };
   }
   return {
     from: toYmd(new Date(Date.UTC(year, month - 1, 1))),
@@ -154,13 +215,102 @@ function asYmd(value: unknown): string {
 }
 
 /* ------------------------------------------------------------------ */
+/* 日报快照 + 周报对比（v2.30 方向 A）                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 日报补充快照：一次 SQL 拿齐月/年摘要覆盖不到的「过去 24h」计数。
+ * 任一子查询失败（旧库缺表等）→ 整体降级为 0，绝不阻断摘要发送。
+ */
+async function buildDailyStats(userId: number, from: string, to: string, today: string): Promise<DigestDailyStats> {
+  try {
+    const result = await query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM events
+           WHERE user_id = $1 AND COALESCE(next_occurrence, date) BETWEEN $2::date AND $3::date) AS events_count,
+         (SELECT COUNT(*)::int FROM todo_completions
+           WHERE user_id = $1 AND occurrence_date BETWEEN $2::date AND $3::date) AS todos_completed,
+         (SELECT COUNT(*)::int FROM events
+           WHERE user_id = $1 AND created_at::date BETWEEN $2::date AND $3::date) AS todos_added,
+         (SELECT COUNT(*)::int FROM medication_doses
+           WHERE user_id = $1 AND status = 'taken' AND scheduled_for::date BETWEEN $2::date AND $3::date) AS doses_taken,
+         (SELECT COUNT(*)::int FROM medication_doses
+           WHERE user_id = $1 AND status = 'missed' AND scheduled_for::date BETWEEN $2::date AND $3::date) AS doses_missed,
+         (SELECT COUNT(*)::int FROM expiry_items
+           WHERE user_id = $1 AND is_active = TRUE AND next_due_date = $4::date)
+         + (SELECT COUNT(*)::int FROM maintenance_plans
+           WHERE user_id = $1 AND is_active = TRUE AND next_due_at::date = $4::date)
+         + (SELECT COUNT(*)::int FROM documents
+           WHERE user_id = $1 AND is_active = TRUE AND expires_at::date = $4::date) AS due_today`,
+      [userId, from, to, today],
+    );
+    const row = (result.rows[0] ?? {}) as Record<string, unknown>;
+    return {
+      eventsCount: asNumber(row.events_count),
+      todosCompleted: asNumber(row.todos_completed),
+      todosAdded: asNumber(row.todos_added),
+      dosesTaken: asNumber(row.doses_taken),
+      dosesMissed: asNumber(row.doses_missed),
+      dueToday: asNumber(row.due_today),
+      habitRate: null, // 由调用方依据 habits 聚合填充
+    };
+  } catch (error) {
+    log.warn({ event: 'digest.daily_stats_failed', userId, err: error }, 'Daily digest stats unavailable; degrading to zeros');
+    return {
+      eventsCount: 0, todosCompleted: 0, todosAdded: 0, dosesTaken: 0, dosesMissed: 0, dueToday: 0, habitRate: null,
+    };
+  }
+}
+
+/** 区间内「有目标的习惯」的平均完成率；没有可统计的习惯 → null（渲染为 —）。 */
+function averageHabitRate(habits: DigestHabitRow[]): number | null {
+  const counted = habits.filter((habit) => habit.target > 0);
+  if (counted.length === 0) return null;
+  return Math.round(counted.reduce((sum, habit) => sum + habit.rate, 0) / counted.length);
+}
+
+/**
+ * 周报对比：用同一套 buildDigestData 聚合上周（now - 7 天）的区间型指标，
+ * 与本期 `current` 的同口径计数逐行对比。时点型指标（未来 30 天 / 逾期）不参与。
+ * 失败 → null（渲染时跳过该区块）。
+ */
+async function buildWeeklyComparison(
+  userId: number,
+  current: Pick<DigestData, 'habits' | 'medications' | 'spend' | 'goals'>,
+  now: Date,
+): Promise<DigestComparison | null> {
+  try {
+    const previous = await buildDigestData(userId, 'weekly', new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), { withComparison: false });
+    return {
+      from: previous.from,
+      to: previous.to,
+      rows: [
+        { label: '习惯打卡次数', current: current.habits.reduce((sum, habit) => sum + habit.logged, 0), previous: previous.habits.reduce((sum, habit) => sum + habit.logged, 0) },
+        { label: '用药记录条数', current: current.medications.total, previous: previous.medications.total },
+        { label: '一次性支出笔数', current: current.spend.onceCount, previous: previous.spend.onceCount },
+        { label: '目标数', current: current.goals.length, previous: previous.goals.length },
+      ],
+    };
+  } catch (error) {
+    log.warn({ event: 'digest.weekly_comparison_failed', userId, err: error }, 'Weekly digest comparison unavailable');
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* 数据聚合（真实 SQL + 既有 service）                                  */
 /* ------------------------------------------------------------------ */
+
+export interface BuildDigestDataOptions {
+  /** 内部递归保护：周报对比聚合上周时不再次触发对比。 */
+  withComparison?: boolean;
+}
 
 export async function buildDigestData(
   userId: number,
   period: DigestPeriod,
   now: Date = new Date(),
+  options: BuildDigestDataOptions = {},
 ): Promise<DigestData> {
   const bounds = digestPeriodBounds(period, now);
   const today = toYmd(now);
@@ -300,6 +450,13 @@ export async function buildDigestData(
     maintenance.length === 0 &&
     goals.length === 0;
 
+  const dailyStats = period === 'daily' ? await buildDailyStats(userId, bounds.from, bounds.to, today) : undefined;
+  if (dailyStats) dailyStats.habitRate = averageHabitRate(habits);
+  const comparison =
+    period === 'weekly' && options.withComparison !== false
+      ? await buildWeeklyComparison(userId, { habits, medications, spend: spendData, goals }, now)
+      : undefined;
+
   return {
     userId,
     period,
@@ -314,6 +471,8 @@ export async function buildDigestData(
     maintenance,
     goals,
     isEmpty,
+    ...(dailyStats ? { daily: dailyStats } : {}),
+    ...(comparison ? { comparison } : {}),
   };
 }
 
@@ -330,6 +489,13 @@ export interface DigestPreferences {
   sections: DigestSectionKey[] | null;
   /** null = 自动选择第一个可用邮件渠道。 */
   channelAccountId: number | null;
+  /** v2.30 方向 A：日报/周报独立开关与投递时刻（用户本地时区 HH:mm）。 */
+  dailyEnabled: boolean;
+  dailyTime: string;
+  weeklyEnabled: boolean;
+  /** 0=周日 … 6=周六 */
+  weeklyDay: number;
+  weeklyTime: string;
 }
 
 /**
@@ -341,6 +507,11 @@ export interface DigestPreferences {
  * 与 v79 的行为一致。
  */
 function readDigestPreferences(userConfig: Record<string, unknown> | null | undefined): DigestPreferences {
+  // v2.30 方向 A：日报/周报的独立开关与时刻（v81 迁移列，全带默认值）
+  const hhmm = (value: unknown, fallback: string): string =>
+    typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : fallback;
+  const weekday = (value: unknown): number =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 6 ? value : 1;
   return {
     enabled: userConfig?.digest_enabled !== false,
     period: userConfig?.digest_period === 'yearly' ? 'yearly' : 'monthly',
@@ -348,7 +519,55 @@ function readDigestPreferences(userConfig: Record<string, unknown> | null | unde
     sections: normalizeDigestSections(userConfig?.digest_sections),
     channelAccountId:
       typeof userConfig?.digest_channel_account_id === 'number' ? userConfig.digest_channel_account_id : null,
+    dailyEnabled: userConfig?.digest_daily_enabled === true,
+    dailyTime: hhmm(userConfig?.digest_daily_time, '21:00'),
+    weeklyEnabled: userConfig?.digest_weekly_enabled === true,
+    weeklyDay: weekday(userConfig?.digest_weekly_day),
+    weeklyTime: hhmm(userConfig?.digest_weekly_time, '09:00'),
   };
+}
+
+/**
+ * v2.30 方向 A：daily/weekly 是否到了今天的投递时刻（用户本地时区）。
+ * 外部 cron 每天调一次 /api/cron/digest?period=daily|weekly；只要本地时间
+ * 已过配置时刻即视为到点，配合 digest_archive 查重保证一天最多发一次。
+ */
+export function isDigestDue(prefs: DigestPreferences, period: DigestPeriod, now: Date, timezone?: string): boolean {
+  if (period === 'daily') {
+    if (!prefs.dailyEnabled) return false;
+    return localHhmm(now, timezone) >= prefs.dailyTime;
+  }
+  if (period === 'weekly') {
+    if (!prefs.weeklyEnabled) return false;
+    const localNow = toZonedDate(now, timezone);
+    if (localNow.getUTCDay() !== prefs.weeklyDay) return false;
+    const hhmm = `${String(localNow.getUTCHours()).padStart(2, '0')}:${String(localNow.getUTCMinutes()).padStart(2, '0')}`;
+    return hhmm >= prefs.weeklyTime;
+  }
+  return true;
+}
+
+/** 任意时区的 HH:mm 字符串（依赖 Intl；时区非法时回退 Asia/Shanghai）。 */
+function localHhmm(now: Date, timezone?: string): string {
+  const localNow = toZonedDate(now, timezone);
+  return `${String(localNow.getUTCHours()).padStart(2, '0')}:${String(localNow.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+/** 把绝对时刻平移到目标时区的墙钟（以 UTC 字段读出）。 */
+function toZonedDate(now: Date, timezone?: string): Date {
+  let tz = timezone || 'Asia/Shanghai';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+  } catch {
+    tz = 'Asia/Shanghai';
+  }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(now);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return new Date(Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second')));
 }
 
 /**
@@ -424,6 +643,26 @@ function sectionIncluded(data: DigestData, key: DigestSectionKey): boolean {
   return !data.sections || data.sections.includes(key);
 }
 
+/** 变化量文案：正数带 +，0 显示「持平」。 */
+function deltaLabel(delta: number): string {
+  if (delta > 0) return `+${delta}`;
+  if (delta < 0) return String(delta);
+  return '持平';
+}
+
+/** 日报「过去 24 小时概览」的固定行序（HTML 与 PDF 共用）。 */
+function dailyStatsRows(daily: DigestDailyStats): Array<Array<string | number>> {
+  return [
+    ['昨日事件', daily.eventsCount],
+    ['完成待办/提醒', daily.todosCompleted],
+    ['新增待办/事项', daily.todosAdded],
+    ['已服药', daily.dosesTaken],
+    ['漏服/错过用药', daily.dosesMissed],
+    ['今日到期', daily.dueToday],
+    ['习惯打卡率（平均）', daily.habitRate == null ? '—' : `${daily.habitRate}%`],
+  ];
+}
+
 function htmlRows(headers: string[], rows: Array<Array<string | number>>, emptyLabel = '无记录'): string {
   if (rows.length === 0) return `<p class="empty">${escapeHtml(emptyLabel)}</p>`;
   const head = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('');
@@ -465,6 +704,8 @@ ${sectionIncluded(data, 'habits') ? htmlSection('习惯完成率', htmlRows(['�
 ${sectionIncluded(data, 'medications') ? htmlSection('用药依从性', htmlRows(['药品', '已服', '跳过', '漏服', '合计', '依从率'], data.medications.perMedication.map((m) => [m.name, m.taken, m.skipped, m.missed, m.total, `${m.percentage}%`]))) : ''}
 ${sectionIncluded(data, 'maintenance') ? htmlSection('保养到期', htmlRows(['资产', '到期', '状态'], data.maintenance.map((m) => [m.assetName, m.due, m.overdue ? '已逾期' : '临近']))) : ''}
 ${sectionIncluded(data, 'goals') ? htmlSection('目标进度', htmlRows(['目标', '状态', '进度', '里程碑'], data.goals.map((g) => [g.title, g.status, g.progress == null ? '—' : `${g.progress}%`, `${g.milestonesDone}/${g.milestonesTotal}`]))) : ''}
+${data.period === 'daily' && data.daily ? htmlSection('过去 24 小时概览', htmlRows(['指标', '数量'], dailyStatsRows(data.daily))) : ''}
+${data.period === 'weekly' && data.comparison ? htmlSection(`周对比（本周 vs 上周 ${data.comparison.from}~${data.comparison.to}）`, htmlRows(['指标', '本周', '上周', '变化'], data.comparison.rows.map((r) => [r.label, r.current, r.previous, deltaLabel(r.current - r.previous)]))) : ''}
 </main></body></html>
 `;
 }
@@ -578,6 +819,16 @@ export async function renderDigestPdf(data: DigestData): Promise<Uint8Array> {
   if (sectionIncluded(data, 'medications')) pdfSection(writer, '用药依从性', ['药品', '已服', '跳过', '漏服', '依从率'], data.medications.perMedication.map((m) => [m.name, String(m.taken), String(m.skipped), String(m.missed), `${m.percentage}%`]), [250, 77, 77, 77, 6]);
   if (sectionIncluded(data, 'maintenance')) pdfSection(writer, '保养到期', ['资产', '到期', '状态'], data.maintenance.map((m) => [m.assetName, m.due, m.overdue ? '已逾期' : '临近']), [280, 120, 87]);
   if (sectionIncluded(data, 'goals')) pdfSection(writer, '目标进度', ['目标', '状态', '进度', '里程碑'], data.goals.map((g) => [g.title, g.status, g.progress == null ? '—' : `${g.progress}%`, `${g.milestonesDone}/${g.milestonesTotal}`]), [260, 90, 70, 67]);
+  if (data.period === 'daily' && data.daily) pdfSection(writer, '过去 24 小时概览', ['指标', '数量'], dailyStatsRows(data.daily).map(([label, value]) => [String(label), String(value)]), [320, 67]);
+  if (data.period === 'weekly' && data.comparison) {
+    pdfSection(
+      writer,
+      `周对比（本周 vs 上周 ${data.comparison.from}~${data.comparison.to}）`,
+      ['指标', '本周', '上周', '变化'],
+      data.comparison.rows.map((r) => [r.label, String(r.current), String(r.previous), deltaLabel(r.current - r.previous)]),
+      [220, 80, 80, 107],
+    );
+  }
 
   writeLine(writer, '本摘要由 TimeMark 生成，仅作记录。', { size: 9, color: SLATE_500 });
   return doc.save();
@@ -595,9 +846,9 @@ export interface DigestSendResult {
   emailed: boolean;
   recipients: string[];
   inbox: boolean;
-  /** cron 路径下因用户关闭摘要而跳过。 */
+  /** cron 路径下因用户关闭摘要而跳过；或查重命中（本期已发过）而跳过。 */
   skipped?: boolean;
-  reason?: 'no_email_recipient' | 'no_email_channel';
+  reason?: 'no_email_recipient' | 'no_email_channel' | 'already_sent';
 }
 
 export interface DigestSendOptions {
@@ -606,10 +857,15 @@ export interface DigestSendOptions {
    * 手动 `POST /api/digest/send`（默认 false）是用户的显式动作，即使定时任务关闭也照发。
    */
   respectEnabled?: boolean;
+  /**
+   * v2.30 方向 A：查重防重发。开启时若 digest_archive 已有同 period + 同期号的记录
+   * （= 今天/本周已经发过），直接跳过。定时路径固定开启；手动发送不查重（显式动作）。
+   */
+  skipDuplicates?: boolean;
 }
 
 function plainSummary(data: DigestData): string {
-  return [
+  const lines = [
     `TimeMark ${PERIOD_LABEL[data.period]}摘要（${data.from} 至 ${data.to}）`,
     `未来 30 天：${data.upcoming.length} 项`,
     `逾期：${data.overdue.length} 项`,
@@ -617,7 +873,21 @@ function plainSummary(data: DigestData): string {
     `用药剂量：${data.medications.total} 条`,
     `保养到期：${data.maintenance.length} 项`,
     `目标：${data.goals.length} 项`,
-  ].join('\n');
+  ];
+  if (data.daily) {
+    lines.push(
+      `昨日事件：${data.daily.eventsCount}`,
+      `完成待办/提醒：${data.daily.todosCompleted}`,
+      `漏服/错过用药：${data.daily.dosesMissed}`,
+      `今日到期：${data.daily.dueToday}`,
+    );
+  }
+  if (data.comparison) {
+    for (const row of data.comparison.rows) {
+      lines.push(`${row.label}：${row.current}（上周 ${row.previous}）`);
+    }
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -629,6 +899,58 @@ function plainSummary(data: DigestData): string {
 async function resolveDigestNarrative(data: DigestData): Promise<string | null> {
   const { narrative } = await summarizeDigestNarrative(data, { enabled: isDigestNarrativeEnabled() });
   return narrative;
+}
+
+/**
+ * v2.30 方向 A：日报/周报的 AI 叙述受 agent 每日预算闸约束（checkbox 118 的
+ * agent_budget_usage 同一计数器）。仅当本地日还剩一个通知名额时才发起 LLM 调用；
+ * 预算耗尽 / 计数器不可用（旧库）时分别「跳过 AI」/「放行」——前者省成本，后者
+ * 不因缺表阻断既有降级路径。任何异常都不会抛出：AI 不可用 → 纯模板文本。
+ * monthly/yearly 维持既有行为（不占预算），避免回归。
+ */
+async function resolveDigestNarrativeGated(
+  userId: number,
+  period: DigestPeriod,
+  data: DigestData,
+  timezone: string | undefined,
+  now: Date,
+): Promise<string | null> {
+  if (period !== 'daily' && period !== 'weekly') return resolveDigestNarrative(data);
+  if (!isDigestNarrativeEnabled()) return null;
+  try {
+    const tz = timezone && timezone.includes('/') ? timezone : 'Asia/Shanghai';
+    const dayKey = getLocalDayKey(now, tz);
+    const limit = readNotificationBudgetConfig().perDay;
+    const consumed = await tryConsumeDailyBudget(userId, dayKey, limit);
+    if (!consumed.allowed) {
+      log.info(
+        { event: 'digest.ai_budget_exhausted', userId, period, dayKey },
+        'Digest AI narrative skipped: agent daily budget exhausted',
+      );
+      return null;
+    }
+  } catch (error) {
+    // 预算闸自身失败（agent_budget_usage 表未建等）→ 放行，与归档写失败同策略。
+    log.warn({ event: 'digest.ai_budget_gate_failed', userId, period, err: error }, 'Digest AI budget gate failed open');
+  }
+  return resolveDigestNarrative(data);
+}
+
+/**
+ * digest_archive 查重（v2.30 方向 A）：同 period + 同期号（bounds.from）已归档
+ * = 今天/本周已发过。表未建/旧库查询失败 → 视为未发过（放行），与归档写失败同策略。
+ */
+async function hasDigestArchiveForPeriod(userId: number, period: DigestPeriod, periodStart: string): Promise<boolean> {
+  try {
+    const result = await query(
+      `SELECT id FROM digest_archive WHERE user_id = $1 AND period = $2 AND period_start = $3::date LIMIT 1`,
+      [userId, period, periodStart],
+    );
+    return result.rows.length > 0;
+  } catch (error) {
+    log.warn({ event: 'digest.dedupe_probe_failed', userId, period, err: error }, 'Digest dedupe probe failed; assuming not sent');
+    return false;
+  }
 }
 
 /**
@@ -651,9 +973,27 @@ export async function sendDigestForUser(
     return { userId, period, from: '', to: '', emailed: false, recipients: [], inbox: false, skipped: true };
   }
 
+  // v2.30 方向 A：daily/weekly 有独立的开关与投递时刻；monthly/yearly 沿用原开关。
+  if (options.respectEnabled && (period === 'daily' || period === 'weekly')) {
+    if (!isDigestDue(prefs, period, now, userConfig?.timezone)) {
+      return { userId, period, from: '', to: '', emailed: false, recipients: [], inbox: false, skipped: true };
+    }
+  }
+
+  // v2.30 方向 A：定时路径查重——同一天/同一周不重复发送（digest_archive 查重）。
+  if (options.skipDuplicates) {
+    const bounds = digestPeriodBounds(period, now);
+    if (await hasDigestArchiveForPeriod(userId, period, bounds.from)) {
+      return {
+        userId, period, from: bounds.from, to: bounds.to,
+        emailed: false, recipients: [], inbox: false, skipped: true, reason: 'already_sent',
+      };
+    }
+  }
+
   const fullData = await buildDigestData(userId, period, now);
   const data = selectDigestSections(fullData, prefs.sections);
-  const narrative = await resolveDigestNarrative(data);
+  const narrative = await resolveDigestNarrativeGated(userId, period, data, userConfig?.timezone, now);
   const dataWithNarrative: DigestData = narrative ? { ...data, narrative } : data;
   const html = renderDigestHtml(dataWithNarrative);
   const pdf = await renderDigestPdf(dataWithNarrative);
@@ -679,6 +1019,8 @@ export async function sendDigestForUser(
           maintenance: data.maintenance.length,
           goals: data.goals.length,
           narrativeSource: narrative ? 'ai' : 'deterministic',
+          ...(data.daily ? { daily: data.daily } : {}),
+          ...(data.comparison ? { comparison: data.comparison } : {}),
         }),
       ],
     );
@@ -756,7 +1098,8 @@ export async function sendDigestsForAllUsers(
   for (const row of usersResult.rows) {
     const userId = asNumber(row.id);
     try {
-      const result = await sendDigestForUser(userId, period, now, { respectEnabled: true });
+      // v2.30 方向 A：定时路径一律查重——同 period 同期号只发一次
+      const result = await sendDigestForUser(userId, period, now, { respectEnabled: true, skipDuplicates: true });
       results.push(result);
       if (result.emailed) sent += 1;
       else skipped += 1;

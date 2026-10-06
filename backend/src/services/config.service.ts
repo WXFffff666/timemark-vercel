@@ -371,14 +371,24 @@ export interface DigestPreferences {
   sections: DigestSectionKey[] | null;
   /** null = 自动选择第一个可用邮件渠道。 */
   channelAccountId: number | null;
+  /** v2.30 方向 A：日报/周报独立开关与投递时刻（v81 列，类型同 digest-schedule.service）。 */
+  dailyEnabled: boolean;
+  dailyTime: string;
+  weeklyEnabled: boolean;
+  weeklyDay: number;
+  weeklyTime: string;
 }
 
 export async function getDigestPreferences(userId: number): Promise<DigestPreferences> {
-  const result = await query(
-    `SELECT digest_enabled, digest_period, digest_recipients, digest_sections, digest_channel_account_id
-     FROM user_configs WHERE user_id = $1`,
-    [userId],
-  );
+  const [result, schedule] = await Promise.all([
+    query(
+      `SELECT digest_enabled, digest_period, digest_recipients, digest_sections, digest_channel_account_id
+       FROM user_configs WHERE user_id = $1`,
+      [userId],
+    ),
+    // v2.30 方向 A：日报/周报排程在独立 service（v81 列），见 digest-schedule.service.ts
+    import('./digest-schedule.service.js').then((m) => m.getDigestSchedule(userId)),
+  ]);
   const row = result.rows[0];
   return {
     enabled: row?.digest_enabled !== false,
@@ -387,6 +397,11 @@ export async function getDigestPreferences(userId: number): Promise<DigestPrefer
     sections: normalizeDigestSections(row?.digest_sections),
     channelAccountId:
       row?.digest_channel_account_id == null ? null : Number(row.digest_channel_account_id),
+    dailyEnabled: schedule.dailyEnabled,
+    dailyTime: schedule.dailyTime,
+    weeklyEnabled: schedule.weeklyEnabled,
+    weeklyDay: schedule.weeklyDay,
+    weeklyTime: schedule.weeklyTime,
   };
 }
 
@@ -398,8 +413,15 @@ export async function saveDigestPreferences(
     recipients?: unknown;
     sections?: unknown;
     channelAccountId?: number | null;
+    dailyEnabled?: boolean;
+    dailyTime?: string;
+    weeklyEnabled?: boolean;
+    weeklyDay?: number;
+    weeklyTime?: string;
   },
 ): Promise<DigestPreferences> {
+  const hhmmOr = (value: unknown, fallback: string): string =>
+    typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : fallback;
   const normalized: DigestPreferences = {
     enabled: prefs.enabled !== false,
     period: prefs.period === 'yearly' ? 'yearly' : 'monthly',
@@ -409,6 +431,14 @@ export async function saveDigestPreferences(
       typeof prefs.channelAccountId === 'number' && Number.isInteger(prefs.channelAccountId) && prefs.channelAccountId > 0
         ? prefs.channelAccountId
         : null,
+    dailyEnabled: prefs.dailyEnabled === true,
+    dailyTime: hhmmOr(prefs.dailyTime, '21:00'),
+    weeklyEnabled: prefs.weeklyEnabled === true,
+    weeklyDay:
+      typeof prefs.weeklyDay === 'number' && Number.isInteger(prefs.weeklyDay) && prefs.weeklyDay >= 0 && prefs.weeklyDay <= 6
+        ? prefs.weeklyDay
+        : 1,
+    weeklyTime: hhmmOr(prefs.weeklyTime, '09:00'),
   };
 
   await query(
@@ -430,7 +460,17 @@ export async function saveDigestPreferences(
     ],
   );
 
-  return normalized;
+  // v2.30 方向 A：排程 5 列由独立 service 落库（静态 SQL），返回值合并
+  const { saveDigestSchedule } = await import('./digest-schedule.service.js');
+  const schedule = await saveDigestSchedule(userId, {
+    dailyEnabled: normalized.dailyEnabled,
+    dailyTime: normalized.dailyTime,
+    weeklyEnabled: normalized.weeklyEnabled,
+    weeklyDay: normalized.weeklyDay,
+    weeklyTime: normalized.weeklyTime,
+  });
+
+  return { ...normalized, ...schedule };
 }
 
 export async function getNotificationAccounts(userId: number): Promise<NotificationAccount[]> {

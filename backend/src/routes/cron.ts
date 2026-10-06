@@ -203,8 +203,10 @@ cronRoutes.get('/retry-notifications', async (c) => {
 cronRoutes.get('/digest', async (c) => {
   const startedAt = Date.now();
   const periodRaw = c.req.query('period') ?? 'monthly';
-  if (periodRaw !== 'monthly' && periodRaw !== 'yearly') {
-    return c.json({ success: false, error: 'period must be monthly or yearly' }, 400);
+  // v2.30 方向 A：period 扩展 daily/weekly——每用户读 digest_daily/weekly_* 配置，
+  // 由 sendDigestForUser 内部判断本地时区是否到点 + digest_archive 查重防重发。
+  if (periodRaw !== 'monthly' && periodRaw !== 'yearly' && periodRaw !== 'daily' && periodRaw !== 'weekly') {
+    return c.json({ success: false, error: 'period must be monthly, yearly, daily or weekly' }, 400);
   }
   const period = periodRaw as DigestPeriod;
   try {

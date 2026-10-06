@@ -59,7 +59,8 @@ describe('GET /api/cron/digest', () => {
   });
 
   it('rejects an invalid period with 400 (authenticated)', async () => {
-    const res = await cronRoutes.request('/digest?period=weekly', { headers: { Authorization: `Bearer ${CRON_SECRET}` } });
+    // v2.30: daily/weekly are now valid periods — 'hourly' is the invalid example
+    const res = await cronRoutes.request('/digest?period=hourly', { headers: { Authorization: `Bearer ${CRON_SECRET}` } });
     expect(res.status).toBe(400);
     expect(mocks.sendDigestsForAllUsers).not.toHaveBeenCalled();
   });
@@ -108,7 +109,7 @@ describe('POST /api/digest/send', () => {
     expect(ok.status).toBe(200);
     expect(mocks.sendDigestForUser).toHaveBeenCalledWith(7, 'monthly');
 
-    const bad = await digestRoutes.request('/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ period: 'weekly' }) });
+    const bad = await digestRoutes.request('/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ period: 'hourly' }) });
     expect(bad.status).toBe(400);
   });
 

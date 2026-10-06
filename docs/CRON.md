@@ -55,7 +55,7 @@ Authorization: Bearer $CRON_SECRET
 | `https://你的域名/api/cron/caldav-sync` | `*/30 * * * *`（每 30 分钟） | cron-job.org（外部，推荐） | CalDAV 只读订阅同步 + 可选回写（每用户默认关闭） |
 | `https://你的域名/api/cron/lunar-phase-reminders` | `* * * * *`（每分钟） | cron-job.org（外部，**必须**） | 农历初一/十五提醒（依赖提醒引擎的 ±2 分钟窗口） |
 | `https://你的域名/api/cron/channel-health` | `0 3 * * *`（每天 1 次） | cron-job.org（外部，推荐；每日一次，Vercel 内置亦可） | 活跃渠道健康检查（只写状态，从不自动停用账号） |
-| `https://你的域名/api/cron/digest?period=monthly` | `0 9 1 * *`（每月 1 日 09:00；年度摘要另建 `?period=yearly`） | cron-job.org（外部，推荐；每月一次，Vercel 内置亦可） | 月度/年度摘要（Inbox + 邮件 PDF 附件） |
+| `https://你的域名/api/cron/digest?period=monthly` | `0 9 1 * *`（每月 1 日 09:00；年度摘要另建 `?period=yearly`；v2.30 起同端点还支持 `?period=daily`/`weekly`，逐用户按设置页排程到点判断） | cron-job.org（外部，推荐；每月一次，Vercel 内置亦可） | 月/年摘要（Inbox + 邮件 PDF 附件）+ AI 日报/周报（设置页开关默认关） |
 | `https://你的域名/api/cron/warmup` | `* * * * *`（每分钟，可选） | cron-job.org（可选） | 冷启动预热；B28 起已并入 `reminder-check`，可停用 |
 | `https://你的域名/api/cron/daily-email-backup` | 按需（未调度） | 未调度（legacy） | GitHub 备份旧入口；`daily-maintenance` 已包含 |
 | `https://你的域名/api/cron/daily-login-backup` | 按需（未调度） | 未调度（legacy） | 登录历史归档旧入口；`daily-maintenance` 已包含 |
@@ -79,6 +79,7 @@ Authorization: Bearer $CRON_SECRET
 | 6 | `channel-health` | `https://你的域名/api/cron/channel-health` | `0 3 * * *`（每天 1 次） |
 | 7 | `digest`（月度） | `https://你的域名/api/cron/digest?period=monthly` | `0 9 1 * *`（每月 1 日 09:00） |
 | 7b | `digest`（年度，可选） | `https://你的域名/api/cron/digest?period=yearly` | `0 9 1 1 *`（每年 1 月 1 日 09:00） |
+| 7c | `digest`（日报+周报，v2.30，可两条分别建） | `https://你的域名/api/cron/digest?period=daily` 与 `?period=weekly` | 日报 `0 21 * * *`、周报 `0 9 * * 1`（设置页默认关，到点+查重双保险） |
 | 8 | `agent-worker-drain`（**POST**） | `https://你的域名/api/agent/worker/drain` | `* * * * *`（每分钟；见下节，后台任务启用后必配） |
 | 9 | `warmup`（可选） | `https://你的域名/api/cron/warmup` | `* * * * *`（每分钟；已并入 1，可停用） |
 

@@ -88,7 +88,7 @@ describe('folded pending migrations 59-75 (integrator tail pin)', () => {
     }
     // 58 keeps its position; v76 (recovery codes), v77 (email fold), v78 (reachability) and v79 (greetings) and v80 (retention) follow.
     expect(versions.indexOf(59)).toBe(versions.indexOf(58) + 1);
-    expect(versions[versions.length - 1]).toBe(80);
+    expect(versions[versions.length - 1]).toBe(81);
     expect(versions.filter((v) => v === 75)).toHaveLength(1);
     // Nothing before the fold moved.
     expect(MIGRATE_SOURCE).toContain("name: 'tags_tag_links_v58'");
@@ -98,7 +98,7 @@ describe('folded pending migrations 59-75 (integrator tail pin)', () => {
   it('applies every folded version on top of a recorded 58 exactly once, in order', async () => {
     await applyIncrementalMigrations(58);
     // v76-v80 sit after the folded block and apply too.
-    expect(versionInserts()).toEqual([...FOLDED_VERSIONS, 76, 77, 78, 79, 80]);
+    expect(versionInserts()).toEqual([...FOLDED_VERSIONS, 76, 77, 78, 79, 80, 81]);
     for (const { marker } of FOLDED) {
       expect(callsMatching(marker).length, `${marker} was not applied`).toBeGreaterThan(0);
     }
@@ -107,8 +107,9 @@ describe('folded pending migrations 59-75 (integrator tail pin)', () => {
     expect(callsMatching('idx_tag_links_tag')).toHaveLength(0);
   });
 
-  it('is idempotent: a recorded 80 row makes the runner skip the whole folded block', async () => {
-    await applyIncrementalMigrations(80);
+  it('is idempotent: a recorded 81 row makes the runner skip the whole folded block', async () => {
+    // v2.30: 81 is the new tail (digest_daily_weekly_schedule_v81)
+    await applyIncrementalMigrations(81);
     expect(versionInserts()).toEqual([]);
     for (const { marker } of FOLDED) {
       expect(callsMatching(marker)).toHaveLength(0);
@@ -123,6 +124,6 @@ describe('folded pending migrations 59-75 (integrator tail pin)', () => {
     await applyIncrementalMigrations(58);
     expect(versionInserts()).not.toContain(59);
     expect(versionInserts()).toContain(78);
-    expect(versionInserts()).toEqual([...FOLDED_VERSIONS.filter((v) => v !== 59), 76, 77, 78, 79, 80]);
+    expect(versionInserts()).toEqual([...FOLDED_VERSIONS.filter((v) => v !== 59), 76, 77, 78, 79, 80, 81]);
   });
 });

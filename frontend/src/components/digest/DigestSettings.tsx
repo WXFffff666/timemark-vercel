@@ -38,6 +38,11 @@ interface DigestConfig {
   recipients: string[];
   sections: string[] | null;
   channelAccountId: number | null;
+  dailyEnabled?: boolean;
+  dailyTime?: string;
+  weeklyEnabled?: boolean;
+  weeklyDay?: number;
+  weeklyTime?: string;
 }
 
 interface AccountRow {
@@ -143,6 +148,12 @@ export function DigestSettings() {
   const [sections, setSections] = useState<string[]>([...SECTION_KEYS]);
   const [channelAccountId, setChannelAccountId] = useState<number | null>(null);
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  // v2.30 方向 A：日报/周报独立排程
+  const [dailyEnabled, setDailyEnabled] = useState(false);
+  const [dailyTime, setDailyTime] = useState('21:00');
+  const [weeklyEnabled, setWeeklyEnabled] = useState(false);
+  const [weeklyDay, setWeeklyDay] = useState(1);
+  const [weeklyTime, setWeeklyTime] = useState('09:00');
 
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -166,6 +177,11 @@ export function DigestSettings() {
           setRecipients(Array.isArray(cfg.recipients) ? cfg.recipients.join(', ') : '');
           setSections(Array.isArray(cfg.sections) && cfg.sections.length > 0 ? cfg.sections : [...SECTION_KEYS]);
           setChannelAccountId(typeof cfg.channelAccountId === 'number' ? cfg.channelAccountId : null);
+          setDailyEnabled(cfg.dailyEnabled === true);
+          setDailyTime(typeof cfg.dailyTime === 'string' ? cfg.dailyTime : '21:00');
+          setWeeklyEnabled(cfg.weeklyEnabled === true);
+          setWeeklyDay(typeof cfg.weeklyDay === 'number' ? cfg.weeklyDay : 1);
+          setWeeklyTime(typeof cfg.weeklyTime === 'string' ? cfg.weeklyTime : '09:00');
         }
         const list = Array.isArray(accts) ? accts.filter((a) => a.is_active !== false && EMAIL_TYPES.has(a.type)) : [];
         setAccounts(list);
@@ -189,6 +205,11 @@ export function DigestSettings() {
     recipients: parseRecipients(recipients),
     sections,
     channelAccountId,
+    dailyEnabled,
+    dailyTime,
+    weeklyEnabled,
+    weeklyDay,
+    weeklyTime,
   });
 
   const save = async () => {
@@ -267,6 +288,68 @@ export function DigestSettings() {
             </div>
           </div>
           <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="启用周期摘要" />
+        </div>
+
+        {/* v2.30 方向 A：AI 日报/周报独立排程（与月/年摘要共用收件人与渠道） */}
+        <div className="space-y-3 p-4 rounded-[2rem] bg-slate-50/60 dark:bg-white/5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">AI 日报</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">过去 24h 事件/提醒/习惯/用药速览，AI 生成自然语言叙述</p>
+            </div>
+            <Switch checked={dailyEnabled} onCheckedChange={setDailyEnabled} aria-label="启用 AI 日报" />
+          </div>
+          {dailyEnabled && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500 dark:text-slate-400 shrink-0">每天投递时刻</label>
+              <input
+                type="time"
+                data-testid="digest-daily-time"
+                aria-label="日报投递时刻"
+                value={dailyTime}
+                onChange={(e) => setDailyTime(e.target.value)}
+                className="h-9 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+              />
+              <span className="text-xs text-slate-400">按你的本地时区到点后由定时任务投递（同一天不重复）</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-4 pt-2 border-t border-slate-200/60 dark:border-slate-700/50">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">AI 周报</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">过去 7 天汇总 + 与上周的对比</p>
+            </div>
+            <Switch checked={weeklyEnabled} onCheckedChange={setWeeklyEnabled} aria-label="启用 AI 周报" />
+          </div>
+          {weeklyEnabled && (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-slate-500 dark:text-slate-400 shrink-0">投递</label>
+              <select
+                data-testid="digest-weekly-day"
+                aria-label="周报投递日"
+                value={weeklyDay}
+                onChange={(e) => setWeeklyDay(Number(e.target.value))}
+                className="h-9 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+              >
+                <option value={1}>每周一</option>
+                <option value={2}>每周二</option>
+                <option value={3}>每周三</option>
+                <option value={4}>每周四</option>
+                <option value={5}>每周五</option>
+                <option value={6}>每周六</option>
+                <option value={0}>每周日</option>
+              </select>
+              <input
+                type="time"
+                data-testid="digest-weekly-time"
+                aria-label="周报投递时刻"
+                value={weeklyTime}
+                onChange={(e) => setWeeklyTime(e.target.value)}
+                className="h-9 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+              />
+              <span className="text-xs text-slate-400">本地时区到点后投递（同一周期不重复）</span>
+            </div>
+          )}
+          <p className="text-xs text-slate-400">日报/周报与月/年摘要共用下方收件人与投递渠道；AI 叙述受预算闸约束，AI 不可用时自动降级为纯统计文本。</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -480,6 +480,12 @@ config.post('/digest', async (c) => {
     recipients: b.recipients,
     sections: b.sections,
     channelAccountId: typeof b.channelAccountId === 'number' ? b.channelAccountId : null,
+    // v2.30 方向 A：日报/周报排程（service 内做 HH:mm/星期归一）
+    dailyEnabled: b.dailyEnabled === true,
+    dailyTime: typeof b.dailyTime === 'string' ? b.dailyTime : undefined,
+    weeklyEnabled: b.weeklyEnabled === true,
+    weeklyDay: typeof b.weeklyDay === 'number' ? b.weeklyDay : undefined,
+    weeklyTime: typeof b.weeklyTime === 'string' ? b.weeklyTime : undefined,
   });
   await logAudit(Number(user.id), 'update', 'digest_settings', user.id, {});
   return c.json({ success: true, data: saved });

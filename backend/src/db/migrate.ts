@@ -3193,6 +3193,19 @@ CREATE TABLE IF NOT EXISTS cron_job_status (
 CREATE INDEX IF NOT EXISTS idx_cron_executed_at ON cron_execution_logs(executed_at);
 CREATE INDEX IF NOT EXISTS idx_trigger_user_created ON event_trigger_logs(user_id, created_at);`,
     },
+    {
+      // v81 (v2.30 方向 A): AI 日报/周报自动化。每用户独立的日报/周报开关与投递时刻
+      // （用户本地时区，由 /api/cron/digest?period=daily|weekly 端点内逐用户判断是否到点）；
+      // 投递渠道复用既有 digest_channel_account_id，不新增列。防重走 digest_archive 查重。
+      // 全部 ADD COLUMN IF NOT EXISTS，可重跑。
+      version: 81,
+      name: 'digest_daily_weekly_schedule_v81',
+      sql: `ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_daily_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_daily_time TEXT NOT NULL DEFAULT '21:00';
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_weekly_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_weekly_day INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_weekly_time TEXT NOT NULL DEFAULT '09:00';`,
+    },
   ];
 
   for (const migration of migrations) {

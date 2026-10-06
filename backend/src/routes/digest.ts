@@ -18,7 +18,8 @@ const digest = new Hono<{ Variables: { user: User } }>();
 digest.use('*', authMiddleware);
 
 function parsePeriod(raw: unknown): DigestPeriod | null {
-  return raw === 'monthly' || raw === 'yearly' ? raw : null;
+  // v2.30 方向 A：手动发送/预览同样开放 daily/weekly 粒度
+  return raw === 'monthly' || raw === 'yearly' || raw === 'daily' || raw === 'weekly' ? raw : null;
 }
 
 digest.post('/send', async (c) => {
@@ -26,7 +27,7 @@ digest.post('/send', async (c) => {
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
   const period = parsePeriod((body as Record<string, unknown>).period ?? c.req.query('period') ?? 'monthly');
   if (!period) {
-    return c.json({ success: false, error: 'period 必须是 monthly 或 yearly' }, 400);
+    return c.json({ success: false, error: 'period 必须是 monthly、yearly、daily 或 weekly' }, 400);
   }
 
   try {
@@ -43,7 +44,7 @@ digest.post('/preview', async (c) => {
   const raw = body as Record<string, unknown>;
   const period = parsePeriod(raw.period ?? c.req.query('period') ?? 'monthly');
   if (!period) {
-    return c.json({ success: false, error: 'period 必须是 monthly 或 yearly' }, 400);
+    return c.json({ success: false, error: 'period 必须是 monthly、yearly、daily 或 weekly' }, 400);
   }
 
   try {
