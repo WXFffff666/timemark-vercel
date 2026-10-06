@@ -13,7 +13,8 @@
  *                              docs in DOCS_INDEX_EXCLUDED are skipped)
  *
  * The serialized index is asserted against a size budget:
- *   <= 200 KiB uncompressed AND <= 50 KiB gzipped (defaults).
+ *   <= 240 KiB uncompressed AND <= 50 KiB gzipped (defaults). 原始预算 200→240
+ *   （v2.28：渠道 46→51 与新页面使索引合理增至 ~216KiB；真实传输成本看 gzip，仍在 50 内）。
  * The build FAILS (exit 1) when either budget is exceeded.
  * Override for diagnostics/negative-control only:
  *   --max-uncompressed-kb=N --max-gzip-kb=N
@@ -234,7 +235,7 @@ async function buildPayload() {
 }
 
 async function main() {
-  const maxUncompressedKb = parseArg('max-uncompressed-kb', 200);
+  const maxUncompressedKb = parseArg('max-uncompressed-kb', 240);
   const maxGzipKb = parseArg('max-gzip-kb', 50);
   const checkOnly = process.argv.includes('--check');
 
