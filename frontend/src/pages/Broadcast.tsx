@@ -56,6 +56,9 @@ export default function Broadcast() {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  // v2.30：发送确认闸门（群发是真发出去的邮件，点一下就该出去太危险）+ 服务端渲染预览
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<{ subject: string; htmlPreview: string } | null>(null);
 
   const [activeCategory, setActiveCategory] = useState<BroadcastTemplateCategory | null>(null);
   const [selectedGreetingId, setSelectedGreetingId] = useState<string | null>(null);
@@ -118,6 +121,34 @@ export default function Broadcast() {
     }
     if (emailAccounts.length === 0) {
       setMessage('请先配置邮件通知渠道');
+      return;
+    }
+    const emails = manualEmails.split(/[,;\s]+/).map((e) => e.trim()).filter((e) => e.includes('@'));
+    if (selectedIds.length === 0 && emails.length === 0) {
+      setMessage('请选择联系人或填写手动邮箱');
+      return;
+    }
+
+    // v2.30：先出确认框——拉服务端预览（占位符已替换、HTML 已消毒），
+    // 用户看到真实效果并确认后才真正发送。
+    setPreviewData(null);
+    setConfirmOpen(true);
+    try {
+      const preview = await api.post<{ subject: string; htmlPreview: string }>('/broadcast/preview', {
+        subject: subject.trim(),
+        html,
+      });
+      setPreviewData(preview);
+    } catch {
+      // 预览失败不阻塞确认（用户仍可按已有正文判断），但给出提示
+      setPreviewData(null);
+    }
+  };
+
+  const sendConfirmed = async () => {
+    setConfirmOpen(false);
+    if (!subject.trim() || !html.trim()) {
+      setMessage('请填写主题和正文');
       return;
     }
     const emails = manualEmails.split(/[,;\s]+/).map((e) => e.trim()).filter((e) => e.includes('@'));
@@ -317,6 +348,40 @@ export default function Broadcast() {
           <Send className="w-4 h-4 mr-2" />
           {sending ? '发送中…' : `发送${recipientCount > 0 ? `（${recipientCount} 人）` : ''}`}
         </Button>
+
+        {/* v2.30：发送确认对话框——预览真实渲染效果 + 明确的收件规模警示 */}
+        {confirmOpen && (
+          <div role="dialog" aria-modal="true" aria-label="确认批量发送" className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="glass-panel rounded-3xl p-6 max-w-lg w-full ring-1 ring-black/10 dark:ring-white/10 max-h-[85vh] overflow-y-auto">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">确认批量发送？</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+                将向 <strong className="text-red-600">{recipientCount}</strong> 个邮箱真实发送邮件（每小时最多 10 次）。
+                邮件发出后无法撤回，请确认内容无误。
+              </p>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 mb-4 bg-white dark:bg-slate-800/60">
+                <p className="text-xs font-semibold text-slate-500 mb-1">主题预览</p>
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                  {previewData?.subject ?? subject.trim()}
+                </p>
+                {previewData?.htmlPreview && (
+                  <>
+                    <p className="text-xs font-semibold text-slate-500 mt-3 mb-1">正文预览（前 2000 字符，占位符已替换）</p>
+                    <div
+                      className="text-xs text-slate-600 dark:text-slate-300 max-h-40 overflow-y-auto [&_a]:text-blue-600"
+                      // htmlPreview 由服务端 sanitizeHtmlPreview 消毒后返回
+                      dangerouslySetInnerHTML={{ __html: previewData.htmlPreview }}
+                    />
+                  </>
+                )}
+                {!previewData && <p className="text-xs text-slate-400 mt-2">预览加载失败，可关闭后按已有正文判断。</p>}
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setConfirmOpen(false)}>再检查一下</Button>
+                <Button variant="destructive" onClick={sendConfirmed}>确认发送（{recipientCount} 人）</Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {message && (
           <p className={`text-sm text-center whitespace-pre-wrap ${message.includes('失败') || message.includes('0/') ? 'text-red-600' : 'text-slate-600 dark:text-slate-400'}`}>
