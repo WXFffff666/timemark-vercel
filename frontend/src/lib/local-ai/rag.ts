@@ -43,15 +43,30 @@ const SYSTEM_PROMPT = [
   '1. 只依据 <知识库> 里的内容回答；知识库没有的信息就明确说"知识库里没有找到"。',
   '2. 回答末尾用 [编号] 标注用到的来源。',
   '3. 简洁中文回答，不超过 {maxWords} 字。',
+  '4. 直接输出自然的中文短句，像说话一样回答；禁止任何 Markdown 记号——不要 #、*、-、`、表格和代码块。',
+  '5. 对话历史里的问答只是上下文，回答只针对最后一问。',
 ].join('\n');
 
-/** 组装 RAG 消息（纯函数，便于单测） */
-export function buildRagMessages(question: string, hits: KbHit[], maxWords = 150): WebLlmChatMessage[] {
+/** 最近几轮问答（追问上下文用）；答案截断防上下文爆炸 */
+export interface RagHistoryTurn {
+  question: string;
+  answer: string;
+}
+
+/** 组装 RAG 消息（纯函数，便于单测）；history 为最近几轮问答，按时间正序 */
+export function buildRagMessages(question: string, hits: KbHit[], maxWords = 150, history: RagHistoryTurn[] = []): WebLlmChatMessage[] {
   const block = formatSourceBlock(hits);
-  return [
+  const messages: WebLlmChatMessage[] = [
     { role: 'system', content: `${SYSTEM_PROMPT.replace('{maxWords}', String(maxWords))}\n\n<知识库>\n${block}\n</知识库>` },
-    { role: 'user', content: question },
   ];
+  for (const turn of history.slice(-3)) {
+    const q = turn.question.trim();
+    const a = turn.answer.trim().slice(0, 400);
+    if (q) messages.push({ role: 'user', content: q });
+    if (a) messages.push({ role: 'assistant', content: a });
+  }
+  messages.push({ role: 'user', content: question });
+  return messages;
 }
 
 function hitToSource(h: KbHit): RagAnswer['sources'][number] {
@@ -71,6 +86,8 @@ export async function answerQuestion(
   question: string,
   opts: {
     tier?: WebLlmTierId;
+    /** 最近几轮问答（追问上下文，正序）；只带最近 3 轮 */
+    history?: RagHistoryTurn[];
     onToken?: (partial: string) => void;
     onStatus?: (msg: string, progress?: number) => void;
     signal?: AbortSignal;
@@ -90,7 +107,7 @@ export async function answerQuestion(
   }
 
   try {
-    const messages = buildRagMessages(question, hits, maxWords);
+    const messages = buildRagMessages(question, hits, maxWords, opts.history ?? []);
     const answer = await chatWebLlm(messages, {
       tier,
       onToken: opts.onToken,

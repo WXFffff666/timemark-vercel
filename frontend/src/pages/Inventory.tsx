@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Boxes, Minus, Package, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Boxes, Minus, Package, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { useSmartBack } from '@/hooks/useSmartBack';
 import { api } from '@/lib/api';
 import { daysUntil } from '@/lib/expiry-utils';
 import {
@@ -213,7 +214,6 @@ function InventoryRow({
 
 export default function Inventory() {
   const navigate = useNavigate();
-  const goBack = useSmartBack('/dashboard');
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [allItems, setAllItems] = useState<InventoryItem[]>([]);
@@ -383,21 +383,17 @@ export default function Inventory() {
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-4 z-40 px-4 max-w-4xl mx-auto" role="banner" aria-label="库存顶部导航">
-        <div className="glass-panel rounded-full px-4 py-3 flex items-center gap-3 ring-1 ring-black/5 dark:ring-white/10">
-          <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={goBack} aria-label="返回上一页">
-            <ArrowLeft size={20} aria-hidden />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold truncate">库存</h1>
-            <p className="text-xs text-hint truncate">食品 · 药品 · 耗材 · 低库存提醒</p>
-          </div>
+      <PageHeader
+        title="库存"
+        subtitle="食品 · 药品 · 耗材 · 低库存提醒"
+        back="smart"
+        actions={
           <Button onClick={openCreate} className="rounded-full min-h-11" aria-label="新建库存项">
             <Plus className="w-4 h-4 mr-1" aria-hidden />
             新建
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       <main id="main-content" className="max-w-4xl mx-auto px-4 py-6 space-y-6" tabIndex={-1}>
         <section aria-label="库存概览" className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -458,14 +454,16 @@ export default function Inventory() {
         {loading ? (
           <p className="text-hint text-sm" role="status">加载中…</p>
         ) : items.length === 0 ? (
-          <div className="text-center py-16 glass-panel rounded-3xl">
-            <Package className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" aria-hidden />
-            <p className="font-semibold text-slate-700 dark:text-slate-200">暂无库存项</p>
-            <p className="text-sm text-hint mt-1">记录食品、药品与耗材，临期与低库存自动提醒</p>
-            <Button className="mt-4 rounded-full" variant="outline" onClick={openCreate}>
-              新建库存项
-            </Button>
-          </div>
+          <EmptyState
+            icon={Package}
+            title="暂无库存项"
+            description="记录食品、药品与耗材，临期与低库存自动提醒"
+            action={
+              <Button className="rounded-full" variant="outline" onClick={openCreate}>
+                新建库存项
+              </Button>
+            }
+          />
         ) : (
           <div className="space-y-6">
             {groups.map((group) => (

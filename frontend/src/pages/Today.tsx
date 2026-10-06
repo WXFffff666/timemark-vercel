@@ -1,11 +1,10 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { useAuthStore } from '@/stores/auth.store';
 import { prefetchRoute } from '@/lib/prefetch-routes';
-import { useSmartBack } from '@/hooks/useSmartBack';
 import { useTodayCards } from '@/components/today/useTodayCards';
 import { TodayCardSettings } from '@/components/today/TodayCardSettings';
 import type { TodayCardId } from '@/components/today/cards';
@@ -44,7 +43,6 @@ function TodayCard({ id }: { id: TodayCardId }) {
 /** Task 136: the configurable Today at-a-glance dashboard. */
 export default function Today() {
   const navigate = useNavigate();
-  const goBack = useSmartBack('/dashboard');
   const userId = useAuthStore((state) => state.user?.id);
   const todayCards = useTodayCards(userId);
 
@@ -58,18 +56,13 @@ export default function Today() {
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-4 z-40 mx-auto max-w-7xl px-4" role="banner" aria-label="今日概览顶部导航">
-        <div className="glass-panel flex items-center gap-3 rounded-full px-4 py-3 ring-1 ring-black/5 dark:ring-white/10">
-          <Button variant="ghost" size="icon" className="min-h-11 min-w-11 rounded-full" onClick={goBack} aria-label="返回上一页">
-            <ArrowLeft size={20} aria-hidden />
-          </Button>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">今日概览</h1>
-            <p className="truncate text-xs text-hint">可配置卡片 · 每张卡片独立加载</p>
-          </div>
-          <TodayCardSettings {...todayCards} />
-        </div>
-      </header>
+      <PageHeader
+        title="今日概览"
+        subtitle="可配置卡片 · 每张卡片独立加载"
+        back="smart"
+        maxWidth="max-w-7xl"
+        actions={<TodayCardSettings {...todayCards} />}
+      />
 
       <main id="main-content" className="mx-auto max-w-7xl px-4 py-8" tabIndex={-1}>
         {todayCards.visibleOrder.length === 0 ? (

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
   Download,
   Eye,
   FileText,
@@ -18,8 +17,9 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { useSmartBack } from '@/hooks/useSmartBack';
 import { api } from '@/lib/api';
 import {
   base64PayloadFromDataUrl,
@@ -318,7 +318,6 @@ function DocumentRow({
 
 export default function Documents() {
   const navigate = useNavigate();
-  const goBack = useSmartBack('/dashboard');
 
   const [items, setItems] = useState<DocumentItem[]>([]);
   const [allItems, setAllItems] = useState<DocumentItem[]>([]);
@@ -595,21 +594,17 @@ export default function Documents() {
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-4 z-40 px-4 max-w-4xl mx-auto" role="banner" aria-label="证件保险箱顶部导航">
-        <div className="glass-panel rounded-full px-4 py-3 flex items-center gap-3 ring-1 ring-black/5 dark:ring-white/10">
-          <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={goBack} aria-label="返回上一页">
-            <ArrowLeft size={20} aria-hidden />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold truncate">证件保险箱</h1>
-            <p className="text-xs text-hint truncate">护照 · 身份证 · 驾照 · 签证 · 保单</p>
-          </div>
+      <PageHeader
+        title="证件保险箱"
+        subtitle="护照 · 身份证 · 驾照 · 签证 · 保单"
+        back="smart"
+        actions={
           <Button onClick={openCreate} className="rounded-full min-h-11" aria-label="新建证件">
             <Plus className="w-4 h-4 mr-1" aria-hidden />
             新建
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       <main id="main-content" className="max-w-4xl mx-auto px-4 py-6 space-y-6" tabIndex={-1}>
         <section aria-label="证件概览" className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -661,14 +656,16 @@ export default function Documents() {
         {loading ? (
           <p className="text-hint text-sm" role="status">加载中…</p>
         ) : items.length === 0 ? (
-          <div className="text-center py-16 glass-panel rounded-3xl">
-            <ShieldCheck className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" aria-hidden />
-            <p className="font-semibold text-slate-700 dark:text-slate-200">暂无证件</p>
-            <p className="text-sm text-hint mt-1">集中保存护照、身份证、驾照与保单，到期前自动提醒</p>
-            <Button className="mt-4 rounded-full" variant="outline" onClick={openCreate}>
-              新建证件
-            </Button>
-          </div>
+          <EmptyState
+            icon={ShieldCheck}
+            title="暂无证件"
+            description="集中保存护照、身份证、驾照与保单，到期前自动提醒"
+            action={
+              <Button className="rounded-full" variant="outline" onClick={openCreate}>
+                新建证件
+              </Button>
+            }
+          />
         ) : (
           <div className="space-y-6">
             {groups.map(([groupKind, groupItems]) => (

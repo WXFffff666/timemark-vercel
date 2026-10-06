@@ -13,9 +13,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ArrowLeft, BarChart3, Bell, Calendar, Radio } from 'lucide-react';
+import { BarChart3, Bell, Calendar, Database, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
 
 interface StatsData {
@@ -74,22 +76,7 @@ export default function Analytics() {
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-6 z-40 px-4 max-w-5xl mx-auto">
-        <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/dashboard')}>
-              <ArrowLeft size={20} />
-            </Button>
-            <div>
-              <h1 className="text-lg font-bold flex items-center gap-2">
-                <BarChart3 size={20} className="text-indigo-500" />
-                数据看板
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">近 30 天提醒与事件概览</p>
-            </div>
-          </div>
-        </div>
-      </header>
+      <PageHeader title="数据看板" subtitle="近 30 天提醒与事件概览" backTo="/dashboard" maxWidth="max-w-5xl" />
 
       <main className="max-w-5xl mx-auto px-4 mt-8 space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -146,7 +133,7 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               {monthlyChartData.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-12">暂无通知记录</p>
+                <EmptyState icon={Bell} title="暂无通知记录" />
               ) : (
                 <div className="h-[260px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -171,7 +158,7 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               {stats.eventsByType.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-12">暂无事件数据</p>
+                <EmptyState icon={Database} title="暂无事件数据" />
               ) : (
                 <div className="h-[260px] w-full">
                   <ResponsiveContainer width="100%" height="100%">

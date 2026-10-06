@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import {
   AlertTriangle,
-  ArrowLeft,
   CalendarClock,
   CheckCircle2,
   Clock,
@@ -29,8 +28,8 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { ProfileSwitcher } from '@/components/ProfileSwitcher';
-import { useSmartBack } from '@/hooks/useSmartBack';
 import { api } from '@/lib/api';
 import { useProfileStore } from '@/stores/profile.store';
 import { useTimezoneStore } from '@/stores/timezone.store';
@@ -311,7 +310,6 @@ async function fetchReport(format: 'html' | 'csv' | 'pdf', from: string, to: str
 
 export default function Medications() {
   const navigate = useNavigate();
-  const goBack = useSmartBack('/dashboard');
   const profileId = useProfileStore((state) => state.profileId);
   const timezone = useTimezoneStore((state) => state.timezone);
 
@@ -569,34 +567,29 @@ export default function Medications() {
 
   return (
     <div className="min-h-screen pb-24 overflow-x-hidden">
-      <header className="sticky top-4 z-40 px-4 max-w-4xl mx-auto" role="banner" aria-label="用药页顶部导航">
-        <div className="glass-panel rounded-3xl px-3 py-2.5 flex flex-wrap items-center gap-2 ring-1 ring-black/5 dark:ring-white/10">
-          <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={goBack} aria-label="返回上一页">
-            <ArrowLeft size={20} aria-hidden />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold truncate flex items-center gap-2">
-              <Pill className="w-5 h-5 text-primary-500 shrink-0" aria-hidden />
-              用药提醒
-            </h1>
-            <p className="text-xs text-hint truncate">今日计划 · 按时记录 · 补货提醒</p>
-          </div>
-          <ProfileSwitcher />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full min-h-11 min-w-11"
-            onClick={() => void refreshAll()}
-            aria-label="刷新用药数据"
-          >
-            <RefreshCw className="w-4 h-4" aria-hidden />
-          </Button>
-          <Button onClick={openCreate} className="rounded-full min-h-11" aria-label="新建药品">
-            <Plus className="w-4 h-4 mr-1" aria-hidden />
-            新建
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        title="用药提醒"
+        subtitle="今日计划 · 按时记录 · 补货提醒"
+        back="smart"
+        actions={
+          <>
+            <ProfileSwitcher />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full min-h-11 min-w-11"
+              onClick={() => void refreshAll()}
+              aria-label="刷新用药数据"
+            >
+              <RefreshCw className="w-4 h-4" aria-hidden />
+            </Button>
+            <Button onClick={openCreate} className="rounded-full min-h-11" aria-label="新建药品">
+              <Plus className="w-4 h-4 mr-1" aria-hidden />
+              新建
+            </Button>
+          </>
+        }
+      />
 
       <main id="main-content" className="max-w-4xl mx-auto px-4 py-6 space-y-6" tabIndex={-1}>
         {error && (

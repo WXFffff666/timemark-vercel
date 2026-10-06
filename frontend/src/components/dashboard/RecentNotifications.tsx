@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Bell, CheckCircle2, AlertCircle, SkipForward } from 'lucide-react';
+import { ArrowRight, Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
-import { readDelivery, type DeliveryOutcome } from '@timemark/shared';
+import { readDelivery } from '@timemark/shared';
+import { OUTCOME_ICON, OUTCOME_TEXT_CLASS } from '@/lib/delivery-outcome-ui';
 
 /**
  * v2.27 遗留2：通知时间线卡（Dashboard）。
@@ -23,19 +24,7 @@ interface TimelineLog {
   created_at: string;
 }
 
-const OUTCOME_ICON: Record<DeliveryOutcome, typeof CheckCircle2> = {
-  delivered: CheckCircle2,
-  partial: AlertCircle,
-  failed: AlertCircle,
-  skipped: SkipForward,
-};
-
-const OUTCOME_CLASS: Record<DeliveryOutcome, string> = {
-  delivered: 'text-emerald-500',
-  partial: 'text-amber-500',
-  failed: 'text-red-500',
-  skipped: 'text-slate-400',
-};
+const OUTCOME_CLASS = OUTCOME_TEXT_CLASS;
 
 function relativeTime(iso: string): string {
   const t = new Date(iso).getTime();

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users, Upload, Mail, Pencil, Eye } from 'lucide-react';
+import { Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users, Upload, Mail, Pencil, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/empty-state';
 import { LabeledFieldsEditor, normalizeEntriesForSave } from '@/components/contacts/LabeledFieldsEditor';
 import { ContactDetailDrawer } from '@/components/contacts/ContactDetailDrawer';
 import { api } from '@/lib/api';
@@ -387,58 +389,59 @@ export default function Contacts() {
 
   return (
     <div id="main-content" className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto pb-24">
-      <div className="flex items-center gap-3 mb-4">
-        <Button variant="ghost" size="icon" onClick={() => { setOpen(false); goBack(); }} aria-label="返回" className="min-h-11 min-w-11">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">固定联系人</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">支持多个邮箱/手机，绑定通知渠道后可快捷发信</p>
-        </div>
-        <Button
-          onClick={() => (tab === 'contacts' ? openCreate() : setGroupOpen(true))}
-          className="min-h-11"
-        >
-          <Plus className="w-4 h-4 mr-1" /> 添加
-        </Button>
-        {tab === 'contacts' && (
+      <PageHeader
+        title="固定联系人"
+        subtitle="支持多个邮箱/手机，绑定通知渠道后可快捷发信"
+        onBack={() => { setOpen(false); goBack(); }}
+        maxWidth="max-w-3xl"
+        actions={
           <>
-            <label className="inline-flex">
-              <input
-                type="file"
-                accept=".vcf,.vcard,text/vcard"
-                className="sr-only"
-                disabled={importing}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) importVcard(file);
-                  e.target.value = '';
-                }}
-              />
-              <Button type="button" variant="outline" className="min-h-11" disabled={importing} asChild>
-                <span><Upload className="w-4 h-4 mr-1" />{importing ? '导入中…' : 'vCard'}</span>
-              </Button>
-            </label>
-            {/* v2.27 遗留4：生日 CSV 批量导入（姓名/生日 必填，邮箱/电话 可选） */}
-            <label className="inline-flex">
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                className="sr-only"
-                disabled={importing}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) importCsv(file);
-                  e.target.value = '';
-                }}
-              />
-              <Button type="button" variant="outline" className="min-h-11" disabled={importing} asChild>
-                <span><Upload className="w-4 h-4 mr-1" />CSV</span>
-              </Button>
-            </label>
+            <Button
+              onClick={() => (tab === 'contacts' ? openCreate() : setGroupOpen(true))}
+              className="min-h-11"
+            >
+              <Plus className="w-4 h-4 mr-1" /> 添加
+            </Button>
+            {tab === 'contacts' && (
+              <>
+                <label className="inline-flex">
+                  <input
+                    type="file"
+                    accept=".vcf,.vcard,text/vcard"
+                    className="sr-only"
+                    disabled={importing}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) importVcard(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <Button type="button" variant="outline" className="min-h-11" disabled={importing} asChild>
+                    <span><Upload className="w-4 h-4 mr-1" />{importing ? '导入中…' : 'vCard'}</span>
+                  </Button>
+                </label>
+                {/* v2.27 遗留4：生日 CSV 批量导入（姓名/生日 必填，邮箱/电话 可选） */}
+                <label className="inline-flex">
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="sr-only"
+                    disabled={importing}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) importCsv(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <Button type="button" variant="outline" className="min-h-11" disabled={importing} asChild>
+                    <span><Upload className="w-4 h-4 mr-1" />CSV</span>
+                  </Button>
+                </label>
+              </>
+            )}
           </>
-        )}
-      </div>
+        }
+      />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'contacts' | 'groups')} className="mb-6">
         <TabsList>
@@ -454,15 +457,14 @@ export default function Contacts() {
         */}
         <TabsContent value="contacts" forceMount className={tab === 'contacts' ? 'mt-4' : 'hidden'}>
           {loading ? null : contacts.length === 0 ? (
-          <div className="text-center py-16 text-slate-500 dark:text-slate-400">
-            <UserPlus className="w-12 h-12 mx-auto mb-3 opacity-40" />
-            <p>暂无联系人，点击右上角添加</p>
+          <>
+            <EmptyState icon={UserPlus} title="暂无联系人，点击右上角添加" />
             {accounts.length === 0 && (
-              <p className="text-xs mt-2">
+              <p className="text-xs mt-2 text-center">
                 请先在<button type="button" className="text-indigo-500 underline mx-1" onClick={() => navigate('/channels')}>通知渠道</button>配置邮件账号
               </p>
             )}
-          </div>
+          </>
           ) : (
           <div className="space-y-3">
             {contacts.map((c) => (
@@ -532,10 +534,7 @@ export default function Contacts() {
 
         <TabsContent value="groups" forceMount className={tab === 'groups' ? 'mt-4' : 'hidden'}>
           {loading ? null : groups.length === 0 ? (
-        <div className="text-center py-16 text-slate-500 dark:text-slate-400">
-          <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
-          <p>暂无分组，用于批量邮件收件人</p>
-        </div>
+            <EmptyState icon={Users} title="暂无分组，用于批量邮件收件人" />
           ) : (
         <div className="space-y-3">
           {groups.map((g) => (

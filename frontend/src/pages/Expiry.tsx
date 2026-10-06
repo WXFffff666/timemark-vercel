@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlarmClock, ArrowLeft, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { AlarmClock, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { useSmartBack } from '@/hooks/useSmartBack';
 import { api } from '@/lib/api';
 import { calculateCountdown } from '@/lib/countdown';
 import {
@@ -267,7 +268,6 @@ function BucketSection({
 
 export default function Expiry() {
   const navigate = useNavigate();
-  const goBack = useSmartBack('/dashboard');
 
   const [items, setItems] = useState<ExpiryItem[]>([]);
   const [allItems, setAllItems] = useState<ExpiryItem[]>([]);
@@ -434,21 +434,17 @@ export default function Expiry() {
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-4 z-40 px-4 max-w-4xl mx-auto" role="banner" aria-label="到期中心顶部导航">
-        <div className="glass-panel rounded-full px-4 py-3 flex items-center gap-3 ring-1 ring-black/5 dark:ring-white/10">
-          <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={goBack} aria-label="返回上一页">
-            <ArrowLeft size={20} aria-hidden />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold truncate">到期中心</h1>
-            <p className="text-xs text-hint truncate">订阅 · 账单 · 保险 · 域名 · 保修</p>
-          </div>
+      <PageHeader
+        title="到期中心"
+        subtitle="订阅 · 账单 · 保险 · 域名 · 保修"
+        back="smart"
+        actions={
           <Button onClick={openCreate} className="rounded-full min-h-11" aria-label="新建到期项">
             <Plus className="w-4 h-4 mr-1" aria-hidden />
             新建
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       <main id="main-content" className="max-w-4xl mx-auto px-4 py-6 space-y-6" tabIndex={-1}>
         <section aria-label="到期概览" className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -515,14 +511,16 @@ export default function Expiry() {
         {loading ? (
           <p className="text-hint text-sm" role="status">加载中…</p>
         ) : items.length === 0 ? (
-          <div className="text-center py-16 glass-panel rounded-3xl">
-            <AlarmClock className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" aria-hidden />
-            <p className="font-semibold text-slate-700 dark:text-slate-200">暂无到期项</p>
-            <p className="text-sm text-hint mt-1">记录订阅、账单、保险、域名与保修，到期前自动提醒</p>
-            <Button className="mt-4 rounded-full" variant="outline" onClick={openCreate}>
-              新建到期项
-            </Button>
-          </div>
+          <EmptyState
+            icon={AlarmClock}
+            title="暂无到期项"
+            description="记录订阅、账单、保险、域名与保修，到期前自动提醒"
+            action={
+              <Button className="rounded-full" variant="outline" onClick={openCreate}>
+                新建到期项
+              </Button>
+            }
+          />
         ) : (
           <>
             <BucketSection

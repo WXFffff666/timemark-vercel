@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
 import {
 
@@ -31,6 +31,8 @@ import {
 import { Button } from '@/components/ui/button';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+import { PageHeader } from '@/components/layout/PageHeader';
 
 import { api } from '@/lib/api';
 
@@ -93,8 +95,6 @@ function heatColor(count: number, max: number): string {
 
 
 export default function AnnualReport() {
-
-  const navigate = useNavigate();
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -192,35 +192,35 @@ export default function AnnualReport() {
 
     <div className="min-h-screen p-6 max-w-4xl mx-auto">
 
-      <div className="flex flex-wrap gap-2 items-center justify-between">
+      <PageHeader
+        title={`${data.year} 年度提醒报告`}
+        backTo="/dashboard"
+        actions={
+          <div className="flex gap-2 items-center">
 
-        <Button variant="ghost" onClick={() => navigate('/dashboard')}>← 返回</Button>
+            <select
 
-        <div className="flex gap-2 items-center">
+              value={year}
 
-          <select
+              onChange={(e) => handleYearChange(parseInt(e.target.value, 10))}
 
-            value={year}
+              className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
 
-            onChange={(e) => handleYearChange(parseInt(e.target.value, 10))}
+            >
 
-            className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+              {Array.from({ length: 5 }, (_, i) => currentYear - i).map((y) => (
 
-          >
+                <option key={y} value={y}>{y} 年</option>
 
-            {Array.from({ length: 5 }, (_, i) => currentYear - i).map((y) => (
+              ))}
 
-              <option key={y} value={y}>{y} 年</option>
+            </select>
 
-            ))}
+            <Button variant="outline" onClick={() => window.print()}>导出 PDF</Button>
 
-          </select>
-
-          <Button variant="outline" onClick={() => window.print()}>导出 PDF</Button>
-
-        </div>
-
-      </div>
+          </div>
+        }
+      />
 
       <Card className="mt-4 glass-panel border-0">
 

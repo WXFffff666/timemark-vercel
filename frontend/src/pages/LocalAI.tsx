@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Cake, Cpu, Database, Download, Loader2, Send, Sparkles, Square } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Cake, Cpu, Database, Download, Loader2, Send, Sparkles, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { api } from '@/lib/api';
 import { probeDeviceCapability, isLocalChatCapable } from '@/lib/local-ai/device';
 import { chatWebLlm, isTierWeightReady, unloadEngines } from '@/lib/local-ai/engine';
@@ -47,8 +47,6 @@ function loadStoredTier(): WebLlmTierId {
  * （向量索引存 IndexedDB，哈希增量构建）。数据全程不出本机。
  */
 export function LocalAI() {
-  const navigate = useNavigate();
-
   const [device, setDevice] = useState<'checking' | 'ok' | 'unsupported'>('checking');
   const [tier, setTier] = useState<WebLlmTierId>(loadStoredTier);
   const [bundledReady, setBundledReady] = useState<boolean | null>(null);
@@ -141,10 +139,16 @@ export function LocalAI() {
     setBusy(true);
     setQuestion('');
     abortRef.current = new AbortController();
+    // v2.29：带最近 3 轮问答进上下文——"它呢？""第二个是什么"这类追问才答得上
+    const priorHistory = history
+      .filter((h) => h.mode === 'local-ai' && !h.answer.startsWith('失败：'))
+      .slice(-3)
+      .map((h) => ({ question: h.question, answer: h.answer }));
     setHistory((prev) => [...prev, { question: q, answer: '…', sources: [], mode: 'local-ai', at: Date.now() }]);
     try {
       const result = await answerQuestion(q, {
         tier,
+        history: priorHistory,
         signal: abortRef.current.signal,
         onStatus: (msg, p) => {
           setModelStatus(msg);
@@ -179,23 +183,11 @@ export function LocalAI() {
       setModelProgress(null);
       setModelStatus('');
     }
-  }, [question, busy, tier]);
+  }, [question, busy, tier, history]);
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-6 z-40 px-4 max-w-4xl mx-auto">
-        <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)} aria-label="返回">
-              <ArrowLeft size={20} />
-            </Button>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">本地 AI（实验）</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">模型跑在浏览器 · 数据不出本机</p>
-            </div>
-          </div>
-        </div>
-      </header>
+      <PageHeader title="本地 AI（实验）" subtitle="模型跑在浏览器 · 数据不出本机" maxWidth="max-w-4xl" />
 
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-5">
         {/* 对话（v2.28：提升为首卡 —— 此前排第 3，移动端被顶出视口，是"看不到后续对话"的主因） */}

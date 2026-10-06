@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Edit2, Trash2, Calendar, Save, Eye } from 'lucide-react';
+import { Plus, Edit2, Trash2, Calendar, Save, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
 
 interface EventTemplate {
@@ -20,7 +21,6 @@ const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, trans
 const itemVariants = { hidden: { opacity: 0, y: 20, scale: 0.95 }, visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 300, damping: 24 } as const } };
 
 export default function Templates() {
-  const navigate = useNavigate();
   const [templates, setTemplates] = useState<EventTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -149,25 +149,21 @@ export default function Templates() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
-      <header className="sticky top-6 z-40 px-4 max-w-3xl mx-auto">
-        <div className="glass-panel rounded-full px-6 py-3.5 flex items-center gap-4 ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
-          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}>
-            <ArrowLeft size={20} />
-          </Button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">事件模板</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">管理常用事件模板</p>
-          </div>
-          <Button 
-            variant="vision" 
-            className="ml-auto rounded-full px-5"
+      <PageHeader
+        title="事件模板"
+        subtitle="管理常用事件模板"
+        maxWidth="max-w-3xl"
+        actions={
+          <Button
+            variant="vision"
+            className="rounded-full px-5"
             onClick={() => { setEditingTemplate(null); setFormData({ event_type: '', template_content: '' }); setShowModal(true); }}
           >
             <Plus size={16} className="mr-1" />
             添加模板
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       <main className="max-w-3xl mx-auto px-6 py-10 mt-2">
         {loading ? (
@@ -175,23 +171,21 @@ export default function Templates() {
             <div className="w-8 h-8 border-2 border-slate-300 border-t-primary-500 rounded-full animate-spin" />
           </div>
         ) : templates.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-              <Calendar className="w-10 h-10 text-slate-400" />
-            </div>
-            <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">暂无事件模板</h3>
-            <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-md mx-auto">
-              创建常用事件模板，快速创建重复事件（如驾照到期、保险续费、会员续费等）
-            </p>
-            <Button 
-              variant="vision" 
-              className="rounded-full px-6"
-              onClick={() => { setEditingTemplate(null); setFormData({ event_type: '', template_content: '' }); setShowModal(true); }}
-            >
-              <Plus size={16} className="mr-2" />
-              创建第一个模板
-            </Button>
-          </div>
+          <EmptyState
+            icon={Calendar}
+            title="暂无事件模板"
+            description="创建常用事件模板，快速创建重复事件（如驾照到期、保险续费、会员续费等）"
+            action={
+              <Button
+                variant="vision"
+                className="rounded-full px-6"
+                onClick={() => { setEditingTemplate(null); setFormData({ event_type: '', template_content: '' }); setShowModal(true); }}
+              >
+                <Plus size={16} className="mr-2" />
+                创建第一个模板
+              </Button>
+            }
+          />
         ) : (
           <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-4">
             {templates.map(template => (

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Flame, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
+import { Flame, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,8 @@ import { Select } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
-import { useSmartBack } from '@/hooks/useSmartBack';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
 import {
   createHabitSchema,
@@ -121,7 +122,6 @@ function enumerateDays(from: string, to: string): string[] {
 
 export default function Habits() {
   const navigate = useNavigate();
-  const goBack = useSmartBack('/dashboard');
 
   const [habits, setHabits] = useState<HabitWithStreak[]>([]);
   const [grid, setGrid] = useState<HabitGridResult | null>(null);
@@ -281,21 +281,17 @@ export default function Habits() {
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-4 z-40 px-4 max-w-4xl mx-auto" role="banner" aria-label="习惯打卡顶部导航">
-        <div className="glass-panel rounded-full px-4 py-3 flex items-center gap-3 ring-1 ring-black/5 dark:ring-white/10">
-          <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={goBack} aria-label="返回上一页">
-            <ArrowLeft size={20} aria-hidden />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold truncate">习惯打卡</h1>
-            <p className="text-xs text-hint truncate">每日 / 每周目标 · 连胜 · 周视图</p>
-          </div>
+      <PageHeader
+        title="习惯打卡"
+        subtitle="每日 / 每周目标 · 连胜 · 周视图"
+        back="smart"
+        actions={
           <Button onClick={openCreate} className="rounded-full min-h-11" aria-label="新建习惯">
             <Plus className="w-4 h-4 mr-1" aria-hidden />
             新建
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       <main id="main-content" className="max-w-4xl mx-auto px-4 py-6 space-y-6" tabIndex={-1}>
         {/* v2.27 F44：排序切换 */}
@@ -320,13 +316,17 @@ export default function Habits() {
         {loading ? (
           <p className="text-hint text-sm" role="status">加载中…</p>
         ) : habits.length === 0 ? (
-          <div data-testid="habit-empty" className="text-center py-16 glass-panel rounded-3xl">
-            <Repeat className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" aria-hidden />
-            <p className="font-semibold text-slate-700 dark:text-slate-200">还没有习惯</p>
-            <p className="text-sm text-hint mt-1">创建第一个习惯，每天打卡，积累连胜</p>
-            <Button className="mt-4 rounded-full" variant="outline" onClick={openCreate}>
-              新建习惯
-            </Button>
+          <div data-testid="habit-empty">
+            <EmptyState
+              icon={Repeat}
+              title="还没有习惯"
+              description="创建第一个习惯，每天打卡，积累连胜"
+              action={
+                <Button className="rounded-full" variant="outline" onClick={openCreate}>
+                  新建习惯
+                </Button>
+              }
+            />
           </div>
         ) : (
           <>

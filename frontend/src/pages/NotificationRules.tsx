@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Trash2, GitBranch } from 'lucide-react';
+import { ArrowLeft, GitBranch, Plus, Trash2 } from 'lucide-react';
 import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
 import { NOTIFICATION_PRESET_LIST } from '@timemark/shared/notification-presets';
 
@@ -168,7 +169,7 @@ export default function NotificationRules() {
       {loading ? (
         <p className="text-center text-slate-500 dark:text-slate-400">加载中...</p>
       ) : rules.length === 0 ? (
-        <p className="text-center text-slate-500 dark:text-slate-400">暂无条件规则</p>
+        <EmptyState icon={GitBranch} title="暂无条件规则" />
       ) : (
         <ul className="space-y-3">
           {rules.map((r) => {

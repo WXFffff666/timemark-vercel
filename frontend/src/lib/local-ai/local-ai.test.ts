@@ -100,6 +100,28 @@ describe('local-ai rag prompt', () => {
     expect(messages[0]!.content).toContain('妈妈生日');
     expect(messages[1]!).toEqual({ role: 'user', content: '妈妈生日是什么时候' });
   });
+
+  it('buildRagMessages injects the last 3 turns as context (追问可答)', () => {
+    const history = [
+      { question: '最早一轮不该出现', answer: '被裁掉' },
+      { question: '我最近有什么重要的事？', answer: '有妈妈生日和护照续期。' },
+      { question: '还有呢？', answer: '还有燃气费要交。' },
+      { question: '保险呢？', answer: '车险 11 月到期。' },
+    ];
+    const messages = buildRagMessages('它呢？', hits, 150, history);
+    // system + 3 轮（6 条）+ 当前问题
+    expect(messages).toHaveLength(8);
+    expect(messages[1]).toEqual({ role: 'user', content: '我最近有什么重要的事？' });
+    expect(messages[messages.length - 1]).toEqual({ role: 'user', content: '它呢？' });
+    const all = messages.map((m) => m.content).join('\n');
+    expect(all).not.toContain('最早一轮不该出现');
+    expect(all).toContain('车险 11 月到期');
+  });
+
+  it('system prompt bans markdown output', () => {
+    const messages = buildRagMessages('x', hits);
+    expect(messages[0]!.content).toContain('禁止任何 Markdown');
+  });
 });
 
 describe('local-ai idb hash', () => {

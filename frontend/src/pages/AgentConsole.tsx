@@ -1,7 +1,5 @@
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { useAiDegradedState } from '@/hooks/useAiDegradedState';
 import { DegradedBanner } from '@/components/ai/DegradedBanner';
 import { useAgentConsoleData, useAgentHealth } from '@/pages/agent-console/agent-console-api';
@@ -24,7 +22,6 @@ import { KillSwitch } from '@/components/agent-console/KillSwitch';
  * explicit degraded surface (linking `docs/AI.md`) instead of empty charts.
  */
 export default function AgentConsole() {
-  const navigate = useNavigate();
   const data = useAgentConsoleData();
   const agentHealth = useAgentHealth();
   const health = useAiDegradedState();
@@ -51,34 +48,13 @@ export default function AgentConsole() {
       exit={{ opacity: 0 }}
       className="min-h-screen pb-24"
     >
-      <header className="sticky top-6 z-40 px-4 max-w-5xl mx-auto">
-        <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
-          <div className="flex items-center gap-4 min-w-0">
-            <Button variant="ghost" size="icon" className="rounded-full shrink-0" onClick={() => navigate(-1)} aria-label="返回">
-              <ArrowLeft size={20} />
-            </Button>
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                <Bot size={20} className="text-blue-600 dark:text-blue-400" aria-hidden /> 控制台
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">
-                控制平面 · 队列 {data.stats?.byStatus?.queued ?? 0} · worker {onlineWorkers}/{data.workers.length} 在线
-                {data.lastUpdated ? ` · ${new Date(data.lastUpdated).toLocaleTimeString()}` : ''}
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full min-h-11 min-w-11 shrink-0"
-            onClick={refresh}
-            disabled={data.loading}
-            aria-label="刷新"
-          >
-            <RefreshCw size={20} className={data.loading ? 'animate-spin' : ''} />
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        title="控制台"
+        subtitle={`控制平面 · 队列 ${data.stats?.byStatus?.queued ?? 0} · worker ${onlineWorkers}/${data.workers.length} 在线${data.lastUpdated ? ` · ${new Date(data.lastUpdated).toLocaleTimeString()}` : ''}`}
+        onRefresh={refresh}
+        refreshing={data.loading}
+        maxWidth="max-w-5xl"
+      />
 
       <main className="max-w-5xl mx-auto px-6 py-8 mt-2 space-y-6">
         <DegradedBanner state={health} />

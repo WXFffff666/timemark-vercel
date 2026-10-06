@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
-import { ArrowLeft, CheckCircle2, HeartPulse, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { CheckCircle2, HeartPulse } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { useSmartBack } from '@/hooks/useSmartBack';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { FindingCard } from '@/components/data-health/FindingCard';
 import { useDataHealth } from '@/components/data-health/useDataHealth';
 
@@ -11,7 +11,6 @@ const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 
 
 /** Task 137: data-health panel with one-click, auditable repairs. */
 export default function DataHealth() {
-  const goBack = useSmartBack('/dashboard');
   const { report, loading, error, repairing, notice, reload, repair } = useDataHealth();
 
   const findings = report?.findings ?? [];
@@ -20,20 +19,13 @@ export default function DataHealth() {
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-4 z-40 mx-auto max-w-4xl px-4" role="banner" aria-label="数据健康顶部导航">
-        <div className="glass-panel flex items-center gap-3 rounded-full px-4 py-3 ring-1 ring-black/5 dark:ring-white/10">
-          <Button variant="ghost" size="icon" className="min-h-11 min-w-11 rounded-full" onClick={goBack} aria-label="返回上一页">
-            <ArrowLeft size={20} aria-hidden />
-          </Button>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">数据健康</h1>
-            <p className="truncate text-xs text-hint">检测孤立 / 缺失 / 重复数据，一键修复</p>
-          </div>
-          <Button variant="ghost" size="icon" className="min-h-11 min-w-11 rounded-full" onClick={() => void reload()} disabled={loading} aria-label="刷新">
-            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} aria-hidden />
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        title="数据健康"
+        subtitle="检测孤立 / 缺失 / 重复数据，一键修复"
+        back="smart"
+        onRefresh={() => void reload()}
+        refreshing={loading}
+      />
 
       <main id="main-content" className="mx-auto max-w-4xl px-4 py-8" tabIndex={-1}>
         <Card className="mb-6 rounded-3xl p-6">
@@ -62,11 +54,7 @@ export default function DataHealth() {
         )}
 
         {loading && !report ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((index) => (
-              <div key={index} className="glass-panel h-28 animate-pulse rounded-3xl" />
-            ))}
-          </div>
+          <SkeletonCard count={3} />
         ) : !dirty ? (
           <div className="glass-panel rounded-3xl py-16 text-center">
             <CheckCircle2 size={48} className="mx-auto mb-4 text-emerald-500" aria-hidden />

@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Inbox as InboxIcon, ArrowLeft, Trash2, RefreshCw, Mail, MailOpen, CheckCheck, Copy } from 'lucide-react';
+import { Inbox as InboxIcon, Trash2, Mail, MailOpen, CheckCheck, Copy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { api } from '@/lib/api';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
@@ -30,7 +32,6 @@ const sourceLabels: Record<string, string> = {
 import { formatRelativeTime } from '@/lib/format-time';
 
 export default function Inbox() {
-  const navigate = useNavigate();
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [total, setTotal] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -124,31 +125,21 @@ export default function Inbox() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
-      <header className="sticky top-6 z-40 px-4 max-w-4xl mx-auto">
-        <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                收件箱
-                {unreadCount > 0 && (
-                  <Badge variant="destructive" className="scale-90">{unreadCount}</Badge>
-                )}
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">共 {total} 条消息</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
+      <PageHeader
+        title="收件箱"
+        subtitle={`共 ${total} 条消息`}
+        actions={
+          <>
+            {unreadCount > 0 && <Badge variant="destructive" className="scale-90">{unreadCount}</Badge>}
             <Button variant="ghost" size="sm" className="rounded-full" onClick={markAllRead} disabled={markingAll || unreadCount === 0}>
               <CheckCheck size={16} className="mr-1" />
               全部已读
             </Button>
-            <Button variant="ghost" size="icon" className="rounded-full" aria-label="刷新收件箱" onClick={() => fetchMessages()} disabled={loading}>
-              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-            </Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+        onRefresh={() => fetchMessages()}
+        refreshing={loading}
+      />
       <div className="max-w-4xl mx-auto px-6 mt-3 flex flex-wrap gap-2 items-center">
         <input
           value={searchQuery}
@@ -174,25 +165,13 @@ export default function Inbox() {
           </div>
         )}
         {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="glass-panel rounded-[2.5rem] p-6 animate-pulse">
-                <div className="flex gap-6">
-                  <div className="w-16 h-16 rounded-[1.5rem] bg-slate-200/60 dark:bg-slate-700/50"></div>
-                  <div className="flex-1">
-                    <div className="h-5 bg-slate-200/60 dark:bg-slate-700/50 rounded-full w-1/3 mb-3"></div>
-                    <div className="h-4 bg-slate-200/60 dark:bg-slate-700/50 rounded-full w-1/2"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <SkeletonCard count={4} />
         ) : messages.length === 0 ? (
-          <div className="text-center py-16 glass-panel rounded-[2.5rem] ring-1 ring-black/5 dark:ring-white/10">
-            <InboxIcon size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">收件箱为空</h3>
-            <p className="text-slate-500 dark:text-slate-400">外部系统通过收件 API 推送的消息将显示在此处（不含您自己发出的提醒）</p>
-          </div>
+          <EmptyState
+            icon={InboxIcon}
+            title="收件箱为空"
+            description="外部系统通过收件 API 推送的消息将显示在此处（不含您自己发出的提醒）"
+          />
         ) : (
           <motion.div variants={containerVariants} initial="hidden" animate="visible" className="relative">
             <div className="absolute left-[2.25rem] top-8 bottom-8 w-px bg-gradient-to-b from-primary-500/40 via-slate-200 dark:via-slate-700 to-transparent z-0"></div>

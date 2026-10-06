@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarClock, Gauge, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
+import { CalendarClock, Gauge, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { useSmartBack } from '@/hooks/useSmartBack';
 import { api } from '@/lib/api';
 import { daysUntil } from '@/lib/expiry-utils';
 import {
@@ -244,7 +245,6 @@ function PlanCard({
 
 export default function Maintenance() {
   const navigate = useNavigate();
-  const goBack = useSmartBack('/dashboard');
 
   const [plans, setPlans] = useState<MaintenancePlan[]>([]);
   const [allPlans, setAllPlans] = useState<MaintenancePlan[]>([]);
@@ -436,21 +436,18 @@ export default function Maintenance() {
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-4 z-40 px-4 max-w-5xl mx-auto" role="banner" aria-label="保养顶部导航">
-        <div className="glass-panel rounded-full px-4 py-3 flex items-center gap-3 ring-1 ring-black/5 dark:ring-white/10">
-          <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={goBack} aria-label="返回上一页">
-            <ArrowLeft size={20} aria-hidden />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold truncate">保养</h1>
-            <p className="text-xs text-hint truncate">车辆 · 家电 · 设备 · 按日期或用量</p>
-          </div>
+      <PageHeader
+        title="保养"
+        subtitle="车辆 · 家电 · 设备 · 按日期或用量"
+        back="smart"
+        maxWidth="max-w-5xl"
+        actions={
           <Button onClick={openCreate} className="rounded-full min-h-11" aria-label="新建保养计划">
             <Plus className="w-4 h-4 mr-1" aria-hidden />
             新建
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       <main id="main-content" className="max-w-5xl mx-auto px-4 py-6 space-y-6" tabIndex={-1}>
         <section aria-label="保养概览" className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -512,14 +509,16 @@ export default function Maintenance() {
         {loading ? (
           <p className="text-hint text-sm" role="status">加载中…</p>
         ) : plans.length === 0 ? (
-          <div className="text-center py-16 glass-panel rounded-3xl">
-            <CalendarClock className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" aria-hidden />
-            <p className="font-semibold text-slate-700 dark:text-slate-200">暂无保养计划</p>
-            <p className="text-sm text-hint mt-1">为车辆、家电与设备登记保养间隔，到期或接近用量阈值自动提醒</p>
-            <Button className="mt-4 rounded-full" variant="outline" onClick={openCreate}>
-              新建保养计划
-            </Button>
-          </div>
+          <EmptyState
+            icon={CalendarClock}
+            title="暂无保养计划"
+            description="为车辆、家电与设备登记保养间隔，到期或接近用量阈值自动提醒"
+            action={
+              <Button className="rounded-full" variant="outline" onClick={openCreate}>
+                新建保养计划
+              </Button>
+            }
+          />
         ) : (
           <section aria-label="保养计划列表" className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {plans.map((plan) => (

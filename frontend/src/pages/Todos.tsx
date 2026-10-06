@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import { ArrowLeft, CalendarClock, CheckCircle2, Circle, History } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Circle, History } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
@@ -11,6 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { MobileBottomNav } from '@/components/MobileBottomNav';
+
+import { PageHeader } from '@/components/layout/PageHeader';
+
+import { EmptyState } from '@/components/ui/empty-state';
 
 import { useEventStore } from '@/stores/event.store';
 
@@ -188,31 +192,10 @@ export default function Todos() {
 
     <div className="min-h-screen pb-24">
 
-      <header className="sticky top-4 z-40 px-4 max-w-4xl mx-auto">
-
-        <div className="glass-panel rounded-full px-4 py-3 flex items-center gap-3 ring-1 ring-black/5 dark:ring-white/10">
-
-          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)} aria-label="返回上一页">
-
-            <ArrowLeft size={20} />
-
-          </Button>
-
-          <div className="flex-1">
-
-            <h1 className="text-lg font-bold">近期待办</h1>
-
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-
-              待办 {pending.length} · 已完成 {completed.length} · 历史 {historyItems.length}
-
-            </p>
-
-          </div>
-
-        </div>
-
-      </header>
+      <PageHeader
+        title="近期待办"
+        subtitle={`待办 ${pending.length} · 已完成 ${completed.length} · 历史 ${historyItems.length}`}
+      />
 
 
 
@@ -256,21 +239,18 @@ export default function Todos() {
 
             {pending.length === 0 && completed.length === 0 ? (
 
-              <div className="text-center py-16 glass-panel rounded-3xl">
+              <EmptyState
+                icon={CheckCircle2}
+                title="暂无待办"
+                description="事件进入提醒窗口后会自动显示在这里"
+                action={
+                  <Button className="rounded-full" variant="outline" onClick={() => navigate('/calendar')}>
 
-                <CheckCircle2 className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+                    打开日历
 
-                <p className="font-semibold text-slate-700 dark:text-slate-200">暂无待办</p>
-
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">事件进入提醒窗口后会自动显示在这里</p>
-
-                <Button className="mt-4 rounded-full" variant="outline" onClick={() => navigate('/calendar')}>
-
-                  打开日历
-
-                </Button>
-
-              </div>
+                  </Button>
+                }
+              />
 
             ) : (
 
@@ -370,15 +350,11 @@ export default function Todos() {
 
             {historyItems.length === 0 ? (
 
-              <div className="text-center py-16 glass-panel rounded-3xl">
-
-                <History className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-
-                <p className="font-semibold text-slate-700 dark:text-slate-200">暂无历史记录</p>
-
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">完成待办且事件过期后会自动归档到这里</p>
-
-              </div>
+              <EmptyState
+                icon={History}
+                title="暂无历史记录"
+                description="完成待办且事件过期后会自动归档到这里"
+              />
 
             ) : (
 

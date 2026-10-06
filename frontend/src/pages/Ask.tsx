@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { ArrowLeft, HelpCircle, Search, Send, Sparkles } from 'lucide-react';
+import { HelpCircle, Search, Send, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
-import { useSmartBack } from '@/hooks/useSmartBack';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { api } from '@/lib/api';
 
 /**
@@ -121,7 +121,6 @@ function CatalogueList({
 }
 
 export default function Ask() {
-  const goBack = useSmartBack('/dashboard');
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<AskResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -209,18 +208,12 @@ export default function Ask() {
 
   return (
     <div className="min-h-screen pb-24">
-      <header className="sticky top-4 z-40 px-4 max-w-4xl mx-auto" role="banner" aria-label="问答顶部导航">
-        <div className="glass-panel rounded-full px-4 py-3 flex items-center gap-3 ring-1 ring-black/5 dark:ring-white/10">
-          <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={goBack} aria-label="返回上一页">
-            <ArrowLeft size={20} aria-hidden />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold truncate">问答</h1>
-            <p className="text-xs text-hint truncate">离线确定性回答 · 零外发 · 无 AI</p>
-          </div>
-          <Sparkles size={18} className="text-primary-500 shrink-0" aria-hidden />
-        </div>
-      </header>
+      <PageHeader
+        title="问答"
+        subtitle="离线确定性回答 · 零外发 · 无 AI"
+        back="smart"
+        actions={<Sparkles size={18} className="text-primary-500 shrink-0" aria-hidden />}
+      />
 
       <main id="main-content" className="max-w-4xl mx-auto px-4 py-6 space-y-6" tabIndex={-1}>
         <section aria-label="提问" className="glass-panel rounded-2xl p-4 ring-1 ring-black/5 dark:ring-white/10">

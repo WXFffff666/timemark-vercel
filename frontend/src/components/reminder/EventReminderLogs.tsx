@@ -1,11 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Bell, CheckCircle2, AlertCircle, Clock, RefreshCw, SkipForward } from 'lucide-react';
+import { Bell, Clock, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { SkeletonCard } from '@/components/ui/skeleton-card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/format-time';
-import { readDelivery, realChannelIds, type DeliveryOutcome } from '@timemark/shared';
+import { readDelivery, realChannelIds } from '@timemark/shared';
+import {
+  OUTCOME_BADGE_VARIANT,
+  OUTCOME_BOX_CLASS,
+  OUTCOME_ICON,
+  OUTCOME_LABEL,
+  OUTCOME_TEXT_CLASS,
+} from '@/lib/delivery-outcome-ui';
 
 /**
  * 「事件提醒」投递记录列表（GET /events/reminder-logs）。
@@ -28,38 +37,6 @@ interface ReminderLog {
   channel_results: object | string | null;
   created_at: string;
 }
-
-const OUTCOME_STYLE: Record<DeliveryOutcome, { label: string; badge: 'success' | 'destructive' | 'secondary'; icon: typeof CheckCircle2; box: string; text: string }> = {
-  delivered: {
-    label: '成功',
-    badge: 'success',
-    icon: CheckCircle2,
-    box: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 border-emerald-100 dark:border-emerald-800/50',
-    text: 'text-emerald-600 dark:text-emerald-400',
-  },
-  // 部分失败以前显示绿色"成功"并把错误藏起来：3 个渠道到了、1 个没到，用户完全看不到
-  partial: {
-    label: '部分失败',
-    badge: 'secondary',
-    icon: AlertCircle,
-    box: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 border-amber-100 dark:border-amber-800/50',
-    text: 'text-amber-600 dark:text-amber-400',
-  },
-  failed: {
-    label: '失败',
-    badge: 'destructive',
-    icon: AlertCircle,
-    box: 'bg-red-50 dark:bg-red-900/30 text-red-600 border-red-100 dark:border-red-800/50',
-    text: 'text-red-500 dark:text-red-400',
-  },
-  skipped: {
-    label: '已跳过',
-    badge: 'secondary',
-    icon: SkipForward,
-    box: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700',
-    text: 'text-slate-500 dark:text-slate-400',
-  },
-};
 
 export function EventReminderLogs() {
   const [reminders, setReminders] = useState<ReminderLog[]>([]);
@@ -151,29 +128,13 @@ export function EventReminderLogs() {
         </Button>
       </div>
       {loading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="glass-panel rounded-[2.5rem] p-6 animate-pulse">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-slate-200/60 dark:bg-slate-700/50"></div>
-                <div className="flex-1">
-                  <div className="h-5 bg-slate-200/60 dark:bg-slate-700/50 rounded-full w-1/3 mb-3"></div>
-                  <div className="h-4 bg-slate-200/60 dark:bg-slate-700/50 rounded-full w-1/2"></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <SkeletonCard count={3} />
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 glass-panel rounded-[2.5rem] ring-1 ring-black/5 dark:ring-white/10">
-          <Bell size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
-          <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-            {outcomeFilter && reminders.length > 0 ? '没有符合筛选的记录' : '暂无提醒记录'}
-          </h3>
-          <p className="text-slate-500 dark:text-slate-400">
-            {outcomeFilter && reminders.length > 0 ? '换个筛选条件试试' : '您的提醒发送历史将在此处显示'}
-          </p>
-        </div>
+        <EmptyState
+          icon={Bell}
+          title={outcomeFilter && reminders.length > 0 ? '没有符合筛选的记录' : '暂无提醒记录'}
+          description={outcomeFilter && reminders.length > 0 ? '换个筛选条件试试' : '您的提醒发送历史将在此处显示'}
+        />
       ) : (
         <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-4">
           {filtered.map((r) => {
@@ -182,22 +143,22 @@ export function EventReminderLogs() {
               channelResults: r.channel_results,
               errorMessage: r.error_message,
             });
-            const style = OUTCOME_STYLE[delivery.outcome];
-            const Icon = style.icon;
+            const outcome = delivery.outcome;
+            const StatusIcon = OUTCOME_ICON[outcome];
             // 落库的 error_message 是权威的人读信息（可能比逐渠道原因更完整），
             // 只有它缺失时才用推导出的逐渠道原因兜底。
             const detail = r.error_message ?? delivery.reason;
             return (
               <motion.div key={r.id} variants={itemVariants} className="glass-panel rounded-[2.5rem] p-6 flex items-center justify-between hover:shadow-xl transition-all ring-1 ring-black/5 dark:ring-white/10">
                 <div className="flex items-center gap-5">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner border ${style.box}`}>
-                    <Icon size={26} />
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner border ${OUTCOME_BOX_CLASS[outcome]}`}>
+                    <StatusIcon size={26} />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-3">
                       {r.event_name}
-                      <Badge variant={style.badge} className="scale-90">
-                        {style.label}
+                      <Badge variant={OUTCOME_BADGE_VARIANT[outcome]} className="scale-90">
+                        {OUTCOME_LABEL[outcome]}
                       </Badge>
                     </h3>
                     <div className="flex items-center gap-3 mt-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -213,7 +174,7 @@ export function EventReminderLogs() {
                       </div>
                     )}
                     {detail && delivery.outcome !== 'delivered' && (
-                      <div className={`mt-1 text-sm ${style.text}`}>{detail}</div>
+                      <div className={`mt-1 text-sm ${OUTCOME_TEXT_CLASS[outcome]}`}>{detail}</div>
                     )}
                   </div>
                 </div>

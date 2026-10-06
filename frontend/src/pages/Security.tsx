@@ -38,7 +38,8 @@ function formatDeployTime(iso: string): string {
   const parsed = new Date(iso);
   return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleString();
 }
-import { Shield, Monitor, Globe, Ban, Key, Clock, Trash2, ArrowLeft, Fingerprint, Plus } from 'lucide-react';
+import { Monitor, Globe, Ban, Key, Clock, Trash2, Fingerprint, Plus } from 'lucide-react';
+import { PageHeader } from '@/components/layout/PageHeader';
 import {
   isPasskeySupported,
   listPasskeys,
@@ -221,16 +222,15 @@ export default function Security() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-8">
-      <header className="sticky top-0 z-20 backdrop-blur border-b border-white/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)} title="返回">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <Shield className="w-5 h-5" />
-          <h1 className="font-semibold">安全中心</h1>
-        </div>
-        <div className="flex gap-2"><ThemeToggle /><Button variant="outline" size="sm" onClick={() => navigate('/settings')}>设置</Button></div>
-      </header>
+      <PageHeader
+        title="安全中心"
+        actions={
+          <>
+            <ThemeToggle />
+            <Button variant="outline" size="sm" onClick={() => navigate('/settings')}>设置</Button>
+          </>
+        }
+      />
 
       <main className="max-w-4xl mx-auto p-4 space-y-4">
         {loadError && (

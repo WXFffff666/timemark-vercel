@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Bell, ArrowLeft, Trash2, RefreshCw, CheckCircle2, XCircle, Calendar, AlertCircle, SkipForward } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Bell, Trash2, RefreshCw, CheckCircle2, XCircle, Calendar, AlertCircle, SkipForward } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { readDelivery, type DeliveryOutcome } from '@timemark/shared';
@@ -88,7 +91,6 @@ const getEventTypeLabel = (type?: string): string => {
 import { formatRelativeTime } from '@/lib/format-time';
 
 export default function TriggerLogs() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<LogsTab>(() =>
     searchParams.get('tab') === 'reminders' ? 'reminders' : 'delivery',
@@ -239,36 +241,27 @@ export default function TriggerLogs() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
-      <header className="sticky top-6 z-40 px-4 max-w-4xl mx-auto">
-        <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(-1)}><ArrowLeft size={20} /></Button>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">提醒日志</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                {tab === 'reminders' ? '事件维度的提醒发送记录' : `共 ${total} 条提醒记录`}
-              </p>
-            </div>
-          </div>
-          {tab === 'delivery' && (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={retryAllFailed} disabled={retryingAll}>
-                {retryingAll ? <RefreshCw size={16} className="mr-1 animate-spin" /> : null}
-                {retryingAll ? '重试中' : '重试全部失败'}
-              </Button>
-              <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={exportCsv}>
-                导出 CSV
-              </Button>
-              <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={() => fetchLogs()} disabled={loading} aria-label="刷新">
-                <RefreshCw size={20} className={loading ? 'animate-spin' : ''} /></Button>
-              <Button variant="ghost" size="sm" className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={clearLogs} disabled={clearing || logs.length === 0}>
-                <Trash2 size={16} className="mr-1" />
-                清空
-              </Button>
-            </div>
-          )}
-        </div>
-      </header>
+      <PageHeader
+        title="提醒日志"
+        subtitle={tab === 'reminders' ? '事件维度的提醒发送记录' : `共 ${total} 条提醒记录`}
+        actions={tab === 'delivery' && (
+          <>
+            <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={retryAllFailed} disabled={retryingAll}>
+              {retryingAll ? <RefreshCw size={16} className="mr-1 animate-spin" /> : null}
+              {retryingAll ? '重试中' : '重试全部失败'}
+            </Button>
+            <Button variant="ghost" size="sm" className="rounded-full min-h-11" onClick={exportCsv}>
+              导出 CSV
+            </Button>
+            <Button variant="ghost" size="sm" className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={clearLogs} disabled={clearing || logs.length === 0}>
+              <Trash2 size={16} className="mr-1" />
+              清空
+            </Button>
+          </>
+        )}
+        onRefresh={tab === 'delivery' ? () => fetchLogs() : undefined}
+        refreshing={loading}
+      />
       <div className="max-w-4xl mx-auto px-6 mt-3">
         <div className="inline-flex rounded-full glass-panel p-1 ring-1 ring-black/5 dark:ring-white/10" role="tablist" aria-label="日志类型">
           {([
@@ -347,25 +340,9 @@ export default function TriggerLogs() {
       ) : (
       <main className="max-w-4xl mx-auto px-6 py-10 mt-2">
         {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="glass-panel rounded-[2.5rem] p-6 animate-pulse">
-                <div className="flex gap-6">
-                  <div className="w-16 h-16 rounded-[1.5rem] bg-slate-200/60 dark:bg-slate-700/50"></div>
-                  <div className="flex-1">
-                    <div className="h-5 bg-slate-200/60 dark:bg-slate-700/50 rounded-full w-1/3 mb-3"></div>
-                    <div className="h-4 bg-slate-200/60 dark:bg-slate-700/50 rounded-full w-1/2"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <SkeletonCard count={4} />
         ) : logs.length === 0 ? (
-          <div className="text-center py-16 glass-panel rounded-[2.5rem] ring-1 ring-black/5 dark:ring-white/10">
-            <Bell size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">暂无提醒记录</h3>
-            <p className="text-slate-500 dark:text-slate-400">事件提醒触发后将在此处显示</p>
-          </div>
+          <EmptyState icon={Bell} title="暂无提醒记录" description="事件提醒触发后将在此处显示" />
         ) : (
           <motion.div variants={containerVariants} initial="hidden" animate="visible" className="relative">
             <div className="absolute left-[2.25rem] top-8 bottom-8 w-px bg-gradient-to-b from-primary-500/40 via-slate-200 dark:via-slate-700 to-transparent z-0"></div>

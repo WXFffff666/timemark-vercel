@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { ChannelRepairWizard } from '@/components/channels/ChannelRepairWizard';
 import { fetchChannelTemplates, type CloudChannelTemplate } from '@/lib/channel-templates';
 import { ChannelIcon } from '@/components/channels/ChannelIcon';
@@ -953,17 +955,11 @@ export default function Channels() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
-      <header className="sticky top-6 z-40 px-4 max-w-[90rem] mx-auto" role="banner">
-        <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="rounded-full min-h-11 min-w-11" onClick={() => navigate(-1)} aria-label="返回上一页">
-              <ArrowLeft size={20} aria-hidden />
-            </Button>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">通知渠道</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">按需添加并绑定，不配置不影响核心提醒</p>
-            </div>
-          </div>
+      <PageHeader
+        title="通知渠道"
+        subtitle="按需添加并绑定，不配置不影响核心提醒"
+        maxWidth="max-w-[90rem]"
+        actions={
           <div className="flex items-center gap-2">
             {accounts.length > 0 && (
               <Button variant="outline" size="sm" className="rounded-full min-h-11 hidden sm:flex" onClick={exportAccounts} aria-label="导出脱敏渠道配置">
@@ -984,16 +980,16 @@ export default function Channels() {
                 {testingAll ? '测试中...' : '全部测试'}
               </Button>
             )}
-            <Button 
-              variant="vision" 
-              className="shadow-md shadow-primary-500/20 flex rounded-full px-5" 
+            <Button
+              variant="vision"
+              className="shadow-md shadow-primary-500/20 flex rounded-full px-5"
               onClick={openTemplateModal}
             >
               <Plus size={16} className="mr-1.5"/> 添加渠道
             </Button>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       <main id="main-content" className="max-w-[90rem] mx-auto px-6 py-10 mt-2" tabIndex={-1}>
         <p className="text-sm text-hint mb-8 max-w-3xl">
@@ -1012,16 +1008,8 @@ export default function Channels() {
         {initialLoading ? (
           // 局部骨架：只在首屏出现，且形状与真实账户卡片一致，页面框架与说明文字不消失
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" aria-busy="true" aria-label="正在加载通知渠道">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="glass-panel rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10 animate-pulse">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-slate-200/60 dark:bg-slate-700/50" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 w-28 rounded-full bg-slate-200/60 dark:bg-slate-700/50" />
-                    <div className="h-3 w-20 rounded-full bg-slate-200/60 dark:bg-slate-700/50" />
-                  </div>
-                </div>
-              </div>
+            {Array.from({ length: 6 }, (_, i) => (
+              <SkeletonCard key={i} count={1} />
             ))}
           </div>
         ) : loadFailed ? (
