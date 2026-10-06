@@ -94,6 +94,9 @@ export function Dashboard() {
     [events, timezone, dayKey],
   );
 
+  // v2.30：ICS 导入结果用行内横幅替代 alert（不打断、可复查、自动消失）
+  const [icsStatus, setIcsStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
   const handleImportIcs = async (file: File) => {
     // v2.27：整个导入路径包 try/catch —— 此前 fetch/json 失败是 unhandled rejection，UI 无反馈
     try {
@@ -106,13 +109,15 @@ export function Dashboard() {
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success) {
-        alert(`已导入 ${data.data.imported} 个事件`);
+        setIcsStatus({ ok: true, text: `已导入 ${data.data.imported} 个事件` });
         fetchEvents();
       } else {
-        alert(data?.error || `导入失败（HTTP ${res.status}）`);
+        setIcsStatus({ ok: false, text: data?.error || `导入失败（HTTP ${res.status}）` });
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : '导入失败');
+      setIcsStatus({ ok: false, text: e instanceof Error ? e.message : '导入失败' });
+    } finally {
+      setTimeout(() => setIcsStatus(null), 6000);
     }
   };
 
@@ -266,6 +271,20 @@ export function Dashboard() {
           </div>
         </div>
       </header>
+
+      {/* v2.30：ICS 导入结果行内横幅（替代 alert） */}
+      {icsStatus && (
+        <div
+          role="status"
+          className={`max-w-7xl mx-auto px-6 mt-2 rounded-xl px-4 py-2 text-sm ${
+            icsStatus.ok
+              ? 'border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/60 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-300'
+              : 'border border-red-200 dark:border-red-900/50 bg-red-50/60 dark:bg-red-900/10 text-red-600 dark:text-red-300'
+          }`}
+        >
+          {icsStatus.text}
+        </div>
+      )}
 
       <main id="main-content" className="max-w-7xl mx-auto px-6 py-8 mt-4" tabIndex={-1}>
         {(() => {

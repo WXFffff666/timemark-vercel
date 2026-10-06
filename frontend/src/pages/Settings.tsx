@@ -613,7 +613,9 @@ export default function Settings() {
 
   const handleSoundToggle = (checked: boolean) => {
     setSoundEnabled(checked);
-    localStorage.setItem('timemark_sound_enabled', String(checked));
+    try {
+      localStorage.setItem('timemark_sound_enabled', String(checked));
+    } catch { /* 隐私模式配额满：内存态仍生效，本次会话内不丢 */ }
   };
 
   const toggleAlertAccount = (accountId: number) => {
