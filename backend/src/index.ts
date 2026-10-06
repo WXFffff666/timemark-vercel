@@ -90,6 +90,7 @@ import botRoutes from './routes/bot.js';
 import aiRoutes from './routes/ai.js';
 import searchRoutes from './routes/search.js';
 import agentTokensRoutes from './routes/agent-tokens.js';
+import apiPortalRoutes from './routes/api-portal.js';
 import agentRoutes from './routes/agent.js';
 // checkbox 103: stateless MCP server over the Streamable HTTP transport (disabled unless
 // MCP_ENABLED=true); a single POST handler over the same scoped tokens + tool registry.
@@ -290,6 +291,8 @@ app.route('/api/agent/scheduler', agentSchedulerRoutes);
 app.route('/api/agent', agentRoutes);
 // checkbox 103: stateless MCP server (Streamable HTTP) over the same registry + scoped tokens.
 app.route('/api/mcp', mcpRoutes);
+// v2.30 方向 B: 对外 REST API（/api/v1/*，tmt_ token 鉴权，与 MCP 同源）。
+app.route('/api/v1', apiPortalRoutes);
 // checkbox 119: the agent control-plane API (jobs, workers, routines; session/admin auth only).
 app.route('/api/admin/agent', adminAgentRoutes);
 // task 138: migration self-check (recorded schema version vs the migrate.ts tail).

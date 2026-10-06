@@ -3,7 +3,7 @@ import {
   LayoutDashboard, CalendarCheck, BarChart3, FileBarChart, ListTodo, MessageCircleQuestion,
   Bell, Cable, BellRing, FileStack, Inbox, Megaphone,
   AlarmClock, Package, Wrench, FileText, Flame, Pill, Target, Users, CalendarDays, CalendarRange,
-  Bot, HeartPulse, Activity, Shield, KeyRound, BookOpen, Rocket, Settings, Container, Cpu,
+  Bot, HeartPulse, Activity, Shield, KeyRound, BookOpen, Rocket, Settings, Container, Cpu, Code2,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -86,6 +86,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // v2.26 C：/assistant 页删除 —— AssistantDock 全局承载，入口只剩一个。
       { path: '/local-ai', icon: Cpu, labelKey: 'nav.localAi' },
       { path: '/agent-console', icon: Bot, labelKey: 'nav.agentConsole' },
+      { path: '/api-portal', icon: Code2, labelKey: 'nav.apiPortal' },
       { path: '/data-health', icon: HeartPulse, labelKey: 'nav.dataHealth' },
       { path: '/cron-monitor', icon: Activity, labelKey: 'nav.cronMonitor' },
       { path: '/security', icon: Shield, labelKey: 'nav.security' },

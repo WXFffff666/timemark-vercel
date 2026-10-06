@@ -25,6 +25,7 @@ const Contacts = lazy(() => import('./pages/Contacts'));
 const Broadcast = lazy(() => import('./pages/Broadcast'));
 const IntegrationsDocs = lazy(() => import('./pages/IntegrationsDocs'));
 const CronMonitor = lazy(() => import('./pages/CronMonitor'));
+const ApiPortal = lazy(() => import('./pages/ApiPortal'));
 const CountdownWidget = lazy(() => import('./pages/CountdownWidget'));
 const DockerMigration = lazy(() => import('./pages/DockerMigration'));
 const LunarHolidays = lazy(() => import('./pages/LunarHolidays'));
@@ -131,6 +132,7 @@ function AppRoutes({ location }: { location: ReturnType<typeof useLocation> }) {
     <Route path="/shared/:token" element={<SharedView />} />
     <Route path="/integrations-docs" element={<ProtectedRoute><IntegrationsDocs /></ProtectedRoute>} />
     <Route path="/cron-monitor" element={<ProtectedRoute><CronMonitor /></ProtectedRoute>} />
+    <Route path="/api-portal" element={<ProtectedRoute><ApiPortal /></ProtectedRoute>} />
     <Route path="/docker-migration" element={<ProtectedRoute><DockerMigration /></ProtectedRoute>} />
     <Route path="/lunar-holidays" element={<ProtectedRoute><LunarHolidays /></ProtectedRoute>} />
     <Route path="/embed/:token" element={<CountdownWidget />} />

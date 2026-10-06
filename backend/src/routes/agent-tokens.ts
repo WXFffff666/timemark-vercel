@@ -10,6 +10,7 @@ import {
   renameAgentToken,
   revokeAgentToken,
 } from '../services/agent-tokens.service.js';
+import { query } from '../db/index.js';
 
 /**
  * Checkbox 101: Settings-facing CRUD for scoped, revocable agent tokens.
@@ -72,6 +73,23 @@ agentTokens.post('/:id/revoke', async (c) => {
   const revoked = await revokeAgentToken(Number(user.id), id.data);
   if (!revoked) return c.json({ success: false, error: 'Token not found or already revoked' }, 404);
   return c.json({ success: true });
+});
+
+// v2.30 方向 B：该 Token 最近调用审计（REST /api/v1 与 MCP 共用 agent_audit_logs，
+// token_id + user_id 双重归属过滤）。给 API 门户的「最近调用」面板用。
+agentTokens.get('/:id/audit', async (c) => {
+  const user = c.get('user');
+  const id = uuidSchema.safeParse(c.req.param('id'));
+  if (!id.success) return c.json({ success: false, error: 'Invalid token id' }, 400);
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '10', 10) || 10, 1), 50);
+  const result = await query(
+    `SELECT id, tool, decision, result, error_code, created_at
+     FROM agent_audit_logs
+     WHERE token_id = $1::uuid AND user_id = $2
+     ORDER BY created_at DESC LIMIT $3`,
+    [id.data, Number(user.id), limit],
+  );
+  return c.json({ success: true, data: result.rows });
 });
 
 export default agentTokens;

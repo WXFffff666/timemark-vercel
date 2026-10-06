@@ -35,6 +35,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.assistant': 'AI Assistant',
   'nav.localAi': 'Local AI',
   'nav.agentConsole': 'Agent Console',
+  'nav.apiPortal': 'API Portal',
   'nav.dataHealth': 'Data Health',
   'nav.cronMonitor': 'Cron Monitor',
   'nav.loginHistory': 'Login Log',

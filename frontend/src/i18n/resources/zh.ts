@@ -33,6 +33,7 @@ export const zh = {
   'nav.assistant': 'AI 助手',
   'nav.localAi': '本地 AI',
   'nav.agentConsole': '智能体控制台',
+  'nav.apiPortal': 'API 门户',
   'nav.dataHealth': '数据健康',
   'nav.cronMonitor': 'Cron 监控',
   'nav.loginHistory': '登录日志',
