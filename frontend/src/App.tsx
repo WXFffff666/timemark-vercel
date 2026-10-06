@@ -6,6 +6,7 @@ import { initAuthLifecycle } from './stores/auth.store';
 import { LoginPage } from './pages/Login';
 import ShareEvent from './pages/ShareEvent';
 import { TimezoneProvider } from './components/RealtimeClock';
+import { PageErrorBoundary } from './components/PageErrorBoundary';
 import { SkipLink } from './components/SkipLink';
 import { AssistantDock } from './components/assistant/AssistantDock';
 import { CommandPalette } from './components/CommandPalette';
@@ -54,13 +55,16 @@ function PageLoader() {
   );
 }
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function ProtectedRoute({ children, pageName }: { children: React.ReactNode; pageName?: string }) {
   const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isLoading = useAuthStore((state) => state.isLoading);
 
   if (isLoading) return <PageLoader />;
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" state={{ from: location }} replace />;
+  // v2.30：页面级错误边界——单页渲染崩溃不再白屏整站
+  return isAuthenticated
+    ? <PageErrorBoundary pageName={pageName}>{children}</PageErrorBoundary>
+    : <Navigate to="/login" state={{ from: location }} replace />;
 }
 
 function MeshBackground() {
@@ -98,43 +102,43 @@ function AppRoutes({ location }: { location: ReturnType<typeof useLocation> }) {
   return (
     <Routes location={location}>
       <Route path="/login" element={<LoginPage />} />
-    <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-    <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+    <Route path="/dashboard" element={<ProtectedRoute pageName="Dashboard"><Dashboard /></ProtectedRoute>} />
+    <Route path="/settings" element={<ProtectedRoute pageName="Settings"><Settings /></ProtectedRoute>} />
     {/* v2.26 C：提醒记录并入 /trigger-logs（?tab=reminders），旧链接 301 兜底 */}
     <Route path="/reminders" element={<Navigate to="/trigger-logs?tab=reminders" replace />} />
-    <Route path="/login-history" element={<ProtectedRoute><LoginHistory /></ProtectedRoute>} />
-    <Route path="/security" element={<ProtectedRoute><Security /></ProtectedRoute>} />
-    <Route path="/deploy-wizard" element={<ProtectedRoute><DeployWizard /></ProtectedRoute>} />
-    <Route path="/channels" element={<ProtectedRoute><Channels /></ProtectedRoute>} />
-    <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
-    <Route path="/trigger-logs" element={<ProtectedRoute><TriggerLogs /></ProtectedRoute>} />
-    <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
-    <Route path="/notification-rules" element={<ProtectedRoute><NotificationRules /></ProtectedRoute>} />
-    <Route path="/annual-report" element={<ProtectedRoute><AnnualReport /></ProtectedRoute>} />
-    <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-    <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
-    <Route path="/broadcast" element={<ProtectedRoute><Broadcast /></ProtectedRoute>} />
-    <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
-    <Route path="/todos" element={<ProtectedRoute><TodosPage /></ProtectedRoute>} />
-    <Route path="/expiry" element={<ProtectedRoute><ExpiryPage /></ProtectedRoute>} />
-    <Route path="/inventory" element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} />
-    <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
-    <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
-    <Route path="/habits" element={<ProtectedRoute><HabitsPage /></ProtectedRoute>} />
-    <Route path="/medications" element={<ProtectedRoute><MedicationsPage /></ProtectedRoute>} />
-    <Route path="/goals" element={<ProtectedRoute><GoalsPage /></ProtectedRoute>} />
+    <Route path="/login-history" element={<ProtectedRoute pageName="LoginHistory"><LoginHistory /></ProtectedRoute>} />
+    <Route path="/security" element={<ProtectedRoute pageName="Security"><Security /></ProtectedRoute>} />
+    <Route path="/deploy-wizard" element={<ProtectedRoute pageName="DeployWizard"><DeployWizard /></ProtectedRoute>} />
+    <Route path="/channels" element={<ProtectedRoute pageName="Channels"><Channels /></ProtectedRoute>} />
+    <Route path="/templates" element={<ProtectedRoute pageName="Templates"><Templates /></ProtectedRoute>} />
+    <Route path="/trigger-logs" element={<ProtectedRoute pageName="TriggerLogs"><TriggerLogs /></ProtectedRoute>} />
+    <Route path="/inbox" element={<ProtectedRoute pageName="Inbox"><Inbox /></ProtectedRoute>} />
+    <Route path="/notification-rules" element={<ProtectedRoute pageName="NotificationRules"><NotificationRules /></ProtectedRoute>} />
+    <Route path="/annual-report" element={<ProtectedRoute pageName="AnnualReport"><AnnualReport /></ProtectedRoute>} />
+    <Route path="/analytics" element={<ProtectedRoute pageName="Analytics"><Analytics /></ProtectedRoute>} />
+    <Route path="/contacts" element={<ProtectedRoute pageName="Contacts"><Contacts /></ProtectedRoute>} />
+    <Route path="/broadcast" element={<ProtectedRoute pageName="Broadcast"><Broadcast /></ProtectedRoute>} />
+    <Route path="/calendar" element={<ProtectedRoute pageName="CalendarPage"><CalendarPage /></ProtectedRoute>} />
+    <Route path="/todos" element={<ProtectedRoute pageName="TodosPage"><TodosPage /></ProtectedRoute>} />
+    <Route path="/expiry" element={<ProtectedRoute pageName="ExpiryPage"><ExpiryPage /></ProtectedRoute>} />
+    <Route path="/inventory" element={<ProtectedRoute pageName="InventoryPage"><InventoryPage /></ProtectedRoute>} />
+    <Route path="/maintenance" element={<ProtectedRoute pageName="MaintenancePage"><MaintenancePage /></ProtectedRoute>} />
+    <Route path="/documents" element={<ProtectedRoute pageName="DocumentsPage"><DocumentsPage /></ProtectedRoute>} />
+    <Route path="/habits" element={<ProtectedRoute pageName="HabitsPage"><HabitsPage /></ProtectedRoute>} />
+    <Route path="/medications" element={<ProtectedRoute pageName="MedicationsPage"><MedicationsPage /></ProtectedRoute>} />
+    <Route path="/goals" element={<ProtectedRoute pageName="GoalsPage"><GoalsPage /></ProtectedRoute>} />
     {/* v2.26 C：/assistant 页删除 —— AssistantDock 已全局承载同一面板 */}
-    <Route path="/agent-console" element={<ProtectedRoute><AgentConsole /></ProtectedRoute>} />
-    <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
-    <Route path="/today" element={<ProtectedRoute><TodayPage /></ProtectedRoute>} />
-    <Route path="/data-health" element={<ProtectedRoute><DataHealthPage /></ProtectedRoute>} />
-    <Route path="/local-ai" element={<ProtectedRoute><LocalAIPage /></ProtectedRoute>} />
+    <Route path="/agent-console" element={<ProtectedRoute pageName="AgentConsole"><AgentConsole /></ProtectedRoute>} />
+    <Route path="/ask" element={<ProtectedRoute pageName="AskPage"><AskPage /></ProtectedRoute>} />
+    <Route path="/today" element={<ProtectedRoute pageName="TodayPage"><TodayPage /></ProtectedRoute>} />
+    <Route path="/data-health" element={<ProtectedRoute pageName="DataHealthPage"><DataHealthPage /></ProtectedRoute>} />
+    <Route path="/local-ai" element={<ProtectedRoute pageName="LocalAIPage"><LocalAIPage /></ProtectedRoute>} />
     <Route path="/shared/:token" element={<SharedView />} />
-    <Route path="/integrations-docs" element={<ProtectedRoute><IntegrationsDocs /></ProtectedRoute>} />
-    <Route path="/cron-monitor" element={<ProtectedRoute><CronMonitor /></ProtectedRoute>} />
-    <Route path="/api-portal" element={<ProtectedRoute><ApiPortal /></ProtectedRoute>} />
-    <Route path="/docker-migration" element={<ProtectedRoute><DockerMigration /></ProtectedRoute>} />
-    <Route path="/lunar-holidays" element={<ProtectedRoute><LunarHolidays /></ProtectedRoute>} />
+    <Route path="/integrations-docs" element={<ProtectedRoute pageName="IntegrationsDocs"><IntegrationsDocs /></ProtectedRoute>} />
+    <Route path="/cron-monitor" element={<ProtectedRoute pageName="CronMonitor"><CronMonitor /></ProtectedRoute>} />
+    <Route path="/api-portal" element={<ProtectedRoute pageName="ApiPortal"><ApiPortal /></ProtectedRoute>} />
+    <Route path="/docker-migration" element={<ProtectedRoute pageName="DockerMigration"><DockerMigration /></ProtectedRoute>} />
+    <Route path="/lunar-holidays" element={<ProtectedRoute pageName="LunarHolidays"><LunarHolidays /></ProtectedRoute>} />
     <Route path="/embed/:token" element={<CountdownWidget />} />
     <Route path="/share/:token" element={<ShareEvent />} />
     <Route path="/" element={<Navigate to="/dashboard" />} />
