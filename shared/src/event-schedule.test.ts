@@ -105,7 +105,10 @@ describe('event-schedule', () => {
     expect(REMINDER_CATCH_UP_MAX_MINUTES).toBe(1440);
     // 迟到方向 24h 内都命中：09:00 的槽位在 20:00 仍补发（v78：cron 停摆后补齐当天）
     expect(matchesReminderTimeWindow('20:00', '09:00', 2, 5000)).toBe(true);
-    expect(matchesReminderTimeWindow('20:00', '09:00', 2)).toBe(true);
+    // v2.31 R3 修复：默认 catchUpMinutes = 0（impl 注释明确"默认与旧行为完全一致"，
+    // 补发分钟数由调用方 jobs/tasks.ts 显式传入）——不传参时 20:00 对 09:00 不命中。
+    // 原断言 .toBe(true) 与实现矛盾，且 shared 测试不在例常门禁内而烂了数个版本。
+    expect(matchesReminderTimeWindow('20:00', '09:00', 2)).toBe(false);
     // 提前方向绝不扩展：昨天语义的槽位（diff 为负）不命中
     expect(matchesReminderTimeWindow('08:00', '09:00', 2, 5000)).toBe(false);
     // 负数按 0 处理 -> 旧行为

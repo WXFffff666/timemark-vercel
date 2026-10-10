@@ -118,6 +118,8 @@ export function Dashboard() {
 
   // v2.30：ICS 导入结果用行内横幅替代 alert（不打断、可复查、自动消失）
   const [icsStatus, setIcsStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  // v2.31 R3（E10）：测试发送/批量删除的行内结果横幅（可带跳转链接）
+  const [actionBanner, setActionBanner] = useState<{ ok: boolean; text: string; linkTo?: string; linkLabel?: string } | null>(null);
 
   const handleImportIcs = async (file: File) => {
     // v2.27：整个导入路径包 try/catch —— 此前 fetch/json 失败是 unhandled rejection，UI 无反馈
@@ -159,21 +161,19 @@ export function Dashboard() {
       const failed = Object.entries(results).filter(([key, r]) => !key.startsWith('_') && !r.success);
       const succeeded = Object.entries(results).filter(([key, r]) => !key.startsWith('_') && r.success);
       if (failed.length > 0) {
-        alert(`部分渠道失败：\n${failed.map(([ch, r]) => `${ch}: ${r.error || '未知错误'}`).join('\n')}`);
+        setActionBanner({ ok: false, text: `部分渠道失败：${failed.map(([ch, r]) => `${ch}: ${r.error || '未知错误'}`).join('；')}` });
       } else if (succeeded.length === 0) {
-        alert('未找到可用通知渠道，请先在「通知渠道」配置并测试通过。');
+        setActionBanner({ ok: false, text: '未找到可用通知渠道，请先在「通知渠道」配置并测试通过。' });
       } else {
         const detail = succeeded.map(([ch, r]) => {
           const emails = r.recipients?.length ? ` → ${r.recipients.join(', ')}` : '';
           return `${ch}${emails}`;
-        }).join('\n');
-        const goLogs = confirm(
-          `测试通知已发出：\n${detail}\n\n邮件渠道若使用 Resend 测试地址，仅可发到注册邮箱；请检查垃圾箱。\n\n点击「确定」打开提醒日志查看详情。`,
-        );
-        if (goLogs) navigate('/trigger-logs');
+        }).join('；');
+        // v2.31 R3（E10）：alert/confirm 改行内横幅 + 显式链接（不再阻塞、可复查）
+        setActionBanner({ ok: true, text: `测试通知已发出：${detail}（Resend 测试地址仅可发注册邮箱，请检查垃圾箱）`, linkTo: '/trigger-logs', linkLabel: '打开提醒日志' });
       }
     } catch (error) {
-      alert(error instanceof Error ? error.message : '发送失败，请检查通知渠道与设置中的默认邮箱');
+      setActionBanner({ ok: false, text: error instanceof Error ? error.message : '发送失败，请检查通知渠道与设置中的默认邮箱' });
     }
   };
   const handleBatchDelete = async () => {
@@ -181,13 +181,13 @@ export function Dashboard() {
     try {
       if (confirm(`确定批量删除 ${selectedIds.length} 个事件？`)) {
         const deletedCount = await deleteEventsBatch(selectedIds);
-        alert(`成功删除 ${deletedCount} 个事件`);
+        setActionBanner({ ok: true, text: `成功删除 ${deletedCount} 个事件` });
         setSelectedIds([]);
         setBatchMode(false);
       }
     } catch (error) {
       console.error('Batch delete error:', error);
-      alert('批量删除失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      setActionBanner({ ok: false, text: '批量删除失败: ' + (error instanceof Error ? error.message : '未知错误') });
     }
   };
 
@@ -235,7 +235,9 @@ export function Dashboard() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
       <header className="sticky top-4 z-50 px-4 max-w-7xl mx-auto" role="banner" aria-label="页面顶部导航">
-        <div className="glass-panel rounded-full px-6 py-3 flex justify-between items-center ring-1 ring-white/20 dark:ring-white/10">
+        {/* v2.31 R3（E11）：移动端收纳——rounded-full 药丸在 375px 装不下 10 个按钮，
+            断点以下改为普通圆角容器 + flex-wrap，图标可换行不被裁切 */}
+        <div className="glass-panel rounded-3xl md:rounded-full px-4 md:px-6 py-3 flex flex-wrap md:flex-nowrap justify-between items-center gap-y-2 ring-1 ring-white/20 dark:ring-white/10">
           <div className="flex items-center gap-4 alive-interactive" onClick={() => navigate('/dashboard')} role="button" tabIndex={0} aria-label="返回首页" onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/dashboard')}>
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary-500 to-purple-500 flex items-center justify-center shadow-lg" aria-hidden>
               <span className="text-white font-bold text-xl">T</span>
@@ -309,6 +311,26 @@ export function Dashboard() {
           }`}
         >
           {icsStatus.text}
+        </div>
+      )}
+
+      {/* v2.31 R3（E10）：测试发送/批量删除结果横幅（可带跳转链接） */}
+      {actionBanner && (
+        <div
+          role="status"
+          className={`max-w-7xl mx-auto px-6 mt-2 rounded-xl px-4 py-2 text-sm flex flex-wrap items-center gap-2 ${
+            actionBanner.ok
+              ? 'border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/60 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-300'
+              : 'border border-red-200 dark:border-red-900/50 bg-red-50/60 dark:bg-red-900/10 text-red-600 dark:text-red-300'
+          }`}
+        >
+          <span className="whitespace-pre-wrap">{actionBanner.text}</span>
+          {actionBanner.linkTo && (
+            <button type="button" className="underline hover:no-underline shrink-0" onClick={() => navigate(actionBanner.linkTo!)}>
+              {actionBanner.linkLabel}
+            </button>
+          )}
+          <button type="button" aria-label="关闭提示" className="ml-auto shrink-0 opacity-60 hover:opacity-100" onClick={() => setActionBanner(null)}>×</button>
         </div>
       )}
 
