@@ -145,6 +145,25 @@ check(
   }),
 );
 
+// v2.31 R1（审计 D14）：更新日志第一行版本必须等于 package.json 的版本——
+// 此前停在 v2.22.0 落后 8 个版本而护栏无法察觉。
+{
+  const pkg = JSON.parse(read('package.json') ?? '{}');
+  const latestRow = versionRows[0]?.split('|').map((cell) => cell.trim())[1] ?? '';
+  const latest = latestRow.replace(/\*\*/g, '').trim();
+  check(
+    'README changelog latest row matches package.json version',
+    latest === `v${pkg.version}`,
+    `changelog=${latest || '(none)'} package.json=v${pkg.version ?? '?'}`,
+  );
+  const badgeMatch = readme.match(/badge\/Version-([\d.]+)-blue/);
+  check(
+    'README version badge matches package.json version',
+    badgeMatch?.[1] === String(pkg.version),
+    `badge=${badgeMatch?.[1] ?? '(none)'} package.json=${pkg.version ?? '?'}`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // 5. CHANGELOG.md version blocks must carry a date.
 // ---------------------------------------------------------------------------

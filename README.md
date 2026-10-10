@@ -10,7 +10,7 @@
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-2.22.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
+[![Version](https://img.shields.io/badge/Version-2.30.0-blue?style=flat&color=2563eb)](https://github.com/WXFffff666/timemark-vercel)
 [![GitHub Stars](https://img.shields.io/github/stars/WXFffff666/timemark-vercel?style=flat&color=f59e0b)](https://github.com/WXFffff666/timemark-vercel/stargazers)
 [![Deploy with Vercel](https://img.shields.io/badge/Deploy%20with-Vercel-black?style=flat&logo=vercel)](https://vercel.com/new)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat&color=22c55e)](LICENSE)
@@ -200,7 +200,7 @@ vercel --prod
 
 ### 初始化数据库
 
-部署后数据库表会在 **首次 API 冷启动时自动迁移**（v1–v80）。也可手动执行：
+部署后数据库表会在 **首次 API 冷启动时自动迁移**（v1–v81）。也可手动执行：
 
 ```bash
 # 拉取 Vercel 环境变量
@@ -210,7 +210,7 @@ vercel env pull .env
 npx tsx scripts/migrate-db.ts
 ```
 
-部署完成后可在 **设置 → 部署向导** 查看「系统自检」（数据库连接、结构版本 v80、CRON_SECRET、Turnstile 等）。
+部署完成后可在 **设置 → 部署向导** 查看「系统自检」（数据库连接、结构版本 v81、CRON_SECRET、Turnstile 等）。
 
 部署完成！生产环境请绑定自定义域名（例如 `https://timemark.example.com`）。
 
@@ -679,7 +679,15 @@ npx pnpm build
 
 | 版本 | 日期 | 内容 |
 |:----:|:----:|------|
-| **v2.22.0** | 2026-10-01 | 30 项扩展功能接入（搜索 / Ask / 标签 / 去重 / 今日一览 / 数据健康 / 批量 / 模板 / 智能默认 / 审计 / 自检 / 订阅入库 / 语音 / OCR / 导出 / 分享 / 备份 / 黄历 / 天气 / 包裹）；提醒链路修复（触发日志、跳过原因、补发、时区校验）；**153-160 后端已挂载但缺前端页面，170 端到端验证已部分执行** |
+| **v2.30.0** | 2026-10-06 | 生产救活（CJS 冷启动崩溃 + 构建期冒烟门禁）、AI 日报/周报自动化（v81 排程/时区到点/查重）、对外 REST API `/api/v1/*` + Token 门户、全链路真发真收 harness（8/8，含自动路由断言）并修复 6 个生产 bug（限流失效/时区偏移/收件 token/签名密钥/cron 告警死信/SMTP TLS 开关）、收件箱标签页与批量操作、Cron 监控图形化与立即运行、新设备登录提醒、页面级错误边界 |
+| **v2.29.0** | 2026-10-06 | 渠道 51→61 + 分类体系 + 扫码绑定（ChannelQr）；全站 UI 统一（PageHeader/EmptyState/SkeletonCard）；AI 多轮追问上下文 + 禁 Markdown 输出；环境变量体检（9 项可选功能 + 信任级门控）；保留期第三轮（35 表） |
+| **v2.28.0** | 2026-10-06 | AI 对话三痛点修复（视口滚动/可中止/输出净化）；渠道三步绑定向导 + 5 新渠道（46→51）；日志治理（cron 失败原因按信任级放开、请求完成日志、DB 慢查询、5 表保留期） |
+| **v2.27.0** | 2026-10-05 | 遗留 6 项清零（祝福多渠道/通知时间线/Web Push 设备管理/生日 CSV/数据健康/年报回顾）+ 50 项体验战役（深链/筛选/排序/导出/焦点管理）+ 两轮自查（NULL 行过滤、next_occurrence 口径） |
+| **v2.26.0** | 2026-10-05 | 祝福链送达性 + AI 预算闸、日志保留 v80（13 表）、UI 合并（/reminders 并入 /trigger-logs）、动画体系（AnimatePresence + overscroll）、weekly-review AI 综述、LocalAI 会话持久化 |
+| **v2.25.0** | 2026-10-04 | 三档本地模型（WebGPU）、AI 生日祝福、通知必达 v78（3 连败暂停 + 24h 自动恢复 + fallback 链 + 重试队列） |
+| **v2.24.0** | 2026-10-04 | 本地 AI（浏览器 WebGPU /data 不出机）、RAG 知识库、MCP Server、智能默认 |
+| **v2.23.0** | 2026-10-03 | 通知必达：渠道健康检查、自愈、v77 渠道重类型化 |
+| | **v2.22.0** | 2026-10-01 | 30 项扩展功能接入（搜索 / Ask / 标签 / 去重 / 今日一览 / 数据健康 / 批量 / 模板 / 智能默认 / 审计 / 自检 / 订阅入库 / 语音 / OCR / 导出 / 分享 / 备份 / 黄历 / 天气 / 包裹）；提醒链路修复（触发日志、跳过原因、补发、时区校验）；**153-160 后端已挂载但缺前端页面，170 端到端验证已部分执行** |
 | **v2.21.0** | 2026-09-30 | 后台 AI 运行时：持久化 Postgres 队列、有界 drain、表驱动调度链、模型分档与成本护栏、每日提醒预算、控制面与「AI 后台」页、四个主动例程、决策卡与反馈记忆、可选本地 Worker、运行观测与看门狗 |
 | **v2.20.0** | 2026-09-29 | 中国日历增强、周期摘要、目标里程碑、Web Push / PWA、CalDAV 与公开订阅、Telegram 双向机器人、AI 网关与 NL 解析、Agent 工具 / 令牌 / MCP、模式挖掘、pg_trgm 搜索、本地模型、应用内助手 |
 | **v2.19.0** | 2026-09-28 | 到期中心、库存与保养、文档保险箱与附件、个人 CRM、习惯打卡、家庭多档案、家庭用药与依从性报告 |

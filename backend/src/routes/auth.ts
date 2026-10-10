@@ -243,7 +243,9 @@ auth.post('/login', loginRateLimit, async (c) => {
     });
   } catch (error: any) {
     console.error('[Login Error]', error);
-    return c.json({ success: false, error: error.message || 'Login failed' }, 500);
+    // v2.31 R1（安全审计 S4）：登录入口的 500 不回显内部 error.message
+    // （DB 驱动错误可能携带主机/SQL 细节）；完整信息已在上一行入日志。
+    return c.json({ success: false, error: '登录服务暂时不可用，请稍后重试' }, 500);
   }
 });
 
@@ -419,7 +421,9 @@ auth.post('/refresh', async (c) => {
     return c.json({ success: true, data: { user, authMode: 'cookie' } });
   } catch (error: any) {
     console.error('[Refresh Token Error]', error);
-    return c.json({ success: false, error: error.message || 'Failed to refresh token' }, 500);
+    // v2.31 R1（安全审计 S4）：同登录入口，不回显内部错误细节。
+    // 保持 500——401 会触发前端登出流程，瞬时 DB 故障不该踢人。
+    return c.json({ success: false, error: '会话刷新失败，请稍后重试' }, 500);
   }
 });
 

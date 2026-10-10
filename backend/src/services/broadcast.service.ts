@@ -72,11 +72,15 @@ async function resolveRecipients(userId: number, input: BroadcastEmailInput): Pr
   return [...byEmail.values()];
 }
 
-function personalizeBroadcast(subject: string, html: string, recipient: BroadcastRecipient) {
-  const vars = { contact_name: recipient.name, subject };
+// v2.31 R1：导出仅供测试（转义行为是安全断言，需要可直接断言的纯函数）
+export function personalizeBroadcast(subject: string, html: string, recipient: BroadcastRecipient) {
+  // v2.31 R1（安全审计 S3）：联系人名可经 ICS 导入/外部 feed 进入库，原样插入
+  // 外发 HTML 是存储型注入面（收件人自己的邮箱客户端是受害者）。HTML 正文用
+  // 转义后的值；subject 是纯文本邮件头（nodemailer 会拦 CRLF），转义反而会让
+  // 名字里的 & 显示成字面 &amp;。
   return {
-    subject: renderBroadcastTemplate(subject, vars),
-    html: renderBroadcastTemplate(html, vars),
+    subject: renderBroadcastTemplate(subject, { contact_name: recipient.name, subject }),
+    html: renderBroadcastTemplate(html, { contact_name: escapeHtml(recipient.name), subject }),
   };
 }
 

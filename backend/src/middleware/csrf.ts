@@ -19,7 +19,11 @@ export function csrfProtection() {
     // classic CSRF does not apply. Exempt ONLY this exact path and ONLY when such a Bearer
     // credential is present; every other non-GET /api/* request still needs Origin/Referer or
     // Bearer + X-Requested-With, so CSRF for the rest of the app is unchanged.
-    if (c.req.path === '/api/mcp' && /^Bearer\s+tmt_/i.test(c.req.header('Authorization') ?? '')) {
+    // v2.31 R1（安全审计 S1）：/api/v1 REST API 与 MCP 共用同一套 tmt_ token——
+    // 标准 curl 客户端不带 Origin 也没有 X-Requested-With，此前 POST 全被 403，
+    // 对外 API 的写端点实际不可用。同款豁免：路径前缀 + tmt_ Bearer 同时满足。
+    if (/^Bearer\s+tmt_/i.test(c.req.header('Authorization') ?? '')
+        && (c.req.path === '/api/mcp' || c.req.path.startsWith('/api/v1/'))) {
       return next();
     }
 

@@ -100,6 +100,11 @@ export default function IntegrationsDocs() {
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">API Key 可在「设置 → 安全与数据」生成；列出事件：</p>
         <pre className="text-xs bg-slate-100 dark:bg-slate-800 p-3 rounded overflow-x-auto mb-2" tabIndex={0}>{listEventsCurl}</pre>
         <pre className="text-xs bg-slate-100 dark:bg-slate-800 p-3 rounded overflow-x-auto mb-2" tabIndex={0}>{testNotifyCurl}</pre>
+        {/* v2.31 R1（审计 D19）：两套凭据并存，页面必须说清区别 */}
+        <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50/60 dark:bg-amber-900/20 rounded-xl px-3 py-2 mb-2">
+          两种凭据怎么选：<code className="font-mono">X-API-Key</code> 是旧式全权 Key（拥有你账户的全部数据权限，无法限定范围）；
+          下方 REST API 章节的 <code className="font-mono">tmt_</code> Token 来自「API 门户」，可随时回收、按 scope 限权、每次调用有审计流水——对外集成优先用它。
+        </p>
         <p className="text-xs text-slate-400">
           快捷指令 URL Scheme 示例（需替换 token）：
           <code className="block mt-1 break-all">shortcuts://run-shortcut?name=TimeMarkCreateEvent</code>
