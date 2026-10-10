@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LayoutGrid } from 'lucide-react';
+import { LayoutGrid, Search } from 'lucide-react';
 import { prefetchRoute } from '@/lib/prefetch-routes';
 import { NAV_GROUPS, NAV_PRIMARY } from '@/lib/nav-groups';
 import { getLang, t } from '@/i18n';
@@ -160,6 +160,18 @@ export function MobileBottomNav() {
               onClick={(e) => e.stopPropagation()}
             >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600" />
+            {/* v2.31 R2（F56）：全局搜索入口——移动端没有 Ctrl/Cmd+K，触屏用户此前完全没有入口 */}
+            <button
+              type="button"
+              onClick={() => {
+                setMoreOpen(false);
+                window.dispatchEvent(new Event('timemark-open-search'));
+              }}
+              className="mb-4 flex w-full items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-3 text-left text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            >
+              <Search className="h-4 w-4 shrink-0" aria-hidden />
+              <span>全局搜索（事件 / 到期 / 联系人 / 文档…）</span>
+            </button>
             {NAV_GROUPS.map((group) => (
               <section key={group.id} className="mb-5">
                 <h2 className="mb-2 px-1 text-xs font-bold uppercase tracking-wider text-slate-400">

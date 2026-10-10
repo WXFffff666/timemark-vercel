@@ -49,6 +49,8 @@ interface EventFormProps {
   onClose: () => void;
   onSubmit: (data: CreateEventRequest) => Promise<void>;
   event?: Event;
+  /** v2.31 R2（F58）：新建时的名称/日期预填（Bookmarklet ?quick= 深链），仅在新建（无 event）时生效 */
+  prefill?: { name?: string; date?: string };
 }
 
 const eventTypes: { value: EventType; label: string; icon: React.ReactNode; color: string }[] = [
@@ -147,20 +149,31 @@ const defaultReminderConfig: ReminderConfig = {
   channels: [],
 };
 
-export function EventForm({ open, onClose, onSubmit, event }: EventFormProps) {
+export function EventForm({ open, onClose, onSubmit, event, prefill }: EventFormProps) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [availableChannels, setAvailableChannels] = useState<AvailableChannel[]>([]);
   const [channelOptions, setChannelOptions] = useState<ChannelTemplate[]>([]);
   const [channelListFailed, setChannelListFailed] = useState(false);
   const [formData, setFormData] = useState<CreateEventRequest>({
-    name: '',
+    name: prefill?.name ?? '',
     type: 'birthday',
-    date: '',
+    date: prefill?.date ?? '',
     calendarType: 'gregorian',
     lunarDate: undefined,
     reminderConfig: defaultReminderConfig,
   });
+
+  // v2.31 R2（F58）：prefill 在打开后变化（深链参数晚于首次渲染到达）时补一次同步，
+  // 只填空白字段——不覆盖用户已输入的内容，编辑模式（event）完全不受影响。
+  useEffect(() => {
+    if (!open || event || !prefill) return;
+    setFormData((prev) => ({
+      ...prev,
+      name: prev.name || prefill.name || '',
+      date: prev.date || prefill.date || '',
+    }));
+  }, [open, event, prefill]);
 
   const reminderTimeline = useMemo(() => {
     if (!formData.date) return [];

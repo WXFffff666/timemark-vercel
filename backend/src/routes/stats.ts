@@ -72,6 +72,48 @@ export interface OnThisDayItem {
 
 const MAX_MEMORY_ITEMS = 50;
 
+// v2.31 R2（F60）：站内日粒度统计——stats_daily 此前只经 /api/v1（tmt_ 门户 token）
+// 暴露，登录用户自己的看板反而看不了。limit 封顶 120 天。
+stats.get('/daily', async (c) => {
+  const userId = Number(c.get('user').id);
+  const days = Math.min(Math.max(parseInt(c.req.query('days') || '30', 10) || 30, 7), 120);
+  const result = await query(
+    `SELECT stat_date::text AS day, events_count, triggers_total, triggers_success, triggers_failed
+     FROM stats_daily
+     WHERE user_id = $1
+     ORDER BY stat_date DESC
+     LIMIT $2`,
+    [userId, days],
+  );
+  return c.json({ success: true, data: result.rows });
+});
+
+// v2.31 R2（F57）：Dashboard 快捷导航卡的实时计数——此前 6 张卡里 4 张只有
+// "管理 →" 没有数字，而各实体的 COUNT 代价极低。一次并行 COUNT，无明细。
+stats.get('/quick-counts', async (c) => {
+  const userId = Number(c.get('user').id);
+  const [contacts, inventory, maintenance, goals, habits, expiry] = await Promise.all([
+    query('SELECT COUNT(*)::int AS n FROM fixed_contacts WHERE user_id = $1', [userId]),
+    query('SELECT COUNT(*)::int AS n FROM inventory_items WHERE user_id = $1', [userId]),
+    query('SELECT COUNT(*)::int AS n FROM maintenance_plans WHERE user_id = $1', [userId]),
+    query("SELECT COUNT(*)::int AS n FROM goals WHERE user_id = $1 AND status = 'active'", [userId]),
+    query('SELECT COUNT(*)::int AS n FROM habits WHERE user_id = $1 AND is_active = TRUE', [userId]),
+    query('SELECT COUNT(*)::int AS n FROM expiry_items WHERE user_id = $1 AND is_active = TRUE', [userId]),
+  ]);
+  const n = (r: { rows: Array<{ n: number }> }) => r.rows[0]?.n ?? 0;
+  return c.json({
+    success: true,
+    data: {
+      contacts: n(contacts),
+      inventory: n(inventory),
+      maintenance: n(maintenance),
+      goals: n(goals),
+      habits: n(habits),
+      expiry: n(expiry),
+    },
+  });
+});
+
 stats.get('/', async (c) => {
   const user = c.get('user');
   const userId = Number(user.id);

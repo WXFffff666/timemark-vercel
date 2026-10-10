@@ -5,14 +5,14 @@ import { useEventStore } from '@/stores/event.store';
 import { Button } from '@/components/ui/button';
 import { EventCard } from '@/components/events/EventCard';
 import { EventForm } from '@/components/events/EventForm';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { RealtimeClock, useTimezone } from '@/components/RealtimeClock';
 import { TimezoneSelector } from '@/components/TimezoneSelector';
 import { ProfileSwitcher } from '@/components/ProfileSwitcher';
 import { useProfileStore } from '@/stores/profile.store';
 import type { Event, CreateEventRequest } from '@timemark/shared';
-import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail, Inbox, AlarmClock, Package, Wrench, Target } from 'lucide-react';
+import { Settings, Bell, Plus, Download, Calendar, BarChart2, ListChecks, Shield, Upload, Users, Mail, Inbox, AlarmClock, Package, Wrench, Target, Search } from 'lucide-react';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { Skeleton } from '@/components/ui/skeleton-card';
 import { api } from '@/lib/api';
@@ -32,6 +32,22 @@ export function Dashboard() {
   const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent, deleteEventsBatch, testSendEvent } = useEventStore();
   // 档案切换器（checkbox 70）：切换后重新拉取事件（fetchEvents 内部会带上 profileId）
   const profileId = useProfileStore((s) => s.profileId);
+  // v2.31 R2（F58）：Bookmarklet 深链 /dashboard?quick=<名称|YYYY-MM-DD> —— 预填新建表单。
+  // IntegrationsDocs 教用户装的快捷书签此前参数根本没人读（文档断裂）。
+  const [searchParams, setSearchParams] = useSearchParams();
+  const quickPrefill = useMemo(() => {
+    const raw = searchParams.get('quick');
+    if (!raw) return undefined;
+    const [name, date] = raw.split('|').map((part) => part.trim());
+    const parsedDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined;
+    return name ? { name, date: parsedDate } : undefined;
+  }, [searchParams]);
+  useEffect(() => {
+    if (quickPrefill) {
+      setShowForm(true);
+      setSearchParams({}, { replace: true }); // 消费掉，刷新/后退不残留
+    }
+  }, [quickPrefill, setSearchParams]);
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | undefined>();
   const [batchMode, setBatchMode] = useState(false);
@@ -40,6 +56,8 @@ export function Dashboard() {
   // v2.27：冲突列表默认只显 3 组，可展开
   const [showAllConflicts, setShowAllConflicts] = useState(false);
   const [inboxUnread, setInboxUnread] = useState(0);
+  // v2.31 R2（F57）：快捷导航卡实时计数（contacts/inventory/maintenance/goals/expiry）
+  const [quickCounts, setQuickCounts] = useState<{ contacts: number; inventory: number; maintenance: number; goals: number; habits: number; expiry: number } | null>(null);
   // v2.25: 静默时段状态提示——静默中的通知不丢（cron 照常投递记录），只是延迟到窗口结束
   const [quietHours, setQuietHours] = useState<{ start: string | null; end: string | null } | null>(null);
 
@@ -70,6 +88,10 @@ export function Dashboard() {
     api.getRaw<unknown[]>('/inbox?limit=1')
       .then((res) => setInboxUnread((res.pagination?.unreadCount as number) || 0))
       .catch(() => setInboxUnread(0));
+    // v2.31 R2（F57）：快捷卡实时计数
+    api.get<{ contacts: number; inventory: number; maintenance: number; goals: number; habits: number; expiry: number }>('/stats/quick-counts')
+      .then(setQuickCounts)
+      .catch(() => undefined);
   }, [fetchEvents, profileId]);
 
   useEffect(() => {
@@ -242,6 +264,10 @@ export function Dashboard() {
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/analytics')} aria-label="数据看板">
                 <BarChart2 size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </Button>
+              {/* v2.31 R2（F56）：全局搜索的移动端/触屏入口——此前唯一入口是 Ctrl/Cmd+K */}
+              <Button variant="ghost" size="icon" className="rounded-full" aria-label="全局搜索" onClick={() => window.dispatchEvent(new Event('timemark-open-search'))}>
+                <Search size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
+              </Button>
               <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/annual-report')} aria-label="年度报告">
                 <Calendar size={20} className="text-slate-600 dark:text-slate-300" aria-hidden />
               </Button>
@@ -323,7 +349,7 @@ export function Dashboard() {
           <div className="glass-panel rounded-2xl p-4"><p className="text-xs text-slate-500 dark:text-slate-400">总事件</p><p className="text-2xl font-bold">{events.length}</p></div>
           <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-emerald-400/50 transition" onClick={() => navigate('/contacts')} role="button" tabIndex={0} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/contacts')}>
             <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Users size={12} />固定联系人</p>
-            <p className="text-sm font-medium text-emerald-600">管理 →</p>
+            <p className="text-sm font-medium text-emerald-600">{quickCounts ? `${quickCounts.contacts} 位 · ` : ''}管理 →</p>
           </div>
           <div className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-blue-400/50 transition" onClick={() => navigate('/broadcast')} role="button" tabIndex={0} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/broadcast')}>
             <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Mail size={12} />批量邮件</p>
@@ -341,7 +367,7 @@ export function Dashboard() {
             onKeyDown={(e) => e.key === 'Enter' && navigate('/expiry')}
           >
             <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><AlarmClock size={12} />到期中心</p>
-            <p className="text-sm font-medium text-rose-600">管理 →</p>
+            <p className="text-sm font-medium text-rose-600">{quickCounts ? `${quickCounts.expiry} 项 · ` : ''}管理 →</p>
           </div>
           <div
             className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-teal-400/50 transition"
@@ -351,7 +377,7 @@ export function Dashboard() {
             onKeyDown={(e) => e.key === 'Enter' && navigate('/inventory')}
           >
             <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Package size={12} />库存</p>
-            <p className="text-sm font-medium text-teal-600">管理 →</p>
+            <p className="text-sm font-medium text-teal-600">{quickCounts ? `${quickCounts.inventory} 件 · ` : ''}管理 →</p>
           </div>
           <div
             className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-orange-400/50 transition"
@@ -361,7 +387,7 @@ export function Dashboard() {
             onKeyDown={(e) => e.key === 'Enter' && navigate('/maintenance')}
           >
             <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Wrench size={12} />保养</p>
-            <p className="text-sm font-medium text-orange-600">管理 →</p>
+            <p className="text-sm font-medium text-orange-600">{quickCounts ? `${quickCounts.maintenance} 项 · ` : ''}管理 →</p>
           </div>
           <div
             className="glass-panel rounded-2xl p-4 cursor-pointer hover:ring-2 hover:ring-violet-400/50 transition"
@@ -372,7 +398,7 @@ export function Dashboard() {
             onKeyDown={(e) => e.key === 'Enter' && navigate('/goals')}
           >
             <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><Target size={12} />目标</p>
-            <p className="text-sm font-medium text-violet-600">管理 →</p>
+            <p className="text-sm font-medium text-violet-600">{quickCounts ? `${quickCounts.goals} 个 · ` : ''}管理 →</p>
           </div>
         </div>
         <div className="mb-6">
@@ -462,7 +488,7 @@ export function Dashboard() {
         </Button>
       </motion.div>
       
-      <EventForm open={showForm} onClose={() => { setShowForm(false); setEditingEvent(undefined); }} onSubmit={handleSubmit} event={editingEvent} />
+      <EventForm open={showForm} onClose={() => { setShowForm(false); setEditingEvent(undefined); }} onSubmit={handleSubmit} event={editingEvent} prefill={quickPrefill} />
       <MobileBottomNav />
     </motion.div>
   );

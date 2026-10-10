@@ -102,6 +102,8 @@ export function CommandPalette() {
   const requestSeq = useRef(0);
 
   // Global shortcut: Ctrl/Cmd+K toggles, Esc closes.
+  // v2.31 R2（审计 D1）：移动端/触屏没有键盘——监听全局事件 `timemark-open-search`，
+  // 任何按钮（Dashboard 工具栏 / 更多抽屉）都能拉起同一个面板。
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && (event.key === 'k' || event.key === 'K')) {
@@ -111,8 +113,13 @@ export function CommandPalette() {
         setOpen(false);
       }
     };
+    const onOpenSearch = () => setOpen(true);
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('timemark-open-search', onOpenSearch);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('timemark-open-search', onOpenSearch);
+    };
   }, []);
 
   // On open: reset state and focus the input. This deliberately issues NO request.

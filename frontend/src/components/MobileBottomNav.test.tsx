@@ -64,8 +64,10 @@ describe('导航可达性', () => {
     }
 
     // 面板必须为每一条已挂载的受保护路由渲染一个入口——这就是「已挂载即可达」
+    // （v2.31 R2：另有一个全局搜索按钮，不对应路由）
     const entryButtons = within(dialog).getAllByRole('button');
-    expect(entryButtons).toHaveLength(NAV_ALL_PATHS.length);
+    expect(entryButtons).toHaveLength(NAV_ALL_PATHS.length + 1);
+    expect(within(dialog).getByRole('button', { name: /全局搜索/ })).toBeInTheDocument();
 
     // 逐个点名曾经失联的页面，确保它们真的出现在面板里
     // （v2.26 C：/assistant 页删除、入口只剩 dock，面板里不再有「AI 助手」）

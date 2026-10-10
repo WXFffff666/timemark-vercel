@@ -133,8 +133,10 @@ export default function Calendar() {
       else if (e.key === 't' || e.key === 'T') goToday();
     };
     window.addEventListener('keydown', onKey);
+    // v2.31 R2（E13）：补依赖数组——此前每次渲染都摘挂监听器（行为对但浪费）
     return () => window.removeEventListener('keydown', onKey);
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, year, month]);
 
   const goPrev = () => {
     if (viewMode === 'year') setCursor(new Date(year - 1, 0, 1));
@@ -166,8 +168,10 @@ export default function Calendar() {
     return `${year}年${month + 1}月`;
   };
 
-  // v2.27：列表类型筛选 chips（'' = 全部类型）
-  const [listType, setListType] = useState<'' | 'birthday' | 'anniversary' | 'exam' | 'holiday' | 'other'>('');
+  // v2.27：列表类型筛选 chips（'' = 全部类型）—— v2.31 R2（D7）：放开全部 11 类
+  const [listType, setListType] = useState<
+    '' | 'birthday' | 'anniversary' | 'exam' | 'holiday' | 'meeting' | 'deadline' | 'travel' | 'graduation' | 'wedding' | 'medical' | 'other'
+  >('');
   const listEvents = useMemo(() => {
     const prefix = listScope === 'year' ? `${year}-` : `${year}-${pad(month + 1)}`;
     return events
@@ -316,9 +320,13 @@ export default function Calendar() {
               </button>
             </div>
           </div>
-          {/* v2.27：类型筛选 chips */}
+          {/* v2.27：类型筛选 chips —— v2.31 R2（D7）：全 11 类（此前会议/截止/旅行/毕业/婚礼/医疗无法筛选） */}
           <div className="flex flex-wrap gap-1.5 mb-2">
-            {([['', '全部'], ['birthday', '生日'], ['anniversary', '纪念日'], ['exam', '考试'], ['holiday', '节日'], ['other', '其他']] as const).map(([v, label]) => (
+            {([['', '全部'],
+               ['birthday', '生日'], ['anniversary', '纪念日'], ['exam', '考试'], ['holiday', '节日'],
+               ['meeting', '会议'], ['deadline', '截止'], ['travel', '旅行'], ['graduation', '毕业'],
+               ['wedding', '婚礼'], ['medical', '医疗'], ['other', '其他'],
+            ] as const).map(([v, label]) => (
               <button
                 key={v || 'all'}
                 type="button"
