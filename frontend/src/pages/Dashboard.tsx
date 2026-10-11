@@ -499,7 +499,10 @@ export function Dashboard() {
         )}
       </main>
 
-      <motion.div className="fixed bottom-10 right-10 z-40" whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}>
+      {/* v2.35 R29（用户报告 UI 重合）：助手 FAB 移动端在 bottom-20 right-4（占 16-64px）、
+          桌面端 md:bottom-6 md:right-6（占 24-72px）——新建事件 FAB 两端都要避开：
+          移动端 right-[5.75rem]（92px>64px）、桌面端 md:right-20（80px>72px） */}
+      <motion.div className="fixed bottom-10 right-[5.75rem] z-40 md:right-20 md:bottom-10" whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}>
         <Button 
           variant="vision" 
           className="h-16 w-16 rounded-[1.5rem] shadow-2xl shadow-primary-600/50 flex items-center justify-center p-0 bg-gradient-to-br from-primary-600 to-primary-700 hover:from-primary-500 hover:to-primary-600" 
