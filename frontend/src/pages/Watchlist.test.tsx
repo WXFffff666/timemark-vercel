@@ -17,7 +17,10 @@ beforeEach(() => {
   mockApi.post.mockReset()
   mockApi.patch.mockReset()
   mockApi.delete.mockReset()
-  mockApi.get.mockResolvedValue({ items: ITEMS })
+  mockApi.get.mockImplementation((path: string) => {
+    if (path === '/watchlist/upcoming') return Promise.resolve({ items: [ITEMS[0]] }) // 仅未来上映条目
+    return Promise.resolve({ items: ITEMS })
+  })
   mockApi.post.mockResolvedValue({})
   mockApi.patch.mockResolvedValue({})
   mockApi.delete.mockResolvedValue({})

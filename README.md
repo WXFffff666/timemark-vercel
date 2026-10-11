@@ -98,8 +98,10 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 
 ### 通知与触达
 - **通知渠道**（/channels）：61 渠道按类分组、扫码绑定、健康总览、24h 暂停一键恢复
-- **观影清单**（/watchlist）：想看/在看/看完四态、类型筛选、评分、即将上映速览
+- **观影清单**（/watchlist）：想看/在看/看完四态、类型筛选、0-10 评分、上映日期与即将上映速览
 - **车辆**（/vehicles）：多车管理、加油账本（自动算油耗/每公里成本）、保养记录与下次到期
+- **宠物**（/pets）：毛孩子档案、疫苗/驱虫日程、到期提醒（30 天窗口）
+- **工时**（/timesheet）：上班打卡/下班签退、周汇总、加班明细
 - **数据健康**（/data-health）：一键修复 + 重复联系人/事件扫描与合并提议（走决定卡审批）
 - **工时**（/timesheet）：上班打卡/下班签退、本周出勤与工时汇总、加班明细（阈值可调）
 - **车辆**（/vehicles）：多车管理、加油账本自动算油耗与每公里成本、保养记录与下次到期提醒
@@ -177,10 +179,9 @@ TimeMark Vercel 版是原 [timemark-docker](https://github.com/WXFffff666/timema
 | 🌤️ 黄历 / 天气 / 包裹 | 进阶黄历（附免责声明）、Open-Meteo 天气与空气质量、包裹跟踪 |
 | 🚗 工时 / 照护 / 车辆 / 清单 | 考勤工时、儿童 / 长者 / 宠物照护、车辆油耗与保养、观影 / 阅读清单 |
 
-> ⚠️ **后端已挂载，前端缺页面**：照护 / 宠物 / 车辆 / 观影清单 / 双向日历同步 / 家庭协作的 API
-> **已经挂载**在 `backend/src/index.ts`（`/api/care`、`/api/pets`、`/api/vehicles`、
-> `/api/watchlist`、`/api/calendar-sync`、`/api/collaboration`），可直接调用；真正缺的是
-> **前端页面与导航入口**，界面上暂时无法使用。（考勤工时与家庭库存则确实尚未挂载。）
+> ⚠️ **后端已挂载，前端缺页面**：照护（`/api/care`）/ 双向日历同步（`/api/calendar-sync`）/
+> 家庭协作（`/api/collaboration`）可直接 API 调用；宠物（/pets）、车辆（/vehicles）、
+> 观影清单（/watchlist）、工时（/timesheet）**已有页面**（v2.32-v2.34 补齐）。
 > 字段级加密（161）与联系人生日祝福（168）**已实现**
 > （`backend/src/services/field-encryption.service.ts`、`birthday-greeting.service.ts`）。
 > Wave 19 端到端验证（170）**已执行**：`frontend/e2e` 全量 23 个 spec 在真实浏览器下跑完，

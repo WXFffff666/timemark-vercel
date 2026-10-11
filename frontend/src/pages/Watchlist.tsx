@@ -47,6 +47,8 @@ export default function Watchlist() {
   const [statusFilter, setStatusFilter] = useState<WatchStatus | ''>('');
   const [newTitle, setNewTitle] = useState('');
   const [newKind, setNewKind] = useState<WatchKind>('film');
+  // v2.31 审计 #4：release_date 此前无法设置，"即将上映"区块是死区
+  const [newRelease, setNewRelease] = useState('');
   const [adding, setAdding] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -72,14 +74,16 @@ export default function Watchlist() {
     [items, kindFilter, statusFilter],
   );
 
-  const upcoming = useMemo(
-    () =>
-      items
-        .filter((it) => it.release_date && it.release_date >= new Date().toISOString().slice(0, 10) && it.status !== 'done')
-        .sort((a, b) => (a.release_date ?? '').localeCompare(b.release_date ?? ''))
-        .slice(0, 5),
-    [items],
-  );
+  // v2.34 R14（审计 #12）：改用服务端 /watchlist/upcoming（此前客户端重算且硬编码 5 条）
+  const [upcoming, setUpcoming] = useState<WatchItem[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ items: WatchItem[] }>('/watchlist/upcoming')
+      .then((d) => { if (!cancelled) setUpcoming((d.items ?? []).slice(0, 5)); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [items.length]);
 
   const add = async () => {
     if (!newTitle.trim()) {
@@ -89,8 +93,14 @@ export default function Watchlist() {
     setAdding(true);
     setError('');
     try {
-      await api.post('/watchlist', { title: newTitle.trim(), kind: newKind, status: 'wanted' });
+      await api.post('/watchlist', {
+        title: newTitle.trim(),
+        kind: newKind,
+        status: 'wanted',
+        releaseDate: newRelease || null,
+      });
       setNewTitle('');
+      setNewRelease('');
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : '添加失败');
@@ -156,6 +166,13 @@ export default function Watchlist() {
               <option key={v} value={v}>{label}</option>
             ))}
           </select>
+          <Input
+            type="date"
+            value={newRelease}
+            onChange={(e) => setNewRelease(e.target.value)}
+            aria-label="上映/发布日期（可选）"
+            className="w-36"
+          />
           <Button onClick={() => void add()} disabled={adding} aria-label="添加到清单">
             {adding ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Plus className="w-4 h-4 mr-1" aria-hidden />}
             添加
@@ -254,11 +271,23 @@ export default function Watchlist() {
                       variant="ghost"
                       className="min-h-9 min-w-9 text-slate-400 hover:text-amber-500"
                       aria-label={`为「${it.title}」评 8 分`}
-                      title="记 8 分"
+                      title={it.rating !== null ? `评分 ${it.rating}（点击清除）` : '记评分（0-10）'}
                       disabled={busyId === it.id}
-                      onClick={() => void patch(it.id, { rating: it.rating === 8 ? null : 8 })}
+                      onClick={() => {
+                        const raw = it.rating !== null
+                          ? null
+                          : prompt(`为「${it.title}」评分（0-10 整数）`, '8');
+                        if (it.rating === null && raw === null) return;
+                        if (it.rating !== null) { void patch(it.id, { rating: null }); return; }
+                        const value = Number(raw);
+                        if (!Number.isInteger(value) || value < 0 || value > 10) {
+                          setError('评分必须是 0-10 的整数');
+                          return;
+                        }
+                        void patch(it.id, { rating: value });
+                      }}
                     >
-                      <Star size={15} className={it.rating === 8 ? 'fill-amber-400 text-amber-500' : ''} aria-hidden />
+                      <Star size={15} className={it.rating !== null ? 'fill-amber-400 text-amber-500' : ''} aria-hidden />
                     </Button>
                     <Button
                       size="icon"
