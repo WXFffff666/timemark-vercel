@@ -51,7 +51,10 @@ export function AssistantDock() {
             data-testid="assistant-dock"
             role="dialog"
             aria-label="智能助手"
-            className="fixed bottom-36 right-4 z-40 flex max-h-[70vh] w-[min(92vw,26rem)] flex-col md:bottom-24 md:right-6"
+            // v2.35 R31（用户报告"太长无法显示/无法上下滑动"根因）：max-h 只限制容器、
+            // 内容溢出可见——外层必须 overflow-hidden 才能真正裁到 70vh，让面板内部
+            // 的滚动区接管。
+            className="fixed bottom-36 right-4 z-40 flex max-h-[70vh] w-[min(92vw,26rem)] flex-col overflow-hidden md:bottom-24 md:right-6"
             initial={{ opacity: 0, y: 12, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.97 }}

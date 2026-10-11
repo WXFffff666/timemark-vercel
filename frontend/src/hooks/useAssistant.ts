@@ -7,8 +7,8 @@ import {
   type AgentToolView,
 } from '@/lib/api';
 import { resolveAssistantIntent, type AssistantIntent } from '@/lib/assistant-intent';
-import { answerQuestion, WEBLLM_TIER_STORAGE_KEY } from '@/lib/local-ai/rag';
-import type { WebLlmTierId } from '@/lib/local-ai/engine';
+import { answerQuestion } from '@/lib/local-ai/rag';
+import { WEBLLM_TIER_STORAGE_KEY, type WebLlmTierId } from '@/lib/local-ai/models';
 
 /**
  * checkbox 109: the assistant state machine.

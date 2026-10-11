@@ -355,7 +355,7 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
       aria-label="智能助手"
       className={cn(
         'flex flex-col gap-3 rounded-[2rem] glass-panel p-4 ring-1 ring-black/5 dark:ring-white/10',
-        variant === 'dock' ? 'h-full overflow-y-auto overscroll-contain' : 'min-h-[60vh]',
+        variant === 'dock' ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain' : 'min-h-[60vh]',
         className,
       )}
     >

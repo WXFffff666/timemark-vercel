@@ -21,7 +21,7 @@ test('dock assistant scoring probe', async ({ page }) => {
   }).catch(() => undefined);
 
   // 直接通过 UI 快捷指令触发真实回答
-  const input = page.getByPlaceholder(/说你想做什么|输入/).first();
+  const input = page.getByPlaceholder(/例如：|说你想做什么/).first();
   if (await input.count()) {
     await input.fill('今天有什么');
     await input.press('Enter');
