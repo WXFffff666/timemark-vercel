@@ -106,6 +106,42 @@ export default function Timesheet() {
 
   const recent = useMemo(() => sessions.slice(0, 10), [sessions]);
 
+  // v2.35 R18（审计 #1）：误打卡修正——补签退/删除（否则忘签退的会话永久「进行中」并令下次打卡 409 死锁）
+  const backfillClockOut = async (session: Session) => {
+    const raw = prompt(`为「${fmtTime(session.clockIn)}」的打卡补签退时间（HH:mm，24 小时制）`, '18:00');
+    if (raw === null) return;
+    if (!/^\d{2}:\d{2}$/.test(raw.trim())) {
+      setError('时间格式需为 HH:mm');
+      return;
+    }
+    setBusyKey(`bf-${session.id}`);
+    setError('');
+    try {
+      // 后端 timestamp 校验接受 ISO；把 HH:mm 拼到打卡当天
+      const day = session.clockIn.slice(0, 10);
+      await api.patch(`/timesheet/sessions/${session.id}`, { clockOut: `${day}T${raw.trim()}:00` });
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '补签退失败');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const deleteSession = async (session: Session) => {
+    if (!confirm(`删除 ${fmtTime(session.clockIn)} 的打卡记录？`)) return;
+    setBusyKey(`del-${session.id}`);
+    setError('');
+    try {
+      await api.delete(`/timesheet/sessions/${session.id}`);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
   return (
     <div className="min-h-screen pb-24">
       <PageHeader
@@ -213,9 +249,19 @@ export default function Timesheet() {
                   <span className="tabular-nums text-slate-600 dark:text-slate-300 shrink-0">{fmtTime(s.clockIn)}</span>
                   <span className="text-slate-400">→</span>
                   <span className="tabular-nums text-slate-600 dark:text-slate-300 shrink-0">{s.clockOut ? fmtTime(s.clockOut) : '进行中'}</span>
-                  {s.durationMinutes !== null && <span className="tabular-nums text-slate-500 ml-auto shrink-0">{fmtMin(s.durationMinutes)}</span>}
+                  {s.durationMinutes !== null && <span className="tabular-nums text-slate-500 shrink-0">{fmtMin(s.durationMinutes)}</span>}
                   {s.location && <span className="text-xs text-slate-400 shrink-0">📍 {s.location}</span>}
                   {s.note && <span className="text-xs text-slate-400 truncate hidden sm:block">{s.note}</span>}
+                  <div className="flex gap-1 shrink-0 ml-auto">
+                    {s.open && (
+                      <Button size="sm" variant="outline" className="rounded-full h-7 px-2 text-xs" disabled={busyKey !== null} onClick={() => void backfillClockOut(s)}>
+                        补签退
+                      </Button>
+                    )}
+                    <Button size="icon" variant="ghost" className="min-h-8 min-w-8 text-red-400 hover:text-red-500" aria-label={`删除 ${fmtTime(s.clockIn)} 的打卡`} disabled={busyKey !== null} onClick={() => void deleteSession(s)}>
+                      {busyKey === `del-${s.id}` ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Trash2 size={13} aria-hidden />}
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

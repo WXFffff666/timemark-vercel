@@ -41,7 +41,8 @@ interface PetReminder {
   daysUntil?: number;
 }
 
-const KIND_LABELS: Record<string, string> = { vaccination: '疫苗', deworming: '驱虫', grooming: '美容', other: '其他' };
+// v2.35 R18（审计 #7）：后端 zod 枚举只有 vaccination|deworming——美容/其他此前必 400
+const KIND_LABELS: Record<string, string> = { vaccination: '疫苗', deworming: '驱虫' };
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -64,6 +65,8 @@ export default function Pets() {
   const [schedKind, setSchedKind] = useState('vaccination');
   const [schedName, setSchedName] = useState('');
   const [schedDue, setSchedDue] = useState(today());
+  // v2.35 R18（审计 #8）：循环间隔——完成一枚循环日程后自动滚下期
+  const [schedInterval, setSchedInterval] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -140,7 +143,14 @@ export default function Pets() {
     setBusyKey(`s-${petId}`);
     setError('');
     try {
-      await api.post(`/pets/${petId}/schedules`, { kind: schedKind, name: schedName.trim(), dueDate: schedDue });
+      await api.post(`/pets/${petId}/schedules`, {
+        kind: schedKind,
+        name: schedName.trim(),
+        dueDate: schedDue,
+        ...(schedInterval.trim() && Number.isInteger(Number(schedInterval)) && Number(schedInterval) > 0
+          ? { intervalDays: Number(schedInterval) }
+          : {}),
+      });
       setSchedName('');
       setSchedFor(null);
       void loadSchedules(petId);
@@ -277,6 +287,7 @@ export default function Pets() {
                           </select>
                           <Input value={schedName} onChange={(e) => setSchedName(e.target.value)} placeholder="名称（如 狂犬疫苗第 2 针）" aria-label="日程名称" className="flex-1 min-w-[10rem]" />
                           <Input type="date" value={schedDue} onChange={(e) => setSchedDue(e.target.value)} aria-label="到期日期" className="w-36" />
+                          <Input value={schedInterval} onChange={(e) => setSchedInterval(e.target.value)} placeholder="每隔 N 天（可选）" aria-label="重复间隔天数" inputMode="numeric" className="w-36" />
                           <Button size="sm" onClick={() => void addSchedule(p.id)} disabled={busyKey === `s-${p.id}`} aria-label="保存日程">保存</Button>
                           <Button size="sm" variant="ghost" onClick={() => setSchedFor(null)} aria-label="取消日程">取消</Button>
                         </div>
