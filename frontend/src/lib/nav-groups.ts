@@ -3,7 +3,7 @@ import {
   LayoutDashboard, CalendarCheck, BarChart3, FileBarChart, ListTodo, MessageCircleQuestion,
   Bell, Cable, BellRing, FileStack, Inbox, Megaphone,
   AlarmClock, Package, Wrench, FileText, Flame, Pill, Target, Users, CalendarDays, CalendarRange,
-  Bot, HeartPulse, Activity, Shield, KeyRound, BookOpen, Rocket, Settings, Container, Cpu, Code2,
+  Bot, HeartPulse, Activity, Shield, KeyRound, BookOpen, Rocket, Settings, Container, Cpu, Code2, Clapperboard,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -77,6 +77,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/medications', icon: Pill, labelKey: 'nav.medications' },
       { path: '/goals', icon: Target, labelKey: 'nav.goals' },
       { path: '/lunar-holidays', icon: CalendarRange, labelKey: 'nav.lunarHolidays' },
+      { path: '/watchlist', icon: Clapperboard, labelKey: 'nav.watchlist' },
     ],
   },
   {

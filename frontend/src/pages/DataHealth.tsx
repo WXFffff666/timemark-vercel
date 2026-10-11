@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { FindingCard } from '@/components/data-health/FindingCard';
 import { useDataHealth } from '@/components/data-health/useDataHealth';
+import { DedupeCard } from '@/components/data-health/DedupeCard';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -70,6 +71,9 @@ export default function DataHealth() {
             ))}
           </motion.div>
         )}
+
+        {/* v2.31 R5（审计 D4）：重复数据清理——/api/dedupe 此前零 UI */}
+        <DedupeCard />
       </main>
     </div>
   );

@@ -30,6 +30,7 @@ export const zh = {
   'nav.contacts': '联系人',
   'nav.calendar': '日历',
   'nav.lunarHolidays': '农历节日',
+  'nav.watchlist': '观影清单',
   'nav.assistant': 'AI 助手',
   'nav.localAi': '本地 AI',
   'nav.agentConsole': '智能体控制台',
