@@ -71,6 +71,8 @@ export default function Vehicles() {
   const [fuelQty, setFuelQty] = useState('');
   const [fuelCost, setFuelCost] = useState('');
   const [fuelOdo, setFuelOdo] = useState('');
+  // v2.35 R19（审计 #3）：能源类型此前不发，电动车充电被记成"升"且油耗口径错误
+  const [energyType, setEnergyType] = useState<'fuel' | 'electric'>('fuel');
 
   // 保养表单（按车）
   const [maintFor, setMaintFor] = useState<number | null>(null);
@@ -196,6 +198,7 @@ export default function Vehicles() {
     try {
       await api.post(`/vehicles/${id}/fuel`, {
         date: fuelDate,
+        energyType,
         quantity: qty,
         odometer: odo,
         totalCost: fuelCost ? Number(fuelCost) : undefined,
@@ -330,6 +333,10 @@ export default function Vehicles() {
                       {fuelFor === v.id ? (
                         <div className="flex flex-wrap gap-2 items-end">
                           <Input type="date" value={fuelDate} onChange={(e) => setFuelDate(e.target.value)} aria-label="加油日期" className="w-36" />
+                          <select value={energyType} onChange={(e) => setEnergyType(e.target.value as 'fuel' | 'electric')} aria-label="能源类型" className="h-10 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white">
+                            <option value="fuel">加油（升）</option>
+                            <option value="electric">充电（kWh）</option>
+                          </select>
                           <Input value={fuelQty} onChange={(e) => setFuelQty(e.target.value)} placeholder="升/kWh 数" aria-label="加油量" inputMode="decimal" className="w-24" />
                           <Input value={fuelCost} onChange={(e) => setFuelCost(e.target.value)} placeholder="花费 ¥（可选）" aria-label="花费" inputMode="decimal" className="w-28" />
                           <Input value={fuelOdo} onChange={(e) => setFuelOdo(e.target.value)} placeholder="里程表读数" aria-label="里程表读数" inputMode="numeric" className="w-32" />

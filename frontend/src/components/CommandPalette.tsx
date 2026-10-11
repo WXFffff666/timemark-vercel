@@ -108,6 +108,7 @@ export function CommandPalette() {
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GlobalSearchHit[]>([]);
   const [facets, setFacets] = useState<GlobalSearchFacets | null>(null);
@@ -139,7 +140,18 @@ export function CommandPalette() {
     };
   }, []);
 
+  // v2.35 R19（审计 #12）：关闭时把焦点还给触发元素
+  useEffect(() => {
+    if (open) {
+      lastFocusedRef.current = document.activeElement as HTMLElement | null;
+    } else if (lastFocusedRef.current) {
+      lastFocusedRef.current.focus?.();
+      lastFocusedRef.current = null;
+    }
+  }, [open]);
+
   // On open: reset state and focus the input. This deliberately issues NO request.
+  // v2.35 R19（审计 #12）：记录打开前的焦点元素，关闭时归还（aria-modal 模态不应丢焦点）
   useEffect(() => {
     if (!open) return;
     setQuery('');
@@ -223,6 +235,10 @@ export function CommandPalette() {
   if (!isAuthenticated || excluded) return null;
 
   const trimmed = query.trim();
+  // v2.35 R19（审计 #12）：facet 计数是未截断总数——汇总给"显示 x / 共 N 条"提示
+  const totalFacets = facets
+    ? GLOBAL_SEARCH_TYPES.reduce((sum, type) => sum + (facets[type] ?? 0), 0)
+    : 0;
   const activeFacets = facets
     ? GLOBAL_SEARCH_TYPES.filter((type) => (facets[type] ?? 0) > 0)
     : [];
@@ -281,7 +297,6 @@ export function CommandPalette() {
               <button
                 key={type}
                 type="button"
-                tabIndex={-1}
                 data-testid={`command-palette-facet-${type}`}
                 aria-pressed={activeType === type}
                 onClick={() => setActiveType((current) => (current === type ? null : type))}
@@ -300,7 +315,7 @@ export function CommandPalette() {
         <ul
           role="listbox"
           id="command-palette-listbox"
-          aria-label="搜索结果"
+          aria-label={`搜索结果${totalFacets > results.length ? `（显示 ${results.length} / 共 ${totalFacets} 条，可按类型筛选）` : ''}`}
           data-testid="command-palette-results"
           className="max-h-[50vh] overflow-y-auto overscroll-contain py-1"
         >
@@ -342,7 +357,7 @@ export function CommandPalette() {
         )}
         {trimmed === '' && (
           <div data-testid="command-palette-hint" className="px-4 py-4 text-center text-sm text-hint">
-            <p>输入关键词，搜索事件、联系人、互动、证件、到期、物品、保养、习惯、目标和收件箱</p>
+            <p>输入关键词，搜索事件、联系人、证件、到期、物品、保养、习惯、目标、收件箱、观影、车辆、宠物、工时</p>
             {/* v2.25: 快捷入口——本地 AI */}
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <button

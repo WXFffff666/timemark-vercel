@@ -22,6 +22,7 @@ interface WatchItem {
   title: string;
   status: WatchStatus;
   release_date: string | null;
+  source: string | null;
   link: string | null;
   rating: number | null;
   note: string;
@@ -49,6 +50,8 @@ export default function Watchlist() {
   const [newKind, setNewKind] = useState<WatchKind>('film');
   // v2.31 审计 #4：release_date 此前无法设置，"即将上映"区块是死区
   const [newRelease, setNewRelease] = useState('');
+  // v2.35 R19（审计 #9）：source 两端全断——后端支持但表单不收也不展示
+  const [newSource, setNewSource] = useState('');
   const [adding, setAdding] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -98,9 +101,11 @@ export default function Watchlist() {
         kind: newKind,
         status: 'wanted',
         releaseDate: newRelease || null,
+        source: newSource.trim() || null,
       });
       setNewTitle('');
       setNewRelease('');
+      setNewSource('');
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : '添加失败');
@@ -172,6 +177,13 @@ export default function Watchlist() {
             onChange={(e) => setNewRelease(e.target.value)}
             aria-label="上映/发布日期（可选）"
             className="w-36"
+          />
+          <Input
+            value={newSource}
+            onChange={(e) => setNewSource(e.target.value)}
+            placeholder="来源（可选）"
+            aria-label="来源（可选）"
+            className="w-32"
           />
           <Button onClick={() => void add()} disabled={adding} aria-label="添加到清单">
             {adding ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Plus className="w-4 h-4 mr-1" aria-hidden />}
@@ -252,6 +264,7 @@ export default function Watchlist() {
                       )}
                     </div>
                     {it.release_date && <p className="text-xs text-slate-400 mt-0.5">上映/发布：{it.release_date}</p>}
+                    {it.source && <p className="text-xs text-slate-400 mt-0.5">来源：{it.source}</p>}
                     {it.note && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-pre-wrap">{it.note}</p>}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
