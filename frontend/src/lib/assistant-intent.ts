@@ -35,7 +35,7 @@ export interface AssistantIntentContext {
 
 /** Quick prompts offered in the UI. Kept here so the panel and the tests share one list. */
 // v2.28：覆盖新增路由的说法（该联系谁/习惯/规律/搜索）
-export const ASSISTANT_QUICK_PROMPTS = ['今天有什么', '下周三提醒我', '这个月花了多少', '该联系谁了', '我的习惯怎么样', '帮我找 租房'] as const;
+export const ASSISTANT_QUICK_PROMPTS = ['今天有什么', '下周三提醒我', '这个月花了多少', '该联系谁了', '我的习惯怎么样', '帮我找 租房', '用药依从性怎么样'] as const;
 
 const QUERY_MARKER = /有什么|有啥|安排|待办|日程|做什么|要做什么/;
 const WEEK_MARKER = /本周|这周|这星期|未来(?:七|7)天|最近(?:七|7)天|一周/;
@@ -160,7 +160,7 @@ function extractTitle(text: string, matchedDate: string | null): string {
 const CLARIFY_NEED_ITEM = '好的，要提醒你什么？例如：下周三 交房租，或 明天提醒我给妈妈打电话。';
 const CLARIFY_NEED_DATE = '请补充事项和日期，例如：下周三 交房租，或 2026-10-05 交报告。';
 const CLARIFY_UNKNOWN =
-  '我没完全听懂。可以试试：今天有什么 / 下周三提醒我交房租 / 这个月花了多少 / 帮我记一下 买牛奶 @ 明天。';
+  '我没完全听懂。可以试试：今天有什么 / 下周三提醒我交房租 / 这个月花了多少 / 该联系谁了 / 习惯打卡怎么样 / 用药依从性 / 帮我找 租房。';
 
 /**
  * Resolve one utterance to a tool call or a clarifying question. Deterministic and side-effect
@@ -201,6 +201,12 @@ export function resolveAssistantIntent(text: string, ctx: AssistantIntentContext
   }
   if (/习惯|打卡|连续|streak/.test(raw) && !CREATE_MARKER.test(raw)) {
     return { kind: 'tool', tool: 'get_habits', args: { active: true }, understood: '查看习惯与连续打卡' };
+  }
+  // v2.35 R28（智能度）：用药依从读意图（get_adherence 已注册）。
+  // 注意：宠物/观影/车辆/工时没有注册的 agent 工具——路由到幽灵工具会 dispatch
+  // 失败，比"坦诚告知能力范围"更不智能，故不添加。
+  if (/吃药|服药|漏服|依从/.test(raw) && !CREATE_MARKER.test(raw)) {
+    return { kind: 'tool', tool: 'get_adherence', args: {}, understood: '查看用药依从性' };
   }
   if (/规律|模式|行为|patterns?|我通常|平时什么/.test(raw)) {
     return { kind: 'tool', tool: 'get_patterns', args: { minEvidence: 3 }, understood: '查看系统发现的规律' };
