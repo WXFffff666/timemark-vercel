@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { HeartHandshake, Loader2, Plus, Trash2, Copy, CheckCircle2 } from 'lucide-react';
+import { HeartHandshake, Loader2, Plus, Trash2, Copy, CheckCircle2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -40,6 +40,64 @@ const KIND_LABELS: Record<string, string> = {
   incident: '意外',
 };
 
+// v2.35 R19/v2.36 R21（审计 #6 遗留）：数值标签的趋势视图
+interface TrendData {
+  label: string | null;
+  trend: {
+    points: Array<{ at: string; value: number; unit: string | null }>;
+    count: number;
+    latest: { at: string; value: number; unit: string | null } | null;
+    delta: number | null;
+    min: number | null;
+    max: number | null;
+    average: number | null;
+    direction: 'rising' | 'falling' | 'stable' | 'none';
+  };
+}
+
+function TrendBlock({ profileId, label, onRemove }: { profileId: number; label: string; onRemove: () => void }) {
+  const [data, setData] = useState<TrendData | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<TrendData>(`/care/profiles/${profileId}/trend?label=${encodeURIComponent(label)}`)
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch(() => { if (!cancelled) setLoading(false); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [profileId, label]);
+
+  const t = data?.trend;
+  const dirIcon = t?.direction === 'rising' ? '↗' : t?.direction === 'falling' ? '↘' : '→';
+  const dirColor = t?.direction === 'rising' ? 'text-red-500' : t?.direction === 'falling' ? 'text-emerald-500' : 'text-slate-400';
+
+  return (
+    <div className="rounded-2xl border border-slate-200/70 dark:border-slate-700/50 px-4 py-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</span>
+        {loading ? (
+          <Loader2 size={14} className="animate-spin text-slate-400" aria-hidden />
+        ) : t && t.direction !== 'none' ? (
+          <span className={`text-sm font-bold ${dirColor}`} aria-label={`趋势 ${t.direction}`}>{dirIcon}</span>
+        ) : null}
+        <Button size="icon" variant="ghost" className="min-h-7 min-w-7 ml-auto text-slate-400" aria-label={`关闭「${label}」趋势`} onClick={onRemove}>
+          ×
+        </Button>
+      </div>
+      {t && t.count > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2 text-xs">
+          <span className="text-slate-500 dark:text-slate-400">最新 <strong className="text-slate-800 dark:text-slate-100 tabular-nums">{t.latest?.value}{t.latest?.unit ?? ''}</strong></span>
+          <span className="text-slate-500 dark:text-slate-400">变化 <strong className={`tabular-nums ${(t.delta ?? 0) > 0 ? 'text-red-500' : (t.delta ?? 0) < 0 ? 'text-emerald-500' : ''}`}>{t.delta !== null ? (t.delta > 0 ? '+' : '') + t.delta.toFixed(1) : '—'}</strong></span>
+          <span className="text-slate-500 dark:text-slate-400">范围 <strong className="tabular-nums text-slate-700 dark:text-slate-200">{t.min?.toFixed(1)}~{t.max?.toFixed(1)}</strong></span>
+          <span className="text-slate-500 dark:text-slate-400">均值 <strong className="tabular-nums text-slate-700 dark:text-slate-200">{t.average?.toFixed(1)}</strong></span>
+        </div>
+      )}
+      {t && t.count === 0 && <p className="text-xs text-slate-400 mt-1">该标签还没有带数值的记录</p>}
+    </div>
+  );
+}
+
 export default function Care() {
   const [profiles, setProfiles] = useState<CareProfile[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -63,6 +121,8 @@ export default function Care() {
   const [logValue, setLogValue] = useState('');
   const [logUnit, setLogUnit] = useState('');
   const [logDetail, setLogDetail] = useState('');
+  // v2.36 R21（审计 #6 遗留）：数值标签趋势视图
+  const [openTrends, setOpenTrends] = useState<Set<string>>(new Set());
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
 
@@ -324,6 +384,32 @@ export default function Care() {
                 ))}
               </ul>
             )}
+
+            {/* v2.36 R21：数值标签趋势（从当前日志派生 label） */}
+            {selected && (() => {
+              const labels = Array.from(new Set(logs.filter((l) => l.value !== null && l.value !== undefined && l.label).map((l) => l.label!)));
+              if (labels.length === 0) return null;
+              return (
+                <section aria-label="数值趋势" className="space-y-2">
+                  <h2 className="text-sm font-bold text-hint px-1">数值趋势</h2>
+                  {labels.map((label) => (
+                    <div key={label}>
+                      {openTrends.has(label) ? (
+                        <TrendBlock profileId={selected.id} label={label} onRemove={() => setOpenTrends((prev) => { const n = new Set(prev); n.delete(label); return n; })} />
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-xs text-primary-600 dark:text-primary-400 hover:underline px-1"
+                          onClick={() => setOpenTrends((prev) => new Set(prev).add(label))}
+                        >
+                          查看「{label}」趋势 →
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </section>
+              );
+            })()}
           </div>
         ) : null}
       </main>

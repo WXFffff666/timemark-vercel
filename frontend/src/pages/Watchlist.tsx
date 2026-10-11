@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Clapperboard, Loader2, Plus, Star, Trash2 } from 'lucide-react';
+import { Clapperboard, Loader2, Pencil, Plus, Star, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -50,6 +50,9 @@ export default function Watchlist() {
   const [newKind, setNewKind] = useState<WatchKind>('film');
   // v2.31 审计 #4：release_date 此前无法设置，"即将上映"区块是死区
   const [newRelease, setNewRelease] = useState('');
+  // v2.36 R21（审计 #10）：条目编辑抽屉
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [edit, setEdit] = useState<{ title: string; kind: WatchKind; releaseDate: string; source: string; link: string; note: string; rating: string } | null>(null);
   // v2.35 R19（审计 #9）：source 两端全断——后端支持但表单不收也不展示
   const [newSource, setNewSource] = useState('');
   const [adding, setAdding] = useState(false);
@@ -122,6 +125,52 @@ export default function Watchlist() {
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...body } : it)));
     } catch (e) {
       setError(e instanceof Error ? e.message : '更新失败');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const openEdit = (it: WatchItem) => {
+    setEditingId(it.id);
+    setEdit({
+      title: it.title,
+      kind: it.kind,
+      releaseDate: it.release_date ?? '',
+      source: it.source ?? '',
+      link: it.link ?? '',
+      note: it.note,
+      rating: it.rating !== null ? String(it.rating) : '',
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!edit || editingId === null) return;
+    if (!edit.title.trim()) {
+      setError('标题不能为空');
+      return;
+    }
+    const ratingNum = edit.rating.trim() === '' ? null : Number(edit.rating);
+    if (ratingNum !== null && (!Number.isInteger(ratingNum) || ratingNum < 0 || ratingNum > 10)) {
+      setError('评分必须是 0-10 的整数');
+      return;
+    }
+    setBusyId(editingId);
+    setError('');
+    try {
+      await api.patch(`/watchlist/${editingId}`, {
+        title: edit.title.trim(),
+        kind: edit.kind,
+        releaseDate: edit.releaseDate || null,
+        source: edit.source.trim() || null,
+        link: edit.link.trim() || null,
+        note: edit.note,
+        ...(ratingNum !== null ? { rating: ratingNum } : { rating: null }),
+      });
+      setItems((prev) => prev.map((it) => (it.id === editingId ? { ...it, ...edit, release_date: edit.releaseDate || null, source: edit.source.trim() || null, link: edit.link.trim() || null, rating: ratingNum } : it)));
+      setEditingId(null);
+      setEdit(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存失败');
     } finally {
       setBusyId(null);
     }
@@ -252,6 +301,26 @@ export default function Watchlist() {
           <ul className="space-y-2.5">
             {filtered.map((it) => (
               <li key={it.id} className="glass-panel rounded-2xl p-4">
+                {/* v2.36 R21（审计 #10）：编辑抽屉 */}
+                {editingId === it.id && edit && (
+                  <div className="space-y-2 mb-3 rounded-2xl border border-primary-200/60 dark:border-primary-800/50 p-3">
+                    <Input value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} aria-label="编辑标题" placeholder="标题" />
+                    <div className="flex flex-wrap gap-2">
+                      <select value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value as WatchKind })} aria-label="编辑类型" className="h-10 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white">
+                        {Object.entries(KIND_LABELS).map(([v, label]) => (<option key={v} value={v}>{label}</option>))}
+                      </select>
+                      <Input type="date" value={edit.releaseDate} onChange={(e) => setEdit({ ...edit, releaseDate: e.target.value })} aria-label="编辑上映日期" className="w-36" />
+                      <Input value={edit.rating} onChange={(e) => setEdit({ ...edit, rating: e.target.value })} placeholder="评分 0-10" aria-label="编辑评分" inputMode="numeric" className="w-24" />
+                    </div>
+                    <Input value={edit.source} onChange={(e) => setEdit({ ...edit, source: e.target.value })} placeholder="来源" aria-label="编辑来源" />
+                    <Input value={edit.link} onChange={(e) => setEdit({ ...edit, link: e.target.value })} placeholder="链接（豆瓣/Bangumi 等）" aria-label="编辑链接" />
+                    <Input value={edit.note} onChange={(e) => setEdit({ ...edit, note: e.target.value })} placeholder="备注（看到哪一集…）" aria-label="编辑备注" />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => void saveEdit()} disabled={busyId === it.id} aria-label="保存编辑">保存</Button>
+                      <Button size="sm" variant="ghost" onClick={() => { setEditingId(null); setEdit(null); }} aria-label="取消编辑">取消</Button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -265,6 +334,11 @@ export default function Watchlist() {
                     </div>
                     {it.release_date && <p className="text-xs text-slate-400 mt-0.5">上映/发布：{it.release_date}</p>}
                     {it.source && <p className="text-xs text-slate-400 mt-0.5">来源：{it.source}</p>}
+                    {it.link && (
+                      <a href={it.link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 dark:text-primary-400 hover:underline mt-0.5 inline-block">
+                        打开条目链接 ↗
+                      </a>
+                    )}
                     {it.note && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-pre-wrap">{it.note}</p>}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
@@ -301,6 +375,16 @@ export default function Watchlist() {
                       }}
                     >
                       <Star size={15} className={it.rating !== null ? 'fill-amber-400 text-amber-500' : ''} aria-hidden />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="min-h-9 min-w-9 text-slate-500"
+                      aria-label={`编辑「${it.title}」`}
+                      disabled={busyId === it.id}
+                      onClick={() => openEdit(it)}
+                    >
+                      <Pencil size={15} aria-hidden />
                     </Button>
                     <Button
                       size="icon"
