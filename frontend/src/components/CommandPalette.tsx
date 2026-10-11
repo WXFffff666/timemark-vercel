@@ -358,6 +358,13 @@ export function CommandPalette() {
         {trimmed === '' && (
           <div data-testid="command-palette-hint" className="px-4 py-4 text-center text-sm text-hint">
             <p>输入关键词，搜索事件、联系人、证件、到期、物品、保养、习惯、目标、收件箱、观影、车辆、宠物、工时</p>
+            {/* v2.37 R25（O）：键盘操作提示——无鼠标用户也能发现全部交互 */}
+            <p className="mt-2 text-xs text-slate-400">
+              <kbd className="px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-600 font-mono text-[10px]">↑↓</kbd> 选择 ·
+              <kbd className="ml-1 px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-600 font-mono text-[10px]">Enter</kbd> 打开 ·
+              <kbd className="ml-1 px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-600 font-mono text-[10px]">Esc</kbd> 关闭 ·
+              <kbd className="ml-1 px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-600 font-mono text-[10px]">Tab</kbd> 移动到类型筛选
+            </p>
             {/* v2.25: 快捷入口——本地 AI */}
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <button

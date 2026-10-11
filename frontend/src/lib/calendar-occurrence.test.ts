@@ -62,6 +62,40 @@ describe('getEventOccurrenceDatesInYear（落位口径）', () => {
     expect(getEventOccurrenceDatesInYear(e, 2026)).toEqual(['1990-07-28'])
   })
 
+  it('weekly 重复：按锚点星期与 interval 在年内展开（每 2 周一次）', () => {
+    // 2026-01-05 是周一；每周重复 → 全年每个周一
+    const weekly = makeEvent({
+      date: '2026-01-05',
+      type: 'meeting',
+      recurringConfig: { enabled: true, frequency: 'weekly', interval: 1, endType: 'never' },
+    })
+    const dates = getEventOccurrenceDatesInYear(weekly, 2026)
+    expect(dates.length).toBeGreaterThanOrEqual(52)
+    // 全部都是周一
+    for (const d of dates) {
+      expect(new Date(`${d}T00:00:00Z`).getUTCDay()).toBe(1)
+    }
+    // 每 2 周一次：约 26 个
+    const biweekly = makeEvent({
+      date: '2026-01-05',
+      type: 'meeting',
+      recurringConfig: { enabled: true, frequency: 'weekly', interval: 2, endType: 'never' },
+    })
+    expect(getEventOccurrenceDatesInYear(biweekly, 2026).length).toBeGreaterThanOrEqual(26)
+  })
+
+  it('daily 重复：全年逐日落位（interval 3 → 每 3 天）', () => {
+    const daily = makeEvent({
+      date: '2026-01-01',
+      type: 'other',
+      recurringConfig: { enabled: true, frequency: 'daily', interval: 3, endType: 'never' },
+    })
+    const dates = getEventOccurrenceDatesInYear(daily, 2026)
+    expect(dates.length).toBe(122) // 365/3 = 121.67 → 122 个锚点对齐落位
+    // 相邻落位间隔 3 天
+    expect(new Date(dates[1]).getTime() - new Date(dates[0]).getTime()).toBe(3 * 86_400_000)
+  })
+
   it('农历事件：按目标年转换（农历六月在当年公历年内落位）', () => {
     const e = makeEvent({
       date: '2000-01-01',

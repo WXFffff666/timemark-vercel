@@ -229,6 +229,21 @@ export function getEventOccurrenceDatesInYear(event: Event, year: number): strin
         const rolled = validGregorian(year, m, Math.min(dd, new Date(Date.UTC(year, m, 0)).getUTCDate()));
         if (rolled) push(rolled);
       }
+    } else if (frequency === 'weekly' || frequency === 'daily') {
+      // v2.37 R25：weekly/daily 展开——从原始日期锚点起，每隔 interval 周天的落位。
+      // 日历粒度小（单用户几百事件），逐日判定足够快。
+      const interval = Math.max(1, recurring?.interval ?? 1);
+      const stepDays = frequency === 'weekly' ? 7 * interval : interval;
+      const anchor = Date.UTC(Number(raw.slice(0, 4)), mm - 1, dd);
+      const jan1 = Date.UTC(year, 0, 1);
+      const dec31 = Date.UTC(year, 11, 31);
+      // 对齐到锚点步进：第一个 ≥1/1 的落位日
+      const offsetDays = Math.ceil((jan1 - anchor) / 86_400_000);
+      const firstOffset = Math.max(0, Math.ceil(offsetDays / stepDays) * stepDays);
+      for (let offset = firstOffset; anchor + offset * 86_400_000 <= dec31; offset += stepDays) {
+        const d = new Date(anchor + offset * 86_400_000);
+        push(`${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`);
+      }
     } else {
       push(raw);
     }
