@@ -33,6 +33,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.calendar': 'Calendar',
   'nav.lunarHolidays': 'Lunar Holidays',
   'nav.watchlist': 'Watchlist',
+  'nav.vehicles': 'Vehicles',
   'nav.assistant': 'AI Assistant',
   'nav.localAi': 'Local AI',
   'nav.agentConsole': 'Agent Console',

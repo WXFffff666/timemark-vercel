@@ -31,6 +31,7 @@ const CountdownWidget = lazy(() => import('./pages/CountdownWidget'));
 const DockerMigration = lazy(() => import('./pages/DockerMigration'));
 const LunarHolidays = lazy(() => import('./pages/LunarHolidays'));
 const Watchlist = lazy(() => import('./pages/Watchlist'));
+const Vehicles = lazy(() => import('./pages/Vehicles'));
 const CalendarPage = lazy(() => import('./pages/Calendar'));
 const TodosPage = lazy(() => import('./pages/Todos'));
 const NotificationRules = lazy(() => import('./pages/NotificationRules'));
@@ -141,6 +142,7 @@ function AppRoutes({ location }: { location: ReturnType<typeof useLocation> }) {
     <Route path="/docker-migration" element={<ProtectedRoute pageName="DockerMigration"><DockerMigration /></ProtectedRoute>} />
     <Route path="/lunar-holidays" element={<ProtectedRoute pageName="LunarHolidays"><LunarHolidays /></ProtectedRoute>} />
     <Route path="/watchlist" element={<ProtectedRoute pageName="Watchlist"><Watchlist /></ProtectedRoute>} />
+    <Route path="/vehicles" element={<ProtectedRoute pageName="Vehicles"><Vehicles /></ProtectedRoute>} />
     <Route path="/embed/:token" element={<CountdownWidget />} />
     <Route path="/share/:token" element={<ShareEvent />} />
     <Route path="/" element={<Navigate to="/dashboard" />} />
