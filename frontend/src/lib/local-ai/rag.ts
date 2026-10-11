@@ -37,6 +37,21 @@ export function formatSourceBlock(hits: KbHit[], maxSnippetChars = 160): string 
     .join('\n\n');
 }
 
+/**
+ * v2.35 R32（用户报告"mdx 文档"）：降级路径的自然语言回答——
+ * 逐条组织成「标题：首句」的句子，不再倾倒 [1] 标题/片段结构块。
+ * 纯函数，便于单测。三处降级路径（无 WebGPU / 模型空产出 / 生成失败）共用。
+ */
+export function composeRetrievalAnswer(hits: KbHit[], lead: string): string {
+  if (hits.length === 0) return `${lead}知识库里没有找到相关内容。`;
+  const sentences = hits.slice(0, 4).map((hit) => {
+    const text = hit.doc.text.replace(/\s+/g, ' ').trim();
+    const first = text.split(/(?<=[。！？.!?])/)[0]?.slice(0, 80) ?? text.slice(0, 80);
+    return `· ${hit.doc.title}：${first}`;
+  });
+  return `${lead}帮你查了知识库，找到 ${hits.length} 条相关内容：\n${sentences.join('\n')}`;
+}
+
 const SYSTEM_PROMPT = [
   '你是 TimeMark 的本地助手，运行在用户浏览器里，只回答关于用户自己的事件、文档和联系人信息的问题。',
   '规则：',
@@ -100,10 +115,14 @@ export async function answerQuestion(
 
   const supported = await isWebLlmSupported().catch(() => false);
   if (!supported) {
-    const lines = hits.length
-      ? `本机不支持 WebGPU 对话，以下是知识库检索结果：\n\n${formatSourceBlock(hits)}`
-      : '本机不支持 WebGPU 对话，且知识库里没有找到相关条目。';
-    return { answer: lines, sources, mode: 'retrieval-only', tier: null };
+    // v2.35 R32（用户报告"mdx 文档"）：无 WebGPU 时的回答改为自然语言——
+    // 逐条组织成句子（标题+首句），不再倾倒 [1] 标题/片段结构块。
+    return {
+      answer: composeRetrievalAnswer(hits, '本机暂不支持 AI 对话，'),
+      sources,
+      mode: 'retrieval-only',
+      tier: null,
+    };
   }
 
   try {
@@ -117,7 +136,7 @@ export async function answerQuestion(
     });
     if (!answer) {
       return {
-        answer: `（本机模型没有产出内容）检索模式：${searchMode === 'vector' ? '语义' : '关键词'}。命中：\n\n${formatSourceBlock(hits)}`,
+        answer: composeRetrievalAnswer(hits, '本机模型这次没有产出内容，'),
         sources,
         mode: 'retrieval-only',
         tier,
@@ -127,7 +146,7 @@ export async function answerQuestion(
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     return {
-      answer: `本机模型生成失败（${reason.slice(0, 120)}）。检索命中：\n\n${formatSourceBlock(hits)}`,
+      answer: composeRetrievalAnswer(hits, `本机模型生成失败（${reason.slice(0, 80)}），`),
       sources,
       mode: 'retrieval-only',
       tier,
