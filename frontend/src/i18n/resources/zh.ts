@@ -32,6 +32,7 @@ export const zh = {
   'nav.lunarHolidays': '农历节日',
   'nav.watchlist': '观影清单',
   'nav.vehicles': '车辆',
+  'nav.timesheet': '工时',
   'nav.assistant': 'AI 助手',
   'nav.localAi': '本地 AI',
   'nav.agentConsole': '智能体控制台',
