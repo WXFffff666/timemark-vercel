@@ -33,6 +33,28 @@ interface PetSchedule {
   status?: string;
 }
 
+interface PetLog {
+  id: number;
+  kind: 'weight' | 'feeding' | 'vet';
+  loggedAt: string;
+  weightKg: number | null;
+  detail: string;
+}
+
+interface PetWeightTrend {
+  petId: number;
+  trend: {
+    points: Array<{ at: string; value: number; unit: string | null }>;
+    count: number;
+    latest: { at: string; value: number; unit: string | null } | null;
+    delta: number | null;
+    min: number | null;
+    max: number | null;
+    average: number | null;
+    direction: 'rising' | 'falling' | 'stable' | 'none';
+  };
+}
+
 interface PetReminder {
   scheduleId?: number;
   petName?: string;
@@ -67,6 +89,13 @@ export default function Pets() {
   const [schedDue, setSchedDue] = useState(today());
   // v2.35 R18（审计 #8）：循环间隔——完成一枚循环日程后自动滚下期
   const [schedInterval, setSchedInterval] = useState('');
+  // v2.37 R24（审计 #6 遗留）：体重/喂养/就医记录与体重趋势
+  const [logsFor, setLogsFor] = useState<number | null>(null);
+  const [logs, setLogs] = useState<Record<number, PetLog[]>>({});
+  const [weightTrend, setWeightTrend] = useState<Record<number, PetWeightTrend['trend'] | null>>({});
+  const [logKind, setLogKind] = useState('weight');
+  const [logWeight, setLogWeight] = useState('');
+  const [logDetail, setLogDetail] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -175,6 +204,62 @@ export default function Pets() {
     }
   };
 
+  const loadLogs = useCallback(async (petId: number) => {
+    try {
+      const d = await api.get<{ data?: PetLog[] }>(`/pets/${petId}/logs?limit=20`);
+      const list = (d as unknown as { events?: PetLog[] }).events ?? (d as unknown as PetLog[]) ?? [];
+      setLogs((prev) => ({ ...prev, [petId]: Array.isArray(list) ? list : [] }));
+    } catch {
+      setLogs((prev) => ({ ...prev, [petId]: [] }));
+    }
+    try {
+      const w = await api.get<{ data?: PetWeightTrend }>(`/pets/${petId}/weight`);
+      const inner = (w as unknown as { data?: PetWeightTrend }).data ?? (w as unknown as PetWeightTrend);
+      setWeightTrend((prev) => ({ ...prev, [petId]: inner?.trend ?? null }));
+    } catch {
+      setWeightTrend((prev) => ({ ...prev, [petId]: null }));
+    }
+  }, []);
+
+  const addLog = async (petId: number) => {
+    const weight = logKind === 'weight' ? Number(logWeight) : null;
+    if (logKind === 'weight' && (!logWeight || !Number.isFinite(weight) || (weight as number) <= 0)) {
+      setError('体重必须是有效数字（kg）');
+      return;
+    }
+    setBusyKey(`log-${petId}`);
+    setError('');
+    try {
+      await api.post(`/pets/${petId}/logs`, {
+        kind: logKind,
+        ...(logKind === 'weight' && weight !== null ? { weightKg: weight } : {}),
+        ...(logDetail.trim() ? { detail: logDetail.trim() } : {}),
+      });
+      setLogWeight('');
+      setLogDetail('');
+      void loadLogs(petId);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '记录失败');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const deleteLog = async (petId: number, logId: number) => {
+    if (!confirm('删除这条记录？')) return;
+    setBusyKey(`pl-${logId}`);
+    try {
+      await api.delete(`/pets/${petId}/logs/${logId}`);
+      void loadLogs(petId);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
   const deleteSchedule = async (petId: number, scheduleId: number) => {
     if (!confirm('确定删除该日程？')) return;
     setBusyKey(`d-${scheduleId}`);
@@ -270,6 +355,9 @@ export default function Pets() {
                       <Button size="sm" variant="outline" className="rounded-full" onClick={() => toggleSchedules(p.id)} aria-expanded={!!list}>
                         <Syringe size={14} className="mr-1" aria-hidden /> 日程
                       </Button>
+                      <Button size="sm" variant="outline" className="rounded-full" aria-expanded={logsFor === p.id} onClick={() => { setLogsFor(logsFor === p.id ? null : p.id); void loadLogs(p.id); }}>
+                        体重/就医
+                      </Button>
                       <Button size="icon" variant="ghost" className="min-h-9 min-w-9 text-red-500" aria-label={`删除 ${p.name}`} onClick={() => void removePet(p.id, p.name)}>
                         <Trash2 size={15} aria-hidden />
                       </Button>
@@ -319,6 +407,57 @@ export default function Pets() {
                               </li>
                             );
                           })}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  {logsFor === p.id && (
+                    <div className="space-y-3 border-t border-slate-200/60 dark:border-slate-700/50 pt-4">
+                      {(() => {
+                        const t = weightTrend[p.id];
+                        if (!t || t.count === 0) return null;
+                        return (
+                          <div className="rounded-2xl border border-slate-200/70 dark:border-slate-700/50 px-4 py-3 text-xs">
+                            <p className="text-slate-500 dark:text-slate-400 mb-1">
+                              体重趋势（{t.count} 次记录）
+                              {t.direction !== 'none' && <span className={`ml-2 font-bold ${t.direction === 'rising' ? 'text-red-500' : t.direction === 'falling' ? 'text-emerald-500' : 'text-slate-400'}`}>{t.direction === 'rising' ? '↗ 上升' : t.direction === 'falling' ? '↘ 下降' : '→ 平稳'}</span>}
+                            </p>
+                            <p className="tabular-nums text-slate-700 dark:text-slate-200">
+                              最新 {t.latest?.value}{t.latest?.unit ?? 'kg'}
+                              {t.delta !== null ? ` · 变化 ${t.delta > 0 ? '+' : ''}${t.delta.toFixed(2)}kg` : ''}
+                              {t.average !== null ? ` · 均值 ${t.average.toFixed(2)}kg` : ''}
+                            </p>
+                          </div>
+                        );
+                      })()}
+
+                      <div className="flex flex-wrap gap-2 items-end">
+                        <select value={logKind} onChange={(e) => setLogKind(e.target.value)} aria-label="记录类型" className="h-10 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white">
+                          <option value="weight">体重</option>
+                          <option value="feeding">喂养</option>
+                          <option value="vet">就医</option>
+                        </select>
+                        {logKind === 'weight' && (
+                          <Input value={logWeight} onChange={(e) => setLogWeight(e.target.value)} placeholder="体重 kg" aria-label="体重 kg" inputMode="decimal" className="w-24" />
+                        )}
+                        <Input value={logDetail} onChange={(e) => setLogDetail(e.target.value)} placeholder={logKind === 'vet' ? '就医详情（如 疫苗复诊）' : '详情（可选）'} aria-label="记录详情" className="flex-1 min-w-[10rem]" />
+                        <Button size="sm" onClick={() => void addLog(p.id)} disabled={busyKey === `log-${p.id}`} aria-label="保存记录">保存</Button>
+                      </div>
+
+                      {(logs[p.id] ?? []).length > 0 && (
+                        <ul className="space-y-1 text-xs" aria-label="照护记录">
+                          {(logs[p.id] ?? []).map((l) => (
+                            <li key={l.id} className="flex items-center gap-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5">
+                              <Badge variant="outline" className="scale-90 shrink-0">{l.kind === 'weight' ? '体重' : l.kind === 'feeding' ? '喂养' : '就医'}</Badge>
+                              <span className="tabular-nums text-slate-500 shrink-0">{new Date(l.loggedAt).toLocaleDateString('zh-CN')}</span>
+                              {l.weightKg !== null && <span className="tabular-nums font-semibold">{l.weightKg}kg</span>}
+                              {l.detail && <span className="truncate text-slate-500">{l.detail}</span>}
+                              <Button size="icon" variant="ghost" className="min-h-6 min-w-6 text-red-400 hover:text-red-500 ml-auto shrink-0" aria-label="删除记录" onClick={() => void deleteLog(p.id, l.id)}>
+                                <Trash2 size={12} aria-hidden />
+                              </Button>
+                            </li>
+                          ))}
                         </ul>
                       )}
                     </div>
