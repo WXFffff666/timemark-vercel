@@ -76,6 +76,11 @@ export default function Vehicles() {
   const [maintFor, setMaintFor] = useState<number | null>(null);
   const [maintItem, setMaintItem] = useState('');
   const [maintDate, setMaintDate] = useState(today());
+  // v2.34 R15（审计 #1）：花费/下次到期——/vehicles/reminders 完全依赖这些字段
+  const [maintCost, setMaintCost] = useState('');
+  const [maintNextDate, setMaintNextDate] = useState('');
+  // v2.34 R15（审计 #1）：到期提醒横幅
+  const [dueReminders, setDueReminders] = useState<Array<{ vehicleId: number; vehicleLabel: string; maintenanceId: number; item: string; nextDueDate: string | null; nextDueOdometer: number | null }>>([]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -84,6 +89,20 @@ export default function Vehicles() {
       .then((d) => setVehicles(d.vehicles ?? []))
       .catch((e) => setError(e instanceof Error ? e.message : '加载失败'))
       .finally(() => setLoading(false));
+    // v2.34 R15（审计 #1）：到期提醒（保养 next_due 字段驱动）
+    api
+      .get<{ reminders: Array<{ vehicleId: number; make: string; model: string; maintenanceId: number; item: string; nextDueDate: string | null; nextDueOdometer: number | null }> }>('/vehicles/reminders')
+      .then((d) => {
+        setDueReminders((d.reminders ?? []).map((r) => ({
+          vehicleId: r.vehicleId,
+          vehicleLabel: [r.make, r.model].filter(Boolean).join(' '),
+          maintenanceId: r.maintenanceId,
+          item: r.item,
+          nextDueDate: r.nextDueDate,
+          nextDueOdometer: r.nextDueOdometer,
+        })));
+      })
+      .catch(() => setDueReminders([]));
   }, []);
 
   useEffect(() => {
@@ -143,6 +162,29 @@ export default function Vehicles() {
     }
   };
 
+  // v2.34 R15（审计 #9）：录错的记录可删，否则油耗/成本统计被永久污染
+  const deleteFuelRecord = async (vehicleId: number, recordId: number) => {
+    if (!confirm('删除这条加油/充电记录？')) return;
+    try {
+      await api.delete(`/vehicles/${vehicleId}/fuel/${recordId}`);
+      void loadLedger(vehicleId);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败');
+    }
+  };
+
+  const deleteMaintenanceRecord = async (vehicleId: number, recordId: number) => {
+    if (!confirm('删除这条保养记录？')) return;
+    try {
+      await api.delete(`/vehicles/${vehicleId}/maintenance/${recordId}`);
+      void loadLedger(vehicleId);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败');
+    }
+  };
+
   const addFuel = async (id: number) => {
     const qty = Number(fuelQty);
     const odo = Number(fuelOdo);
@@ -174,9 +216,17 @@ export default function Vehicles() {
     }
     setError('');
     try {
-      await api.post(`/vehicles/${id}/maintenance`, { item: maintItem.trim(), date: maintDate });
+      await api.post(`/vehicles/${id}/maintenance`, {
+        item: maintItem.trim(),
+        date: maintDate,
+        cost: maintCost ? Number(maintCost) : undefined,
+        nextDueDate: maintNextDate || undefined,
+      });
       setMaintItem('');
+      setMaintCost('');
+      setMaintNextDate('');
       void loadLedger(id);
+      load();
     } catch (e) {
       setError(e instanceof Error ? e.message : '记录失败');
     }
@@ -191,6 +241,19 @@ export default function Vehicles() {
         onRefresh={load}
         refreshing={loading}
       />
+
+      {/* v2.34 R15（审计 #1）：保养到期提醒横幅 */}
+      {dueReminders.length > 0 && (
+        <div role="status" className="max-w-3xl mx-auto px-6 mt-4 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-900/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300 space-y-1">
+          {dueReminders.map((r) => (
+            <p key={r.maintenanceId}>
+              🔧 {r.vehicleLabel} · {r.item}
+              {r.nextDueDate ? ` — 到期 ${r.nextDueDate}` : ''}
+              {r.nextDueOdometer !== null ? `（里程 ${r.nextDueOdometer.toLocaleString()} km）` : ''}
+            </p>
+          ))}
+        </div>
+      )}
 
       <main className="max-w-3xl mx-auto px-6 py-6 space-y-5">
         {error && (
@@ -287,6 +350,9 @@ export default function Vehicles() {
                               <span className="tabular-nums">{r.quantity} {r.unit}</span>
                               <span className="tabular-nums text-slate-500">¥{r.totalCost.toFixed(2)}</span>
                               {r.consumptionPer100 !== null && <span className="tabular-nums text-emerald-600 dark:text-emerald-400 ml-auto">{r.consumptionPer100.toFixed(1)} {r.unit}/100km</span>}
+                              <Button size="icon" variant="ghost" className="min-h-7 min-w-7 text-red-400 hover:text-red-500 shrink-0" aria-label={`删除 ${r.date} 的加油记录`} onClick={() => void deleteFuelRecord(v.id, r.id)}>
+                                <Trash2 size={13} aria-hidden />
+                              </Button>
                             </li>
                           ))}
                         </ul>
@@ -297,6 +363,8 @@ export default function Vehicles() {
                         <div className="flex flex-wrap gap-2 items-end">
                           <Input value={maintItem} onChange={(e) => setMaintItem(e.target.value)} placeholder="保养项目（如 更换机油）" aria-label="保养项目" className="flex-1 min-w-[10rem]" />
                           <Input type="date" value={maintDate} onChange={(e) => setMaintDate(e.target.value)} aria-label="保养日期" className="w-36" />
+                          <Input value={maintCost} onChange={(e) => setMaintCost(e.target.value)} placeholder="花费 ¥（可选）" aria-label="保养花费" inputMode="decimal" className="w-28" />
+                          <Input type="date" value={maintNextDate} onChange={(e) => setMaintNextDate(e.target.value)} aria-label="下次到期日期（可选）" className="w-36" />
                           <Button size="sm" onClick={() => void addMaintenance(v.id)} aria-label="保存保养记录">保存</Button>
                           <Button size="sm" variant="ghost" onClick={() => setMaintFor(null)} aria-label="取消保养记录">取消</Button>
                         </div>
@@ -313,6 +381,9 @@ export default function Vehicles() {
                               <span className="truncate">{m.item}</span>
                               <span className="tabular-nums text-slate-500 ml-auto shrink-0">{m.date}</span>
                               {m.nextDueDate && <span className="text-amber-500 shrink-0">下次 {m.nextDueDate}</span>}
+                              <Button size="icon" variant="ghost" className="min-h-7 min-w-7 text-red-400 hover:text-red-500 shrink-0" aria-label={`删除「${m.item}」保养记录`} onClick={() => void deleteMaintenanceRecord(v.id, m.id)}>
+                                <Trash2 size={13} aria-hidden />
+                              </Button>
                             </li>
                           ))}
                         </ul>

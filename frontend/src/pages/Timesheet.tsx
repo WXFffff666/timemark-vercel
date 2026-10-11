@@ -42,6 +42,8 @@ export default function Timesheet() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  // v2.34 R15（审计 #11）：location 此前未采集（后端早就支持）
+  const [location, setLocation] = useState('');
   const [error, setError] = useState('');
 
   const load = useCallback(() => {
@@ -67,8 +69,12 @@ export default function Timesheet() {
     setBusy(true);
     setError('');
     try {
-      await api.post('/timesheet/sessions/clock-in', note.trim() ? { note: note.trim() } : {});
+      await api.post('/timesheet/sessions/clock-in', {
+        ...(note.trim() ? { note: note.trim() } : {}),
+        ...(location.trim() ? { location: location.trim() } : {}),
+      });
       setNote('');
+      setLocation('');
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : '打卡失败');
@@ -137,9 +143,16 @@ export default function Timesheet() {
               <Input
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="备注（可选：地点/今日重点）"
+                placeholder="备注（可选：今日重点）"
                 aria-label="打卡备注"
                 maxLength={120}
+              />
+              <Input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="地点（可选，如 公司/家里）"
+                aria-label="打卡地点"
+                maxLength={80}
               />
               <div>
                 <Button size="lg" variant="vision" className="rounded-full min-h-12 px-10" disabled={busy} onClick={() => void clockIn()} aria-label="上班打卡">
@@ -201,6 +214,7 @@ export default function Timesheet() {
                   <span className="text-slate-400">→</span>
                   <span className="tabular-nums text-slate-600 dark:text-slate-300 shrink-0">{s.clockOut ? fmtTime(s.clockOut) : '进行中'}</span>
                   {s.durationMinutes !== null && <span className="tabular-nums text-slate-500 ml-auto shrink-0">{fmtMin(s.durationMinutes)}</span>}
+                  {s.location && <span className="text-xs text-slate-400 shrink-0">📍 {s.location}</span>}
                   {s.note && <span className="text-xs text-slate-400 truncate hidden sm:block">{s.note}</span>}
                 </li>
               ))}
