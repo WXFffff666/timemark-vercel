@@ -186,6 +186,85 @@ export function groupEventsByDate(events: Event[]): Map<string, Event[]> {
   return map;
 }
 
+/**
+ * v2.31 R4（审计 D2）：事件在指定年份的「落位日期集」。
+ *
+ * 旧日历网格/列表直接按原始 `date` 落位——重复（yearly/monthly）与农历/双历事件
+ * 在其发生年份的网格上永远查不到（生日 1990-07-28 在 2026 年 7 月不存在），而
+ * EventCard/Dashboard 用 resolveNextOccurrenceDate，两处口径互相矛盾。
+ *
+ * 规则：
+ * - yearly（显式配置）公历面：月-日滚动到目标年（02-29 在平年跳过，不虚构 03-01）
+ * - monthly：日滚动到目标年每个月（clamp 到月末）
+ * - 农历/双历且有 lunarDate：农历转换到目标年
+ * - 其余（一次性事件）：原始日期，任何年份都按原样展示（历史保留）
+ * - 农历/双历一次性事件：原始公历 date 与农历转换日都落位（双历语义）
+ */
+export function getEventOccurrenceDatesInYear(event: Event, year: number): string[] {
+  const raw = event.date.slice(0, 10);
+  const mm = Number.parseInt(raw.slice(5, 7), 10);
+  const dd = Number.parseInt(raw.slice(8, 10), 10);
+  if (!Number.isFinite(mm) || !Number.isFinite(dd)) return [raw];
+
+  const recurring = event.recurringConfig ?? null;
+  const frequency = recurring?.enabled ? recurring.frequency : null;
+  const out: string[] = [];
+  const push = (key: string) => {
+    if (!out.includes(key)) out.push(key);
+  };
+  const validGregorian = (y: number, m: number, d: number): string | null => {
+    const probe = new Date(Date.UTC(y, m - 1, d));
+    if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== m - 1 || probe.getUTCDate() !== d) return null;
+    return `${y}-${pad(m)}-${pad(d)}`;
+  };
+
+  // 公历面
+  if (event.calendarType === 'gregorian' || event.calendarType === 'both' || !event.lunarDate) {
+    if (frequency === 'yearly') {
+      // 02-29 在平年跳过（不虚构 03-01）；该年无落位就是无，不回退原始日期
+      const rolled = validGregorian(year, mm, dd);
+      if (rolled) push(rolled);
+    } else if (frequency === 'monthly') {
+      for (let m = 1; m <= 12; m += 1) {
+        const rolled = validGregorian(year, m, Math.min(dd, new Date(Date.UTC(year, m, 0)).getUTCDate()));
+        if (rolled) push(rolled);
+      }
+    } else {
+      push(raw);
+    }
+  }
+
+  // 农历面（lunar / both 且有农历数据）
+  if ((event.calendarType === 'lunar' || event.calendarType === 'both') && event.lunarDate) {
+    const month = event.lunarDate.isLeap ? -event.lunarDate.month : event.lunarDate.month;
+    try {
+      const solar = Lunar.fromYmd(year, month, event.lunarDate.day).getSolar();
+      // 注意：lunar-javascript 的 Solar API 是 getYear()（没有 getFullYear，那是浏览器 Date 的）
+      push(
+        `${solar.getYear()}-${String(solar.getMonth()).padStart(2, '0')}-${String(solar.getDay()).padStart(2, '0')}`,
+      );
+    } catch (err) {
+      // 该年无此农历日（如闰月缺失）——静默跳过
+    }
+  }
+
+  // 仅一次性事件在转换全失败时回退原始日期；重复事件该年无落位就是无
+  return out.length > 0 || frequency ? out : [raw];
+}
+
+/** 日历网格/年视图/列表的统一落位：按目标年展开全部事件的 occurrence 集合。 */
+export function groupEventsByOccurrence(events: Event[], year: number): Map<string, Event[]> {
+  const map = new Map<string, Event[]>();
+  for (const e of events) {
+    for (const key of getEventOccurrenceDatesInYear(e, year)) {
+      const list = map.get(key) || [];
+      list.push(e);
+      map.set(key, list);
+    }
+  }
+  return map;
+}
+
 const TYPE_LABELS: Record<string, string> = {
   birthday: '生日',
   anniversary: '纪念日',

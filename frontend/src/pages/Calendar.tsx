@@ -10,7 +10,8 @@ import type { Event } from '@timemark/shared';
 import {
   dateKey,
   pad,
-  groupEventsByDate,
+  groupEventsByOccurrence,
+  getEventOccurrenceDatesInYear,
   eventTypeLabel,
   daysUntilEvent,
 } from '@/lib/calendar-utils';
@@ -81,7 +82,10 @@ export default function Calendar() {
   }, [events, searchParams]);
 
 
-  const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
+  // v2.31 R4（D2）：网格/年视图按「落位日期集」展开——重复/农历事件在其发生年份可见，
+  // 一次性事件仍按原始日期保留历史。此前直接按原始 date 落位，生日在出生年份之外的
+  // 年份永远查不到，与 EventCard/Dashboard 的 resolveNextOccurrenceDate 口径矛盾。
+  const eventsByDate = useMemo(() => groupEventsByOccurrence(events, year), [events, year]);
   const todayKey = getTodayDateKey(timezone);
 
   const year = cursor.getFullYear();
@@ -174,8 +178,10 @@ export default function Calendar() {
   >('');
   const listEvents = useMemo(() => {
     const prefix = listScope === 'year' ? `${year}-` : `${year}-${pad(month + 1)}`;
+    // v2.31 R4（D2）：列表与网格同一落位口径——按 occurrence 集合匹配前缀，
+    // 而不是原始 date（否则重复/农历事件在列表里同样缺席）。
     return events
-      .filter((e) => e.date.startsWith(prefix))
+      .filter((e) => getEventOccurrenceDatesInYear(e, year).some((k) => k.startsWith(prefix)))
       .filter((e) => (listType ? e.type === listType : true))
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [events, listScope, year, month, listType]);
