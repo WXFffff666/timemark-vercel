@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Clock, LogOut, Loader2, Timer } from 'lucide-react';
+import { Clock, LogOut, Loader2, Timer, CalendarOff, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -44,6 +44,12 @@ export default function Timesheet() {
   const [note, setNote] = useState('');
   // v2.34 R15（审计 #11）：location 此前未采集（后端早就支持）
   const [location, setLocation] = useState('');
+  // v2.36 R22（审计 #2）：请假区块——/timesheet/leaves 此前零 UI
+  const [leaves, setLeaves] = useState<Array<{ id: number; kind: string; startDate: string; endDate: string; days: number; note: string }>>([]);
+  const [leaveKind, setLeaveKind] = useState('leave');
+  const [leaveFrom, setLeaveFrom] = useState('');
+  const [leaveTo, setLeaveTo] = useState('');
+  const [showLeaves, setShowLeaves] = useState(false);
   const [error, setError] = useState('');
 
   const load = useCallback(() => {
@@ -51,11 +57,13 @@ export default function Timesheet() {
     Promise.all([
       api.get<{ sessions: Session[]; openSession: Session | null }>('/timesheet/sessions'),
       api.get<OvertimeView>('/timesheet/overtime'),
+      api.get<{ leaves: Array<{ id: number; kind: string; startDate: string; endDate: string; days: number; note: string }> }>('/timesheet/leaves').catch(() => ({ leaves: [] })),
     ])
-      .then(([s, o]) => {
+      .then(([s, o, l]) => {
         setSessions(s.sessions ?? []);
         setOpenSession(s.openSession ?? null);
         setOvertime(o ?? null);
+        setLeaves(l.leaves ?? []);
       })
       .catch((e) => setError(e instanceof Error ? e.message : '加载失败'))
       .finally(() => setLoading(false));
@@ -135,6 +143,38 @@ export default function Timesheet() {
     try {
       await api.delete(`/timesheet/sessions/${session.id}`);
       load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const addLeave = async () => {
+    if (!leaveFrom || !leaveTo) {
+      setError('请选择请假起止日期');
+      return;
+    }
+    setBusyKey('leave-add');
+    setError('');
+    try {
+      await api.post('/timesheet/leaves', { kind: leaveKind, startDate: leaveFrom, endDate: leaveTo });
+      setLeaveFrom('');
+      setLeaveTo('');
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '请假记录失败');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const deleteLeave = async (id: number) => {
+    if (!confirm('删除这条请假记录？')) return;
+    setBusyKey(`lv-${id}`);
+    try {
+      await api.delete(`/timesheet/leaves/${id}`);
+      setLeaves((prev) => prev.filter((l) => l.id !== id));
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败');
     } finally {
@@ -233,6 +273,48 @@ export default function Timesheet() {
             </ul>
           </section>
         )}
+
+        {/* v2.36 R22（审计 #2）：请假区块 */}
+        <section aria-label="请假记录" className="glass-panel rounded-3xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-hint flex items-center gap-1.5">
+              <CalendarOff size={16} aria-hidden /> 请假 / 缺勤
+            </h2>
+            <Button size="sm" variant="ghost" className="rounded-full text-xs" onClick={() => setShowLeaves((v) => !v)}>
+              {showLeaves ? '收起' : '记请假'}
+            </Button>
+          </div>
+          {showLeaves && (
+            <div className="flex flex-wrap gap-2 items-end">
+              <select value={leaveKind} onChange={(e) => setLeaveKind(e.target.value)} aria-label="请假类型" className="h-10 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white">
+                <option value="leave">事假</option>
+                <option value="sick">病假</option>
+                <option value="absence">缺勤</option>
+                <option value="holiday">假日</option>
+                <option value="other">其他</option>
+              </select>
+              <Input type="date" value={leaveFrom} onChange={(e) => setLeaveFrom(e.target.value)} aria-label="请假开始日期" className="w-36" />
+              <Input type="date" value={leaveTo} onChange={(e) => setLeaveTo(e.target.value)} aria-label="请假结束日期" className="w-36" />
+              <Button size="sm" onClick={() => void addLeave()} disabled={busyKey === 'leave-add'} aria-label="保存请假">保存</Button>
+            </div>
+          )}
+          {leaves.length > 0 ? (
+            <ul className="space-y-1.5 text-sm">
+              {leaves.slice(0, 8).map((l) => (
+                <li key={l.id} className="flex items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3 py-2">
+                  <Badge variant="outline" className="scale-90 shrink-0">{l.kind}</Badge>
+                  <span className="tabular-nums">{l.startDate} ~ {l.endDate}</span>
+                  <span className="text-slate-400 text-xs shrink-0">{l.days} 天</span>
+                  <Button size="icon" variant="ghost" className="min-h-7 min-w-7 text-red-400 ml-auto shrink-0" aria-label="删除请假记录" onClick={() => void deleteLeave(l.id)}>
+                    <Trash2 size={13} aria-hidden />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-slate-400">暂无请假记录</p>
+          )}
+        </section>
 
         {/* 最近记录 */}
         <section aria-label="最近记录">
