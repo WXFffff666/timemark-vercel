@@ -7,6 +7,8 @@ import {
   type AgentToolView,
 } from '@/lib/api';
 import { resolveAssistantIntent, type AssistantIntent } from '@/lib/assistant-intent';
+import { answerQuestion, WEBLLM_TIER_STORAGE_KEY } from '@/lib/local-ai/rag';
+import type { WebLlmTierId } from '@/lib/local-ai/engine';
 
 /**
  * checkbox 109: the assistant state machine.
@@ -154,7 +156,43 @@ export function useAssistant() {
         timezone: defaultTimeZone(),
       });
       if (intent.kind === 'clarify') {
-        setMessages((prev) => [...prev, { id: nextId(), role: 'assistant', text: intent.question }]);
+        // v2.35 R30（不够智能）：自由提问兜底接入本地 AI RAG——用用户自己的数据
+        // 生成自然语言回答，而不是"我没听懂"。引擎不可用（no-engine）时才回落
+        // 到能力范围提示。tier 与 LocalAI 页共享同一 localStorage 档位。
+        const id = nextId();
+        setMessages((prev) => [...prev, { id, role: 'assistant', text: '思考中…' }]);
+        const controller = new AbortController();
+        abortRef.current = controller;
+        setRunningTool('local-ai');
+        try {
+          let tier: WebLlmTierId | undefined;
+          try {
+            const stored = localStorage.getItem(WEBLLM_TIER_STORAGE_KEY);
+            if (stored) tier = stored as WebLlmTierId;
+          } catch { /* 隐私模式忽略 */ }
+          const result = await answerQuestion(text, {
+            ...(tier ? { tier } : {}),
+            signal: controller.signal,
+          });
+          if (result.mode === 'no-engine' || !result.answer.trim()) {
+            patchMessage(id, { text: intent.question });
+          } else {
+            const sources = result.sources.length
+              ? `
+
+来源：${result.sources.map((src) => `[${src.title}]`).join(' ')}`
+              : '';
+            patchMessage(id, { text: `${result.answer}${sources}` });
+          }
+        } catch (error) {
+          const aborted = controller.signal.aborted;
+          patchMessage(id, aborted
+            ? { text: '已停止。' }
+            : { text: intent.question });
+        } finally {
+          setRunningTool(null);
+          abortRef.current = null;
+        }
         return;
       }
       await runTool(intent.tool, intent.args, intent.understood);

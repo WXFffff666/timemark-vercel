@@ -13,6 +13,38 @@ import type {
   AssistantTranscript,
 } from '@/hooks/useAssistant';
 
+/**
+ * v2.35 R30（用户报告"不是自然语言"）：把工具结果转成一句人话——
+ * 递归找第一个非空对象数组，取前 3 条的可读名；找不到数组就报"操作完成"。
+ * 原始 JSON 折叠进 <details>，透明度不丢但不再霸屏。
+ */
+function summarizeResult(result: unknown): string | null {
+  if (result == null || typeof result !== 'object') return null;
+  const findArr = (v: unknown, depth = 0): readonly unknown[] | null => {
+    if (depth > 4 || v == null || typeof v !== 'object') return null;
+    if (Array.isArray(v)) return v.length > 0 ? v : null;
+    for (const val of Object.values(v as Record<string, unknown>)) {
+      const found = findArr(val, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  };
+  const arr = findArr(result);
+  if (arr) {
+    const names = arr.slice(0, 3).map((item) => {
+      if (item == null || typeof item !== 'object') return String(item);
+      const o = item as Record<string, unknown>;
+      const readable = [o.name, o.title, o.label, o.summary, o.day, o.id].find(
+        (candidate) => candidate !== undefined && candidate !== null && String(candidate).trim() !== '',
+      );
+      return String(readable ?? '?');
+    });
+    const more = arr.length > 3 ? ` 等（共 ${arr.length} 条）` : '';
+    return `找到 ${arr.length} 条：${names.join('、')}${more}`;
+  }
+  return '操作完成。';
+}
+
 function formatJson(value: unknown): string {
   if (value === undefined) return '{}';
   try {
@@ -145,16 +177,28 @@ function TranscriptBlock({ transcript }: { transcript: AssistantTranscript }) {
       <div className="mt-1 text-xs">
         <span className="text-slate-500 dark:text-slate-400">参数：</span>
         {/* v2.35 R27（用户报告）：max-h 帽——大 JSON 会把输入区顶出 70vh 面板 */}
-        <pre data-testid="assistant-tool-args" className="mt-1 max-h-40 overflow-auto text-xs text-slate-700 dark:text-slate-200">
-          {formatJson(transcript.args)}
-        </pre>
+        <details className="mt-1">
+          <summary className="cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">查看参数</summary>
+          <pre data-testid="assistant-tool-args" className="mt-1 max-h-40 overflow-auto text-xs text-slate-700 dark:text-slate-200">
+            {formatJson(transcript.args)}
+          </pre>
+        </details>
       </div>
       {transcript.status === 'executed' && (
         <div className="mt-1 text-xs">
           <span className="text-slate-500 dark:text-slate-400">结果：</span>
-          <pre data-testid="assistant-tool-result" className="mt-1 max-h-56 overflow-auto text-xs text-slate-700 dark:text-slate-200">
-            {formatJson(transcript.result)}
-          </pre>
+          {/* v2.35 R30（用户报告"mdx 格式"）：自然语言摘要一行，原始 JSON 折叠收起 */}
+          <span data-testid="assistant-tool-result" className="text-slate-800 dark:text-slate-100">
+            {summarizeResult(transcript.result) ?? '已完成'}
+          </span>
+          {transcript.result != null && typeof transcript.result === 'object' && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">原始数据</summary>
+              <pre className="mt-1 max-h-40 overflow-auto text-[10px] leading-4 text-slate-500 dark:text-slate-400">
+                {formatJson(transcript.result)}
+              </pre>
+            </details>
+          )}
         </div>
       )}
       {transcript.status === 'failed' && transcript.error && (
@@ -311,7 +355,7 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
       aria-label="智能助手"
       className={cn(
         'flex flex-col gap-3 rounded-[2rem] glass-panel p-4 ring-1 ring-black/5 dark:ring-white/10',
-        variant === 'dock' ? 'h-full' : 'min-h-[60vh]',
+        variant === 'dock' ? 'h-full overflow-y-auto overscroll-contain' : 'min-h-[60vh]',
         className,
       )}
     >

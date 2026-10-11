@@ -15,6 +15,11 @@ import type { AgentToolPreview } from '@/lib/api';
  *   - the input is labelled, the message list is announced, 确认 is a real focusable button.
  */
 
+vi.mock('@/lib/local-ai/rag', () => ({
+  answerQuestion: vi.fn(async () => ({ answer: '', sources: [], mode: 'no-engine', tier: null })),
+  WEBLLM_TIER_STORAGE_KEY: 'webllm_tier',
+}))
+
 vi.mock('@/lib/api', () => ({
   fetchAgentTools: vi.fn(),
   invokeAgentAction: vi.fn(),
