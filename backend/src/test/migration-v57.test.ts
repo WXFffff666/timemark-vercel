@@ -98,8 +98,9 @@ describe('migration v57 registration (checkbox 132)', () => {
   it('is idempotent: a recorded v57 row makes the runner skip v57 entirely', async () => {
     await applyIncrementalMigrations(57);
     expect(callsMatching('idx_inbox_messages_body_trgm')).toHaveLength(0);
-    expect(callsMatching('gin_trgm_ops')).toHaveLength(0);
-    expect(versionInserts()).toEqual([58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81]);
+    // v2.34 R16：v82 也是 trgm 索引迁移（6 条），跳过 v57 后仍会执行 v82
+    expect(callsMatching('gin_trgm_ops')).toHaveLength(1); // v82 整块 SQL 单次调用
+    expect(versionInserts()).toEqual([58, 59, 60, 61, 62, 63, 64, 65, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82]);
   });
 
   it('does not record v57 when its SQL fails, so a later cold start retries', async () => {
@@ -115,7 +116,7 @@ describe('migration v57 registration (checkbox 132)', () => {
     const versions = registeredMigrationVersions(MIGRATE_SOURCE);
     expect(versions.filter((v) => v === 57)).toHaveLength(1);
     expect(versions.indexOf(57)).toBe(versions.indexOf(56) + 1);
-    expect(versions[versions.length - 1]).toBe(81);
+    expect(versions[versions.length - 1]).toBe(82);
     for (let i = 1; i < versions.length; i += 1) {
       expect(versions[i], `version ${versions[i]} is not greater than ${versions[i - 1]}`).toBeGreaterThan(versions[i - 1]);
     }
@@ -147,7 +148,7 @@ describe('migration v57 registration (checkbox 132)', () => {
     expect(V57_SQL).toContain('idx_inventory_items_notes_trgm');
   });
 
-  it('covers all ten result tables in the search SQL (five v53 types + five v57 types)', () => {
+  it('covers all fourteen result tables in the search SQL (five v53 + five v57 + four v82 types)', () => {
     for (const table of [
       'events',
       'fixed_contacts',
@@ -159,10 +160,14 @@ describe('migration v57 registration (checkbox 132)', () => {
       'habits',
       'goals',
       'inbox_messages',
+      'watchlist_items',
+      'vehicles',
+      'pets',
+      'timesheet_sessions',
     ]) {
       expect(TRIGRAM_SEARCH_SQL, `search SQL is missing FROM ${table}`).toContain(`FROM ${table}`);
     }
-    expect(TRIGRAM_SEARCH_SQL.match(/UNION ALL/g)).toHaveLength(9);
+    expect(TRIGRAM_SEARCH_SQL.match(/UNION ALL/g)).toHaveLength(13);
   });
 
   it('is re-runnable: every statement is IF NOT EXISTS and additive-only', () => {

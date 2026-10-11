@@ -501,6 +501,10 @@ export const GLOBAL_SEARCH_TYPES = [
   'habit',
   'goal',
   'inbox',
+  'watchlist',
+  'vehicle',
+  'pet',
+  'timesheet',
 ] as const;
 export type GlobalSearchType = (typeof GLOBAL_SEARCH_TYPES)[number];
 

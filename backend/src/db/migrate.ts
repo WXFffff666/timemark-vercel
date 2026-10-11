@@ -3206,6 +3206,19 @@ ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_weekly_enabled BOOLEAN 
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_weekly_day INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS digest_weekly_time TEXT NOT NULL DEFAULT '09:00';`,
     },
+    {
+      // v82 (v2.34 R16): 全局搜索覆盖新域——watchlist/vehicles/pets/timesheet 的 ILIKE
+      // 列补 gin_trgm_ops 索引（search.service 的 4 条新 UNION 依赖同一 trgm 栈）。
+      // 全部 IF NOT EXISTS，可重跑。
+      version: 82,
+      name: 'search_new_domains_trgm_v82',
+      sql: `CREATE INDEX IF NOT EXISTS idx_watchlist_title_trgm ON watchlist_items USING gin (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_vehicles_make_trgm ON vehicles USING gin (make gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_vehicles_model_trgm ON vehicles USING gin (model gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_vehicles_plate_trgm ON vehicles USING gin (plate gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_pets_name_trgm ON pets USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_timesheet_note_trgm ON timesheet_sessions USING gin (note gin_trgm_ops);`,
+    },
   ];
 
   for (const migration of migrations) {

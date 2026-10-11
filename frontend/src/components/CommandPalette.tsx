@@ -14,6 +14,7 @@ import {
   Target,
   Users,
   Wrench,
+  Clapperboard, Car, Cat, Timer,
 } from 'lucide-react';
 import { GLOBAL_SEARCH_TYPES, globalSearch } from '@/lib/api';
 import type { GlobalSearchFacets, GlobalSearchHit, GlobalSearchType } from '@/lib/api';
@@ -44,6 +45,10 @@ const TYPE_LABELS: Record<GlobalSearchType, string> = {
   habit: '习惯',
   goal: '目标',
   inbox: '收件箱',
+  watchlist: '观影',
+  vehicle: '车辆',
+  pet: '宠物',
+  timesheet: '工时',
 };
 
 const TYPE_ROUTES: Record<GlobalSearchType, string> = {
@@ -57,6 +62,10 @@ const TYPE_ROUTES: Record<GlobalSearchType, string> = {
   habit: '/habits',
   goal: '/goals',
   inbox: '/inbox',
+  watchlist: '/watchlist',
+  vehicle: '/vehicles',
+  pet: '/pets',
+  timesheet: '/timesheet',
 };
 
 function TypeIcon({ type, size = 16 }: { type: GlobalSearchType; size?: number }) {
@@ -81,6 +90,14 @@ function TypeIcon({ type, size = 16 }: { type: GlobalSearchType; size?: number }
       return <Target size={size} aria-hidden />;
     case 'inbox':
       return <Inbox size={size} aria-hidden />;
+    case 'watchlist':
+      return <Clapperboard size={size} aria-hidden />;
+    case 'vehicle':
+      return <Car size={size} aria-hidden />;
+    case 'pet':
+      return <Cat size={size} aria-hidden />;
+    case 'timesheet':
+      return <Timer size={size} aria-hidden />;
     default:
       return <Search size={size} aria-hidden />;
   }

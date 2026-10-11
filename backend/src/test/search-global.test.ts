@@ -125,7 +125,7 @@ afterEach(() => {
 });
 
 describe('GET /api/search - ten-type ranked results + facets', () => {
-  it('a Chinese query matching every type returns all ten with correct facets', async () => {
+  it('a Chinese query matching every type returns all with correct facets', async () => {
     fixture = [...ALL_TYPES_FIXTURE];
     const response = await get(`q=${encodeURIComponent('苹果')}`);
     expect(response.status).toBe(200);
@@ -145,11 +145,11 @@ describe('GET /api/search - ten-type ranked results + facets', () => {
     expect(body.success).toBe(true);
     expect(body.data.mode).toBe('trigram');
     expect(body.data.query).toBe('苹果');
-    expect(body.data.results).toHaveLength(10);
+    expect(body.data.results).toHaveLength(SEARCH_RESULT_TYPES.length);
     expect(body.data.results.map((hit) => hit.owner_type).sort()).toEqual([...SEARCH_RESULT_TYPES].sort());
     expect(body.data.types).toEqual([...SEARCH_RESULT_TYPES]);
     expect(body.data.ignoredTypes).toEqual([]);
-    expect(body.data.total).toBe(10);
+    expect(body.data.total).toBe(SEARCH_RESULT_TYPES.length);
     for (const type of SEARCH_RESULT_TYPES) {
       expect(body.data.facets[type]).toBe(1);
     }

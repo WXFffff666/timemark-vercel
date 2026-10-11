@@ -54,6 +54,10 @@ export const SEARCH_RESULT_TYPES = [
   'habit',
   'goal',
   'inbox',
+  'watchlist',
+  'vehicle',
+  'pet',
+  'timesheet',
 ] as const;
 export type SearchResultType = (typeof SEARCH_RESULT_TYPES)[number];
 
@@ -189,7 +193,42 @@ SELECT 'inbox' AS owner_type, id AS owner_id, title AS title, source AS subtitle
        ), 0) AS rank
 FROM inbox_messages
 WHERE user_id = $1
-  AND (title ILIKE $3 OR body ILIKE $3 OR sender_label ILIKE $3)`;
+  AND (title ILIKE $3 OR body ILIKE $3 OR sender_label ILIKE $3)
+UNION ALL
+SELECT 'watchlist' AS owner_type, id AS owner_id, title AS title, status AS subtitle,
+       COALESCE(GREATEST(
+         similarity(title, $2),
+         similarity(COALESCE(note, ''), $2)
+       ), 0) AS rank
+FROM watchlist_items
+WHERE user_id = $1
+  AND (title ILIKE $3 OR COALESCE(note, '') ILIKE $3)
+UNION ALL
+SELECT 'vehicle' AS owner_type, id AS owner_id, TRIM(BOTH ' ' FROM make || ' ' || model) AS title, NULLIF(plate, '') AS subtitle,
+       COALESCE(GREATEST(
+         similarity(make, $2),
+         similarity(model, $2),
+         similarity(plate, $2)
+       ), 0) AS rank
+FROM vehicles
+WHERE user_id = $1
+  AND (make ILIKE $3 OR model ILIKE $3 OR plate ILIKE $3)
+UNION ALL
+SELECT 'pet' AS owner_type, id AS owner_id, name AS title, breed AS subtitle,
+       COALESCE(GREATEST(
+         similarity(name, $2),
+         similarity(COALESCE(breed, ''), $2),
+         similarity(COALESCE(notes, ''), $2)
+       ), 0) AS rank
+FROM pets
+WHERE user_id = $1
+  AND (name ILIKE $3 OR breed ILIKE $3 OR notes ILIKE $3)
+UNION ALL
+SELECT 'timesheet' AS owner_type, id AS owner_id, COALESCE(NULLIF(note, ''), '工时记录') AS title,
+       to_char(clock_in, 'MM-DD HH24:MI') AS subtitle,
+       similarity(COALESCE(note, ''), $2) AS rank
+FROM timesheet_sessions
+WHERE user_id = $1 AND note ILIKE $3`;
 
 /**
  * Untyped default search: `$1` user, `$2` raw query, `$3` escaped pattern, `$4` limit. Kept at
