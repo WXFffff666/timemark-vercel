@@ -181,6 +181,36 @@ Content-Type: application/json
 {"name":"会议","date":"2026-08-01","type":"meeting","daysBefore":[1]}`}</pre>
       </section>
 
+      <section className="mb-8 glass-panel p-6 rounded-2xl" aria-labelledby="telegram-heading">
+        <h2 id="telegram-heading" className="text-lg font-semibold mb-2 flex items-center gap-2">
+          <Send size={20} aria-hidden /> Telegram 双向机器人
+        </h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+          在「通知渠道」绑定 Telegram 后，除单向推送外还有双向能力：直接在聊天里查事件、建提醒、查到期。
+        </p>
+        <ol className="text-sm text-slate-600 dark:text-slate-400 list-decimal list-inside space-y-1 mb-3">
+          <li>找 @BotFather 创建机器人，拿到 Bot Token</li>
+          <li>「通知渠道」→ Telegram → 粘贴 Token 与你的 Chat ID，测试通过</li>
+          <li>在聊天框输入 <code className="font-mono text-xs">/help</code> 查看全部指令；<code className="font-mono text-xs">/add 名称 日期</code> 直接建事件</li>
+        </ol>
+        <p className="text-xs text-slate-400">双向指令经 token 查库鉴权 + 常量时间比较，日志全程脱敏。</p>
+      </section>
+
+      <section className="mb-8 glass-panel p-6 rounded-2xl" aria-labelledby="webpush-heading">
+        <h2 id="webpush-heading" className="text-lg font-semibold mb-2 flex items-center gap-2">
+          <Smartphone size={20} aria-hidden /> Web Push（浏览器/手机推送）
+        </h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+          把浏览器或 Android 手机变成一条通知渠道（PWA 安装后原生体验）：
+        </p>
+        <ol className="text-sm text-slate-600 dark:text-slate-400 list-decimal list-inside space-y-1 mb-3">
+          <li>在本机浏览器打开应用 → 允许通知权限 → 「通知渠道」里订阅 Web Push</li>
+          <li>手机：用 Chrome 打开站点 → 「添加到主屏幕」→ 打开 PWA → 订阅推送</li>
+          <li>VAPID 密钥由服务端自动生成，无需手工配置</li>
+        </ol>
+        <p className="text-xs text-slate-400">iOS Safari 的 Web Push 需要先将站点添加到主屏幕（系统限制）；离线时推送由 Service Worker 缓存兜底。</p>
+      </section>
+
       <section className="mb-8 glass-panel p-6 rounded-2xl" aria-labelledby="rest-api-heading">
         <h2 id="rest-api-heading" className="text-lg font-semibold mb-2 flex items-center gap-2">
           <Code2 size={20} aria-hidden /> REST API（v2.30 新增）
