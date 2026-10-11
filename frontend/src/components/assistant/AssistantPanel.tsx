@@ -144,14 +144,15 @@ function TranscriptBlock({ transcript }: { transcript: AssistantTranscript }) {
       </div>
       <div className="mt-1 text-xs">
         <span className="text-slate-500 dark:text-slate-400">参数：</span>
-        <pre data-testid="assistant-tool-args" className="mt-1 overflow-x-auto text-xs text-slate-700 dark:text-slate-200">
+        {/* v2.35 R27（用户报告）：max-h 帽——大 JSON 会把输入区顶出 70vh 面板 */}
+        <pre data-testid="assistant-tool-args" className="mt-1 max-h-40 overflow-auto text-xs text-slate-700 dark:text-slate-200">
           {formatJson(transcript.args)}
         </pre>
       </div>
       {transcript.status === 'executed' && (
         <div className="mt-1 text-xs">
           <span className="text-slate-500 dark:text-slate-400">结果：</span>
-          <pre data-testid="assistant-tool-result" className="mt-1 overflow-x-auto text-xs text-slate-700 dark:text-slate-200">
+          <pre data-testid="assistant-tool-result" className="mt-1 max-h-56 overflow-auto text-xs text-slate-700 dark:text-slate-200">
             {formatJson(transcript.result)}
           </pre>
         </div>
@@ -341,8 +342,15 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
         role="log"
         aria-live="polite"
         aria-label="助手对话记录"
-        // v2.30：移除 overscroll-contain——滚到边界后手势被吞，用户感知为"滑不动"
-        className="flex-1 min-h-0 space-y-3 overflow-y-auto rounded-2xl bg-white/40 p-3 dark:bg-black/20 min-h-40"
+        // v2.35 R27（用户报告）：悬浮面板必须 overscroll-contain——固定定位面板滚到边界
+        // 后手势链到背后的页面，面板内容不动 = "无法上下滑动"。页面内联卡片才应链滚动。
+        // dock 变体加 contain；page 变体（整页对话）保持链接滚动。
+        className={cn(
+          'mt-2 space-y-3 rounded-2xl bg-white/40 p-3 dark:bg-black/20',
+          variant === 'dock'
+            ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain min-h-40'
+            : 'flex-1 min-h-0 overflow-y-auto min-h-40',
+        )}
       >
         {empty ? (
           <p className="py-6 text-center text-sm text-slate-400">
