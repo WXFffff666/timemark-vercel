@@ -121,7 +121,9 @@ describe('webauthn /login/options — 防枚举语义', () => {
       body: JSON.stringify({ username: 'alice' }),
     });
     expect(res2.status).toBe(401);
-    expect((await res1.json()).error).toBe((await res2.json()).error);
+    const body1 = (await res1.json()) as { error?: string };
+    const body2 = (await res2.json()) as { error?: string };
+    expect(body1.error).toBe(body2.error);
   });
 
   it('known user with passkeys gets authentication options', async () => {
