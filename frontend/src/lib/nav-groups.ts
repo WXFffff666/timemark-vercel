@@ -82,6 +82,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/timesheet', icon: Timer, labelKey: 'nav.timesheet' },
       { path: '/pets', icon: Cat, labelKey: 'nav.pets' },
       { path: '/care', icon: HeartHandshake, labelKey: 'nav.care' },
+      { path: '/collaboration', icon: Users, labelKey: 'nav.collaboration' },
     ],
   },
   {

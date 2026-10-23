@@ -18,6 +18,15 @@ import { listHabits, logHabit } from '../habit.service.js';
 import { listPatterns } from '../patterns.service.js';
 import { sendDigestForUser } from '../digest.service.js';
 import { getUserConfig } from '../config.service.js';
+import { listPets } from './pet.service.js';
+import { listWatchlistItems } from './watchlist.service.js';
+
+const WATCHLIST_STATUSES = ['wanted', 'in_progress', 'done', 'dropped'] as const;
+function asWatchStatus(value: string | undefined): value is (typeof WATCHLIST_STATUSES)[number] {
+  return (WATCHLIST_STATUSES as readonly string[]).includes(value ?? '');
+}
+import { listVehicles } from './vehicle.service.js';
+import { getTimesheetSummary } from './timesheet.service.js';
 
 /**
  * Checkbox 102: the ONE place where a registry tool name (shared/src/agent-tools.ts) is bound
@@ -364,5 +373,40 @@ export const AGENT_TOOL_HANDLERS: Readonly<Record<AgentToolName, AgentToolHandle
       events: pending.filter((item) => item.date >= today && item.date <= horizon),
       includeCompleted,
     });
+  },
+
+  // v2.38 R14（方面 2）：宠物/观影/车辆/工时四个只读工具——智能度提升的注册表补齐。
+  // 全部只读（destructive=false, requiresConfirmation=false），schema 为空对象（无参数）。
+  async list_pets({ userId, args }) {
+    const pets = await listPets(userId);
+    return ok({ pets });
+  },
+
+  async get_watchlist({ userId, args }) {
+    const raw = asString(args.status);
+    const status = asWatchStatus(raw) ? raw : undefined; // 'all' → 不过滤
+    const items = await listWatchlistItems(userId, status ? { status } : {});
+    return ok({ items });
+  },
+
+  async list_vehicles({ userId }) {
+    const vehicles = await listVehicles(userId);
+    return ok({ vehicles });
+  },
+
+  async get_timesheet_summary({ userId, args }) {
+    const tz = await resolveTimezone(userId);
+    const today = dateStringInTimeZone(new Date(), tz);
+    // 本周一（ISO 周，周一为起点）到今天——与工时页默认范围一致
+    const dow = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7;
+    const monday = addDaysYmd(today, -dow);
+    const threshold = asNumber(args.overtimeThreshold);
+    const summary = await getTimesheetSummary(userId, {
+      from: monday,
+      to: today,
+      timezone: tz,
+      ...(threshold !== undefined ? { thresholdMinutes: threshold } : {}),
+    });
+    return ok(summary);
   },
 };

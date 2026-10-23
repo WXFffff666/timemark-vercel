@@ -100,6 +100,10 @@ export const AGENT_TOOL_SCOPES = [
   'patterns:read',
   'search:read',
   'digest:send',
+  'pets:read',
+  'watchlist:read',
+  'vehicles:read',
+  'timesheet:read',
 ] as const;
 
 export type AgentToolScope = (typeof AGENT_TOOL_SCOPES)[number];
@@ -128,6 +132,10 @@ export const DOCUMENTED_AGENT_TOOL_NAMES = [
   'send_digest',
   'get_today',
   'get_week',
+  'list_pets',
+  'get_watchlist',
+  'list_vehicles',
+  'get_timesheet_summary',
 ] as const;
 
 export type AgentToolName = (typeof DOCUMENTED_AGENT_TOOL_NAMES)[number];
@@ -473,6 +481,65 @@ export const AGENT_TOOLS: readonly AgentToolDefinition[] = [
     requiresConfirmation: false,
     // [planned] same aggregator as get_today, 7-day window; no single existing export yet.
     handler: 'assistant.service.getWeek',
+  },
+  {
+    name: 'list_pets',
+    description:
+      'Call when the user asks about their pets or pet care schedules (for example "how is my cat" or "when is the next vaccine"). Returns each pet with age, latest weight, and due schedules.',
+    inputSchema: z.strictObject({
+      includeSchedules: z
+        .boolean()
+        .describe('true = also include each pet due vaccination and deworming schedules.'),
+    }),
+    requiredScope: 'pets:read',
+    destructive: false,
+    requiresConfirmation: false,
+    handler: 'pet.service.listPets',
+  },
+  {
+    name: 'get_watchlist',
+    description:
+      'Call when the user asks about their watchlist (for example "what do I want to watch" or "anything releasing soon"). Returns watchlist items with status and release dates.',
+    inputSchema: z.strictObject({
+      status: z
+        .enum(['wanted', 'in_progress', 'done', 'dropped', 'all'])
+        .describe('Filter by watch status; pass all for everything.'),
+    }),
+    requiredScope: 'watchlist:read',
+    destructive: false,
+    requiresConfirmation: false,
+    handler: 'watchlist.service.listWatchlistItems',
+  },
+  {
+    name: 'list_vehicles',
+    description:
+      'Call when the user asks about their vehicles, fuel spending, or maintenance (for example "when is my car due for service"). Returns each vehicle with odometer and due-maintenance reminders.',
+    inputSchema: z.strictObject({
+      includeReminders: z
+        .boolean()
+        .describe('true = also include due-maintenance reminders per vehicle.'),
+    }),
+    requiredScope: 'vehicles:read',
+    destructive: false,
+    requiresConfirmation: false,
+    handler: 'vehicle.service.listVehicles',
+  },
+  {
+    name: 'get_timesheet_summary',
+    description:
+      'Call when the user asks about their work hours, attendance, or overtime (for example "how many hours this week"). Returns the weekly summary with day totals and overtime.',
+    inputSchema: z.strictObject({
+      overtimeThreshold: z
+        .number()
+        .int()
+        .min(1)
+        .max(1440)
+        .describe('Minutes per day beyond which time counts as overtime; use 480 unless the user says otherwise.'),
+    }),
+    requiredScope: 'timesheet:read',
+    destructive: false,
+    requiresConfirmation: false,
+    handler: 'timesheet.service.getTimesheetSummary',
   },
 ];
 

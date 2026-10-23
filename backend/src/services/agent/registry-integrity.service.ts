@@ -38,7 +38,7 @@ const log = createLogger('agent-registry-integrity');
  * plus the drift test in the same commit.
  */
 export const AGENT_TOOL_REGISTRY_SHA256 =
-  'b3f843112b8a2d7fe47cde5e12d60b056ca4f0b7640e42b54ea9839d74f65dc4';
+  '3ef1144616695492d661f62c4bcd7d717549201bb032512cd74ca3d8cae6a040';
 
 /** Deterministic JSON: object keys are sorted at every depth, so digest order never varies. */
 function stableStringify(value: unknown): string {

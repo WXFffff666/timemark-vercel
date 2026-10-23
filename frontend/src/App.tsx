@@ -35,6 +35,7 @@ const Vehicles = lazy(() => import('./pages/Vehicles'));
 const Timesheet = lazy(() => import('./pages/Timesheet'));
 const Pets = lazy(() => import('./pages/Pets'));
 const Care = lazy(() => import('./pages/Care'));
+const Collaboration = lazy(() => import('./pages/Collaboration'));
 const CalendarPage = lazy(() => import('./pages/Calendar'));
 const TodosPage = lazy(() => import('./pages/Todos'));
 const NotificationRules = lazy(() => import('./pages/NotificationRules'));
@@ -149,6 +150,7 @@ function AppRoutes({ location }: { location: ReturnType<typeof useLocation> }) {
     <Route path="/timesheet" element={<ProtectedRoute pageName="Timesheet"><Timesheet /></ProtectedRoute>} />
     <Route path="/pets" element={<ProtectedRoute pageName="Pets"><Pets /></ProtectedRoute>} />
     <Route path="/care" element={<ProtectedRoute pageName="Care"><Care /></ProtectedRoute>} />
+    <Route path="/collaboration" element={<ProtectedRoute pageName="Collaboration"><Collaboration /></ProtectedRoute>} />
     <Route path="/embed/:token" element={<CountdownWidget />} />
     <Route path="/share/:token" element={<ShareEvent />} />
     <Route path="/" element={<Navigate to="/dashboard" />} />

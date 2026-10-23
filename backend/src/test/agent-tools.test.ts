@@ -97,8 +97,9 @@ function describeEntry(index: number): string {
 }
 
 describe('agent tool registry (checkbox 100)', () => {
-  it('documents exactly 22 tools and the registry matches the documented list', () => {
-    expect(DOCUMENTED_AGENT_TOOL_NAMES.length).toBe(22);
+  it('documents exactly 26 tools and the registry matches the documented list', () => {
+    // v2.38 R14：+4 只读工具（pets/watchlist/vehicles/timesheet），智能度扩域
+    expect(DOCUMENTED_AGENT_TOOL_NAMES.length).toBe(26);
 
     const registryNames = AGENT_TOOLS.map((tool) => tool.name);
     expect(registryNames, 'registry count must equal the documented tool count').toHaveLength(

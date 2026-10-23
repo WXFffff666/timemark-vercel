@@ -35,6 +35,7 @@ export const zh = {
   'nav.timesheet': '工时',
   'nav.pets': '宠物',
   'nav.care': '照护',
+  'nav.collaboration': '家庭协作',
   'nav.assistant': 'AI 助手',
   'nav.localAi': '本地 AI',
   'nav.agentConsole': '智能体控制台',

@@ -37,6 +37,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.timesheet': 'Timesheet',
   'nav.pets': 'Pets',
   'nav.care': 'Care',
+  'nav.collaboration': 'Family Sharing',
   'nav.assistant': 'AI Assistant',
   'nav.localAi': 'Local AI',
   'nav.agentConsole': 'Agent Console',
