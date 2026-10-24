@@ -37,6 +37,7 @@ export const zh = {
   'nav.care': '照护',
   'nav.collaboration': '家庭协作',
   'nav.householdLists': '家庭清单',
+  'nav.dataSources': '数据源与备份',
   'nav.assistant': 'AI 助手',
   'nav.localAi': '本地 AI',
   'nav.agentConsole': '智能体控制台',
