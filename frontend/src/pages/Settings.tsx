@@ -990,7 +990,33 @@ export default function Settings() {
                   label="日历 Feed URL（ICS）"
                   onCopy={(v) => copyToClipboard(v, '日历 Feed URL')}
                 />
-                <p className="text-xs text-slate-400 mt-1">在 Google Calendar / Outlook 中添加「通过 URL 订阅」</p>
+                {/* v2.38 R16（方面 9）：一键订阅——把 webcal:// 与各家入口的 URL 模板拼好 */}
+                {calendarFeedUrl && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <a
+                      className="text-xs px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                      href={calendarFeedUrl.replace(/^https?:\/\//, 'webcal://')}
+                      onClick={(e) => { e.preventDefault(); window.location.href = calendarFeedUrl.replace(/^https?:\/\//, 'webcal://'); }}
+                    >
+                      🍎 Apple 日历（webcal）
+                    </a>
+                    <button
+                      type="button"
+                      className="text-xs px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                      onClick={() => window.open(`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(calendarFeedUrl)}`, '_blank', 'noopener')}
+                    >
+                      📅 Google 日历
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                      onClick={() => window.open(`https://outlook.live.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addcalendar&url=${encodeURIComponent(calendarFeedUrl)}`, '_blank', 'noopener')}
+                    >
+                      📬 Outlook
+                    </button>
+                  </div>
+                )}
+                <p className="text-xs text-slate-400 mt-1">在 Google Calendar / Outlook 中添加「通过 URL 订阅」，或点上方按钮直达</p>
                 {calendarFeedTokens.length > 0 && (
                   <ul className="mt-2 space-y-1 text-xs font-mono">
                     {calendarFeedTokens.map((t) => (

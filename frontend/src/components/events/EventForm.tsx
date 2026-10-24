@@ -80,7 +80,19 @@ const calendarTypes: { value: CalendarType; label: string }[] = [
   { value: 'both', label: '双历' },
 ];
 
-const reminderDays = [1, 3, 7, 14, 30];
+// v2.38 R16（方面 7）：多级提前提醒编排——天数扩为竞品标准档 + 自定义输入
+const reminderDays = [0, 1, 3, 7, 14, 30, 60, 90];
+
+const DAY_LABELS: Record<number, string> = {
+  0: '当天',
+  1: '前1天',
+  3: '前3天',
+  7: '前7天',
+  14: '前14天',
+  30: '前30天',
+  60: '前60天',
+  90: '前90天',
+};
 
 const reminderTimes = [
   '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
@@ -1287,7 +1299,7 @@ export function EventForm({ open, onClose, onSubmit, event, prefill }: EventForm
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                           }`}
                         >
-                          {day}天
+                          {DAY_LABELS[day] ?? `前${day}天`}
                         </button>
                       ))}
                     </div>

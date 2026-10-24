@@ -129,7 +129,119 @@ export default function ShareEvent() {
         <div className="mt-8 border-t border-slate-200/70 pt-4 dark:border-white/10">
           <p className="text-xs text-hint">由 TimeMark 智能事件提醒生成</p>
         </div>
+
+        {/* v2.38 R16（方面 10）：分享卡片图片生成——倒数日核心传播功能 */}
+        <button
+          type="button"
+          onClick={() => void downloadCard(data, days)}
+          className="mt-4 w-full rounded-2xl bg-gradient-to-b from-blue-500 to-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.98]"
+          aria-label="下载分享卡片图片"
+        >
+          下载分享卡片
+        </button>
       </article>
     </div>
   );
+}
+
+/** Canvas 渲染 600×900 分享卡（标题/类型/倒数/日期/品牌），导出 PNG。 */
+async function downloadCard(data: ShareData, days: number): Promise<void> {
+  const canvas = document.createElement('canvas');
+  canvas.width = 600;
+  canvas.height = 900;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  // 背景：柔和渐变
+  const grad = ctx.createLinearGradient(0, 0, 0, 900);
+  grad.addColorStop(0, '#4f46e5');
+  grad.addColorStop(1, '#1e1b4b');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 600, 900);
+
+  // 类型徽章
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  roundRect(ctx, 60, 80, 160, 44, 22);
+  ctx.fill();
+  ctx.fillStyle = '#e0e7ff';
+  ctx.font = 'bold 22px system-ui, -apple-system, "PingFang SC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(eventTypeLabel(data.type), 140, 110);
+
+  // 标题（最多 2 行，每行 ≤10 个全角字符）
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 44px system-ui, -apple-system, "PingFang SC", sans-serif';
+  const titleLines = splitLines(data.name, 10, 2);
+  let y = 220;
+  for (const line of titleLines) {
+    ctx.fillText(line, 300, y);
+    y += 60;
+  }
+
+  // 倒数大字
+  ctx.fillStyle = '#a5b4fc';
+  ctx.font = 'bold 120px system-ui, -apple-system, sans-serif';
+  y += 60;
+  if (days === 0) {
+    ctx.fillText('就是今天', 300, y);
+  } else {
+    ctx.fillText(String(days), 300, y - 10);
+    ctx.font = 'bold 36px system-ui, -apple-system, "PingFang SC", sans-serif';
+    ctx.fillText(days > 0 ? '天后' : '天前', 300, y + 46);
+  }
+
+  // 日期
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = '28px system-ui, -apple-system, "PingFang SC", sans-serif';
+  y += 110;
+  ctx.fillText(data.date, 300, y);
+  if (data.person_name) {
+    y += 44;
+    ctx.fillText(`相关人：${data.person_name}`, 300, y);
+  }
+
+  // 底部品牌
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '22px system-ui, -apple-system, "PingFang SC", sans-serif';
+  ctx.fillText('TimeMark · 智能事件提醒', 300, 830);
+
+  const url = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `timemark-${data.name.slice(0, 12)}-${data.date}.png`;
+  a.click();
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** 全角近似：CJK 记 1，ASCII 记 0.5；按 maxPerLine 分行，超行截断加省略号。 */
+function splitLines(text: string, maxPerLine: number, maxLines: number): string[] {
+  const width = (ch: string): number => (/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(ch) ? 1 : 0.5);
+  const lines: string[] = [];
+  let current = '';
+  let currentWidth = 0;
+  for (const ch of text) {
+    if (currentWidth + width(ch) > maxPerLine) {
+      lines.push(current);
+      current = ch;
+      currentWidth = width(ch);
+      if (lines.length >= maxLines) {
+        lines[maxLines - 1] = lines[maxLines - 1].slice(0, -1) + '…';
+        return lines;
+      }
+    } else {
+      current += ch;
+      currentWidth += width(ch);
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
 }
