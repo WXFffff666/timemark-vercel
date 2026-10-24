@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CloudUpload, DatabaseBackup, Loader2, Plus, RefreshCw, Rss, Trash2, CheckCircle2 } from 'lucide-react';
+import { UploadCloud, DatabaseBackup, Loader2, Plus, RefreshCw, Rss, Trash2, CheckCircle2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -364,7 +364,7 @@ export default function DataSources() {
               </Button>
               {config?.enabled && (
                 <Button variant="outline" onClick={() => void runBackup()} disabled={backupBusy !== null} aria-label="立即备份">
-                  {backupBusy === 'run' ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <CloudUpload className="w-4 h-4 mr-1" aria-hidden />}
+                  {backupBusy === 'run' ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <UploadCloud className="w-4 h-4 mr-1" aria-hidden />}
                   立即备份
                 </Button>
               )}
