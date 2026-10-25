@@ -38,8 +38,14 @@ export function stripMarkdownLight(text: string): string {
       .replace(/\*\*/g, '')
       // 行首孤立 #（无后缀的空标题）
       .replace(/^\s{0,3}#{1,6}\s*$/gm, '')
-      // 模型偶尔漏出的 HTML 标签（<br> <b> 等）剥标记
-      .replace(/<\/?[a-z][^>]*>/gi, '')
+      // v2.39（用户再报"mdx 文档"）：mdx 文档头语句整行删——import/export 只会出现在
+      // 模型吐 mdx 文档的场景，自然语言里没有以它们开头的行（区分大小写，只匹配语句）
+      .replace(/^\s{0,3}(import|export)\s[^\n]*$/gm, '')
+      // 模型偶尔漏出的 HTML/JSX 标签（<br> <b> <Card /> 等）剥标记；
+      // 大写开头是 mdx/JSX 组件，小写是 HTML——一并剥离
+      .replace(/<\/?[A-Za-z][^>]*>/g, '')
+      // 行内跨行拆散后残留的孤立反引号（成对剥离之后剩奇数个的场景）
+      .replace(/`/g, '')
       // 收尾：压掉 3+ 连续空行
       .replace(/\n{3,}/g, '\n\n')
       .trim()

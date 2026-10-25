@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { UploadCloud, DatabaseBackup, Loader2, Plus, RefreshCw, Rss, Trash2, CheckCircle2 } from 'lucide-react';
+import { UploadCloud, DatabaseBackup, Loader2, Plus, RefreshCw, Rss, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';

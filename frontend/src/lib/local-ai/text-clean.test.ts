@@ -47,3 +47,31 @@ describe('stripMarkdownLight — mdx 残留（R27）', () => {
     expect(out).toContain('12-25')
   })
 })
+
+describe('stripMarkdownLight — v2.39 mdx 文档头与 JSX 组件', () => {
+  it('removes mdx import/export statement lines entirely', () => {
+    const out = stripMarkdownLight("import { Card } from 'components'\nexport default Page\n\n你好，这是回答。")
+    expect(out).toBe('你好，这是回答。')
+  })
+
+  it('strips PascalCase JSX component tags mdx models leak', () => {
+    expect(stripMarkdownLight('<Card title="礼物">巧克力和鲜花</Card>')).toBe('巧克力和鲜花')
+  })
+
+  it('strips stray backticks left after paired removal', () => {
+    expect(stripMarkdownLight('推荐 `保温杯` 和 `茶叶`')).toBe('推荐 保温杯 和 茶叶')
+    expect(stripMarkdownLight('只有`一个反引号残留')).toBe('只有一个反引号残留')
+  })
+
+  it('keeps Chinese text with less-than intact (no false positive on math <)', () => {
+    expect(stripMarkdownLight('还有 3<5 件待办')).toBe('还有 3<5 件待办')
+  })
+
+  it('greeting draft typical model output becomes natural text', () => {
+    const out = stripMarkdownLight('**亲爱的妈妈：**\n- 祝你生日快乐\n- 身体健康\n\n> 永远爱你的儿子')
+    expect(out).not.toContain('**')
+    expect(out).not.toMatch(/^- /m)
+    expect(out).toContain('亲爱的妈妈：')
+    expect(out).toContain('祝你生日快乐')
+  })
+})

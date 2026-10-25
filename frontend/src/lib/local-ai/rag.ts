@@ -110,7 +110,7 @@ export async function answerQuestion(
 ): Promise<RagAnswer> {
   const tier: WebLlmTierId = opts.tier && opts.tier in WEBLLM_MODELS ? opts.tier : 'phone';
   const { maxWords, maxTokens } = generationParamsForTier(tier);
-  const { hits, mode: searchMode } = await searchKb(question, 6);
+  const { hits } = await searchKb(question, 6);
   const sources = hits.map(hitToSource);
 
   const supported = await isWebLlmSupported().catch(() => false);

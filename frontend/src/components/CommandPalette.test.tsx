@@ -51,6 +51,10 @@ const FACETS: GlobalSearchFacets = {
   habit: 0,
   goal: 1,
   inbox: 1,
+  watchlist: 0,
+  vehicle: 0,
+  pet: 0,
+  timesheet: 0,
 };
 
 function response(overrides: Partial<GlobalSearchResponse> = {}): GlobalSearchResponse {

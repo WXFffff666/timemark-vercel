@@ -36,14 +36,6 @@ interface FeedProposal {
   created_at: string;
 }
 
-const STATUS_LABELS: Record<DecisionStatus, string> = {
-  pending: '待审批',
-  approved: '已批准',
-  rejected: '已拒绝',
-  target_missing: '目标缺失',
-  expired: '已过期',
-};
-
 const SUBJECT_LABELS: Record<string, string> = {
   reschedule_reminder: '改期提醒',
   merge_contacts: '合并联系人',

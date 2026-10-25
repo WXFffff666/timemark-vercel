@@ -539,13 +539,15 @@ function GreetingDraftTool({
         />
       </div>
       {draft && (
+        // v2.39：祝福/礼物同主对话一样过自然语言清洗——小模型生成列表型内容
+        // 最爱吐 ** 与 -，此前这两块是唯二裸渲染的 AI 输出
         <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/50 px-4 py-3 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300 mb-2">
-          {draft}
+          {stripMarkdownLight(draft)}
         </div>
       )}
       {gifts && (
         <div className="rounded-xl bg-pink-50/60 dark:bg-pink-950/30 border border-pink-200/60 dark:border-pink-800/50 px-4 py-3 text-sm whitespace-pre-wrap text-pink-800 dark:text-pink-200 mb-2">
-          {gifts}
+          {stripMarkdownLight(gifts)}
         </div>
       )}
       <div className="flex gap-2 flex-wrap">
@@ -581,7 +583,8 @@ function GreetingDraftTool({
             variant="outline"
             size="sm"
             className="rounded-full"
-            onClick={() => void navigator.clipboard.writeText(draft).catch(() => undefined)}
+            // v2.39：复制清洗后的自然语言文本（屏显与剪贴板一致）
+            onClick={() => void navigator.clipboard.writeText(stripMarkdownLight(draft)).catch(() => undefined)}
           >
             复制
           </Button>

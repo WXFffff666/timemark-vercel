@@ -85,11 +85,13 @@ export default function Calendar() {
   // v2.31 R4（D2）：网格/年视图按「落位日期集」展开——重复/农历事件在其发生年份可见，
   // 一次性事件仍按原始日期保留历史。此前直接按原始 date 落位，生日在出生年份之外的
   // 年份永远查不到，与 EventCard/Dashboard 的 resolveNextOccurrenceDate 口径矛盾。
+  // v2.39：year 声明上移——此前在下方 useMemo 之后声明，TDZ 首渲染即
+  // ReferenceError（tsc 一直报 2448/2454，vite 构建不查类型所以漏到线上）。
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
   const eventsByDate = useMemo(() => groupEventsByOccurrence(events, year), [events, year]);
   const todayKey = getTodayDateKey(timezone);
 
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
   const coverage = getHolidayCoverage();
   const yearCovered = isYearCovered(year);
 

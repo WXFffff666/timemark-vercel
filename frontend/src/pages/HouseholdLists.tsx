@@ -3,7 +3,6 @@ import { ClipboardList, Loader2, Plus, Trash2, CheckCircle2, Users } from 'lucid
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SkeletonCard } from '@/components/ui/skeleton-card';

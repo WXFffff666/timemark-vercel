@@ -264,7 +264,7 @@ export default function Collaboration() {
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.actorKind === 'guest' ? 'bg-blue-500' : 'bg-slate-400'}`} aria-hidden />
                   <span className="text-slate-700 dark:text-slate-200 shrink-0">{a.actorLabel || (a.actorKind === 'owner' ? '我' : '访客')}</span>
                   <span className="truncate">{ACTION_LABELS[a.action] ?? a.action}</span>
-                  <span className="text-slate-400 ml-auto shrink-0">{fmtTime(a.createdAt)}</span>
+                  <span className="text-slate-400 ml-auto shrink-0">{fmtTime(a.createdAt ?? null)}</span>
                 </li>
               ))}
             </ul>

@@ -54,7 +54,9 @@ export function AssistantDock() {
             // v2.35 R31（用户报告"太长无法显示/无法上下滑动"根因）：max-h 只限制容器、
             // 内容溢出可见——外层必须 overflow-hidden 才能真正裁到 70vh，让面板内部
             // 的滚动区接管。
-            className="fixed bottom-36 right-4 z-40 flex max-h-[70vh] w-[min(92vw,26rem)] flex-col overflow-hidden md:bottom-24 md:right-6"
+            // v2.39：max-h 再扣掉底部悬浮球占位（10.5rem）——矮视口（手机横屏）
+            // 下 70vh + bottom-36 会把面板头部顶出屏幕上沿，关闭按钮够不着。
+            className="fixed bottom-36 right-4 z-40 flex max-h-[min(70vh,calc(100dvh-10.5rem))] w-[min(92vw,26rem)] flex-col overflow-hidden md:bottom-24 md:right-6"
             initial={{ opacity: 0, y: 12, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.97 }}

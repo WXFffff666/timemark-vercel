@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { HeartHandshake, Loader2, Plus, Trash2, Copy, CheckCircle2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { HeartHandshake, Loader2, Plus, Trash2, Copy } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -293,6 +293,18 @@ export default function Care() {
           <Button size="sm" variant="outline" className="rounded-full" onClick={() => setShowAdd((v) => !v)} aria-label="添加照护档案">
             <Plus size={14} className="mr-1" aria-hidden /> 添加档案
           </Button>
+          {/* v2.39：removeProfile 此前是写了没接线的死函数——补上删除入口（当前选中档案） */}
+          {selected && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="min-h-9 min-w-9 text-red-400 hover:text-red-500"
+              aria-label={`删除档案 ${selected.name}`}
+              onClick={() => void removeProfile(selected.id, selected.name)}
+            >
+              <Trash2 size={14} aria-hidden />
+            </Button>
+          )}
         </div>
 
         {showAdd && (

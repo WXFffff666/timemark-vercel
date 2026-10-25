@@ -41,6 +41,8 @@ export default function Timesheet() {
   const [overtime, setOvertime] = useState<OvertimeView | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // 逐操作 busy 键（null=空闲）：打卡/签退用全局 busy，行级操作（删打卡、补签退、请假）用键控
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [note, setNote] = useState('');
   // v2.34 R15（审计 #11）：location 此前未采集（后端早就支持）
   const [location, setLocation] = useState('');

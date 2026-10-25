@@ -355,7 +355,12 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
       aria-label="智能助手"
       className={cn(
         'flex flex-col gap-3 rounded-[2rem] glass-panel p-4 ring-1 ring-black/5 dark:ring-white/10',
-        variant === 'dock' ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain' : 'min-h-[60vh]',
+        // v2.39：dock 不再是滚动容器（此前 section 和 list 双层 overflow-y-auto +
+        // 双层 overscroll-contain，list 滚到边界后手势被吞、链不到 section，
+        // 矮视口下面板内部溢出时输入区永远够不着 = "无法上下滑动"的根因）。
+        // 现在 dock：section 只裁剪（overflow-hidden），消息 list 是唯一滚动区，
+        // header/表单恒定可见；page 变体（整页）保持随页面增高。
+        variant === 'dock' ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-[60vh]',
         className,
       )}
     >
@@ -386,13 +391,14 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
         role="log"
         aria-live="polite"
         aria-label="助手对话记录"
-        // v2.35 R27（用户报告）：悬浮面板必须 overscroll-contain——固定定位面板滚到边界
-        // 后手势链到背后的页面，面板内容不动 = "无法上下滑动"。页面内联卡片才应链滚动。
-        // dock 变体加 contain；page 变体（整页对话）保持链接滚动。
+        // v2.35 R27：dock 列表 overscroll-contain（固定面板滚到边界后不链到背后页面）。
+        // v2.39：dock 去掉 min-h-40——它与 min-h-0 在 twMerge 下冲突（后者胜出不可控），
+        // 且固定下限会把面板内容总高顶过 70vh，重新制造"外层必须滚"的死结；
+        // page 变体保留 min-h-40（页面可滚，下限只是占位视觉）。
         className={cn(
           'mt-2 space-y-3 rounded-2xl bg-white/40 p-3 dark:bg-black/20',
           variant === 'dock'
-            ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain min-h-40'
+            ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain'
             : 'flex-1 min-h-0 overflow-y-auto min-h-40',
         )}
       >
@@ -407,13 +413,20 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2" data-testid="assistant-quick-prompts">
+      {/* v2.39：dock 变体快捷指令改单行横滚——多行 wrap 在矮视口 70vh 面板里
+          挤占消息区高度；page 变体保持多行 wrap */}
+      <div
+        className={cn('gap-2', variant === 'dock' ? 'flex flex-nowrap overflow-x-auto pb-1' : 'flex flex-wrap')}
+        data-testid="assistant-quick-prompts"
+      >
         {quick.map((prompt) => (
           <button
             key={prompt}
             type="button"
             onClick={() => void assistant.submit(prompt)}
-            className="min-h-9 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-500/20 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
+            className={cn(
+              'min-h-9 shrink-0 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-500/20 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10',
+            )}
           >
             {prompt}
           </button>

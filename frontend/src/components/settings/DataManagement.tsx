@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Archive, ChevronDown, Database, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { stripMarkdownLight } from '@/lib/local-ai/text-clean';
 
 /**
  * v2.26 批次 B：数据管理卡（设置页「安全与数据」）。
@@ -145,7 +146,7 @@ export function DataManagement() {
                       </p>
                       {a.narrative_preview && (
                         <p className="mt-1 text-slate-500 dark:text-slate-400 line-clamp-3 whitespace-pre-line">
-                          {a.narrative_preview}
+                          {stripMarkdownLight(a.narrative_preview)}
                         </p>
                       )}
                     </li>

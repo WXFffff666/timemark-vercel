@@ -6,7 +6,6 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 /**
  * v2.30 方向 B：API 门户 —— 对外 REST API 的 Token 管理与文档页。
@@ -114,7 +113,7 @@ export default function ApiPortal() {
     }
   };
 
-  const copy = (text: string, label: string) => {
+  const copy = (text: string) => {
     navigator.clipboard.writeText(text).catch(() => undefined);
   };
 
@@ -179,7 +178,7 @@ export default function ApiPortal() {
                 <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 mb-1">请立即复制（只显示这一次）：</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-xs break-all font-mono text-slate-800 dark:text-slate-100">{freshToken}</code>
-                  <Button size="sm" variant="outline" onClick={() => copy(freshToken, 'Token')} aria-label="复制 Token">
+                  <Button size="sm" variant="outline" onClick={() => copy(freshToken)} aria-label="复制 Token">
                     <Copy size={14} />
                   </Button>
                 </div>
@@ -248,7 +247,7 @@ export default function ApiPortal() {
                   size="sm"
                   variant="ghost"
                   aria-label="复制 curl 示例"
-                  onClick={() => copy('curl -H "Authorization: Bearer tmt_xxx" https://你的域名/api/v1/events?limit=10', 'curl 示例')}
+                  onClick={() => copy('curl -H "Authorization: Bearer tmt_xxx" https://你的域名/api/v1/events?limit=10')}
                 >
                   <Copy size={14} />
                 </Button>

@@ -1,10 +1,10 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { PageErrorBoundary } from './PageErrorBoundary'
 
 // 每个用例挂载一个新的 throwing 子树（reset 后重新抛）
 let shouldThrow = false
-function Bomb(): JSX.Element {
+function Bomb() {
   if (shouldThrow) throw new Error('boom-abc')
   return <div>ok</div>
 }
