@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Send, ShieldAlert, Sparkles, Wrench, X } from 'lucide-react';
+import { Check, ChevronDown, Maximize2, Minimize2, Send, ShieldAlert, Sparkles, Wrench, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -323,19 +323,27 @@ export interface AssistantPanelProps {
   assistant: AssistantController;
   variant?: 'page' | 'dock';
   onClose?: () => void;
+  /** v2.39：dock 大窗/还原切换（expanded 由 AssistantDock 持有） */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
   className?: string;
 }
 
 /** checkbox 109: the shared assistant surface used by both the /assistant page and the dock. */
-export function AssistantPanel({ assistant, variant = 'page', onClose, className }: AssistantPanelProps) {
+export function AssistantPanel({ assistant, variant = 'page', onClose, expanded, onToggleExpand, className }: AssistantPanelProps) {
   // v2.28：消息列表自动滚底 —— 此前完全没有滚动控制，长回答尾部在可视区外
   // v2.30：依赖加最后一条消息的文本长度——流式/长回答增长时也持续滚底。
   const listRef = useRef<HTMLDivElement | null>(null);
   const messageCount = assistant.messages.length;
   const lastTextLength = assistant.messages[messageCount - 1]?.text.length ?? 0;
+  // v2.39：列表是否真的溢出（可滚）。overscroll-contain 只应在"确实在滚"的容器上：
+  // 内容不满时 contain 会把整个列表区变成手势死区——列表滚不了，手势也链不到
+  // 背后页面（手机上即"没办法挪动视角"的根因之一）。
+  const [listScrollable, setListScrollable] = useState(false);
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+    if (el) setListScrollable(el.scrollHeight > el.clientHeight + 4);
   }, [messageCount, lastTextLength]);
 
   const [draft, setDraft] = useState('');
@@ -370,12 +378,26 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
         <p className="ml-2 hidden text-xs text-slate-500 sm:block dark:text-slate-400">
           工具调用全程可见 · 破坏性操作需确认
         </p>
-        {onClose && (
+        {/* v2.39：大窗/还原切换——用户反馈面板太小"看不全"，展开后手机近全屏、桌面 42rem */}
+        {onToggleExpand && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
             className="ml-auto rounded-full"
+            aria-label={expanded ? '还原面板大小' : '放大面板'}
+            data-testid="assistant-dock-expand"
+            onClick={onToggleExpand}
+          >
+            {expanded ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
+          </Button>
+        )}
+        {onClose && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn('rounded-full', !onToggleExpand && 'ml-auto')}
             aria-label="收起智能助手"
             data-testid="assistant-dock-close"
             onClick={onClose}
@@ -391,14 +413,16 @@ export function AssistantPanel({ assistant, variant = 'page', onClose, className
         role="log"
         aria-live="polite"
         aria-label="助手对话记录"
-        // v2.35 R27：dock 列表 overscroll-contain（固定面板滚到边界后不链到背后页面）。
-        // v2.39：dock 去掉 min-h-40——它与 min-h-0 在 twMerge 下冲突（后者胜出不可控），
-        // 且固定下限会把面板内容总高顶过 70vh，重新制造"外层必须滚"的死结；
+        // v2.35 R27：dock 列表滚到边界后不链到背后页面。
+        // v2.39 两处修订：①去掉 min-h-40（与 min-h-0 twMerge 冲突，且固定下限会把
+        // 面板内容顶过容器上限，重新制造"外层必须滚"的死结）；②overscroll-contain
+        // 改为动态——只有列表真的溢出在滚时才 contain，内容不满时放手势穿透到页面
+        // （此前不满时 contain 把列表区变成手势死区，手机上"挪不动视角"）。
         // page 变体保留 min-h-40（页面可滚，下限只是占位视觉）。
         className={cn(
           'mt-2 space-y-3 rounded-2xl bg-white/40 p-3 dark:bg-black/20',
           variant === 'dock'
-            ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain'
+            ? cn('flex-1 min-h-0 overflow-y-auto', listScrollable ? 'overscroll-contain' : 'overscroll-auto')
             : 'flex-1 min-h-0 overflow-y-auto min-h-40',
         )}
       >

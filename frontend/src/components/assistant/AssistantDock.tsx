@@ -17,6 +17,8 @@ export function AssistantDock() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  // v2.39：大窗模式——用户反馈默认面板"看不全"；展开后手机近全屏、桌面 42rem
+  const [expanded, setExpanded] = useState(false);
   const assistant = useAssistant();
   const { loadTools } = assistant;
 
@@ -51,18 +53,28 @@ export function AssistantDock() {
             data-testid="assistant-dock"
             role="dialog"
             aria-label="智能助手"
-            // v2.35 R31（用户报告"太长无法显示/无法上下滑动"根因）：max-h 只限制容器、
-            // 内容溢出可见——外层必须 overflow-hidden 才能真正裁到 70vh，让面板内部
-            // 的滚动区接管。
-            // v2.39：max-h 再扣掉底部悬浮球占位（10.5rem）——矮视口（手机横屏）
-            // 下 70vh + bottom-36 会把面板头部顶出屏幕上沿，关闭按钮够不着。
-            className="fixed bottom-36 right-4 z-40 flex max-h-[min(70vh,calc(100dvh-10.5rem))] w-[min(92vw,26rem)] flex-col overflow-hidden md:bottom-24 md:right-6"
+            // v2.35 R31：外层必须 overflow-hidden 才能真正裁住高度，让面板内部的
+            // 滚动区接管。
+            // v2.39：①默认尺寸放大（26rem→30rem 宽、70vh→82dvh 高，用户反馈看不全）；
+            // ②新增展开态——手机近全屏（inset 定位，上下留出顶栏与悬浮球），
+            // 桌面 42rem 大窗；max-h-none 由 inset 撑出边界。
+            className={
+              expanded
+                ? 'fixed inset-x-3 top-14 bottom-36 z-40 flex w-auto max-h-none flex-col overflow-hidden md:inset-x-auto md:top-16 md:right-6 md:bottom-24 md:w-[min(96vw,42rem)]'
+                : 'fixed bottom-36 right-4 z-40 flex max-h-[min(82dvh,calc(100dvh-10.5rem))] w-[min(94vw,30rem)] flex-col overflow-hidden md:bottom-24 md:right-6'
+            }
             initial={{ opacity: 0, y: 12, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.97 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
           >
-            <AssistantPanel assistant={assistant} variant="dock" onClose={() => setOpen(false)} />
+            <AssistantPanel
+              assistant={assistant}
+              variant="dock"
+              expanded={expanded}
+              onToggleExpand={() => setExpanded((v) => !v)}
+              onClose={() => setOpen(false)}
+            />
           </motion.div>
         )}
       </AnimatePresence>
