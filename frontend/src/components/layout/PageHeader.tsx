@@ -49,8 +49,12 @@ export function PageHeader({
 
   return (
     <header className={`sticky top-6 z-40 px-4 ${maxWidth ?? 'max-w-4xl'} mx-auto ${className ?? ''}`}>
-      <div className="glass-panel rounded-full px-6 py-3.5 flex justify-between items-center gap-3 ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
-        <div className="flex items-center gap-4 min-w-0">
+      {/* v2.43 R26：左组 flex-1 保底可读宽度 + 右组 max-w 可收缩——此前右组
+          shrink-0 的宽按钮组（ProfileSwitcher/添加/更多）在 390px 下把左组压到
+          宽度 0，标题文字消失（a11y e2e 的 toBeVisible hidden 实证 w=0）。
+          rounded-full 在两行时会露馅，改 rounded-[2rem]。 */}
+      <div className="glass-panel rounded-[2rem] px-6 py-3.5 flex flex-wrap justify-between items-center gap-x-3 gap-y-2 ring-1 ring-black/5 dark:ring-white/10 shadow-xs">
+        <div className="flex items-center gap-4 min-w-0 flex-1 min-w-[10rem]">
           <Button
             variant="ghost"
             size="icon"
@@ -65,7 +69,7 @@ export function PageHeader({
             {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">{subtitle}</p>}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 max-w-full">
           {actions}
           {onRefresh && (
             <Button

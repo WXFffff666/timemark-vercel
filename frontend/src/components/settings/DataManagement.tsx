@@ -199,7 +199,8 @@ export function DataManagement() {
             <details className="mt-3 text-xs text-slate-500 dark:text-slate-400">
               <summary className="cursor-pointer select-none">查看保留策略明细</summary>
               <ul className="mt-2 space-y-1">
-                {POLICY_LABELS.filter(([key]) => typeof data.policy[key] === 'number').map(
+                {/* v2.43：policy 空值防御——API 突变/缺字段时不再白掉整个 Settings 页 */}
+                {POLICY_LABELS.filter(([key]) => typeof data.policy?.[key] === 'number').map(
                   ([key, label]) => (
                     <li key={key}>
                       {label}：{data.policy[key]} 天
