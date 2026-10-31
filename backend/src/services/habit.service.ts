@@ -170,6 +170,24 @@ export async function getHabitWithStreak(
   return { ...habit, streak: streakFor(habit, logs, now, timeZone) };
 }
 
+/**
+ * v2.42 R25：习惯打卡日志（热力图数据源）——loadLogs 全量后按天数截取。
+ * logged_on 为 YYYY-MM-DD 文本，无时区漂移。
+ */
+export async function listHabitLogs(
+  userId: number,
+  habitId: number,
+  days = 182,
+): Promise<Array<{ logged_on: string; count: number }>> {
+  const logs = await loadLogs(userId, habitId);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - Math.min(Math.max(days, 7), 365));
+  const cutoffYmd = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`;
+  return logs
+    .filter((l) => l.logged_on >= cutoffYmd)
+    .map((l) => ({ logged_on: l.logged_on, count: l.count }));
+}
+
 export async function getHabitStreak(
   userId: number,
   habitId: number,

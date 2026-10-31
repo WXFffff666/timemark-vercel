@@ -92,6 +92,10 @@ function fileToContentType(f: File): string | null {
 export function Ocr() {
   const [status, setStatus] = useState<OcrStatus | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  // v2.42 R25：多文件批量（files.length>1 走批量队列）
+  const [files, setFiles] = useState<File[]>([]);
+  const [batchResults, setBatchResults] = useState<Array<{ name: string; text: string; fields?: OcrFields; error?: string; saved?: boolean }> | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<OcrResultView | null>(null);
@@ -125,10 +129,50 @@ export function Ocr() {
   }, [loadStatus, loadHistory]);
 
   const handleExtract = useCallback(async () => {
+    if (busy) return;
+    if (files.length > 1) {
+      // v2.42 R25：批量识别——逐个 POST，进度 x/y，失败项不阻断后续
+      setBusy(true);
+      setError('');
+      setResult(null);
+      setBatchResults([]);
+      setBatchProgress({ done: 0, total: files.length });
+      const collected: Array<{ name: string; text: string; fields?: OcrFields; error?: string }> = [];
+      try {
+        for (const f of files) {
+          try {
+            const contentType = fileToContentType(f);
+            if (!contentType) throw new Error('不支持的类型');
+            if (f.size > 2 * 1024 * 1024) throw new Error('超过 2 MB');
+            const dataBase64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const s = String(reader.result ?? '');
+                resolve(s.includes(',') ? s.slice(s.indexOf(',') + 1) : s);
+              };
+              reader.onerror = () => reject(new Error('读取失败'));
+              reader.readAsDataURL(f);
+            });
+            const res = await api.post<OcrResultView>('/ocr', { contentType, dataBase64 });
+            collected.push({ name: f.name, text: res.text, fields: res.fields });
+          } catch (e) {
+            collected.push({ name: f.name, text: '', error: e instanceof Error ? e.message : '识别失败' });
+          }
+          setBatchResults([...collected]);
+          setBatchProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+        }
+        void loadHistory();
+      } finally {
+        setBusy(false);
+        setBatchProgress(null);
+      }
+      return;
+    }
     if (!file || busy) return;
     setBusy(true);
     setError('');
     setResult(null);
+    setBatchResults(null);
     setSaved('');
     try {
       const contentType = fileToContentType(file);
@@ -159,7 +203,25 @@ export function Ocr() {
     } finally {
       setBusy(false);
     }
-  }, [file, busy, loadHistory]);
+  }, [file, files, busy, loadHistory]);
+
+  /** v2.42 R25：批量结果逐条存文档 */
+  const saveBatchItem = useCallback(async (idx: number) => {
+    const item = batchResults?.[idx];
+    if (!item || item.error) return;
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      await api.post('/documents', {
+        kind: inferDocKind(item.text),
+        title: (item.fields?.issuer?.trim() || item.name.replace(/\.[a-z]+$/i, '')).slice(0, 120) + `（${today}）`,
+        issuer: item.fields?.issuer?.trim().slice(0, 200) || null,
+        notes: item.text.slice(0, 2000),
+      });
+      setBatchResults((prev) => prev?.map((r, i) => (i === idx ? { ...r, saved: true } : r)) ?? null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '存为文档失败');
+    }
+  }, [batchResults]);
 
   const handleSaveDocument = useCallback(async () => {
     if (!result) return;
@@ -223,12 +285,16 @@ export function Ocr() {
             ref={fileRef}
             type="file"
             accept={ACCEPT}
+            multiple
             capture="environment"
             className="hidden"
             aria-label="选择或拍摄图片"
             onChange={(e) => {
-              setFile(e.target.files?.[0] ?? null);
+              const picked = Array.from(e.target.files ?? []);
+              setFiles(picked);
+              setFile(picked[0] ?? null);
               setResult(null);
+              setBatchResults(null);
               setError('');
               setSaved('');
               setDocKind('other');
@@ -240,10 +306,41 @@ export function Ocr() {
             </Button>
             <Button type="button" variant="vision" size="sm" className="rounded-full min-h-11" disabled={!file || busy} onClick={() => void handleExtract()}>
               {busy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Sparkles size={14} className="mr-1.5" />}
-              {busy ? '识别中…' : '开始识别'}
+              {busy ? '识别中…' : files.length > 1 ? `开始识别（${files.length} 个文件）` : '开始识别'}
             </Button>
-            {file && <span className="text-xs text-slate-400 self-center">{file.name} · {fmtBytes(file.size)}</span>}
+            {file && <span className="text-xs text-slate-400 self-center">{files.length > 1 ? `${files.length} 个文件` : file.name} · {fmtBytes(file.size)}</span>}
           </div>
+          {batchProgress && (
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400" role="status">
+              批量识别中：{batchProgress.done}/{batchProgress.total}
+            </p>
+          )}
+          {batchResults && batchResults.length > 0 && (
+            <ul className="mt-4 space-y-2" aria-label="批量识别结果">
+              {batchResults.map((r, i) => (
+                <li key={i} className="rounded-xl border border-slate-200/70 dark:border-slate-700/50 p-3 text-sm">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[50%]">{r.name}</span>
+                    {r.error ? (
+                      <span className="text-xs text-red-500">失败：{r.error}</span>
+                    ) : (
+                      <span className="text-xs text-slate-400 truncate flex-1">{r.text.slice(0, 60) || '（未识别到文本）'}</span>
+                    )}
+                    {!r.error && (
+                      <button
+                        type="button"
+                        className="ml-auto text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline shrink-0"
+                        disabled={r.saved}
+                        onClick={() => void saveBatchItem(i)}
+                      >
+                        {r.saved ? '已存入' : '存为文档'}
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
           {error && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
           {result && (

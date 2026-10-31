@@ -13,6 +13,7 @@ import {
   deleteHabit,
   getHabitGrid,
   getHabitStreak,
+  listHabitLogs,
   getHabitWithStreak,
   listHabits,
   logHabit,
@@ -115,6 +116,17 @@ habits.get('/:id/streak', async (c) => {
   const data = await getHabitStreak(userId, id);
   if (!data) return c.json({ success: false, error: '习惯不存在' }, 404);
   return c.json({ success: true, data });
+});
+
+// v2.42 R25：打卡日志（热力图数据源）；days 7-365，缺省 182（约半年）
+habits.get('/:id/logs', async (c) => {
+  const userId = Number(c.get('user').id);
+  const id = parseId(c.req.param('id'));
+  if (id === null) return c.json({ success: false, error: '无效的 ID' }, 400);
+  const raw = parseInt(c.req.query('days') ?? '', 10);
+  const days = Number.isFinite(raw) && raw > 0 ? raw : 182;
+  const logs = await listHabitLogs(userId, id, days);
+  return c.json({ success: true, data: logs });
 });
 
 habits.post('/:id/log', async (c) => {
