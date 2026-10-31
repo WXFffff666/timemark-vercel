@@ -12,51 +12,69 @@ import { AssistantDock } from './components/assistant/AssistantDock';
 import { CommandPalette } from './components/CommandPalette';
 import { ToastHost } from './components/ui/toast-host';
 
-const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
-const Settings = lazy(() => import('./pages/Settings'));
-const LoginHistory = lazy(() => import('./pages/LoginHistory'));
-const Channels = lazy(() => import('./pages/Channels'));
-const Templates = lazy(() => import('./pages/Templates'));
-const TriggerLogs = lazy(() => import('./pages/TriggerLogs'));
-const Inbox = lazy(() => import('./pages/Inbox'));
-const AnnualReport = lazy(() => import('./pages/AnnualReport'));
-const Analytics = lazy(() => import('./pages/Analytics'));
-const Security = lazy(() => import('./pages/Security'));
-const DeployWizard = lazy(() => import('./pages/DeployWizard'));
-const Contacts = lazy(() => import('./pages/Contacts'));
-const Broadcast = lazy(() => import('./pages/Broadcast'));
-const IntegrationsDocs = lazy(() => import('./pages/IntegrationsDocs'));
-const CronMonitor = lazy(() => import('./pages/CronMonitor'));
-const ApiPortal = lazy(() => import('./pages/ApiPortal'));
-const CountdownWidget = lazy(() => import('./pages/CountdownWidget'));
-const DockerMigration = lazy(() => import('./pages/DockerMigration'));
-const LunarHolidays = lazy(() => import('./pages/LunarHolidays'));
-const Watchlist = lazy(() => import('./pages/Watchlist'));
-const Vehicles = lazy(() => import('./pages/Vehicles'));
-const Timesheet = lazy(() => import('./pages/Timesheet'));
-const Pets = lazy(() => import('./pages/Pets'));
-const Care = lazy(() => import('./pages/Care'));
-const Collaboration = lazy(() => import('./pages/Collaboration'));
-const HouseholdLists = lazy(() => import('./pages/HouseholdLists'));
-const DataSources = lazy(() => import('./pages/DataSources'));
-const OcrPage = lazy(() => import('./pages/Ocr'));
-const WeeklyReview = lazy(() => import('./pages/WeeklyReview'));
-const CalendarPage = lazy(() => import('./pages/Calendar'));
-const TodosPage = lazy(() => import('./pages/Todos'));
-const NotificationRules = lazy(() => import('./pages/NotificationRules'));
-const ExpiryPage = lazy(() => import('./pages/Expiry'));
-const InventoryPage = lazy(() => import('./pages/Inventory'));
-const MaintenancePage = lazy(() => import('./pages/Maintenance'));
-const DocumentsPage = lazy(() => import('./pages/Documents'));
-const HabitsPage = lazy(() => import('./pages/Habits'));
-const MedicationsPage = lazy(() => import('./pages/Medications'));
-const GoalsPage = lazy(() => import('./pages/Goals'));
-const AgentConsole = lazy(() => import('./pages/AgentConsole'));
-const AskPage = lazy(() => import('./pages/Ask'));
-const TodayPage = lazy(() => import('./pages/Today'));
-const DataHealthPage = lazy(() => import('./pages/DataHealth'));
-const SharedView = lazy(() => import('./pages/SharedView'));
-const LocalAIPage = lazy(() => import('./pages/LocalAI'));
+/**
+ * v2.44 R29：部署后旧 HTML 引用已删除的 hash chunk → ChunkLoadError 白屏。
+ * 兜底：懒加载失败自动整页刷新一次（sessionStorage 标记防循环）——刷新后拿到
+ * 新 HTML 与新 chunk 引用。仅网络/解析类失败触发，keep-alive 请求不在此列。
+ */
+function lazyPage<T extends { default: React.ComponentType }>(factory: () => Promise<T>) {
+  return lazy(() =>
+    factory().catch((error: unknown) => {
+      const marker = 'timemark_chunk_reload';
+      if (!sessionStorage.getItem(marker)) {
+        sessionStorage.setItem(marker, '1');
+        window.location.reload();
+      }
+      throw error;
+    }),
+  );
+}
+
+const Dashboard = lazyPage(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
+const Settings = lazyPage(() => import('./pages/Settings'));
+const LoginHistory = lazyPage(() => import('./pages/LoginHistory'));
+const Channels = lazyPage(() => import('./pages/Channels'));
+const Templates = lazyPage(() => import('./pages/Templates'));
+const TriggerLogs = lazyPage(() => import('./pages/TriggerLogs'));
+const Inbox = lazyPage(() => import('./pages/Inbox'));
+const AnnualReport = lazyPage(() => import('./pages/AnnualReport'));
+const Analytics = lazyPage(() => import('./pages/Analytics'));
+const Security = lazyPage(() => import('./pages/Security'));
+const DeployWizard = lazyPage(() => import('./pages/DeployWizard'));
+const Contacts = lazyPage(() => import('./pages/Contacts'));
+const Broadcast = lazyPage(() => import('./pages/Broadcast'));
+const IntegrationsDocs = lazyPage(() => import('./pages/IntegrationsDocs'));
+const CronMonitor = lazyPage(() => import('./pages/CronMonitor'));
+const ApiPortal = lazyPage(() => import('./pages/ApiPortal'));
+const CountdownWidget = lazyPage(() => import('./pages/CountdownWidget'));
+const DockerMigration = lazyPage(() => import('./pages/DockerMigration'));
+const LunarHolidays = lazyPage(() => import('./pages/LunarHolidays'));
+const Watchlist = lazyPage(() => import('./pages/Watchlist'));
+const Vehicles = lazyPage(() => import('./pages/Vehicles'));
+const Timesheet = lazyPage(() => import('./pages/Timesheet'));
+const Pets = lazyPage(() => import('./pages/Pets'));
+const Care = lazyPage(() => import('./pages/Care'));
+const Collaboration = lazyPage(() => import('./pages/Collaboration'));
+const HouseholdLists = lazyPage(() => import('./pages/HouseholdLists'));
+const DataSources = lazyPage(() => import('./pages/DataSources'));
+const OcrPage = lazyPage(() => import('./pages/Ocr'));
+const WeeklyReview = lazyPage(() => import('./pages/WeeklyReview'));
+const CalendarPage = lazyPage(() => import('./pages/Calendar'));
+const TodosPage = lazyPage(() => import('./pages/Todos'));
+const NotificationRules = lazyPage(() => import('./pages/NotificationRules'));
+const ExpiryPage = lazyPage(() => import('./pages/Expiry'));
+const InventoryPage = lazyPage(() => import('./pages/Inventory'));
+const MaintenancePage = lazyPage(() => import('./pages/Maintenance'));
+const DocumentsPage = lazyPage(() => import('./pages/Documents'));
+const HabitsPage = lazyPage(() => import('./pages/Habits'));
+const MedicationsPage = lazyPage(() => import('./pages/Medications'));
+const GoalsPage = lazyPage(() => import('./pages/Goals'));
+const AgentConsole = lazyPage(() => import('./pages/AgentConsole'));
+const AskPage = lazyPage(() => import('./pages/Ask'));
+const TodayPage = lazyPage(() => import('./pages/Today'));
+const DataHealthPage = lazyPage(() => import('./pages/DataHealth'));
+const SharedView = lazyPage(() => import('./pages/SharedView'));
+const LocalAIPage = lazyPage(() => import('./pages/LocalAI'));
 
 function PageLoader() {
   return (
@@ -79,26 +97,19 @@ function ProtectedRoute({ children, pageName }: { children: React.ReactNode; pag
 }
 
 function MeshBackground() {
+  // v2.44 R29：SVG feGaussianBlur(stdDeviation=80) 对全屏椭圆模糊的 paint 开销
+  // 在低端手机上显著且每页常驻——改纯 CSS radial-gradient（视觉近似、零 filter）。
   return (
-    <div className="fixed inset-0 -z-10 overflow-hidden" style={{ backgroundColor: 'var(--mesh-color-3)' }}>
-      <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <radialGradient id="meshGradient1" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="var(--mesh-color-1)" stopOpacity="var(--mesh-opacity)" />
-            <stop offset="100%" stopColor="var(--mesh-color-1)" stopOpacity="0" />
-          </radialGradient>
-          <radialGradient id="meshGradient2" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="var(--mesh-color-2)" stopOpacity="var(--mesh-opacity)" />
-            <stop offset="100%" stopColor="var(--mesh-color-2)" stopOpacity="0" />
-          </radialGradient>
-          <filter id="blurFilter" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation={80} />
-          </filter>
-        </defs>
-        <ellipse cx="20%" cy="20%" rx="35vw" ry="35vw" fill="url(#meshGradient1)" filter="url(#blurFilter)" />
-        <ellipse cx="80%" cy="80%" rx="40vw" ry="40vw" fill="url(#meshGradient2)" filter="url(#blurFilter)" />
-      </svg>
-    </div>
+    <div
+      className="fixed inset-0 -z-10 overflow-hidden"
+      style={{
+        backgroundColor: 'var(--mesh-color-3)',
+        backgroundImage: [
+          'radial-gradient(70vw 70vw at 20% 20%, var(--mesh-color-1) 0%, transparent 65%)',
+          'radial-gradient(80vw 80vw at 80% 80%, var(--mesh-color-2) 0%, transparent 65%)',
+        ].join(', '),
+      }}
+    />
   );
 }
 
