@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
+import { formatBytes as fmtBytes } from '@/lib/format';
 
 /**
  * v2.40 R17：OCR 扫描识别页——ocr 路由（task 146）此前 5 端点零 UI。
@@ -76,11 +77,6 @@ const KIND_OPTIONS: Array<[string, string]> = [
   ['contract', '合同'],
   ['certificate', '证书'],
 ];
-
-function fmtBytes(n: number): string {
-  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  return `${Math.max(1, Math.round(n / 1024))} KB`;
-}
 
 function fileToContentType(f: File): string | null {
   if (f.type && ACCEPT.split(',').includes(f.type)) return f.type;

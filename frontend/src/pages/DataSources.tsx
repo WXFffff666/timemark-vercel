@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { formatBytes as fmtSize, formatShortTime as fmtTime } from '@/lib/format';
 
 /**
  * v2.38 R15c（方面 4+6）：数据源与备份页。
@@ -45,16 +46,6 @@ interface BackupRecord {
   message: string | null;
   createdAt: string;
 }
-
-const fmtTime = (iso: string | null): string =>
-  iso ? new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-
-const fmtSize = (bytes: number | null): string => {
-  if (bytes === null || bytes === undefined) return '—';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-};
 
 export default function DataSources() {
   // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）

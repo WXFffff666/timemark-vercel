@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { formatShortTime as fmtTime } from '@/lib/format';
 
 /**
  * v2.38 R14（审计 D3 #1）：家庭协作管理页——collaboration 路由（11 端点）此前零 UI，
@@ -57,9 +58,6 @@ const ACTION_LABELS: Record<string, string> = {
   invite_created: '邀请已创建',
   invite_revoked: '邀请已撤销',
 };
-
-const fmtTime = (iso: string | null): string =>
-  iso ? new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
 export default function Collaboration() {
   // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）

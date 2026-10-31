@@ -3,6 +3,7 @@ import { GitPullRequest, Loader2, Check, X, Pencil, Inbox as InboxIcon } from 'l
 import { api } from '@/lib/api';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
+import { formatShortTime as fmtTime } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -43,9 +44,6 @@ const SUBJECT_LABELS: Record<string, string> = {
   adjust_cadence: '调整联系节奏',
   accept_tag: '采纳标签',
 };
-
-const fmtTime = (iso: string | null): string =>
-  iso ? new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
 export function DecisionsPanel() {
   const [cards, setCards] = useState<DecisionCard[]>([]);
