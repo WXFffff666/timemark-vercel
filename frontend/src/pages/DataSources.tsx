@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { UploadCloud, DatabaseBackup, Loader2, Plus, RefreshCw, Rss, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { UploadCloud, DatabaseBackup, Loader2, Plus, RefreshCw, Rss, Trash2, Archive } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -84,6 +84,15 @@ export default function DataSources() {
   const [enabled, setEnabled] = useState(true);
   const [backupBusy, setBackupBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // v2.40 R19：本地备份恢复（restore）——此前 /backup/import 端点零 UI，
+  // Settings 的 /data/import 导入无预览无危险门。
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [restorePreview, setRestorePreview] = useState<{ version?: string; exportedAt?: string; events: number; mappings: number; templates: number } | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreResult, setRestoreResult] = useState('');
+  const [restoreError, setRestoreError] = useState('');
+  const restoreInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadFeeds = useCallback(() => {
     setFeedsLoading(true);
@@ -231,6 +240,58 @@ export default function DataSources() {
       setNotice({ ok: false, text: e instanceof Error ? e.message : '删除失败' });
     } finally {
       setBackupBusy(null);
+    }
+  };
+
+  // v2.40 R19：恢复流程三步——选文件解析预览 → RESTORE 文本确认门 → 执行并报告
+  const handleRestoreFile = async (file: File) => {
+    setRestoreFile(file);
+    setRestorePreview(null);
+    setRestoreResult('');
+    setRestoreError('');
+    try {
+      const parsed = JSON.parse(await file.text()) as {
+        version?: string;
+        exportedAt?: string;
+        events?: unknown[];
+        relationshipMappings?: unknown[];
+        eventTemplates?: unknown[];
+      };
+      const events = Array.isArray(parsed.events) ? parsed.events.length : 0;
+      const mappings = Array.isArray(parsed.relationshipMappings) ? parsed.relationshipMappings.length : 0;
+      const templates = Array.isArray(parsed.eventTemplates) ? parsed.eventTemplates.length : 0;
+      if (events + mappings + templates === 0) {
+        setRestoreError('文件里没有可导入的数据（需要 events / relationshipMappings / eventTemplates 任一非空）');
+        return;
+      }
+      setRestorePreview({ version: parsed.version, exportedAt: parsed.exportedAt, events, mappings, templates });
+    } catch {
+      setRestoreError('不是合法的备份 JSON 文件');
+    }
+  };
+
+  const runRestore = async () => {
+    if (!restorePreview) return;
+    // 危险操作双保险：合并导入不可逆，要求输入 RESTORE 才放行
+    const ok = await confirm({
+      title: '确认恢复备份？',
+      description: `将把 ${restorePreview.events} 条事件、${restorePreview.mappings} 条关系映射、${restorePreview.templates} 条模板合并导入当前账户，无法自动撤销。`,
+      tone: 'danger',
+      confirmLabel: '开始恢复',
+      requireText: 'RESTORE',
+    });
+    if (!ok) return;
+    setRestoreBusy(true);
+    setRestoreResult('');
+    setRestoreError('');
+    try {
+      const text = await restoreFile!.text();
+      const res = await api.post<{ events: number; mappings: number; templates: number }>('/backup/import', JSON.parse(text));
+      setRestoreResult(`恢复完成：事件 ${res.events} 条 · 关系映射 ${res.mappings} 条 · 模板 ${res.templates} 条`);
+    } catch (e) {
+      setRestoreError(e instanceof Error ? e.message : '恢复失败');
+    } finally {
+      setRestoreBusy(false);
     }
   };
 
@@ -395,6 +456,51 @@ export default function DataSources() {
               </ul>
             </div>
           )}
+        </section>
+
+        {/* v2.40 R19：本地备份恢复——/backup/import 端点此前零 UI */}
+        <section aria-labelledby="restore-heading">
+          <h2 id="restore-heading" className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-2 px-1 flex items-center gap-1.5">
+            <Archive size={14} aria-hidden /> 本地备份恢复
+          </h2>
+          <div className="glass-panel rounded-3xl p-5 space-y-3">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              选择此前导出的 JSON 备份文件，先预览内容再合并导入。导入是合并语义（不删除现有数据），但无法自动撤销。
+            </p>
+            <div className="flex flex-wrap gap-2 items-center">
+              <input
+                ref={restoreInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                aria-label="选择备份文件"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleRestoreFile(f);
+                  e.target.value = '';
+                }}
+              />
+              <Button variant="secondary" size="sm" className="rounded-full min-h-11" onClick={() => restoreInputRef.current?.click()} disabled={restoreBusy}>
+                选择备份文件
+              </Button>
+              {restoreFile && <span className="text-xs text-slate-400">{restoreFile.name} · {Math.max(1, Math.round(restoreFile.size / 1024))} KB</span>}
+              {restorePreview && (
+                <Button variant="destructive" size="sm" className="rounded-full min-h-11" onClick={() => void runRestore()} disabled={restoreBusy}>
+                  {restoreBusy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                  恢复 {restorePreview.events} 条事件
+                </Button>
+              )}
+            </div>
+            {restorePreview && (
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/50 px-4 py-3 text-xs text-slate-600 dark:text-slate-300 space-y-0.5">
+                <p className="font-semibold text-slate-700 dark:text-slate-200">备份预览</p>
+                <p>版本：{restorePreview.version || '未知'} · 导出时间：{restorePreview.exportedAt ? new Date(restorePreview.exportedAt).toLocaleString('zh-CN') : '未知'}</p>
+                <p>事件 {restorePreview.events} 条 · 关系映射 {restorePreview.mappings} 条 · 模板 {restorePreview.templates} 条</p>
+              </div>
+            )}
+            {restoreResult && <p role="status" className="text-sm text-emerald-600 dark:text-emerald-400">{restoreResult}</p>}
+            {restoreError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{restoreError}</p>}
+          </div>
         </section>
       </main>
       {confirmDialog}
