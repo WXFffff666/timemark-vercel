@@ -147,12 +147,16 @@ describe('CommandPalette (checkbox 132)', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(screen.getByTestId('command-palette-option-2')).toHaveAttribute('aria-selected', 'true');
 
-    // ArrowUp cannot move above the first option.
+    // v2.40 R17：方向键循环——到顶回环到尾、到底回环到首。
     fireEvent.keyDown(input, { key: 'ArrowUp' });
+    expect(screen.getByTestId('command-palette-option-1')).toHaveAttribute('aria-selected', 'true');
     fireEvent.keyDown(input, { key: 'ArrowUp' });
     expect(screen.getByTestId('command-palette-option-0')).toHaveAttribute('aria-selected', 'true');
-
+    // 到顶再按 ArrowUp → 回环到最后一项
     fireEvent.keyDown(input, { key: 'ArrowUp' });
+    expect(screen.getByTestId('command-palette-option-2')).toHaveAttribute('aria-selected', 'true');
+    // 到底再按 ArrowDown → 回环到第一项
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(screen.getByTestId('command-palette-option-0')).toHaveAttribute('aria-selected', 'true');
 
     // Enter opens the active hit (event -> /calendar) and closes the palette.

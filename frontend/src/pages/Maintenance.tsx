@@ -295,8 +295,11 @@ export default function Maintenance() {
     try {
       const all = await api.get<MaintenancePlan[]>('/maintenance?limit=200');
       setAllPlans(Array.isArray(all) ? all : []);
-    } catch {
+      setError('');
+    } catch (e) {
+      // v2.40 R17：此前静默清空——统计与筛选会悄悄失真，至少让用户知道。
       setAllPlans([]);
+      setError(e instanceof Error ? `保养计划加载失败：${e.message}` : '保养计划加载失败');
     }
   }, []);
 

@@ -40,6 +40,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.collaboration': 'Family Sharing',
   'nav.householdLists': 'Household Lists',
   'nav.dataSources': 'Feeds & Backup',
+  'nav.ocr': 'Scan & OCR',
   'nav.assistant': 'AI Assistant',
   'nav.localAi': 'Local AI',
   'nav.agentConsole': 'Agent Console',

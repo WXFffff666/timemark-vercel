@@ -148,8 +148,11 @@ export default function Care() {
     try {
       const d = await api.get<{ events: CareLog[] }>(`/care/profiles/${profileId}/logs?limit=30`);
       setLogs(Array.isArray(d.events) ? d.events : []);
-    } catch {
+      setError('');
+    } catch (e) {
+      // v2.40 R17：此前静默清空——用户分不清「没有记录」和「加载失败」。
       setLogs([]);
+      setError(e instanceof Error ? `照护记录加载失败：${e.message}` : '照护记录加载失败');
     } finally {
       setLogsLoading(false);
     }

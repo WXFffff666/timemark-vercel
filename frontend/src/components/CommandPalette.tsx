@@ -211,12 +211,15 @@ export function CommandPalette() {
   );
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    // v2.40 R17：方向键循环——到底回环到首、到顶回环到尾（此前 Math.min/Math.max 截断，
+    // 长列表回选第一项要按到底再一路往回）。空列表保持 0。
+    const last = Math.max(results.length - 1, 0);
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setActiveIndex((index) => Math.min(index + 1, Math.max(results.length - 1, 0)));
+      setActiveIndex((index) => (index >= last ? 0 : index + 1));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
-      setActiveIndex((index) => Math.max(index - 1, 0));
+      setActiveIndex((index) => (index <= 0 ? last : index - 1));
     } else if (event.key === 'Enter') {
       event.preventDefault();
       const hit = results[activeIndex];

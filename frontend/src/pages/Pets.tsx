@@ -120,8 +120,11 @@ export default function Pets() {
       const d = await api.get<{ data?: PetSchedule[] }>(`/pets/${petId}/schedules`);
       const list = (d as unknown as { data?: PetSchedule[] }).data ?? (d as unknown as PetSchedule[]);
       setSchedules((prev) => ({ ...prev, [petId]: Array.isArray(list) ? list : [] }));
-    } catch {
+      setError('');
+    } catch (e) {
+      // v2.40 R17：此前静默清空——疫苗/驱虫日程看不见是会出事的，必须报错。
       setSchedules((prev) => ({ ...prev, [petId]: [] }));
+      setError(e instanceof Error ? `日程加载失败：${e.message}` : '日程加载失败');
     }
   }, []);
 

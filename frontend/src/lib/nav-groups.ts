@@ -3,7 +3,7 @@ import {
   LayoutDashboard, CalendarCheck, BarChart3, FileBarChart, ListTodo, MessageCircleQuestion,
   Bell, Cable, BellRing, FileStack, Inbox, Megaphone,
   AlarmClock, Package, Wrench, FileText, Flame, Pill, Target, Users, CalendarDays, CalendarRange,
-  Bot, HeartPulse, Activity, Shield, KeyRound, BookOpen, Rocket, Settings, Container, Cpu, Code2, Clapperboard, Car, Timer, Cat, HeartHandshake, ClipboardList, Rss,
+  Bot, HeartPulse, Activity, Shield, KeyRound, BookOpen, Rocket, Settings, Container, Cpu, Code2, Clapperboard, Car, Timer, Cat, HeartHandshake, ClipboardList, Rss, ScanLine,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -73,6 +73,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/inventory', icon: Package, labelKey: 'nav.inventory' },
       { path: '/maintenance', icon: Wrench, labelKey: 'nav.maintenance' },
       { path: '/documents', icon: FileText, labelKey: 'nav.documents' },
+      { path: '/ocr', icon: ScanLine, labelKey: 'nav.ocr' },
       { path: '/habits', icon: Flame, labelKey: 'nav.habits' },
       { path: '/medications', icon: Pill, labelKey: 'nav.medications' },
       { path: '/goals', icon: Target, labelKey: 'nav.goals' },

@@ -38,6 +38,7 @@ const Care = lazy(() => import('./pages/Care'));
 const Collaboration = lazy(() => import('./pages/Collaboration'));
 const HouseholdLists = lazy(() => import('./pages/HouseholdLists'));
 const DataSources = lazy(() => import('./pages/DataSources'));
+const OcrPage = lazy(() => import('./pages/Ocr'));
 const CalendarPage = lazy(() => import('./pages/Calendar'));
 const TodosPage = lazy(() => import('./pages/Todos'));
 const NotificationRules = lazy(() => import('./pages/NotificationRules'));
@@ -155,6 +156,7 @@ function AppRoutes({ location }: { location: ReturnType<typeof useLocation> }) {
     <Route path="/collaboration" element={<ProtectedRoute pageName="Collaboration"><Collaboration /></ProtectedRoute>} />
     <Route path="/household-lists" element={<ProtectedRoute pageName="HouseholdLists"><HouseholdLists /></ProtectedRoute>} />
     <Route path="/data-sources" element={<ProtectedRoute pageName="DataSources"><DataSources /></ProtectedRoute>} />
+    <Route path="/ocr" element={<ProtectedRoute pageName="Ocr"><OcrPage /></ProtectedRoute>} />
     <Route path="/embed/:token" element={<CountdownWidget />} />
     <Route path="/share/:token" element={<ShareEvent />} />
     <Route path="/" element={<Navigate to="/dashboard" />} />

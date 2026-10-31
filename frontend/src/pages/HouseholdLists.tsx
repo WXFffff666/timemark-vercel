@@ -69,8 +69,11 @@ export default function HouseholdLists() {
     try {
       const res = await data.get<{ items: ListItem[] }>(`/inventory-list/${listId}`);
       setItems(res.items ?? []);
-    } catch {
+      setError('');
+    } catch (e) {
+      // v2.40 R17：此前静默清空——用户分不清「清单为空」和「加载失败」。
       setItems([]);
+      setError(e instanceof Error ? `条目加载失败：${e.message}` : '条目加载失败');
     } finally {
       setItemsLoading(false);
     }
