@@ -38,6 +38,19 @@ export function ToastHost() {
           >
             <Icon size={18} className={`mt-0.5 shrink-0 ${s.iconColor}`} aria-hidden />
             <p className="flex-1 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{t.text}</p>
+            {t.action && (
+              <button
+                type="button"
+                data-testid="toast-action"
+                className="shrink-0 rounded-full px-3 py-1 text-xs font-bold text-primary-600 transition hover:bg-primary-500/10 dark:text-primary-400"
+                onClick={() => {
+                  t.action?.onClick();
+                  toast.dismiss(t.id);
+                }}
+              >
+                {t.action.label}
+              </button>
+            )}
             <button
               type="button"
               aria-label="关闭通知"

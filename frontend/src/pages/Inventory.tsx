@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Boxes, Minus, Package, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useConfirm } from '@/components/ui/confirm-dialog';
+import { toast } from '@/lib/toast';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -214,6 +216,8 @@ function InventoryRow({
 
 export default function Inventory() {
   const navigate = useNavigate();
+  // v2.42 R23：统一确认弹窗 + 删除可撤销（window.confirm 漏网清零）
+  const { confirm, confirmDialog } = useConfirm();
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [allItems, setAllItems] = useState<InventoryItem[]>([]);
@@ -370,12 +374,33 @@ export default function Inventory() {
   };
 
   const remove = async (item: InventoryItem) => {
-    if (!window.confirm(`确定删除「${item.name}」？`)) return;
+    if (!(await confirm({ title: `删除「${item.name}」？`, tone: 'danger', confirmLabel: '删除' }))) return;
     setError('');
     try {
       await api.delete(`/inventory/${item.id}`);
-      setStatus(`已删除「${item.name}」`);
       await Promise.all([loadFiltered(), loadSummary()]);
+      // v2.42 R23：撤销 = 按原文重新创建（内容恢复，id 为新记录）
+      toast.success(`已删除「${item.name}」`, {
+        label: '撤销',
+        onClick: () => {
+          void api
+            .post('/inventory', {
+              name: item.name,
+              category: item.category ?? undefined,
+              quantity: item.quantity ?? undefined,
+              unit: item.unit ?? null,
+              lowStockThreshold: item.low_stock_threshold ?? null,
+              purchasedAt: item.purchased_at ?? null,
+              expiresAt: item.expires_at ?? null,
+              location: item.location ?? null,
+              notes: item.notes ?? null,
+              reminderConfig: item.reminder_config ?? null,
+              isActive: item.is_active ?? true,
+            })
+            .then(() => { void Promise.all([loadFiltered(), loadSummary()]); toast.info('已恢复（生成为新记录）'); })
+            .catch(() => toast.error('恢复失败'));
+        },
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败');
     }
@@ -640,6 +665,7 @@ export default function Inventory() {
           </div>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

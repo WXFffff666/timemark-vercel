@@ -157,7 +157,35 @@ export function Dashboard() {
   };
 
   const handleEdit = (event: Event) => { setEditingEvent(event); setShowForm(true); };
-  const handleDelete = async (id: string) => { if (!(await confirm({ title: '删除此事件？', tone: 'danger', confirmLabel: '删除' }))) return; await deleteEvent(id); setShowForm(false); setEditingEvent(undefined); };
+  const handleDelete = async (id: string) => {
+    if (!(await confirm({ title: '删除此事件？', tone: 'danger', confirmLabel: '删除' }))) return;
+    // v2.42 R23：删除前留存原文，toast 撤销 = 重新创建（内容恢复，id/时间为新记录）
+    const original = events.find((e) => e.id === id);
+    await deleteEvent(id);
+    setShowForm(false);
+    setEditingEvent(undefined);
+    if (original) {
+      toast.success('事件已删除', {
+        label: '撤销',
+        onClick: () => {
+          void createEvent({
+            name: original.name,
+            type: original.type,
+            date: original.date,
+            calendarType: original.calendarType,
+            lunarDate: original.lunarDate ?? undefined,
+            reminderConfig: original.reminderConfig,
+            recurringConfig: original.recurringConfig ?? undefined,
+            personName: original.personName ?? null,
+            birthDate: original.birthDate ?? null,
+            birthDateLunar: original.birthDateLunar ?? null,
+            reminderRecipientName: original.reminderRecipientName ?? null,
+            reminderRecipientEmail: original.reminderRecipientEmail ?? null,
+          }).then(() => toast.info('已恢复（生成为新记录）')).catch(() => toast.error('恢复失败，请到回收检查'));
+        },
+      });
+    }
+  };
   const handleTestSend = async (id: string) => {
     try {
       const result = await testSendEvent(id);

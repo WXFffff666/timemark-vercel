@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { daysUntil } from '@/lib/expiry-utils';
 import {
   assetKindLabel,
@@ -245,6 +246,8 @@ function PlanCard({
 
 export default function Maintenance() {
   const navigate = useNavigate();
+  // v2.42 R23：统一确认弹窗（window.confirm 漏网清零）
+  const { confirm, confirmDialog } = useConfirm();
 
   const [plans, setPlans] = useState<MaintenancePlan[]>([]);
   const [allPlans, setAllPlans] = useState<MaintenancePlan[]>([]);
@@ -382,7 +385,7 @@ export default function Maintenance() {
   };
 
   const remove = async (plan: MaintenancePlan) => {
-    if (!window.confirm(`确定删除「${plan.asset_name}」？`)) return;
+    if (!(await confirm({ title: `删除保养计划「${plan.asset_name}」？`, tone: 'danger', confirmLabel: '删除' }))) return;
     setError('');
     try {
       await api.delete(`/maintenance/${plan.id}`);
@@ -769,6 +772,7 @@ export default function Maintenance() {
           </div>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

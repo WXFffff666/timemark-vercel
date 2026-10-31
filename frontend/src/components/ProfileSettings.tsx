@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Trash2, Pencil, Bell, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { useProfileStore } from '@/stores/profile.store';
 import type { ProfileRecord } from '@timemark/shared';
 
@@ -27,6 +28,8 @@ const KIND_LABELS: Record<string, string> = { self: '我', family: '家人', pet
 
 export function ProfileSettings() {
   const { profiles, load } = useProfileStore();
+  // v2.42 R23：统一确认弹窗（window.confirm 漏网清零）
+  const { confirm, confirmDialog } = useConfirm();
 
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -95,7 +98,7 @@ export function ProfileSettings() {
   };
 
   const handleDelete = async (profile: ProfileRecord) => {
-    if (!window.confirm(`确定删除档案「${profile.name}」？关联数据会保留，只是不再归属该档案。`)) return;
+    if (!(await confirm({ title: `删除档案「${profile.name}」？`, description: '关联数据会保留，只是不再归属该档案。', tone: 'danger', confirmLabel: '删除' }))) return;
     try {
       await api.delete(`/profiles/${profile.id}`);
       if (routingProfile?.id === profile.id) setRoutingProfile(null);
@@ -246,6 +249,7 @@ export function ProfileSettings() {
           </div>
         </div>
       )}
+      {confirmDialog}
     </section>
   );
 }

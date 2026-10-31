@@ -9,6 +9,7 @@ import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { dueCountdownLabel, goalPercent } from '@/lib/goals-utils';
 import type { GoalStatus, GoalWithMilestones, MilestoneRecord } from '@timemark/shared';
 
@@ -58,6 +59,8 @@ function toForm(goal: GoalWithMilestones): GoalForm {
 }
 
 export default function Goals() {
+  // v2.42 R23：统一确认弹窗（window.confirm 漏网清零）
+  const { confirm, confirmDialog } = useConfirm();
   const [goals, setGoals] = useState<GoalWithMilestones[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -158,7 +161,7 @@ export default function Goals() {
   };
 
   const remove = async (goal: GoalWithMilestones) => {
-    if (!window.confirm(`确定删除「${goal.title}」？`)) return;
+    if (!(await confirm({ title: `删除目标「${goal.title}」？`, tone: 'danger', confirmLabel: '删除' }))) return;
     setError('');
     setBusyId(goal.id);
     try {
@@ -526,6 +529,7 @@ export default function Goals() {
           </div>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

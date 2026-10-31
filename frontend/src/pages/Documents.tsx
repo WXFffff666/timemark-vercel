@@ -21,6 +21,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import {
   base64PayloadFromDataUrl,
   documentCountdown,
@@ -318,6 +319,8 @@ function DocumentRow({
 
 export default function Documents() {
   const navigate = useNavigate();
+  // v2.42 R23：统一确认弹窗（window.confirm 漏网清零）
+  const { confirm, confirmDialog } = useConfirm();
 
   const [items, setItems] = useState<DocumentItem[]>([]);
   const [allItems, setAllItems] = useState<DocumentItem[]>([]);
@@ -505,7 +508,7 @@ export default function Documents() {
   };
 
   const remove = async (item: DocumentItem) => {
-    if (!window.confirm(`确定删除「${item.title}」？`)) return;
+    if (!(await confirm({ title: `删除「${item.title}」？`, tone: 'danger', confirmLabel: '删除' }))) return;
     setError('');
     try {
       await api.delete(`/documents/${item.id}`);
@@ -909,6 +912,7 @@ export default function Documents() {
           </div>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { api, listTags, type TagRecord, type TagEntityType } from '@/lib/api';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { cn } from '@/lib/utils';
 
 /** Task 139 frontend contract; mirrors the backend service allowlists. */
@@ -59,6 +60,8 @@ export function BulkActionBar({
   className,
 }: BulkActionBarProps) {
   const [busyAction, setBusyAction] = useState<BulkAction | null>(null);
+  // v2.42 R23：统一确认弹窗（window.confirm 漏网清零）
+  const { confirm, confirmDialog } = useConfirm();
   const [outcome, setOutcome] = useState<BulkOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tags, setTags] = useState<TagRecord[]>(tagsProp ?? []);
@@ -92,7 +95,7 @@ export function BulkActionBar({
 
   async function run(action: BulkAction) {
     if (action === 'delete') {
-      const confirmed = window.confirm(`确认删除选中的 ${count} 个条目？此操作不可撤销。`);
+      const confirmed = await confirm({ title: `删除选中的 ${count} 个条目？`, description: '此操作不可撤销。', tone: 'danger', confirmLabel: '删除' });
       if (!confirmed) return;
     }
     const params: { tagId?: number; toType?: string } = {};
@@ -229,6 +232,7 @@ export function BulkActionBar({
           ) : null}
         </div>
       ) : null}
+      {confirmDialog}
     </div>
   );
 }

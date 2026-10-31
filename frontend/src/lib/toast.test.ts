@@ -3,6 +3,7 @@ import { toast, subscribeToasts, __resetToastsForTests } from './toast'
 
 /**
  * v2.41 R20：toast store 单测——push/dispatch/auto-dismiss/上限挤旧。
+ * v2.42 R23：action 按钮携带与 8s 停留。
  */
 
 describe('toast store', () => {
@@ -12,6 +13,26 @@ describe('toast store', () => {
   })
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('carries an action and keeps the toast alive for 8s', () => {
+    const onClick = vi.fn()
+    let items: Array<{ id: number; action?: { label: string; onClick: () => void } }> = []
+    const unsub = subscribeToasts((list) => { items = [...list] })
+    toast.success('事件已删除', { label: '撤销', onClick })
+    expect(items.length).toBe(1)
+    expect(items[0].action?.label).toBe('撤销')
+    // 3.5s 时还在（action toast 停留 8s）
+    vi.advanceTimersByTime(3600)
+    let still = -1
+    const unsub2 = subscribeToasts((list) => { still = list.length })
+    expect(still).toBe(1)
+    // 8s 后消失
+    vi.advanceTimersByTime(4600)
+    let after = -1
+    const unsub3 = subscribeToasts((list) => { after = list.length })
+    expect(after).toBe(0)
+    unsub3(); unsub2(); unsub()
   })
 
   it('pushes success/error/info with kind tags', () => {

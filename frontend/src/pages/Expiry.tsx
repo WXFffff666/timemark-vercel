@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { calculateCountdown } from '@/lib/countdown';
 import {
   annualiseSpend,
@@ -268,6 +269,8 @@ function BucketSection({
 
 export default function Expiry() {
   const navigate = useNavigate();
+  // v2.42 R23：统一确认弹窗（window.confirm 漏网清零）
+  const { confirm, confirmDialog } = useConfirm();
 
   const [items, setItems] = useState<ExpiryItem[]>([]);
   const [allItems, setAllItems] = useState<ExpiryItem[]>([]);
@@ -421,7 +424,7 @@ export default function Expiry() {
   };
 
   const remove = async (item: ExpiryItem) => {
-    if (!window.confirm(`确定删除「${item.title}」？`)) return;
+    if (!(await confirm({ title: `删除「${item.title}」？`, tone: 'danger', confirmLabel: '删除' }))) return;
     setError('');
     try {
       await api.delete(`/expiry/${item.id}`);
@@ -749,6 +752,7 @@ export default function Expiry() {
           </div>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

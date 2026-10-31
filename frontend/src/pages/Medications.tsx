@@ -31,6 +31,7 @@ import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { ProfileSwitcher } from '@/components/ProfileSwitcher';
 import { api } from '@/lib/api';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { useProfileStore } from '@/stores/profile.store';
 import { useTimezoneStore } from '@/stores/timezone.store';
 import {
@@ -310,6 +311,8 @@ async function fetchReport(format: 'html' | 'csv' | 'pdf', from: string, to: str
 
 export default function Medications() {
   const navigate = useNavigate();
+  // v2.42 R23：统一确认弹窗（window.confirm 漏网清零）
+  const { confirm, confirmDialog } = useConfirm();
   const profileId = useProfileStore((state) => state.profileId);
   const timezone = useTimezoneStore((state) => state.timezone);
 
@@ -520,7 +523,7 @@ export default function Medications() {
   };
 
   const remove = async (med: MedicationRecord) => {
-    if (!window.confirm(`确定删除「${med.name}」？`)) return;
+    if (!(await confirm({ title: `删除用药「${med.name}」？`, tone: 'danger', confirmLabel: '删除' }))) return;
     setError('');
     try {
       await api.delete(`/medications/${med.id}`);
@@ -1279,6 +1282,7 @@ export default function Medications() {
           </div>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

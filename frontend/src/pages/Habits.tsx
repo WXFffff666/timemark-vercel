@@ -11,6 +11,8 @@ import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import {
   createHabitSchema,
   dateStringInTimeZone,
@@ -122,6 +124,8 @@ function enumerateDays(from: string, to: string): string[] {
 
 export default function Habits() {
   const navigate = useNavigate();
+  // v2.42 R23：统一确认弹窗 + 删除可撤销
+  const { confirm, confirmDialog } = useConfirm();
 
   const [habits, setHabits] = useState<HabitWithStreak[]>([]);
   const [grid, setGrid] = useState<HabitGridResult | null>(null);
@@ -221,7 +225,7 @@ export default function Habits() {
       setStatus('今日全部达标，无需打卡 🎉');
       return;
     }
-    if (!confirm(`一键打卡 ${due.length} 个未达标的习惯？`)) return;
+    if (!(await confirm({ title: `一键打卡 ${due.length} 个未达标的习惯？`, confirmLabel: '打卡' }))) return;
     setBulkLogging(true);
     setError('');
     try {
@@ -284,12 +288,30 @@ export default function Habits() {
   };
 
   const remove = async (habit: HabitWithStreak) => {
-    if (!window.confirm(`确定删除「${habit.name}」？`)) return;
+    if (!(await confirm({ title: `删除习惯「${habit.name}」？`, description: '打卡历史将一并删除。', tone: 'danger', confirmLabel: '删除' }))) return;
     setError('');
     try {
       await api.delete(`/habits/${habit.id}`);
-      setStatus(`已删除「${habit.name}」`);
       await refresh();
+      // v2.42 R23：撤销 = 按原文重新创建（内容恢复，id/打卡历史为新记录）
+      toast.success(`已删除「${habit.name}」`, {
+        label: '撤销',
+        onClick: () => {
+          void api
+            .post('/habits', {
+              name: habit.name,
+              icon: habit.icon ?? null,
+              targetPerPeriod: habit.target_per_period ?? undefined,
+              period: habit.period ?? undefined,
+              scheduleDays: habit.schedule_days ?? null,
+              reminderTimes: habit.reminder_times ?? null,
+              color: habit.color ?? null,
+              isActive: habit.is_active ?? true,
+            })
+            .then(() => { void refresh(); toast.info('已恢复（生成为新记录）'); })
+            .catch(() => toast.error('恢复失败'));
+        },
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败');
     }
@@ -634,6 +656,7 @@ export default function Habits() {
           </div>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }

@@ -107,10 +107,23 @@ export default function Templates() {
 
   const handleDelete = async (eventType: string) => {
     if (!(await confirm({ title: '删除此模板？', tone: 'danger', confirmLabel: '删除' }))) return;
-    
+
+    // v2.42 R23：留存原文，撤销 = 重新保存同内容
+    const original = templates.find((t) => t.event_type === eventType);
     try {
       await api.delete(`/config/templates/${eventType}`);
       loadTemplates();
+      if (original) {
+        toast.success(`模板「${eventType}」已删除`, {
+          label: '撤销',
+          onClick: () => {
+            void api
+              .post('/config/templates', { event_type: original.event_type, template_content: original.template_content })
+              .then(() => { loadTemplates(); toast.info('已恢复'); })
+              .catch(() => toast.error('恢复失败'));
+          },
+        });
+      }
     } catch (error) {
       console.error('Failed to delete template:', error);
       toast.error('删除失败');
