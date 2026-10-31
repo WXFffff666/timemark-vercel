@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { toast } from '@/lib/toast';
 
 interface EventTemplate {
   id: number;
@@ -87,7 +88,7 @@ export default function Templates() {
 
   const handleSave = async () => {
     if (!formData.event_type.trim() || !formData.template_content.trim()) {
-      alert('请填写事件类型和模板内容');
+      toast.error('请填写事件类型和模板内容');
       return;
     }
 
@@ -100,7 +101,7 @@ export default function Templates() {
       loadTemplates();
     } catch (error) {
       console.error('Failed to save template:', error);
-      alert('保存失败');
+      toast.error('保存失败');
     }
   };
 
@@ -112,7 +113,7 @@ export default function Templates() {
       loadTemplates();
     } catch (error) {
       console.error('Failed to delete template:', error);
-      alert('删除失败');
+      toast.error('删除失败');
     }
   };
 

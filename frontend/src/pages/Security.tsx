@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { toast } from '@/lib/toast';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
@@ -128,7 +129,7 @@ export default function Security() {
   const saveWhitelist = async () => {
     const ips = whitelistIps.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
     await api.put('/security/ip-whitelist', { enabled: whitelistEnabled, ips });
-    alert('IP 白名单已保存');
+    toast.success('IP 白名单已保存');
   };
 
   const setupTotp = async () => {
@@ -140,7 +141,7 @@ export default function Security() {
     await api.post('/security/totp/enable', { code: totpCode });
     setTotpEnabled(true);
     setQrDataUrl('');
-    alert('双因素认证已启用');
+    toast.success('双因素认证已启用');
   };
 
   const issueRecoveryCodes = async () => {
@@ -154,7 +155,7 @@ export default function Security() {
       setRecoveryPassword('');
       setRecoveryCodesRemaining(data.codes.length);
     } catch (e) {
-      alert(e instanceof Error ? e.message : '恢复码签发失败');
+      toast.error(e instanceof Error ? e.message : '恢复码签发失败');
     } finally {
       setRecoveryBusy(false);
     }
@@ -164,10 +165,10 @@ export default function Security() {
     if (!issuedRecoveryCodes?.length) return;
     try {
       await navigator.clipboard.writeText(issuedRecoveryCodes.join('\n'));
-      alert('已复制全部恢复码');
+      toast.success('已复制全部恢复码');
     } catch {
       // Clipboard API can be unavailable (non-HTTPS / permission denied) — select-free fallback.
-      alert('复制失败，请手动抄写');
+      toast.error('复制失败，请手动抄写');
     }
   };
 
@@ -179,10 +180,10 @@ export default function Security() {
       setTotpEnabled(false);
       setRecoveryCodesRemaining(null);
       setIssuedRecoveryCodes(null);
-      alert('双因素认证已关闭');
+      toast.success('双因素认证已关闭');
       load();
     } catch (e) {
-      alert(e instanceof Error ? e.message : '关闭失败');
+      toast.error(e instanceof Error ? e.message : '关闭失败');
     } finally {
       setRecoveryBusy(false);
     }
@@ -195,17 +196,17 @@ export default function Security() {
 
   const handleRegisterPasskey = async () => {
     if (!passkeySupported) {
-      alert('当前浏览器不支持 Passkey');
+      toast.error('当前浏览器不支持 Passkey');
       return;
     }
     setPasskeyBusy(true);
     try {
       await registerPasskey(passkeyName.trim() || '我的设备');
       setPasskeyName('');
-      alert('Passkey 注册成功');
+      toast.success('Passkey 注册成功');
       load();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Passkey 注册失败');
+      toast.error(e instanceof Error ? e.message : 'Passkey 注册失败');
     } finally {
       setPasskeyBusy(false);
     }
@@ -217,7 +218,7 @@ export default function Security() {
       await removePasskey(id);
       load();
     } catch (e) {
-      alert(e instanceof Error ? e.message : '删除失败');
+      toast.error(e instanceof Error ? e.message : '删除失败');
     }
   };
 

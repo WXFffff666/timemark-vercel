@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { toast } from '@/lib/toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { ChannelRepairWizard } from '@/components/channels/ChannelRepairWizard';
@@ -474,15 +475,15 @@ export default function Channels() {
   const testSmtpConfig = async () => {
     if (!selectedTemplate || selectedTemplate.id !== 'smtp') return;
     if (!configForm.smtpProvider) {
-      alert('请先选择邮箱服务商');
+      toast.error('请先选择邮箱服务商');
       return;
     }
     if (!configForm.chat_id?.trim() || !configForm.webhook?.trim() || !configForm.secret?.trim()) {
-      alert('请填写发件人邮箱、SMTP 服务器和端口');
+      toast.error('请填写发件人邮箱、SMTP 服务器和端口');
       return;
     }
     if (!configForm.token?.trim() && !(selectedAccount?.tokenConfigured)) {
-      alert('请填写授权码或应用专用密码');
+      toast.error('请填写授权码或应用专用密码');
       return;
     }
 
@@ -514,7 +515,7 @@ export default function Channels() {
 
   const saveConfig = async () => {
     if (!selectedTemplate || !configForm.name.trim()) {
-      alert('请填写渠道名称');
+      toast.error('请填写渠道名称');
       return;
     }
 
@@ -525,7 +526,7 @@ export default function Channels() {
           if (field.name === 'token' && selectedAccount.tokenConfigured) continue;
           if (field.name === 'secret' && selectedAccount.secretConfigured) continue;
         }
-        alert(`请填写 ${field.label}`);
+        toast.error(`请填写 ${field.label}`);
         return;
       }
     }
@@ -544,7 +545,7 @@ export default function Channels() {
         chatId = chatId ? (normalizeEmail(chatId) ?? chatId.trim().toLowerCase()) : undefined;
       } else if (selectedTemplate.id === 'smtp') {
         if (!configForm.smtpProvider) {
-          alert('请选择邮箱服务商');
+          toast.error('请选择邮箱服务商');
           setSaving(false);
           return;
         }
@@ -582,7 +583,7 @@ export default function Channels() {
       await fetchData();
     } catch (error: unknown) {
       console.error('Failed to save config:', error);
-      alert(error instanceof Error ? error.message : '保存配置失败，请检查输入格式');
+      toast.error(error instanceof Error ? error.message : '保存配置失败，请检查输入格式');
     } finally {
       setSaving(false);
     }
@@ -615,9 +616,9 @@ export default function Channels() {
     const result = await testAccountStatus(account);
     setTestingConnection(null);
     if (result.status === 'connected') {
-      alert(`✅ ${result.message || '连接成功'}`);
+      toast.success(`${result.message || '连接成功'}`);
     } else {
-      alert(`❌ ${result.message || '测试失败'}`);
+      toast.error(`${result.message || '测试失败'}`);
     }
   };
 
@@ -630,7 +631,7 @@ export default function Channels() {
     }
     const lines = text.split(/\n+/).map((l) => l.trim()).filter((l) => /:\/\//.test(l));
     if (!lines.length) {
-      alert('未解析到有效 URL');
+      toast.error('未解析到有效 URL');
       return;
     }
     setConfigForm((prev) => ({

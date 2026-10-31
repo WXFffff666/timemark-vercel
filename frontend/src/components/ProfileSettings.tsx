@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2, Pencil, Bell, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { toast } from '@/lib/toast';
 import { useProfileStore } from '@/stores/profile.store';
 import type { ProfileRecord } from '@timemark/shared';
 
@@ -12,7 +13,7 @@ import type { ProfileRecord } from '@timemark/shared';
  * - 通知路由：每个档案可勾选「提醒走哪些通知账户」；一个都不勾 = 未配置路由 =
  *   全部启用账户（后端 profile_channel_accounts 无行时的回退语义）。
  *
- * 与设置页其它区块一致：直接调用 api.*，反馈用 alert()，样式复用 glass-panel。
+ * 与设置页其它区块一致：直接调用 api.*，反馈用 toast()（v2.41 R20），样式复用 glass-panel。
  */
 
 interface AccountRow {
@@ -64,7 +65,7 @@ export function ProfileSettings() {
 
   const handleSave = async () => {
     if (!form.name.trim()) {
-      alert('档案名称不能为空');
+      toast.error('档案名称不能为空');
       return;
     }
     setSaving(true);
@@ -87,7 +88,7 @@ export function ProfileSettings() {
       setEditing(null);
       await load();
     } catch (error) {
-      alert('保存失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      toast.error('保存失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setSaving(false);
     }
@@ -100,7 +101,7 @@ export function ProfileSettings() {
       if (routingProfile?.id === profile.id) setRoutingProfile(null);
       await load();
     } catch (error) {
-      alert('删除失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      toast.error('删除失败: ' + (error instanceof Error ? error.message : '未知错误'));
     }
   };
 
@@ -112,7 +113,7 @@ export function ProfileSettings() {
       const data = await api.get<{ account_ids: number[] }>(`/profiles/${profile.id}/accounts`);
       setRoutedIds(Array.isArray(data?.account_ids) ? data.account_ids : []);
     } catch (error) {
-      alert('读取通知路由失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      toast.error('读取通知路由失败: ' + (error instanceof Error ? error.message : '未知错误'));
       setRoutingProfile(null);
     } finally {
       setRoutingLoading(false);
@@ -129,9 +130,9 @@ export function ProfileSettings() {
     try {
       const data = await api.put<{ account_ids: number[] }>(`/profiles/${routingProfile.id}/accounts`, { accountIds: routedIds });
       setRoutedIds(Array.isArray(data?.account_ids) ? data.account_ids : routedIds);
-      alert('通知路由已保存');
+      toast.success('通知路由已保存');
     } catch (error) {
-      alert('保存通知路由失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      toast.error('保存通知路由失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setSaving(false);
     }

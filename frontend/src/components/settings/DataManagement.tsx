@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { stripMarkdownLight } from '@/lib/local-ai/text-clean';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { toast } from '@/lib/toast';
 
 /**
  * v2.26 批次 B：数据管理卡（设置页「安全与数据」）。
@@ -177,7 +178,7 @@ export function DataManagement() {
                   a.click();
                   window.URL.revokeObjectURL(url);
                 } catch (e) {
-                  alert(e instanceof Error ? e.message : '导出失败');
+                  toast.error(e instanceof Error ? e.message : '导出失败');
                 }
               }}
             >

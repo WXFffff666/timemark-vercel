@@ -85,6 +85,15 @@
   @media (width >= 1400px) { max-width: 1400px; }
 }
 
+/* v2.41 R20：toast 滑入动画（ToastHost） */
+@keyframes toast-slide-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast-slide-in {
+  animation: toast-slide-in 0.18s ease-out;
+}
+
 @layer base {
   :root {
     /* 銆愭祬鑹叉ā寮忓交搴曢噸鏋勩€戯細鍙傝€?MacOS / Windows 11 浜戞瘝璐ㄦ劅 */

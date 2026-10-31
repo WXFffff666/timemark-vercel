@@ -23,6 +23,7 @@ import { AlmanacCard } from '@/components/almanac/AlmanacCard';
 import { TimeMachineCard } from '@/components/dashboard/TimeMachineCard';
 import { RecentNotificationsCard } from '@/components/dashboard/RecentNotifications';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { toast } from '@/lib/toast';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -217,7 +218,7 @@ export function Dashboard() {
         if (data.success && data.data?.length > 0) {
           window.open(data.data[0].link, '_blank');
         } else {
-          alert('没有可导出的事件');
+          toast.error('没有可导出的事件');
         }
       } else if (format === 'apple') {
         // Subscribe to Apple Calendar
@@ -231,7 +232,7 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error('Export error:', error);
-      alert('导出失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      toast.error('导出失败: ' + (error instanceof Error ? error.message : '未知错误'));
     }
   };
 

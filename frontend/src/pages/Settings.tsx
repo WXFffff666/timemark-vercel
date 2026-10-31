@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { toast } from '@/lib/toast';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -300,7 +301,7 @@ export default function Settings() {
     const params = new URLSearchParams(window.location.search);
     const google = params.get('google');
     if (google === 'connected') {
-      alert('Google 日历已成功连接');
+      toast.success('Google 日历已成功连接');
       params.delete('google');
       window.history.replaceState({}, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}`);
       api.get<{ configured?: boolean; connected?: boolean; email?: string | null; calendarId?: string }>('/calendar/google-oauth/status')
@@ -312,7 +313,7 @@ export default function Settings() {
         }))
         .catch(() => {});
     } else if (google === 'error') {
-      alert(`Google 日历连接失败：${params.get('reason') || '未知错误'}`);
+      toast.error(`Google 日历连接失败：${params.get('reason') || '未知错误'}`);
       params.delete('google');
       params.delete('reason');
       window.history.replaceState({}, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}`);
@@ -330,9 +331,9 @@ export default function Settings() {
         default_test_email: defaultTestEmail.trim() || null,
         reminder_emails: reminderList.length ? reminderList : [],
       });
-      alert('通知默认设置已保存');
+      toast.success('通知默认设置已保存');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '保存失败');
+      toast.error(e instanceof Error ? e.message : '保存失败');
     } finally {
       setNotificationDefaultsSaving(false);
     }
@@ -346,16 +347,16 @@ export default function Settings() {
       await api.delete('/email-logs');
       setEmailLogs([]);
     } catch (e) {
-      alert(e instanceof Error ? e.message : '清空失败');
+      toast.error(e instanceof Error ? e.message : '清空失败');
     }
   };
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      alert(`${label}已复制`);
+      toast.success(`${label}已复制`);
     } catch {
-      alert('复制失败，请手动选择复制');
+      toast.error('复制失败，请手动选择复制');
     }
   };
 
@@ -366,9 +367,9 @@ export default function Settings() {
         externalCalendarUrls: externalCalendarUrls.filter((u) => u.trim()),
         externalCalendarSyncStrategy: syncStrategy,
       });
-      alert('外部日历 URL 已保存');
+      toast.success('外部日历 URL 已保存');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '保存失败');
+      toast.error(e instanceof Error ? e.message : '保存失败');
     } finally {
       setIntegrationsSaving(false);
     }
@@ -381,7 +382,7 @@ export default function Settings() {
       const result = await api.post<{ url: string }>('/calendar/feed-tokens', { name });
       setCalendarFeedTokens((prev) => [...prev, { name, url: result.url }]);
     } catch (e) {
-      alert(e instanceof Error ? e.message : '创建失败');
+      toast.error(e instanceof Error ? e.message : '创建失败');
     }
   };
 
@@ -389,7 +390,7 @@ export default function Settings() {
   const createIcsFeed = async () => {
     const value = newIcsFeedValue.trim();
     if (!value) {
-      alert('请填写筛选值（事件分类 / 档案 ID / 联系人姓名）');
+      toast.error('请填写筛选值（事件分类 / 档案 ID / 联系人姓名）');
       return;
     }
     const filter: { type: 'category' | 'profile' | 'contact'; value: string | number } =
@@ -397,7 +398,7 @@ export default function Settings() {
         ? { type: 'profile', value: Number(value) }
         : { type: newIcsFeedType, value };
     if (filter.type === 'profile' && (!Number.isInteger(filter.value) || Number(filter.value) <= 0)) {
-      alert('档案筛选值必须是正整数 ID');
+      toast.error('档案筛选值必须是正整数 ID');
       return;
     }
 
@@ -422,7 +423,7 @@ export default function Settings() {
       setNewIcsFeedName('');
       setNewIcsFeedValue('');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '创建订阅源失败');
+      toast.error(e instanceof Error ? e.message : '创建订阅源失败');
     } finally {
       setIcsFeedBusy(false);
     }
@@ -435,7 +436,7 @@ export default function Settings() {
       setIcsFeeds((prev) => prev.map((f) => (f.id === id ? { ...f, revokedAt: new Date().toISOString() } : f)));
       setCreatedIcsFeed((prev) => (prev && prev.id === id ? null : prev));
     } catch (e) {
-      alert(e instanceof Error ? e.message : '撤销失败');
+      toast.error(e instanceof Error ? e.message : '撤销失败');
     }
   };
 
@@ -448,9 +449,9 @@ export default function Settings() {
         password: caldavPassword || undefined,
       });
       setCaldavPassword('');
-      alert('CalDAV 配置已保存');
+      toast.success('CalDAV 配置已保存');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '保存失败');
+      toast.error(e instanceof Error ? e.message : '保存失败');
     } finally {
       setIntegrationsSaving(false);
     }
@@ -458,7 +459,7 @@ export default function Settings() {
 
   const handleEncryptedExport = async () => {
     if (!encryptBackupPassword || encryptBackupPassword.length < 8) {
-      alert('加密导出需要至少 8 位密码');
+      toast.error('加密导出需要至少 8 位密码');
       return;
     }
     setBackupLoading(true);
@@ -483,7 +484,7 @@ export default function Settings() {
       window.URL.revokeObjectURL(url);
       setEncryptBackupPassword('');
     } catch (error) {
-      alert(error instanceof Error ? error.message : '加密导出失败');
+      toast.error(error instanceof Error ? error.message : '加密导出失败');
     } finally {
       setBackupLoading(false);
     }
@@ -512,7 +513,7 @@ export default function Settings() {
       const result = await api.get<{ authUrl: string }>('/calendar/google-oauth/start');
       if (result.authUrl) window.location.href = result.authUrl;
     } catch (e) {
-      alert(e instanceof Error ? e.message : '无法启动 Google 授权');
+      toast.error(e instanceof Error ? e.message : '无法启动 Google 授权');
     }
   };
 
@@ -521,9 +522,9 @@ export default function Settings() {
     try {
       await api.delete('/calendar/google-oauth');
       setGoogleOAuth((prev) => ({ ...prev, connected: false, email: null }));
-      alert('已断开 Google 日历');
+      toast.error('已断开 Google 日历');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '断开失败');
+      toast.error(e instanceof Error ? e.message : '断开失败');
     }
   };
 
@@ -557,9 +558,9 @@ export default function Settings() {
         quiet_hours_start: quietHoursStart.trim() || null,
         quiet_hours_end: quietHoursEnd.trim() || null,
       });
-      alert('免打扰时段已保存');
+      toast.success('免打扰时段已保存');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '保存失败');
+      toast.error(e instanceof Error ? e.message : '保存失败');
     } finally {
       setQuietHoursSaving(false);
     }
@@ -579,9 +580,9 @@ export default function Settings() {
         holiday_reminder_mode: holidayReminderMode,
         jieqi_reminder_list: jieqiReminderList,
       });
-      alert('日历提醒设置已保存');
+      toast.success('日历提醒设置已保存');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '保存失败');
+      toast.error(e instanceof Error ? e.message : '保存失败');
     } finally {
       setHolidaySaving(false);
     }
@@ -597,9 +598,9 @@ export default function Settings() {
         reminder_catchup_minutes: reminderCatchupMinutes.trim() === '' ? null : Number(reminderCatchupMinutes),
         fallback_enabled: fallbackEnabled,
       });
-      alert('高级通知设置已保存');
+      toast.success('高级通知设置已保存');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '保存失败');
+      toast.error(e instanceof Error ? e.message : '保存失败');
     } finally {
       setAdvancedSaving(false);
     }
@@ -636,9 +637,9 @@ export default function Settings() {
         alert_emails: emails,
         alert_account_ids: selectedAlertAccountIds,
       });
-      alert('安全告警设置已保存');
+      toast.success('安全告警设置已保存');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '保存失败');
+      toast.error(e instanceof Error ? e.message : '保存失败');
     } finally {
       setAlertSaving(false);
     }
@@ -661,7 +662,7 @@ export default function Settings() {
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      alert('导出失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      toast.error('导出失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setBackupLoading(false);
     }
@@ -674,9 +675,9 @@ export default function Settings() {
       const text = await file.text();
       const data = JSON.parse(text);
       const result = await api.post<{ events: number; mappings: number; templates: number }>('/data/import', data);
-      alert(`导入完成：事件 ${result.events} 条，关系映射 ${result.mappings} 条，模板 ${result.templates} 条`);
+      toast.error(`导入完成：事件 ${result.events} 条，关系映射 ${result.mappings} 条，模板 ${result.templates} 条`);
     } catch (error) {
-      alert('导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      toast.error('导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setBackupLoading(false);
     }
@@ -701,11 +702,11 @@ export default function Settings() {
       // Update original profile for future resets
       setOriginalProfile(profileForm);
       
-      alert('个人信息保存成功');
+      toast.success('个人信息保存成功');
       setShowProfileModal(false);
     } catch (error) {
       console.error('Failed to save profile:', error);
-      alert('保存失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      toast.error('保存失败: ' + (error instanceof Error ? error.message : '未知错误'));
     }
   };
   
@@ -752,12 +753,12 @@ export default function Settings() {
 
   const handleChangePassword = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert('两次输入的密码不一致');
+      toast.error('两次输入的密码不一致');
       return;
     }
     
     if (passwordForm.newPassword.length < 8) {
-      alert('新密码至少需要8个字符');
+      toast.error('新密码至少需要8个字符');
       return;
     }
 
@@ -766,12 +767,12 @@ export default function Settings() {
         currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword,
       });
-      alert('密码修改成功');
+      toast.success('密码修改成功');
       setShowPasswordModal(false);
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (error: any) {
       console.error('Failed to change password:', error);
-      alert(error.message || '密码修改失败');
+      toast.error(error.message || '密码修改失败');
     }
   };
 

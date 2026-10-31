@@ -29,6 +29,7 @@ import type { VoiceDraft } from './voice-input';
 import { PRESET_TEMPLATES, renderTemplate, EVENT_TYPE_TEMPLATES } from '@timemark/shared/templates';
 import { getBlessing } from '@timemark/shared/blessings';
 import type { Event, CreateEventRequest, EventType, CalendarType, ReminderConfig, LunarDate } from '@timemark/shared';
+import { toast } from '@/lib/toast';
 
 interface NotificationAccountResponse {
   id: number;
@@ -508,17 +509,17 @@ export function EventForm({ open, onClose, onSubmit, event, prefill }: EventForm
     
     // Validate required fields
     if (!formData.name.trim()) {
-      alert('请输入事件名称');
+      toast.error('请输入事件名称');
       return;
     }
     
     if (!formData.date && formData.calendarType !== 'lunar') {
-      alert('请选择日期');
+      toast.error('请选择日期');
       return;
     }
 
     if (formData.calendarType === 'lunar' && !lunarInputValue.trim()) {
-      alert('请填写农历日期');
+      toast.error('请填写农历日期');
       return;
     }
     
@@ -530,13 +531,13 @@ export function EventForm({ open, onClose, onSubmit, event, prefill }: EventForm
       }
       const targetDate = new Date(dateToValidate + 'T00:00:00');
       if (isNaN(targetDate.getTime())) {
-        alert('无效的日期格式');
+        toast.error('无效的日期格式');
         return;
       }
     } else if (formData.calendarType === 'lunar') {
       const lunarDate = parseLunarInput(lunarInputValue);
       if (!lunarDate || !convertToGregorian(lunarDate)) {
-        alert('请填写有效的农历日期');
+        toast.error('请填写有效的农历日期');
         return;
       }
     }
@@ -562,7 +563,7 @@ export function EventForm({ open, onClose, onSubmit, event, prefill }: EventForm
         // Try to parse as date (append T00:00:00 to force local timezone)
         const targetDate = new Date(formData.date + 'T00:00:00');
         if (isNaN(targetDate.getTime())) {
-          alert('无效的日期格式');
+          toast.error('无效的日期格式');
           return;
         }
         const year = targetDate.getFullYear();
@@ -594,13 +595,13 @@ export function EventForm({ open, onClose, onSubmit, event, prefill }: EventForm
         const lunarFromDate = convertToLunar(dateStr);
         submissionData.lunarDate = lunarFromInput ?? formData.lunarDate ?? lunarFromDate ?? undefined;
         if (!submissionData.lunarDate) {
-          alert('请填写有效的农历日期');
+          toast.error('请填写有效的农历日期');
           return;
         }
         if (!submissionData.date) {
           const gregorian = convertToGregorian(submissionData.lunarDate);
           if (!gregorian) {
-            alert('农历日期无效，无法转换为公历');
+            toast.error('农历日期无效，无法转换为公历');
             return;
           }
           submissionData.date = gregorian;
@@ -611,7 +612,7 @@ export function EventForm({ open, onClose, onSubmit, event, prefill }: EventForm
       onClose();
     } catch (error: any) {
       console.error('Submit error:', error);
-      alert(error.message || '保存失败，请检查输入格式');
+      toast.error(error.message || '保存失败，请检查输入格式');
     } finally {
       setLoading(false);
     }
@@ -747,12 +748,12 @@ export function EventForm({ open, onClose, onSubmit, event, prefill }: EventForm
     if (!customTime) return;
     const timePattern = /^([01]?[0-9]|2[0-3]):([0-5][0-9])$/;
     if (!timePattern.test(customTime)) {
-      alert('请输入正确的时间格式，如 09:00');
+      toast.error('请输入正确的时间格式，如 09:00');
       return;
     }
     const currentTimes = formData.reminderConfig.reminderTimes || [];
     if (currentTimes.includes(customTime)) {
-      alert('该时间已存在');
+      toast.error('该时间已存在');
       return;
     }
     setFormData({

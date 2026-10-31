@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { api } from '@/lib/api';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { toast } from '@/lib/toast';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } as const } };
@@ -92,10 +93,10 @@ export default function LoginHistory() {
     try {
       await api.delete('/auth/login-history');
       setLogs([]);
-      alert('登录历史已清空');
+      toast.success('登录历史已清空');
     } catch (error) {
       console.error('Failed to clear logs:', error);
-      alert('清空失败，请稍后重试');
+      toast.error('清空失败，请稍后重试');
     } finally {
       setClearing(false);
     }
