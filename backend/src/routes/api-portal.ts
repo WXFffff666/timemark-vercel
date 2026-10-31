@@ -9,6 +9,7 @@ import { listExpiryItems } from '../services/expiry.service.js';
 import { listHabits } from '../services/habit.service.js';
 import { createLogger } from '../utils/logger.js';
 import { createEventSchema } from '@timemark/shared';
+import { openApiSpec } from './api-portal.openapi.js';
 import type { AgentTokenScope } from '../services/agent-tokens.service.js';
 
 /**
@@ -100,6 +101,9 @@ async function audit(entry: {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// v2.41 R21：公开 OpenAPI 规范（无需 token——spec 本身无敏感数据）
+apiV1.get('/openapi.json', (c) => c.json(openApiSpec as unknown as Record<string, unknown>));
 
 function parseLimit(raw: string | undefined): number {
   return Math.min(Math.max(parseInt(raw || '50', 10) || 50, 1), 100);
