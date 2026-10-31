@@ -56,12 +56,20 @@ export default function Analytics() {
   // v2.31 R2（F60）：日粒度切换
   const [dailyRange, setDailyRange] = useState<7 | 30 | 90>(30);
   const [daily, setDaily] = useState<DailyStatsRow[]>([]);
+  // v2.41 R22：生活域概览（quick-counts 六域计数）
+  const [lifeCounts, setLifeCounts] = useState<{ contacts: number; inventory: number; maintenance: number; goals: number; habits: number; expiry: number } | null>(null);
 
   useEffect(() => {
     api.get<StatsData>('/stats')
       .then(setStats)
       .catch(console.error)
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    api.get<{ contacts: number; inventory: number; maintenance: number; goals: number; habits: number; expiry: number }>('/stats/quick-counts')
+      .then(setLifeCounts)
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -76,6 +84,19 @@ export default function Analytics() {
     () => [...daily].reverse().map((r) => ({ day: r.day.slice(5), success: r.triggers_success, failed: r.triggers_failed })),
     [daily],
   );
+
+  // v2.41 R22：生活域概览数据（count 未加载时显示 — 占位不渲染）
+  const lifeDomains = useMemo(() => {
+    if (lifeCounts === null) return null;
+    return [
+      { label: '联系人', count: lifeCounts.contacts, href: '/contacts' },
+      { label: '物品', count: lifeCounts.inventory, href: '/inventory' },
+      { label: '保养计划', count: lifeCounts.maintenance, href: '/maintenance' },
+      { label: '进行中目标', count: lifeCounts.goals, href: '/goals' },
+      { label: '活跃习惯', count: lifeCounts.habits, href: '/habits' },
+      { label: '到期项目', count: lifeCounts.expiry, href: '/expiry' },
+    ];
+  }, [lifeCounts]);
 
   const monthlyChartData = useMemo(() => {
     if (!stats?.monthlyTriggers?.length) return [];
@@ -159,6 +180,31 @@ export default function Analytics() {
             </CardContent>
           </Card>
         </div>
+
+        {/* v2.41 R22：生活域概览——quick-counts 六域计数 + 管理跳转（NN/g 空态引导的落地形态） */}
+        <Card className="glass-panel border-0">
+          <CardHeader>
+            <CardTitle className="text-base">生活域概览</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {lifeDomains === null ? (
+              <p className="text-sm text-muted-foreground">正在统计…</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {lifeDomains.map((d) => (
+                  <a
+                    key={d.label}
+                    href={d.href}
+                    className="rounded-2xl border border-slate-200/70 dark:border-slate-700/50 px-4 py-3 hover:border-primary-400 hover:bg-primary-500/5 transition-colors"
+                  >
+                    <p className="text-xl font-bold text-slate-800 dark:text-slate-100">{d.count}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{d.label}</p>
+                  </a>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid md:grid-cols-2 gap-6">
           <Card className="glass-panel border-0">

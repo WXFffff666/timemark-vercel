@@ -53,6 +53,30 @@ const FIELD_LABELS: Array<[keyof OcrFields, string]> = [
   ['currency', '币种'],
 ];
 
+/** v2.41 R22：按识别文本推断证件类型——身份证/护照/驾照/签证/保单/合同/证书，默认 other */
+export function inferDocKind(text: string): string {
+  const t = typeof text === 'string' ? text : '';
+  if (/居民身份证|身份证/.test(t)) return 'id_card';
+  if (/护照|passport/i.test(t)) return 'passport';
+  if (/驾驶证|驾照|行驶证/.test(t)) return 'driver_license';
+  if (/签证|visa/i.test(t)) return 'visa';
+  if (/保险单|保单|保险合同/.test(t)) return 'policy';
+  if (/合同|协议书/.test(t)) return 'contract';
+  if (/证书|毕业|学位|资格证/.test(t)) return 'certificate';
+  return 'other';
+}
+
+const KIND_OPTIONS: Array<[string, string]> = [
+  ['other', '其他'],
+  ['id_card', '身份证'],
+  ['passport', '护照'],
+  ['driver_license', '驾照'],
+  ['visa', '签证'],
+  ['policy', '保单'],
+  ['contract', '合同'],
+  ['certificate', '证书'],
+];
+
 function fmtBytes(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(n / 1024))} KB`;
@@ -73,6 +97,8 @@ export function Ocr() {
   const [result, setResult] = useState<OcrResultView | null>(null);
   const [history, setHistory] = useState<OcrHistoryRow[]>([]);
   const [saved, setSaved] = useState('');
+  // v2.41 R22：保存为文档时的类型（识别完成后按文本自动预选，可手动改）
+  const [docKind, setDocKind] = useState('other');
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const loadStatus = useCallback(async () => {
@@ -125,6 +151,8 @@ export function Ocr() {
       });
       const res = await api.post<OcrResultView>('/ocr', { contentType, dataBase64 });
       setResult(res);
+      // v2.41 R22：按识别文本自动预选文档类型（用户可改）
+      setDocKind(inferDocKind(res.text));
       void loadHistory();
     } catch (e) {
       setError(e instanceof Error ? e.message : '识别失败');
@@ -139,16 +167,18 @@ export function Ocr() {
     const today = new Date().toISOString().slice(0, 10);
     try {
       await api.post('/documents', {
-        kind: 'other',
+        // v2.41 R22：按识别文本推断证件类型（不再一律 other）；签发日期可回填
+        kind: docKind,
         title: (issuer.trim() || '扫描件').slice(0, 120) + `（${today}）`,
         issuer: issuer.trim().slice(0, 200) || null,
+        issuedAt: /^\d{4}-\d{2}-\d{2}$/.test(result.fields?.date ?? '') ? result.fields.date : null,
         notes: result.text.slice(0, 2000),
       });
       setSaved('已存入「文档」');
     } catch (e) {
       setError(e instanceof Error ? e.message : '存为文档失败');
     }
-  }, [result]);
+  }, [result, docKind]);
 
   const handleDownload = useCallback(() => {
     if (!result) return;
@@ -201,6 +231,7 @@ export function Ocr() {
               setResult(null);
               setError('');
               setSaved('');
+              setDocKind('other');
             }}
           />
           <div className="flex flex-wrap gap-2">
@@ -222,6 +253,21 @@ export function Ocr() {
                   <span key={key} className="text-xs px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
                     {label}：{result.fields?.[key] || '—'}
                   </span>
+                ))}
+              </div>
+              {/* v2.41 R22：存为文档的类型（识别完成自动预选，可改） */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-slate-500 dark:text-slate-400">存为文档类型：</span>
+                {KIND_OPTIONS.map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={docKind === value}
+                    onClick={() => setDocKind(value)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition ${docKind === value ? 'border-cyan-500 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-semibold' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  >
+                    {label}
+                  </button>
                 ))}
               </div>
               <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/50 px-4 py-3 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300 max-h-80 overflow-y-auto">

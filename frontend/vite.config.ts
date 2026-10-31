@@ -41,7 +41,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': {
+      // v2.41 R22：^/api/ 精确前缀——此前 '/api' 前缀把 /api-portal、/api-v1
+      // 等页面路由也代理给 backend，backend 静态 fallback 返回 dist/index.html
+      // （生产 bundle 引用 /assets/*），dev server 下 404 → ApiPortal 页 dev 白屏
+      // （v2.30 建页起一直如此，SPA 内部导航不走网络所以没人发现）。
+      '/api/': {
         target: process.env.VITE_API_TARGET || 'http://localhost:3000',
         changeOrigin: true,
       },
