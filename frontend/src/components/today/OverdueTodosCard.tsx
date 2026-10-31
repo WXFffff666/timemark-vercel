@@ -1,7 +1,8 @@
 import { ListChecks } from 'lucide-react';
-import type { Event } from '@timemark/shared';
+import { useEffect } from 'react';
 import { api } from '@/lib/api';
 import { useTimezone } from '@/components/RealtimeClock';
+import { useEventStore } from '@/stores/event.store';
 import { CardShell } from './CardShell';
 import { useCardData } from './useCardData';
 import { daysUntilEvent, eventTypeLabel, resolveNextOccurrenceDate, todoCompletionKey } from '@/lib/calendar-utils';
@@ -13,15 +14,21 @@ interface TodoCompletion {
 
 export function OverdueTodosCard() {
   const { timezone } = useTimezone();
-  const { data, loading, error, reload } = useCardData(
-    () => Promise.all([api.get<Event[]>('/events'), api.get<TodoCompletion[]>('/todos/completions')]),
+  // v2.44 R30：events 改用共享 event store（与 TodayEventsCard 同源，in-flight
+  // 去重）——此前本卡独立再拉一次 /events，Today 页首屏同一请求发两遍。
+  const { events: allEvents, fetchEvents } = useEventStore();
+  useEffect(() => {
+    void fetchEvents();
+  }, [fetchEvents]);
+  const { data: completionsData, loading, error, reload } = useCardData(
+    () => api.get<TodoCompletion[]>('/todos/completions'),
     [timezone],
   );
 
   const now = new Date();
-  const [events, completions] = data ?? [[], []];
+  const completions = completionsData ?? [];
   const completed = new Set(completions.map((completion) => todoCompletionKey(completion.eventId, completion.occurrenceDate)));
-  const overdue = events.filter((event) => {
+  const overdue = allEvents.filter((event) => {
     if (event.reminderConfig?.enabled === false) return false;
     if (daysUntilEvent(event.date, now, timezone) >= 0) return false;
     // A recurring event whose next occurrence is still ahead is not overdue.

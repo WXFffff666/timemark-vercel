@@ -76,15 +76,25 @@ export function Dashboard() {
   }, []);
 
   useEffect(() => {
-    prefetchRoute('/inbox');
-    prefetchRoute('/channels');
-    prefetchRoute('/calendar');
-    prefetchRoute('/todos');
-    prefetchRoute('/expiry');
-    prefetchRoute('/inventory');
-    prefetchRoute('/maintenance');
-    prefetchRoute('/goals');
-    prefetchRoute('/settings');
+    // v2.44 R30：9 个路由 chunk 预取移入 idle 时段——此前挂载即发，与首屏
+    // 数据请求（/config、/events?limit=200、/inbox 等）抢带宽。
+    const prefetch = () => {
+      prefetchRoute('/inbox');
+      prefetchRoute('/channels');
+      prefetchRoute('/calendar');
+      prefetchRoute('/todos');
+      prefetchRoute('/expiry');
+      prefetchRoute('/inventory');
+      prefetchRoute('/maintenance');
+      prefetchRoute('/goals');
+      prefetchRoute('/settings');
+    };
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(prefetch, { timeout: 4000 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(prefetch, 2500);
+    return () => window.clearTimeout(t);
   }, []);
 
   useEffect(() => {

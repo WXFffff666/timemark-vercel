@@ -150,15 +150,30 @@ function inputToMethods(input: CreateFixedContactInput | UpdateFixedContactInput
 export async function listFixedContacts(userId: number, profileId?: number | null): Promise<FixedContactRow[]> {
   // Optional profile filter (checkbox 69): omitted = all profiles, byte-identical
   // to the pre-profile API shape. The predicate is ADDED, never a rewrite.
-  const profileClause = profileId == null ? '' : ' AND profile_id = $2';
+  // v2.44 R30：防御性 LIMIT 500——此前是全仓库唯一无上限的列表查询
+  //（events 都 cap 200）；单用户场景 500 足够。profile 过滤走独立 if 分支，
+  // 两个 SQL 均为纯字面量模板（无插值）。
+  const LIMIT_CAP = 500;
+  if (profileId == null) {
+    const result = await query(
+      `SELECT id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid,
+              contact_methods, preferred_channels, relationship, gender, notes,
+              birth_date, greeting_opt_out,
+              cadence_days, last_contact_at, cadence_enabled,
+              validation_status, last_validated_at, created_at, updated_at
+       FROM fixed_contacts WHERE user_id = $1 ORDER BY name ASC LIMIT $2`,
+      [userId, LIMIT_CAP],
+    );
+    return result.rows.map(mapContactRow);
+  }
   const result = await query(
     `SELECT id, name, nickname, email, phone, telegram_chat_id, qq, wxpusher_uid,
             contact_methods, preferred_channels, relationship, gender, notes,
             birth_date, greeting_opt_out,
             cadence_days, last_contact_at, cadence_enabled,
             validation_status, last_validated_at, created_at, updated_at
-     FROM fixed_contacts WHERE user_id = $1${profileClause} ORDER BY name ASC`,
-    profileId == null ? [userId] : [userId, profileId],
+     FROM fixed_contacts WHERE user_id = $1 AND profile_id = $2 ORDER BY name ASC LIMIT $3`,
+    [userId, profileId, LIMIT_CAP],
   );
   return result.rows.map(mapContactRow);
 }

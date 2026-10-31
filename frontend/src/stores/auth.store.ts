@@ -137,10 +137,30 @@ interface AuthState {
   clearMustChangePassword: () => void;
 }
 
+/** v2.44 R30：本地是否存在登录凭证或「保持登录」标记——乐观渲染的前提 */
+function hasLocalAuthHint(): boolean {
+  try {
+    if (
+      localStorage.getItem('accessToken') ||
+      sessionStorage.getItem('accessToken') ||
+      localStorage.getItem('timemark_persistent_login') === 'true'
+    ) {
+      return true;
+    }
+    return false;
+    // HttpOnly cookie 会话（无本地凭证）无法乐观判断，保持 spinner→校验路径
+  } catch {
+    return false;
+  }
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  isAuthenticated: false,
-  isLoading: true,
+  // v2.44 R30：乐观渲染——有本地凭证/保持登录标记时假定已登录，首帧不再等
+  // /auth/session（Vercel 冷启动常态 >5s）。checkAuth 后台校验，真 401/403
+  // 时走既有踢回+清 token 逻辑。无本地凭证（首访/登出后）保持 spinner 路径。
+  isAuthenticated: hasLocalAuthHint(),
+  isLoading: !hasLocalAuthHint(),
   mustChangePassword: sessionStorage.getItem('mustChangePassword') === 'true',
 
   setUser: (user) => set({ user }),

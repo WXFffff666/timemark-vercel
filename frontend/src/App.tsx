@@ -187,7 +187,11 @@ function AnimatedRoutes() {
   useEffect(() => { checkAuth(); initAuthLifecycle(); }, [checkAuth]);
 
   useEffect(() => {
-    if (isAuthenticated && location.pathname === '/login') {
+    // v2.44 R30：乐观态下 isAuthenticated 立即为 true——不能把仍在 /login 输入
+    // 密码的用户弹走（随后校验失败又踢回 = 抖动）。仅在校验完成（!isLoading）
+    // 后才重定向已登录用户离开 /login。
+    const isLoading = useAuthStore.getState().isLoading;
+    if (!isLoading && isAuthenticated && location.pathname === '/login') {
       navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, location.pathname, navigate]);
@@ -196,12 +200,15 @@ function AnimatedRoutes() {
     <Suspense fallback={<PageLoader />}>
       {/*
         v2.26 D：全站页面过渡。
-        包一层 keyed motion.div + AnimatePresence(mode='wait') —— 旧代码里各页
-        根元素的 exit= 永远不会执行（Routes 没有 AnimatePresence 包裹），这里在
-        路由层统一做进入/退出过渡，28+ 页一次覆盖；页面内的 stagger 动画照常叠加。
+        包一层 keyed motion.div + AnimatePresence —— 旧代码里各页根元素的 exit=
+        永远不会执行（Routes 没有 AnimatePresence 包裹），这里在路由层统一做
+        进入/退出过渡，28+ 页一次覆盖；页面内的 stagger 动画照常叠加。
         跳过理由：/login 无动画直进；/embed /share 是外嵌 iframe 场景，动效无意义。
+        v2.44 R30：去掉 mode="wait"——旧页 exit 0.18s 跑完才挂新页 = 每次切页
+        固定多 180-360ms 可感延迟；现在新旧页短暂并行（exit 元素已脱离布局流，
+        absolute 定位避免双页叠影）。
       */}
-      <AnimatePresence mode="wait" initial={false}>
+      <AnimatePresence initial={false}>
         {NO_TRANSITION_ROUTES.has(location.pathname) ? (
           <div key={location.pathname}>
             <AppRoutes location={location} />
@@ -209,10 +216,12 @@ function AnimatedRoutes() {
         ) : (
           <motion.div
             key={location.pathname}
+            className={undefined}
+            style={{ position: 'relative' }}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
+            exit={{ opacity: 0, y: -6, position: 'absolute' as const, inset: '0 0 auto 0' }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
           >
             <AppRoutes location={location} />
           </motion.div>

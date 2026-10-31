@@ -217,11 +217,37 @@ export function useAiDegradedState(options: UseAiDegradedStateOptions = {}): Use
         mountedRef.current = false;
       };
     }
-    refresh();
-    const timer = window.setInterval(refresh, pollMs);
+    // v2.44 R30：首次探测延后到 idle（10.5s 上限）——Today 页首屏 8-9 个请求里
+    // AI 状态探测不紧急，挂载即发会与数据请求抢带宽。
+    let cancelled = false;
+    let interval = 0;
+    let fallback = 0;
+    let idleId = 0;
+    const start = () => {
+      if (cancelled) return;
+      cancelledStart = false;
+      refresh();
+      interval = window.setInterval(refresh, pollMs);
+    };
+    let cancelledStart = false;
+    if (typeof requestIdleCallback === 'function') {
+      idleId = requestIdleCallback(() => {
+        cancelledStart = true;
+        start();
+      }, { timeout: 10_000 });
+      // 兜底：idle 迟迟不来（后台标签页）也保证 10.5s 内启动
+      fallback = window.setTimeout(() => {
+        if (!cancelled && !cancelledStart) start();
+      }, 10_500);
+    } else {
+      fallback = window.setTimeout(start, 1500);
+    }
     return () => {
+      cancelled = true;
+      if (idleId && typeof cancelIdleCallback === 'function') cancelIdleCallback(idleId);
+      if (fallback) window.clearTimeout(fallback);
+      if (interval) window.clearInterval(interval);
       mountedRef.current = false;
-      window.clearInterval(timer);
     };
   }, [enabled, pollMs, refresh]);
 
