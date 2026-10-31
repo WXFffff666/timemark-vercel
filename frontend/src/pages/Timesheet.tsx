@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Clock, LogOut, Loader2, Timer, CalendarOff, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,8 @@ const fmtMin = (m: number): string => `${Math.floor(m / 60)}h${String(m % 60).pa
 const fmtTime = (iso: string): string => new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 export default function Timesheet() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [openSession, setOpenSession] = useState<Session | null>(null);
   const [overtime, setOvertime] = useState<OvertimeView | null>(null);
@@ -139,7 +142,7 @@ export default function Timesheet() {
   };
 
   const deleteSession = async (session: Session) => {
-    if (!confirm(`删除 ${fmtTime(session.clockIn)} 的打卡记录？`)) return;
+    if (!(await confirm({ title: `删除 ${fmtTime(session.clockIn)} 的打卡记录？`, tone: 'danger', confirmLabel: '删除' }))) return;
     setBusyKey(`del-${session.id}`);
     setError('');
     try {
@@ -172,7 +175,7 @@ export default function Timesheet() {
   };
 
   const deleteLeave = async (id: number) => {
-    if (!confirm('删除这条请假记录？')) return;
+    if (!(await confirm({ title: '删除这条请假记录？', tone: 'danger', confirmLabel: '删除' }))) return;
     setBusyKey(`lv-${id}`);
     try {
       await api.delete(`/timesheet/leaves/${id}`);
@@ -352,6 +355,7 @@ export default function Timesheet() {
           )}
         </section>
       </main>
+      {confirmDialog}
     </div>
   );
 }

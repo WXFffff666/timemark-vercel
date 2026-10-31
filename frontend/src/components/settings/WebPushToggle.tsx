@@ -3,6 +3,7 @@ import { BellRing, Monitor, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import {
   getWebPushState,
   sendTestWebPush,
@@ -25,6 +26,8 @@ interface PushDevice {
  * push button. Kept in its own component so the Settings.tsx diff stays tiny.
  */
 export function WebPushToggle() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [state, setState] = useState<WebPushState | 'loading'>('loading');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -148,7 +151,7 @@ export function WebPushToggle() {
                     className="shrink-0 text-slate-400 hover:text-red-500 transition disabled:opacity-50"
                     disabled={busy}
                     onClick={async () => {
-                      if (!confirm('移除该设备的推送订阅？')) return;
+                      if (!(await confirm({ title: '移除该设备的推送订阅？', tone: 'danger', confirmLabel: '移除' }))) return;
                       setBusy(true);
                       try {
                         await api.delete(`/push/subscriptions/${d.id}`);
@@ -169,6 +172,7 @@ export function WebPushToggle() {
         )}
         {message && <p className="text-xs text-slate-500 dark:text-slate-400">{message}</p>}
       </div>
+      {confirmDialog}
     </section>
   );
 }

@@ -3,6 +3,7 @@ import { ClipboardList, Loader2, Plus, Trash2, CheckCircle2, Users } from 'lucid
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
@@ -30,6 +31,8 @@ interface ListItem {
 const data = api;
 
 export default function HouseholdLists() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [lists, setLists] = useState<ListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -103,7 +106,7 @@ export default function HouseholdLists() {
   };
 
   const deleteList = async (id: number, name: string) => {
-    if (!confirm(`删除清单「${name}」会一并删除其条目，确定？`)) return;
+    if (!(await confirm({ title: `删除清单「${name}」？`, description: '会一并删除其全部条目。', tone: 'danger', confirmLabel: '删除' }))) return;
     setError('');
     try {
       await data.delete(`/inventory-list/${id}`);
@@ -150,7 +153,7 @@ export default function HouseholdLists() {
   };
 
   const deleteItem = async (itemId: number) => {
-    if (selectedId === null || !confirm('删除该条目？')) return;
+    if (selectedId === null || !(await confirm({ title: '删除该条目？', tone: 'danger', confirmLabel: '删除' }))) return;
     try {
       await data.delete(`/inventory-list/${selectedId}/items/${itemId}`);
       setItems((prev) => prev.filter((it) => it.id !== itemId));
@@ -274,6 +277,7 @@ export default function HouseholdLists() {
           </div>
         ) : null}
       </main>
+      {confirmDialog}
     </div>
   );
 }

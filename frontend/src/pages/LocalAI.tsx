@@ -8,6 +8,7 @@ import { chatWebLlm, isTierWeightReady, unloadEngines } from '@/lib/local-ai/eng
 import { buildKbIndex } from '@/lib/local-ai/kb';
 import { answerQuestion, type RagAnswer } from '@/lib/local-ai/rag';
 import { stripMarkdownLight } from '@/lib/local-ai/text-clean';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import {
   WEBLLM_MODELS,
   WEBLLM_TIER_IDS,
@@ -47,6 +48,8 @@ function loadStoredTier(): WebLlmTierId {
  * （向量索引存 IndexedDB，哈希增量构建）。数据全程不出本机。
  */
 export function LocalAI() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [device, setDevice] = useState<'checking' | 'ok' | 'unsupported'>('checking');
   const [tier, setTier] = useState<WebLlmTierId>(loadStoredTier);
   const [bundledReady, setBundledReady] = useState<boolean | null>(null);
@@ -89,7 +92,7 @@ export function LocalAI() {
   }, [history]);
 
   const handleClearHistory = useCallback(async () => {
-    if (!confirm('清空本地对话记录？')) return;
+    if (!(await confirm({ title: '清空本地对话记录？', description: 'IndexedDB 里的会话快照也会一并删除。', tone: 'danger', confirmLabel: '清空' }))) return;
     await clearChatHistory().catch(() => undefined);
     setHistory([]);
   }, []);
@@ -421,6 +424,7 @@ export function LocalAI() {
 
         <GreetingDraftTool device={device} tier={tier} onStatus={(msg, p) => { setModelStatus(msg); setModelProgress(typeof p === 'number' ? p : null); }} onDone={() => { setModelProgress(null); setModelStatus(''); }} />
       </main>
+      {confirmDialog}
     </div>
   );
 }

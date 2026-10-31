@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 /**
  * v2.38 R14（审计 D3 #1）：家庭协作管理页——collaboration 路由（11 端点）此前零 UI，
@@ -61,6 +62,8 @@ const fmtTime = (iso: string | null): string =>
   iso ? new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
 export default function Collaboration() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [invites, setInvites] = useState<Invite[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +124,7 @@ export default function Collaboration() {
   };
 
   const revoke = async (id: number) => {
-    if (!confirm('撤销后该链接立即失效，确定？')) return;
+    if (!(await confirm({ title: '撤销该邀请链接？', description: '撤销后立即失效。', tone: 'danger', confirmLabel: '撤销' }))) return;
     setError('');
     try {
       await api.delete(`/collaboration/invites/${id}`);
@@ -271,6 +274,7 @@ export default function Collaboration() {
           )}
         </section>
       </main>
+      {confirmDialog}
     </div>
   );
 }

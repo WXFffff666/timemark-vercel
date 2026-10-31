@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 /**
  * v2.38 R15c（方面 4+6）：数据源与备份页。
@@ -56,6 +57,8 @@ const fmtSize = (bytes: number | null): string => {
 };
 
 export default function DataSources() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   // feeds
   const [sources, setSources] = useState<FeedSource[]>([]);
   const [feedsLoading, setFeedsLoading] = useState(true);
@@ -147,7 +150,7 @@ export default function DataSources() {
   };
 
   const deleteFeed = async (id: number, name: string) => {
-    if (!confirm(`删除数据源「${name}」？`)) return;
+    if (!(await confirm({ title: `删除数据源「${name}」？`, tone: 'danger', confirmLabel: '删除' }))) return;
     setFeedBusy(`del-${id}`);
     try {
       await api.delete(`/feeds/${id}`);
@@ -217,7 +220,7 @@ export default function DataSources() {
   };
 
   const removeConfig = async () => {
-    if (!confirm('删除备份配置？历史记录保留但不再自动备份。')) return;
+    if (!(await confirm({ title: '删除备份配置？', description: '历史记录保留但不再自动备份。', tone: 'danger', confirmLabel: '删除' }))) return;
     setBackupBusy('remove');
     try {
       await api.delete('/remote-backup/config');
@@ -394,6 +397,7 @@ export default function DataSources() {
           )}
         </section>
       </main>
+      {confirmDialog}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Cat, Loader2, Plus, Syringe, Trash2, CheckCircle2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -69,6 +70,8 @@ const KIND_LABELS: Record<string, string> = { vaccination: '疫苗', deworming: 
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function Pets() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [pets, setPets] = useState<Pet[]>([]);
   const [reminders, setReminders] = useState<PetReminder[]>([]);
   const [schedules, setSchedules] = useState<Record<number, PetSchedule[]>>({});
@@ -158,7 +161,7 @@ export default function Pets() {
   };
 
   const removePet = async (id: number, petName: string) => {
-    if (!confirm(`删除「${petName}」会一并删除其日程与记录，确定？`)) return;
+    if (!(await confirm({ title: `删除宠物「${petName}」？`, description: '会一并删除其日程与记录。', tone: 'danger', confirmLabel: '删除' }))) return;
     try {
       await api.delete(`/pets/${id}`);
       setPets((prev) => prev.filter((p) => p.id !== id));
@@ -250,7 +253,7 @@ export default function Pets() {
   };
 
   const deleteLog = async (petId: number, logId: number) => {
-    if (!confirm('删除这条记录？')) return;
+    if (!(await confirm({ title: '删除这条记录？', tone: 'danger', confirmLabel: '删除' }))) return;
     setBusyKey(`pl-${logId}`);
     try {
       await api.delete(`/pets/${petId}/logs/${logId}`);
@@ -264,7 +267,7 @@ export default function Pets() {
   };
 
   const deleteSchedule = async (petId: number, scheduleId: number) => {
-    if (!confirm('确定删除该日程？')) return;
+    if (!(await confirm({ title: '删除该日程？', description: '疫苗/驱虫日程删除后不再提醒。', tone: 'danger', confirmLabel: '删除' }))) return;
     setBusyKey(`d-${scheduleId}`);
     try {
       await api.delete(`/pets/${petId}/schedules/${scheduleId}`);
@@ -471,6 +474,7 @@ export default function Pets() {
           </ul>
         )}
       </main>
+      {confirmDialog}
     </div>
   );
 }

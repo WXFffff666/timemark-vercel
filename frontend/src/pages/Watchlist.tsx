@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 /**
  * v2.31 R5（审计 D3）：观影/追剧清单页——后端 watchlist 路由（task 158）此前
@@ -42,6 +43,8 @@ const KIND_TABS: Array<[WatchKind | '', string]> = [
 ];
 
 export default function Watchlist() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [items, setItems] = useState<WatchItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [kindFilter, setKindFilter] = useState<WatchKind | ''>('');
@@ -177,7 +180,7 @@ export default function Watchlist() {
   };
 
   const remove = async (id: number) => {
-    if (!confirm('确定删除该条目？')) return;
+    if (!(await confirm({ title: '删除该条目？', tone: 'danger', confirmLabel: '删除' }))) return;
     setBusyId(id);
     try {
       await api.delete(`/watchlist/${id}`);
@@ -403,6 +406,7 @@ export default function Watchlist() {
           </ul>
         )}
       </main>
+      {confirmDialog}
     </div>
   );
 }

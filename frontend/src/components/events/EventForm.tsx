@@ -921,6 +921,47 @@ export function EventForm({ open, onClose, onSubmit, event, prefill }: EventForm
               {formData.calendarType === 'both' && <span className="text-xs text-slate-400 ml-2">(农历将在下方自动计算)</span>}
             </label>
             {formData.calendarType !== 'lunar' ? (
+              <>
+              {/* v2.40 R18：快捷日期 chips（调研：Apple Reminders 2026 文本识别日期的轻量版） */}
+              <div className="flex flex-wrap gap-1.5" data-testid="event-date-quick">
+                {(() => {
+                  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                  const now = new Date();
+                  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+                  const nextMon = new Date(now); nextMon.setDate(now.getDate() + ((8 - now.getDay()) % 7 || 7));
+                  const weekend = new Date(now); weekend.setDate(now.getDate() + ((6 - now.getDay() + 7) % 7 || 7));
+                  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                  const chips: Array<[string, string]> = [
+                    ['今天', fmt(now)],
+                    ['明天', fmt(tomorrow)],
+                    ['下周一', fmt(nextMon)],
+                    ['周六', fmt(weekend)],
+                    ['月底', fmt(monthEnd)],
+                  ];
+                  return chips.map(([label, value]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => {
+                          const next = { ...prev, date: value };
+                          if (prev.calendarType === 'both') {
+                            const lunar = convertToLunar(value);
+                            if (lunar) {
+                              next.lunarDate = lunar;
+                              setLunarInputValue(formatLunarInput(lunar));
+                            }
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`text-xs px-3 py-1.5 rounded-full border transition ${formData.date === value ? 'border-primary-500 bg-primary-500/10 text-primary-600 dark:text-primary-400 font-semibold' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    >
+                      {label}
+                    </button>
+                  ));
+                })()}
+              </div>
               <Input
                 required
                 type="date"
@@ -942,6 +983,7 @@ export function EventForm({ open, onClose, onSubmit, event, prefill }: EventForm
                 }}
                 className="h-12"
               />
+              </>
             ) : (
               <Input
                 required

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { MobileBottomNav } from '@/components/MobileBottomNav';
@@ -61,6 +62,8 @@ interface SessionRow {
 
 export default function Security() {
   const navigate = useNavigate();
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [ipBans, setIpBans] = useState<any[]>([]);
@@ -117,7 +120,7 @@ export default function Security() {
   useEffect(() => { load(); }, []);
 
   const revokeSession = async (id: number) => {
-    if (!confirm('确定踢出该设备？')) return;
+    if (!(await confirm({ title: '踢出该设备？', tone: 'danger', confirmLabel: '踢出' }))) return;
     await api.delete(`/security/sessions/${id}`);
     load();
   };
@@ -169,7 +172,7 @@ export default function Security() {
   };
 
   const disableTotp = async () => {
-    if (!confirm('确定关闭双因素认证？关闭后登录只需用户名和密码，账号安全性会降低。')) return;
+    if (!(await confirm({ title: '关闭双因素认证？', description: '关闭后登录只需用户名和密码，账号安全性会降低。', tone: 'danger', confirmLabel: '关闭 2FA' }))) return;
     setRecoveryBusy(true);
     try {
       await api.post('/security/totp/disable', { password: recoveryPassword, code: totpCode });
@@ -209,7 +212,7 @@ export default function Security() {
   };
 
   const handleRemovePasskey = async (id: string) => {
-    if (!confirm('确定删除此 Passkey？')) return;
+    if (!(await confirm({ title: '删除此 Passkey？', tone: 'danger', confirmLabel: '删除' }))) return;
     try {
       await removePasskey(id);
       load();
@@ -481,6 +484,7 @@ export default function Security() {
         <AuditTrailCard />
       </main>
       <MobileBottomNav />
+      {confirmDialog}
     </div>
   );
 }

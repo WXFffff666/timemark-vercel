@@ -4,6 +4,7 @@ import { useSmartBack } from '@/hooks/useSmartBack';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
 import { NOTIFICATION_PRESET_LIST } from '@timemark/shared/notification-presets';
@@ -33,6 +34,8 @@ function parseChannelsSafe(raw: unknown): string[] {
 
 export default function NotificationRules() {
   const goBack = useSmartBack('/settings');
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [rules, setRules] = useState<ConditionalRule[]>([]);
   const [preset, setPreset] = useState('');
   const [presetSaving, setPresetSaving] = useState(false);
@@ -75,7 +78,7 @@ export default function NotificationRules() {
   };
 
   const removeRule = async (id: number) => {
-    if (!confirm('删除该规则？')) return;
+    if (!(await confirm({ title: '删除该规则？', tone: 'danger', confirmLabel: '删除' }))) return;
     await api.delete(`/conditional-rules/${id}`);
     await load();
   };
@@ -192,6 +195,7 @@ export default function NotificationRules() {
           })}
         </ul>
       )}
+      {confirmDialog}
     </div>
   );
 }

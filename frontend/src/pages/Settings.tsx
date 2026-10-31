@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -124,7 +125,9 @@ function SecretUrlField({
 export default function Settings() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
+
   // Modal states
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -337,7 +340,8 @@ export default function Settings() {
 
   const clearEmailLogs = async () => {
     // v2.28 C14：文案与后端实际行为对齐（DELETE /email-logs 删除的是全部记录）
-    if (!confirm('确定清空全部邮件发送记录？此操作不可恢复。')) return;
+    // v2.40 R18：原生 confirm → 统一确认弹窗
+    if (!(await confirm({ title: '确定清空全部邮件发送记录？', description: '此操作不可恢复。', tone: 'danger', confirmLabel: '清空' }))) return;
     try {
       await api.delete('/email-logs');
       setEmailLogs([]);
@@ -425,7 +429,7 @@ export default function Settings() {
   };
 
   const revokeIcsFeed = async (id: number) => {
-    if (!confirm('撤销后公开订阅 URL 立即失效且无法恢复，确定撤销？')) return;
+    if (!(await confirm({ title: '撤销公开订阅？', description: '撤销后订阅 URL 立即失效且无法恢复。', tone: 'danger', confirmLabel: '撤销' }))) return;
     try {
       await api.delete(`/calendar/ics-feeds/${id}`);
       setIcsFeeds((prev) => prev.map((f) => (f.id === id ? { ...f, revokedAt: new Date().toISOString() } : f)));
@@ -513,7 +517,7 @@ export default function Settings() {
   };
 
   const disconnectGoogleCalendar = async () => {
-    if (!confirm('确定断开 Google 日历连接？')) return;
+    if (!(await confirm({ title: '断开 Google 日历连接？', tone: 'danger', confirmLabel: '断开' }))) return;
     try {
       await api.delete('/calendar/google-oauth');
       setGoogleOAuth((prev) => ({ ...prev, connected: false, email: null }));
@@ -664,7 +668,7 @@ export default function Settings() {
   };
 
   const handleImportData = async (file: File) => {
-    if (!confirm('导入将合并数据到当前账户，是否继续？')) return;
+    if (!(await confirm({ title: '导入并合并数据？', description: '导入将合并数据到当前账户。', confirmLabel: '导入' }))) return;
     setBackupLoading(true);
     try {
       const text = await file.text();
@@ -772,7 +776,7 @@ export default function Settings() {
   };
 
   const handleLogout = async () => {
-    if (confirm('确定要退出登录吗？')) {
+    if (await confirm({ title: '确定要退出登录吗？', tone: 'default', confirmLabel: '退出登录' })) {
       await logout();
       navigate('/login');
     }
@@ -1801,6 +1805,7 @@ export default function Settings() {
         </DialogContent>
       </Dialog>
       <MobileBottomNav />
+      {confirmDialog}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { Archive, ChevronDown, Database, Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { stripMarkdownLight } from '@/lib/local-ai/text-clean';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 /**
  * v2.26 批次 B：数据管理卡（设置页「安全与数据」）。
@@ -46,6 +47,8 @@ function formatDate(iso: string): string {
 }
 
 export function DataManagement() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [data, setData] = useState<RetentionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [purging, setPurging] = useState(false);
@@ -69,7 +72,7 @@ export function DataManagement() {
   }, [load]);
 
   const purgeNow = async () => {
-    if (!confirm('立即清理所有已过期日志？此操作不可恢复。')) return;
+    if (!(await confirm({ title: '立即清理所有已过期日志？', description: '此操作不可恢复。', tone: 'danger', confirmLabel: '清理' }))) return;
     setPurging(true);
     setPurgeResult(null);
     try {
@@ -207,6 +210,7 @@ export function DataManagement() {
           )}
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }

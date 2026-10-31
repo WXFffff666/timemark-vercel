@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
@@ -53,6 +54,8 @@ interface Ledger {
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function Vehicles() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -155,7 +158,7 @@ export default function Vehicles() {
   };
 
   const removeVehicle = async (id: number) => {
-    if (!confirm('删除车辆会一并删除其加油/保养记录，确定？')) return;
+    if (!(await confirm({ title: '删除这辆车？', description: '会一并删除其加油/保养记录。', tone: 'danger', confirmLabel: '删除' }))) return;
     try {
       await api.delete(`/vehicles/${id}`);
       setVehicles((prev) => prev.filter((v) => v.id !== id));
@@ -166,7 +169,7 @@ export default function Vehicles() {
 
   // v2.34 R15（审计 #9）：录错的记录可删，否则油耗/成本统计被永久污染
   const deleteFuelRecord = async (vehicleId: number, recordId: number) => {
-    if (!confirm('删除这条加油/充电记录？')) return;
+    if (!(await confirm({ title: '删除这条加油/充电记录？', tone: 'danger', confirmLabel: '删除' }))) return;
     try {
       await api.delete(`/vehicles/${vehicleId}/fuel/${recordId}`);
       void loadLedger(vehicleId);
@@ -177,7 +180,7 @@ export default function Vehicles() {
   };
 
   const deleteMaintenanceRecord = async (vehicleId: number, recordId: number) => {
-    if (!confirm('删除这条保养记录？')) return;
+    if (!(await confirm({ title: '删除这条保养记录？', tone: 'danger', confirmLabel: '删除' }))) return;
     try {
       await api.delete(`/vehicles/${vehicleId}/maintenance/${recordId}`);
       void loadLedger(vehicleId);
@@ -403,6 +406,7 @@ export default function Vehicles() {
           </ul>
         )}
       </main>
+      {confirmDialog}
     </div>
   );
 }

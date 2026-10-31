@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Trash2, UserPlus, CheckCircle2, AlertCircle, Users, Upload, Mail, Pencil, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSmartBack } from '@/hooks/useSmartBack';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -119,6 +120,8 @@ const CHANNEL_TYPE_LABELS: Record<string, string> = {
 export default function Contacts() {
   const navigate = useNavigate();
   const goBack = useSmartBack('/dashboard');
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [tab, setTab] = useState<'contacts' | 'groups'>('contacts');
   const [contacts, setContacts] = useState<FixedContact[]>([]);
   const [accounts, setAccounts] = useState<NotificationAccount[]>([]);
@@ -282,7 +285,7 @@ export default function Contacts() {
   };
 
   const remove = async (id: number) => {
-    if (!confirm('确定删除该联系人？')) return;
+    if (!(await confirm({ title: '删除该联系人？', tone: 'danger', confirmLabel: '删除' }))) return;
     await api.delete(`/contacts/${id}`);
     await loadContacts();
   };
@@ -744,6 +747,7 @@ export default function Contacts() {
           void loadDue();
         }}
       />
+      {confirmDialog}
     </div>
   );
 }

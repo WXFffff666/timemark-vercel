@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { api } from '@/lib/api';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } as const } };
@@ -59,6 +60,8 @@ const getOSName = (userAgent: string): string => {
 };
 
 export default function LoginHistory() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [logs, setLogs] = useState<LoginLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
@@ -83,7 +86,7 @@ export default function LoginHistory() {
   };
 
   const clearLogs = async () => {
-    if (!confirm('确定清空所有登录日志？此操作不可恢复。')) return;
+    if (!(await confirm({ title: '清空所有登录日志？', description: '此操作不可恢复。', tone: 'danger', confirmLabel: '清空' }))) return;
     
     setClearing(true);
     try {
@@ -135,7 +138,8 @@ export default function LoginHistory() {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
       <PageHeader
         title="登录历史"
         subtitle="查看近期登录记录与设备"
@@ -204,6 +208,8 @@ export default function LoginHistory() {
           </motion.div>
         )}
       </main>
-    </motion.div>
+      </motion.div>
+      {confirmDialog}
+    </>
   );
 }

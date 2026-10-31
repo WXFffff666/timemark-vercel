@@ -4,6 +4,7 @@ import { Bell, Trash2, RefreshCw, CheckCircle2, XCircle, Calendar, AlertCircle, 
 import { useSearchParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { Button } from '@/components/ui/button';
@@ -91,6 +92,8 @@ const getEventTypeLabel = (type?: string): string => {
 import { formatRelativeTime } from '@/lib/format-time';
 
 export default function TriggerLogs() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<LogsTab>(() =>
     searchParams.get('tab') === 'reminders' ? 'reminders' : 'delivery',
@@ -167,7 +170,8 @@ export default function TriggerLogs() {
   };
 
   const clearLogs = async () => {
-    if (!confirm('确定清空所有提醒日志？此操作不可恢复。')) return;
+    // v2.40 R18：原生 confirm → 统一确认弹窗（danger）
+    if (!(await confirm({ title: '确定清空所有提醒日志？', description: '此操作不可恢复。', tone: 'danger', confirmLabel: '清空' }))) return;
 
     setClearing(true);
     try {
@@ -210,7 +214,7 @@ export default function TriggerLogs() {
 
   // v79 批量重试：把近 7 天真实失败（含部分失败）的提醒一次性逐条补发（后端单次上限 10 条）
   const retryAllFailed = async () => {
-    if (!confirm('将把近 7 天内失败/部分失败的提醒逐条重新发送（单次最多 10 条），继续？')) return;
+    if (!(await confirm({ title: '批量重新发送失败提醒？', description: '将把近 7 天内失败/部分失败的提醒逐条重新发送（单次最多 10 条）。', tone: 'danger', confirmLabel: '重发' }))) return;
     setRetryingAll(true);
     try {
       const res = await api.post<{ attempted: number; retried: number; failed: number; candidates: number }>(
@@ -478,6 +482,7 @@ export default function TriggerLogs() {
         )}
       </main>
       )}
+      {confirmDialog}
     </motion.div>
   );
 }

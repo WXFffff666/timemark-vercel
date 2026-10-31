@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { HeartHandshake, Loader2, Plus, Trash2, Copy } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -99,6 +100,8 @@ function TrendBlock({ profileId, label, onRemove }: { profileId: number; label: 
 }
 
 export default function Care() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [profiles, setProfiles] = useState<CareProfile[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [logs, setLogs] = useState<CareLog[]>([]);
@@ -187,7 +190,7 @@ export default function Care() {
   };
 
   const removeProfile = async (id: number, profileName: string) => {
-    if (!confirm(`删除「${profileName}」会一并删除其照护记录，确定？`)) return;
+    if (!(await confirm({ title: `删除档案「${profileName}」？`, description: '会一并删除其全部照护记录。', tone: 'danger', confirmLabel: '删除' }))) return;
     try {
       await api.delete(`/care/profiles/${id}`);
       load();
@@ -226,7 +229,7 @@ export default function Care() {
   };
 
   const deleteLog = async (logId: number) => {
-    if (!confirm('删除这条照护记录？')) return;
+    if (!(await confirm({ title: '删除这条照护记录？', tone: 'danger', confirmLabel: '删除' }))) return;
     setBusyKey(`del-${logId}`);
     try {
       await api.delete(`/care/logs/${logId}`);
@@ -428,6 +431,7 @@ export default function Care() {
           </div>
         ) : null}
       </main>
+      {confirmDialog}
     </div>
   );
 }

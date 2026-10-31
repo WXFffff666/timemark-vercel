@@ -59,12 +59,14 @@ describe('Watchlist 页（v2.31 R5 / F63）', () => {
   })
 
   it('delete asks for confirmation and calls DELETE', async () => {
-    const spy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    // v2.40 R18：原生 confirm → ConfirmDialog（点删除先弹窗，再点弹窗里的确认）
     renderPage()
     await waitFor(() => expect(screen.getByLabelText('删除「沙丘 3」')).toBeInTheDocument())
     fireEvent.click(screen.getByLabelText('删除「沙丘 3」'))
+    await waitFor(() => expect(screen.getByTestId('confirm-dialog-confirm')).toBeInTheDocument())
+    expect(mockApi.delete).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'))
     await waitFor(() => expect(mockApi.delete).toHaveBeenCalledWith('/watchlist/1'))
-    spy.mockRestore()
   })
 
   it('status filter narrows the list', async () => {

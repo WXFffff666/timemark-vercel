@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { ChannelQr } from '@/components/channels/ChannelQr';
 import { api } from '@/lib/api';
@@ -33,6 +34,8 @@ const sourceLabels: Record<string, string> = {
 import { formatRelativeTime } from '@/lib/format-time';
 
 export default function Inbox() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [total, setTotal] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -136,7 +139,7 @@ export default function Inbox() {
   };
 
   const deleteMessage = async (id: number) => {
-    if (!confirm('确定删除此消息？')) return;
+    if (!(await confirm({ title: '删除此消息？', tone: 'danger', confirmLabel: '删除' }))) return;
     try {
       await api.delete(`/inbox/${id}`);
       const removed = messages.find((m) => m.id === id);
@@ -161,7 +164,7 @@ export default function Inbox() {
 
   const batchRun = async (op: 'read' | 'delete') => {
     if (selectedIds.size === 0) return;
-    if (op === 'delete' && !confirm(`确定删除选中的 ${selectedIds.size} 条消息？`)) return;
+    if (op === 'delete' && !(await confirm({ title: `删除选中的 ${selectedIds.size} 条消息？`, tone: 'danger', confirmLabel: '删除' }))) return;
     setBatchBusy(true);
     setActionError('');
     try {
@@ -182,7 +185,8 @@ export default function Inbox() {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
       <PageHeader
         title="收件箱"
         subtitle={`共 ${total} 条消息${retentionDays ? ` · 保留 ${retentionDays} 天` : ''}`}
@@ -393,6 +397,8 @@ export default function Inbox() {
           </div>
         )}
       </main>
-    </motion.div>
+      </motion.div>
+      {confirmDialog}
+    </>
   );
 }

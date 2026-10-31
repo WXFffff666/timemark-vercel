@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { api } from '@/lib/api';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 interface EventTemplate {
   id: number;
@@ -21,6 +22,8 @@ const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, trans
 const itemVariants = { hidden: { opacity: 0, y: 20, scale: 0.95 }, visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 300, damping: 24 } as const } };
 
 export default function Templates() {
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const [templates, setTemplates] = useState<EventTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -102,7 +105,7 @@ export default function Templates() {
   };
 
   const handleDelete = async (eventType: string) => {
-    if (!confirm('确定要删除此模板吗？')) return;
+    if (!(await confirm({ title: '删除此模板？', tone: 'danger', confirmLabel: '删除' }))) return;
     
     try {
       await api.delete(`/config/templates/${eventType}`);
@@ -148,7 +151,8 @@ export default function Templates() {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen pb-24">
       <PageHeader
         title="事件模板"
         subtitle="管理常用事件模板"
@@ -293,6 +297,8 @@ export default function Templates() {
           </div>
         </DialogContent>
       </Dialog>
-    </motion.div>
+      </motion.div>
+      {confirmDialog}
+    </>
   );
 }

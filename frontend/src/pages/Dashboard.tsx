@@ -22,6 +22,7 @@ import { useTodoCompletions } from '@/hooks/useTodoCompletions';
 import { AlmanacCard } from '@/components/almanac/AlmanacCard';
 import { TimeMachineCard } from '@/components/dashboard/TimeMachineCard';
 import { RecentNotificationsCard } from '@/components/dashboard/RecentNotifications';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2 } } };
@@ -29,6 +30,8 @@ const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 
 export function Dashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  // v2.40 R18：统一确认弹窗（Promise 化 confirm，遮蔽全局同名函数）
+  const { confirm, confirmDialog } = useConfirm();
   const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent, deleteEventsBatch, testSendEvent } = useEventStore();
   // 档案切换器（checkbox 70）：切换后重新拉取事件（fetchEvents 内部会带上 profileId）
   const profileId = useProfileStore((s) => s.profileId);
@@ -153,7 +156,7 @@ export function Dashboard() {
   };
 
   const handleEdit = (event: Event) => { setEditingEvent(event); setShowForm(true); };
-  const handleDelete = async (id: string) => { if (confirm('确定删除此事件？')) { await deleteEvent(id); setShowForm(false); setEditingEvent(undefined); } };
+  const handleDelete = async (id: string) => { if (!(await confirm({ title: '删除此事件？', tone: 'danger', confirmLabel: '删除' }))) return; await deleteEvent(id); setShowForm(false); setEditingEvent(undefined); };
   const handleTestSend = async (id: string) => {
     try {
       const result = await testSendEvent(id);
@@ -179,7 +182,7 @@ export function Dashboard() {
   const handleBatchDelete = async () => {
     if (selectedIds.length === 0) return;
     try {
-      if (confirm(`确定批量删除 ${selectedIds.length} 个事件？`)) {
+      if (await confirm({ title: `批量删除 ${selectedIds.length} 个事件？`, tone: 'danger', confirmLabel: '删除' })) {
         const deletedCount = await deleteEventsBatch(selectedIds);
         setActionBanner({ ok: true, text: `成功删除 ${deletedCount} 个事件` });
         setSelectedIds([]);
@@ -515,6 +518,7 @@ export function Dashboard() {
       
       <EventForm open={showForm} onClose={() => { setShowForm(false); setEditingEvent(undefined); }} onSubmit={handleSubmit} event={editingEvent} prefill={quickPrefill} />
       <MobileBottomNav />
+      {confirmDialog}
     </motion.div>
   );
 }
