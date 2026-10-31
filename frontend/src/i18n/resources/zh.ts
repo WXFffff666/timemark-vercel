@@ -39,6 +39,7 @@ export const zh = {
   'nav.householdLists': '家庭清单',
   'nav.dataSources': '数据源与备份',
   'nav.ocr': '扫描识别',
+  'nav.weeklyReview': '本周回顾',
   'nav.assistant': 'AI 助手',
   'nav.localAi': '本地 AI',
   'nav.agentConsole': '智能体控制台',
