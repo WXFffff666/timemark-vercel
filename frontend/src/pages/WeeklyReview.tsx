@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Activity, ArrowRight, CalendarCheck, Flame, Lightbulb, Package, Target, TrendingUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/lib/toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
@@ -116,6 +118,50 @@ export function WeeklyReview() {
     [eventsThisWeek, triggersFailed, habitBoard, upcoming.length, activeGoals.length],
   );
 
+  // v2.43 R28：周回顾导出为 Markdown（复用 LocalAI .md 下载先例的 Blob 流程）
+  const exportMarkdown = () => {
+    const lines: string[] = [
+      `# 本周回顾（自 ${monday}）`,
+      '',
+      '## 建议',
+      ...suggestions.map((s) => `- [${s.tone === 'good' ? '良好' : s.tone === 'warn' ? '注意' : '信息'}] ${s.text}`),
+      '',
+      '## 本周统计',
+      `- 本周事件：${eventsThisWeek}`,
+      `- 提醒发送：${triggersTotal}（成功率 ${successRate === null ? '—' : `${successRate}%`}）`,
+      `- 7 天内到期：${upcoming.length}`,
+      '',
+      '## 习惯连击榜',
+      ...(habitBoard.length > 0
+        ? habitBoard.map((h, i) => `${i + 1}. ${h.icon || '🔥'} ${h.name} — ${h.streak?.current ?? 0} 天`)
+        : ['（暂无连击中的习惯）']),
+      '',
+      '## 7 天内到期',
+      ...(upcoming.length > 0
+        ? upcoming.slice(0, 8).map((it) => `- ${it.title}${it.expires_at ? `（${it.expires_at}）` : ''}`)
+        : ['（未来 7 天没有到期项）']),
+      '',
+      '## 进行中的目标',
+      ...(activeGoals.length > 0
+        ? activeGoals.slice(0, 5).map((g) => {
+            const done = g.milestones?.filter((m) => m.completed).length ?? 0;
+            const total = g.milestones?.length ?? 0;
+            return `- ${g.title}（${done}/${total}）`;
+          })
+        : ['（暂无进行中的目标）']),
+      '',
+      `> 由 TimeMark 周回顾生成 · ${new Date().toLocaleString('zh-CN')}`,
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `weekly-review-${monday}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('周回顾已导出');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen pb-24">
@@ -129,7 +175,16 @@ export function WeeklyReview() {
 
   return (
     <div className="min-h-screen pb-24">
-      <PageHeader title="本周回顾" subtitle={`本周（自 ${monday.slice(5)}）· 数据驱动 · 不假 AI`} maxWidth="max-w-4xl" />
+      <PageHeader
+        title="本周回顾"
+        subtitle={`本周（自 ${monday.slice(5)}）· 数据驱动 · 不假 AI`}
+        maxWidth="max-w-4xl"
+        actions={
+          <Button type="button" variant="outline" size="sm" className="rounded-full min-h-11" onClick={exportMarkdown}>
+            导出 .md
+          </Button>
+        }
+      />
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-5">
         {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
