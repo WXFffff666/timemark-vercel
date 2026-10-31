@@ -22,6 +22,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { toast } from '@/lib/toast';
 import {
   base64PayloadFromDataUrl,
   documentCountdown,
@@ -512,8 +513,26 @@ export default function Documents() {
     setError('');
     try {
       await api.delete(`/documents/${item.id}`);
-      setStatus(`已删除「${item.title}」`);
       await Promise.all([loadFiltered(), loadSummary(), loadAttachments()]);
+      // v2.43 R27：撤销 = 按原文重新创建（内容恢复，id 为新记录）
+      toast.success(`已删除「${item.title}」`, {
+        label: '撤销',
+        onClick: () => {
+          void api
+            .post('/documents', {
+              kind: item.kind,
+              title: item.title,
+              issuer: item.issuer,
+              issuedAt: item.issued_at,
+              expiresAt: item.expires_at,
+              country: item.country,
+              notes: item.notes,
+              isActive: item.is_active,
+            })
+            .then(() => { void Promise.all([loadFiltered(), loadSummary()]); toast.info('已恢复（生成为新记录）'); })
+            .catch(() => toast.error('恢复失败'));
+        },
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败');
     }

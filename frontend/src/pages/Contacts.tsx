@@ -287,8 +287,32 @@ export default function Contacts() {
 
   const remove = async (id: number) => {
     if (!(await confirm({ title: '删除该联系人？', tone: 'danger', confirmLabel: '删除' }))) return;
+    // v2.43 R27：删除前留存原文，撤销 = 重新创建（内容恢复，id 为新记录）
+    const original = contacts.find((c) => c.id === id);
     await api.delete(`/contacts/${id}`);
     await loadContacts();
+    if (original) {
+      toast.success(`已删除「${original.name}」`, {
+        label: '撤销',
+        onClick: () => {
+          void api
+            .post('/contacts', {
+              name: original.name,
+              nickname: original.nickname || undefined,
+              relationship: original.relationship || undefined,
+              birthDate: original.birth_date || '',
+              gender: (original.gender as 'male' | 'female' | 'unknown') || 'unknown',
+              emails: original.emails ?? [],
+              phones: original.phones ?? [],
+              telegrams: original.telegrams ?? [],
+              qqs: original.qqs ?? [],
+              wxpusherUids: original.wxpusher_uids ?? [],
+            })
+            .then(() => { void loadContacts(); toast.info('已恢复（生成为新记录）'); })
+            .catch(() => toast.error('恢复失败'));
+        },
+      });
+    }
   };
 
   const openQuickSend = (c: FixedContact) => {

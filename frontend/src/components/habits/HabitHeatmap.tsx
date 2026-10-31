@@ -32,6 +32,8 @@ function ymd(d: Date): string {
 }
 
 export function HabitHeatmap({ habits }: { habits: Array<HabitOption> }) {
+  // v2.43 R27：26 周 / 52 周年视图切换（调研：年视图是 GitHub 式追踪器标配进阶）
+  const [weeks, setWeeks] = useState<26 | 52>(26);
   const [habitId, setHabitId] = useState<number | null>(habits[0]?.id ?? null);
   const [logs, setLogs] = useState<LogRow[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,13 +41,13 @@ export function HabitHeatmap({ habits }: { habits: Array<HabitOption> }) {
   useEffect(() => {
     if (habitId === null) return;
     setLoading(true);
-    api.get<LogRow[]>(`/habits/${habitId}/logs?days=182`)
+    api.get<LogRow[]>(`/habits/${habitId}/logs?days=${weeks === 52 ? 364 : 182}`)
       .then((rows) => setLogs(Array.isArray(rows) ? rows : []))
       .catch(() => setLogs([]))
       .finally(() => setLoading(false));
-  }, [habitId]);
+  }, [habitId, weeks]);
 
-  // 26 周网格：从本周一开始向前 26 列；行 = 周一..周日
+  // 网格：从本周一开始向前 weeks 列；行 = 周一..周日
   const cells = useMemo(() => {
     if (!logs) return null;
     const byDate = new Map(logs.map((l) => [l.logged_on, l.count]));
@@ -53,7 +55,7 @@ export function HabitHeatmap({ habits }: { habits: Array<HabitOption> }) {
     const day = (today.getDay() + 6) % 7; // 周一=0
     const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - day);
     const cols: Array<Array<{ ymd: string; count: number } | null>> = [];
-    for (let w = 25; w >= 0; w--) {
+    for (let w = weeks - 1; w >= 0; w--) {
       const col: Array<{ ymd: string; count: number } | null> = [];
       for (let dow = 0; dow < 7; dow++) {
         const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - w * 7 + dow);
@@ -64,7 +66,7 @@ export function HabitHeatmap({ habits }: { habits: Array<HabitOption> }) {
       cols.push(col);
     }
     return cols;
-  }, [logs]);
+  }, [logs, weeks]);
 
   const selected = habits.find((h) => h.id === habitId) ?? null;
   const totalCheckins = logs?.reduce((s, l) => s + (l.count > 0 ? 1 : 0), 0) ?? 0;
@@ -87,9 +89,23 @@ export function HabitHeatmap({ habits }: { habits: Array<HabitOption> }) {
             <option key={h.id} value={h.id}>{h.icon ? `${h.icon} ` : ''}{h.name}</option>
           ))}
         </select>
+        {/* v2.43 R27：26 周 / 52 周切换 */}
+        <div className="flex gap-1" role="group" aria-label="时间范围">
+          {([26, 52] as const).map((w) => (
+            <button
+              key={w}
+              type="button"
+              aria-pressed={weeks === w}
+              onClick={() => setWeeks(w)}
+              className={`text-xs px-3 py-1.5 rounded-full border transition ${weeks === w ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+            >
+              {w} 周
+            </button>
+          ))}
+        </div>
         {selected && (
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            近 26 周 <strong className="text-slate-700 dark:text-slate-200">{totalCheckins}</strong> 天 · 连胜 {selected.streak.current} · 最长 {selected.streak.longest}
+            近 {weeks} 周 <strong className="text-slate-700 dark:text-slate-200">{totalCheckins}</strong> 天 · 连胜 {selected.streak.current} · 最长 {selected.streak.longest}
           </span>
         )}
       </div>
@@ -99,7 +115,7 @@ export function HabitHeatmap({ habits }: { habits: Array<HabitOption> }) {
         <p className="text-sm text-slate-400">—</p>
       ) : (
         <div className="overflow-x-auto pb-1">
-          <div className="flex gap-[3px]" role="img" aria-label="过去 26 周打卡热力图">
+          <div className="flex gap-[3px]" role="img" aria-label={`过去 ${weeks} 周打卡热力图`}>
             {cells.map((col, ci) => (
               <div key={ci} className="flex flex-col gap-[3px]">
                 {col.map((cell, ri) =>
