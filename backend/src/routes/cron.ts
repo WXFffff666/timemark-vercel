@@ -108,13 +108,10 @@ cronRoutes.use('*', async (c, next) => {
 });
 
 // Warmup — reduce cold start (call from external cron before reminder-check)
+// Active CPU 防御层：Fluid 架构下实例常驻复用、空闲不计费，无冷启动需求；
+// 保活调用不再打 DB（原 SELECT 1 每分钟一次纯属白烧），纯内存响应。
 cronRoutes.get('/warmup', async (c) => {
-  try {
-    await query('SELECT 1');
-    return c.json({ success: true, warmed: true, timestamp: new Date().toISOString() });
-  } catch (error: any) {
-    return c.json({ success: false, error: error.message }, 500);
-  }
+  return c.json({ success: true, warmed: true, timestamp: new Date().toISOString() });
 });
 
 // 1. Reminder check — call every minute via cron-job.org (free) on Vercel Hobby
@@ -586,6 +583,15 @@ cronRoutes.get('/caldav-sync', async (c) => {
 // C33 农历初一/十五提醒
 cronRoutes.get('/lunar-phase-reminders', async (c) => {
   const startedAt = Date.now();
+  // Active CPU 防御层：农历日期是日历级，每天真正跑一次即可。外部每分钟调用时
+  // 其余调用在这里秒回（一次轻查询），不再整段唤醒扫描；tick 端点内部也复用同一门控。
+  try {
+    if (!(await oncePerDayDue('lunar-phase-reminders'))) {
+      return c.json({ success: true, job: 'lunar-phase-reminders', sent: 0, skipped: 'daily-gate' });
+    }
+  } catch {
+    // 门控查询失败时保守放行，保持原有行为。
+  }
   try {
     const sent = await sendLunarPhaseReminders();
     await logCronRun('lunar-phase-reminders', 'success', startedAt, `sent ${sent}`);

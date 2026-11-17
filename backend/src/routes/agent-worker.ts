@@ -475,6 +475,12 @@ export function createAgentWorkerRoutes(deps: AgentWorkerRouteDeps = {}): Hono {
     c.json({ status: 'ok', endpoint: '/api/agent/worker/drain', method: 'POST' }),
   );
 
+  // Active CPU 防御层（额度优化批次）：cron-job.org 每分钟 POST 一次 drain，但空队列的
+  // reclaim+claim 也要付 1-2 次 DB 往返（~15-30 分钟 CPU/月）。AI 队列不是实时需求，
+  // 每 10 分钟真正 drain 一次，其余调用直接秒回（Fluid 并发复用同一暖实例，内存门控足够准）。
+  const DRAIN_MIN_INTERVAL_MS = 10 * 60 * 1000;
+  let lastRealDrainAt = Number.NEGATIVE_INFINITY;
+
   // Checkbox 129: capability discovery for an optional outbound-only local worker. Authenticated
   // (worker token) but DB-free and side-effect free, so a worker can self-configure on startup.
   routes.get('/me', drainGuard(), (c) =>
@@ -503,6 +509,18 @@ export function createAgentWorkerRoutes(deps: AgentWorkerRouteDeps = {}): Hono {
   );
 
   routes.post('/drain', drainGuard(), async (c) => {
+    if (now() - lastRealDrainAt < DRAIN_MIN_INTERVAL_MS) {
+      return c.json({
+        status: 'ok',
+        skipped: 'interval-gate',
+        claimed: 0,
+        succeeded: 0,
+        failed: 0,
+        reclaimed: 0,
+        remaining: 0,
+      });
+    }
+    lastRealDrainAt = now();
     const startedAt = now();
     const drainRequest = await readDrainRequest(c);
     const config = drainRequest.limit === null ? baseConfig : { ...baseConfig, limit: drainRequest.limit };
