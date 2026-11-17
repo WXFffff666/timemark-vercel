@@ -134,6 +134,73 @@ cronRoutes.get('/reminder-check', async (c) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// 统一每分钟 tick（额度优化批次）：cron-job.org 只保留一条每分钟任务打到这里，
+// 内部按时间门控调度原本的多条任务。背景：Fluid Active CPU 按代码实际执行计费，
+// 每次调用都会唤醒整个函数实例；原 4 条每分钟任务（reminder-check /
+// lunar-phase-reminders / agent drain / warmup）合计每月 ~17 万次唤醒，
+// 合并后每月 ~4.3 万次（-75%）。提醒推送精度不变（仍是每分钟扫描）。
+// 明确不含（旧端点全部保留、向后兼容，只是不再被定时调用）：
+//   - /warmup：Fluid 架构下实例常驻复用，无冷启动需求
+//   - /agent/worker/drain：AI 队列不常用，网页使用时按需触发即可
+// ---------------------------------------------------------------------------
+
+/** 用 cron_job_status 的 last_ok_at 做「每天一次」门控（v2.26 起成功记录写这张表，
+ *  cron_execution_logs 只保留失败明细）；首次运行直接放行。 */
+async function oncePerDayDue(jobName: string): Promise<boolean> {
+  const prev = await query(
+    `SELECT last_ok_at FROM cron_job_status WHERE job_name = $1 LIMIT 1`,
+    [jobName],
+  );
+  if (!prev.rows[0]?.last_ok_at) return true;
+  return Date.now() - new Date(prev.rows[0].last_ok_at as string).getTime() > 24 * 60 * 60 * 1000;
+}
+
+cronRoutes.get('/tick', async (c) => {
+  const startedAt = Date.now();
+  const now = new Date();
+  // UTC 分钟与北京分钟同相（时区差整小时），10 分钟门控用哪个都一致
+  const minute = now.getUTCMinutes();
+  const jobs: string[] = [];
+
+  // 1) 主链路：提醒扫描 + 推送（每分钟精度不变 = 原 /reminder-check 全流程）
+  try {
+    await query('SELECT 1'); // warmup DB connection
+    await sendReminders();
+    await checkCronGapAlert('reminder-check');
+    await logCronRun('reminder-check', 'success', startedAt, 'Reminders checked (tick)');
+    await pingHeartbeat('reminder-check');
+    jobs.push('reminder-check:ok');
+  } catch (error: any) {
+    await logCronRun('reminder-check', 'failed', startedAt, undefined, error.message);
+    jobs.push(`reminder-check:failed:${error.message}`);
+  }
+
+  // 2) 通知重试：每 10 分钟（原每 10 分钟的外部任务合并进来，退避节奏不变）
+  if (minute % 10 === 0) {
+    try {
+      const stats = await processNotificationRetries();
+      await logCronRun('retry-notifications', 'success', startedAt, `processed ${stats.processed}, ok ${stats.succeeded}`);
+      jobs.push(`retry:${stats.processed}/${stats.succeeded}`);
+    } catch (error: any) {
+      jobs.push(`retry:failed:${error.message}`);
+    }
+  }
+
+  // 3) 农历初一/十五提醒：每天一次（原每分钟轮询 → 每日一次；农历日期是日历级，分钟级轮询无意义）
+  try {
+    if (await oncePerDayDue('lunar-phase-reminders')) {
+      const sent = await sendLunarPhaseReminders();
+      await logCronRun('lunar-phase-reminders', 'success', Date.now(), `sent ${sent} (tick)`);
+      jobs.push(`lunar:${sent}`);
+    }
+  } catch (error: any) {
+    jobs.push(`lunar:failed:${error.message}`);
+  }
+
+  return c.json({ success: true, job: 'tick', jobs, timestamp: now.toISOString() });
+});
+
 /** B29: Cron 间隔 >3min 告警（阈值 = tasks.ts 的 CRON_GAP_ALERT_MINUTES；checkbox 166 的补发
  *  日志复用同一常量，但告警通道本身保持不变）。导出供测试直接驱动。 */
 export async function checkCronGapAlert(jobName: string): Promise<void> {
