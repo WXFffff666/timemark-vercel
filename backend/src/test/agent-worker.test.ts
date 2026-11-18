@@ -287,15 +287,26 @@ describe('POST /api/agent/worker/drain - bounded batch', () => {
   });
 
   it('a second drain claims the NEXT batch, not the same jobs again', async () => {
+    // Active CPU 门控（额度优化批次）：同一实例 10 分钟内的连续 POST 会被 interval-gate
+    // 拦截秒回——用注入的假时钟跨过间隔再验证"下一次 claim 拿下一批"的原语义。
     const { queue, state } = createFakeQueue(10);
     wireQueuedCount(state);
-    const app = buildApp({ queue, execute: completeOk });
+    let clock = 1_000_000;
+    const app = buildApp({ queue, execute: completeOk, now: () => clock });
 
     const first = (await (await post(app)).json()) as Record<string, number>;
-    const second = (await (await post(app)).json()) as Record<string, number>;
+    expect(first.claimed).toBe(3);
     expect(first.remaining).toBe(7);
-    expect(second.claimed).toBe(3);
-    expect(second.remaining).toBe(4);
+
+    const second = (await (await post(app)).json()) as Record<string, number>;
+    expect(second.skipped).toBe('interval-gate');
+    expect(second.claimed).toBe(0);
+
+    clock += 10 * 60 * 1000;
+    const third = (await (await post(app)).json()) as Record<string, number>;
+    expect(third.claimed).toBe(3);
+    expect(third.remaining).toBe(4);
+
     const completedIds = state.completeCalls.map((call) => call.id);
     expect(completedIds).toEqual(['job-1', 'job-2', 'job-3', 'job-4', 'job-5', 'job-6']);
     expect(new Set(completedIds).size).toBe(6);
@@ -328,6 +339,46 @@ describe('POST /api/agent/worker/drain - bounded batch', () => {
     const res = await post(app, '/api/agent/worker/drain?limit=99999');
     expect(((await res.json()) as Record<string, number>).claimed).toBe(5);
     expect(state.claimCalls).toEqual([MAX_DRAIN_LIMIT]);
+  });
+});
+
+describe('POST /api/agent/worker/drain - interval gate (Active CPU defense)', () => {
+  it('gates a POST 9 minutes after the last real drain and releases at exactly 10 minutes', async () => {
+    const { queue, state } = createFakeQueue(4);
+    wireQueuedCount(state);
+    let clock = 50_000;
+    const app = buildApp({ queue, execute: completeOk, now: () => clock });
+
+    // 第一次：真正 drain（门控初始放行）
+    const first = (await (await post(app)).json()) as Record<string, number>;
+    expect(first.skipped).toBeUndefined();
+    expect(first.claimed).toBe(3);
+
+    // 9 分钟后：仍在门控窗口内，秒回且不碰队列
+    clock += 9 * 60 * 1000;
+    const claimCallsBeforeGate = state.claimCalls.length;
+    const gated = (await (await post(app)).json()) as Record<string, number>;
+    expect(gated.skipped).toBe('interval-gate');
+    expect(gated.claimed).toBe(0);
+    expect(gated.remaining).toBe(0);
+    expect(state.claimCalls.length).toBe(claimCallsBeforeGate);
+
+    // 累计恰好 10 分钟：门控放行，claim 下一批
+    clock += 1 * 60 * 1000;
+    const released = (await (await post(app)).json()) as Record<string, number>;
+    expect(released.skipped).toBeUndefined();
+    expect(released.claimed).toBe(1);
+    expect(released.remaining).toBe(0);
+  });
+
+  it('a fresh routes instance starts ungated (first POST always drains)', async () => {
+    const { queue, state } = createFakeQueue(1);
+    wireQueuedCount(state);
+    const app = buildApp({ queue, execute: completeOk, now: () => 42 });
+
+    const first = (await (await post(app)).json()) as Record<string, number>;
+    expect(first.skipped).toBeUndefined();
+    expect(first.claimed).toBe(1);
   });
 });
 
