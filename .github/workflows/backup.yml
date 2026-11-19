@@ -1,0 +1,74 @@
+name: Daily DB backup
+
+on:
+  schedule:
+    # 每日 03:20 UTC（北京 11:20）：错峰于 03:00/03:05/03:15/03:30/03:45。
+    # timemark 是提醒系统——事件/联系人/用药/习惯等 70 张表的个人核心数据，
+    # githubBackup() 只是 Docker 时代 SQLite 备份的残留空壳（仅 SELECT COUNT），
+    # Neon 时代**没有**自动备份——本 workflow 补上。PITR Hobby 仅 6h 窗口。
+    - cron: "20 3 * * *"
+  workflow_dispatch:
+
+# 兜底步骤要向 backups 分支提交 dump——默认 GITHUB_TOKEN 只读，需要显式放行
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify pg_dump available（runner 镜像自带 PG18 client ≥ Neon PG17；PGDG apt 源在 Ubuntu 26.04 runner 上暂缺仓库，勿改回 apt 安装）
+        run: pg_dump --version
+
+      - name: Dump（非 pooler 直连串；恢复：pg_restore --no-owner --no-privileges -d <新库> *.dump）
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ]; then echo "::error::Secret BACKUP_DATABASE_URL 未配置（Neon 控制台的 DIRECT/UNPOOLED 连接串）"; exit 1; fi
+          pg_dump "$BACKUP_DATABASE_URL" --no-owner --no-privileges -Fc -f timemark.dump
+          gzip timemark.dump
+          ls -la timemark.dump.gz
+
+      - name: Upload artifact（保留 14 天滚动）
+        id: upload
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: timemark-db-backup
+          path: timemark.dump.gz
+          retention-days: 14
+
+      - name: 兜底——artifact 配额满时 commit dump 到私有 backups 分支
+        if: steps.upload.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DUMP=$(ls timemark.dump.gz | head -1)
+          echo "artifact 上传失败，兜底提交 $DUMP 到 backups 分支（单文件滚动覆盖）"
+          # base64(gzip 字节) 走 stdin 构造 JSON——勿解压（blob 存原始 gzip 字节）
+          BLOB=$(base64 -w0 timemark.dump.gz | jq -Rs '{content: ., encoding: "base64"}' \
+            | gh api --method POST repos/${{ github.repository }}/git/blobs --input - --jq '.sha')
+          # tree/commit 构造必须走 stdin+jq（-f 传 JSON 对象会被当字符串 → 422）
+          TREE=$(jq -n --arg p "latest.dump.gz" --arg s "$BLOB" \
+            '{tree:[{path:"latest.dump.gz",mode:"100644",type:"blob",sha:$s}]}' \
+            | gh api --method POST repos/${{ github.repository }}/git/trees --input - --jq '.sha')
+          COMMIT=$(jq -n --arg m "db backup $(date -u '+%Y-%m-%dT%H:%MZ')" --arg t "$TREE" \
+            '{message:$m, tree:$t, parents:[]}' \
+            | gh api --method POST repos/${{ github.repository }}/git/commits --input - --jq '.sha')
+          # 根 commit（无 parent）滚动覆盖式强推；refs 不存在则创建
+          if gh api repos/${{ github.repository }}/git/refs/heads/backups > /dev/null 2>&1; then
+            gh api --method PATCH repos/${{ github.repository }}/git/refs/heads/backups -f sha="$COMMIT" > /dev/null
+          else
+            gh api --method POST repos/${{ github.repository }}/git/refs \
+              -f ref="refs/heads/backups" -f sha="$COMMIT" > /dev/null
+          fi
+          echo "兜底备份已提交: backups@$(echo $COMMIT | head -c 7)"
+
+      - name: 标记备份结果
+        if: always()
+        run: |
+          if [ "${{ steps.upload.outcome }}" = "success" ]; then
+            echo "✅ 备份经 artifact 存储成功"
+          else
+            echo "⚠️ artifact 配额满——已兜底写入 backups 分支（数据未丢失，恢复: git fetch origin backups && git show backups:latest.dump.gz > b.gz && gunzip && pg_restore）"
+          fi
