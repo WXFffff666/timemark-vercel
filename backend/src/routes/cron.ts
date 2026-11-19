@@ -90,7 +90,22 @@ cronRoutes.use('*', async (c, next) => {
   } catch {
     bearerOk = false;
   }
-  // Always require CRON_SECRET Bearer — x-vercel-cron-auth-token alone is not sufficient
+  // 额度优化修复（2026-11-20）：Vercel 内置 cron（daily-maintenance，02:00 UTC）不带
+  // Bearer，而是自动注入 x-vercel-cron-auth-token 头（值 = CRON_SECRET 环境变量）。
+  // 原实现拒绝"仅有平台 token"的请求 → daily-maintenance 自首次部署起全部 401，
+  // **128 天从未成功执行**（cron_job_status 无记录实证）：会话清理/GitHub 备份/剂量
+  // 物化/patterns 挖掘/日志清理全部未跑，日志表无限膨胀。修复：接受
+  // x-vercel-cron-auth-token === CRON_SECRET（伪造它需要知道 secret，安全等价 Bearer）。
+  if (!bearerOk) {
+    const platformToken = c.req.header('x-vercel-cron-auth-token') || '';
+    try {
+      const p = Buffer.from(platformToken);
+      const s = Buffer.from(cronSecret);
+      bearerOk = p.length === s.length && timingSafeEqual(p, s);
+    } catch {
+      bearerOk = false;
+    }
+  }
   if (!bearerOk) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
