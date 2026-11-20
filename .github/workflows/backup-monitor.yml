@@ -36,9 +36,10 @@ jobs:
             CREATED="${LAST#*@}"
             if [[ "$CREATED" != "$TODAY"* ]]; then
               echo "⚠️ $R: 今日（UTC $TODAY）备份未运行（最新: $CREATED）→ 重试 dispatch"
-              gh workflow run backup.yml --repo "WXFffff666/$R" 2>/dev/null \
+              gh api --method POST "repos/WXFffff666/$R/actions/workflows/backup.yml/dispatches" \
+                -f ref="$BR" > /dev/null 2>&1 \
                 && echo "  → 已 dispatch（结果见该仓库 Actions）" \
-                || echo "  → dispatch 失败"
+                || echo "  → dispatch 失败（MONITOR_PAT 权限不足）"
               FAILS="$FAILS $R(未运行)"
               continue
             fi
@@ -46,7 +47,8 @@ jobs:
               success) echo "✓ $R: 备份成功（$CREATED）" ;;
               failure)
                 echo "✗ $R: 备份失败（$CREATED）→ 重试 dispatch"
-                gh workflow run backup.yml --repo "WXFffff666/$R" 2>/dev/null \
+                gh api --method POST "repos/WXFffff666/$R/actions/workflows/backup.yml/dispatches" \
+                  -f ref="$BR" > /dev/null 2>&1 \
                   && echo "  → 已 dispatch 重试" || echo "  → 重试 dispatch 失败"
                 FAILS="$FAILS $R(failure)"
                 ;;
