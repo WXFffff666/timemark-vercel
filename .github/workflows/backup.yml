@@ -38,6 +38,28 @@ jobs:
           path: timemark.dump.gz
           retention-days: 14
 
+      - name: 永久备份——commit dump 到 backups 分支（与其他仓库模式对齐）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DUMP=$(ls timemark.dump.gz | head -1)
+          echo "提交 $DUMP 到 backups 分支（单文件滚动覆盖，永久保留）"
+          BLOB=$(base64 -w0 timemark.dump.gz | jq -Rs '{content: ., encoding: "base64"}' \
+            | gh api --method POST repos/${{ github.repository }}/git/blobs --input - --jq '.sha')
+          TREE=$(jq -n --arg p "latest.dump.gz" --arg s "$BLOB" \
+            '{tree:[{path:"latest.dump.gz",mode:"100644",type:"blob",sha:$s}]}' \
+            | gh api --method POST repos/${{ github.repository }}/git/trees --input - --jq '.sha')
+          COMMIT=$(jq -n --arg m "db backup $(date -u '+%Y-%m-%dT%H:%MZ')" --arg t "$TREE" \
+            '{message:$m, tree:$t, parents:[]}' \
+            | gh api --method POST repos/${{ github.repository }}/git/commits --input - --jq '.sha')
+          if gh api repos/${{ github.repository }}/git/refs/heads/backups > /dev/null 2>&1; then
+            gh api --method PATCH repos/${{ github.repository }}/git/refs/heads/backups -f sha="$COMMIT" > /dev/null
+          else
+            gh api --method POST repos/${{ github.repository }}/git/refs \
+              -f ref="refs/heads/backups" -f sha="$COMMIT" > /dev/null
+          fi
+          echo "永久备份已提交: backups@$(echo $COMMIT | head -c 7)"
+
       - name: 兜底——artifact 配额满时 commit dump 到私有 backups 分支
         if: steps.upload.outcome != 'success'
         env:
