@@ -25,6 +25,7 @@ jobs:
             exit 1
           fi
           REPOS="inkisle feedharbor gamehall netlab tidebook timemark-vercel"
+          BRANCHES="main master main main main main master"
           TODAY=$(date -u +%Y-%m-%d)
           FAILS=""
           for R in $REPOS; do
