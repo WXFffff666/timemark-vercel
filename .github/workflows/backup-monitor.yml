@@ -1,0 +1,67 @@
+name: Daily backup monitor
+
+on:
+  schedule:
+    # 每日 04:30 UTC（北京 12:30）：所有仓库的 DB 备份（03:00-03:45 UTC）完成后
+    # 一个半小时，检查它们的运行结果——未运行/失败的仓库自动重试 dispatch，
+    # 有任何异常时本 workflow 失败 → GitHub 邮件通知（默认开启）。
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查六仓库备份状态，异常自动重试
+        env:
+          GH_TOKEN: ${{ secrets.MONITOR_PAT }}
+        run: |
+          REPOS="inkisle feedharbor gamehall netlab tidebook timemark-vercel"
+          TODAY=$(date -u +%Y-%m-%d)
+          FAILS=""
+          for R in $REPOS; do
+            LAST=$(gh run list --repo "WXFffff666/$R" --workflow backup.yml --limit 1 \
+              --json conclusion,createdAt --jq '.[0] | .conclusion + "@" + .createdAt' 2>/dev/null \
+              || echo "none@missing")
+            CONCLUSION="${LAST%%@*}"
+            CREATED="${LAST#*@}"
+            if [[ "$CREATED" != "$TODAY"* ]]; then
+              echo "⚠️ $R: 今日（UTC $TODAY）备份未运行（最新: $CREATED）→ 重试 dispatch"
+              gh workflow run backup.yml --repo "WXFffff666/$R" 2>/dev/null \
+                && echo "  → 已 dispatch（结果见该仓库 Actions）" \
+                || echo "  → dispatch 失败"
+              FAILS="$FAILS $R(未运行)"
+              continue
+            fi
+            case "$CONCLUSION" in
+              success) echo "✓ $R: 备份成功（$CREATED）" ;;
+              failure)
+                echo "✗ $R: 备份失败（$CREATED）→ 重试 dispatch"
+                gh workflow run backup.yml --repo "WXFffff666/$R" 2>/dev/null \
+                  && echo "  → 已 dispatch 重试" || echo "  → 重试 dispatch 失败"
+                FAILS="$FAILS $R(failure)"
+                ;;
+              *) echo "? $R: $CONCLUSION（$CREATED）"; FAILS="$FAILS $R(异常)" ;;
+            esac
+          done
+          {
+            echo "## 备份监控报告 $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            if [ -n "$FAILS" ]; then
+              echo "❌ 异常仓库:$FAILS"
+            else
+              echo "✅ 六仓库备份全部正常"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 有异常 → 本 job 失败 → GitHub 邮件通知（监控闭环的关键：异常必须触达）
+          [ -z "$FAILS" ] || exit 1
+
+      - name: 说明
+        if: always()
+        run: |
+          echo "本 workflow 每日检查六仓库的备份运行状态。"
+          echo "异常时：① 自动 dispatch 重试 ② 本 job 失败 → GitHub 邮件通知"
+          echo "持续失败请查：gh run view <id> --log-failed（配额/secret/网络三类原因）"
