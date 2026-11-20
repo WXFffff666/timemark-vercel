@@ -1,4 +1,4 @@
-name: Daily backup monitor
+﻿name: Daily backup monitor
 
 on:
   schedule:
@@ -19,6 +19,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.MONITOR_PAT }}
         run: |
+          if [ -z "$MONITOR_PAT" ]; then
+            echo "::error::Secret MONITOR_PAT 未配置——跨仓库检查需要 repo 权限的 GitHub PAT"
+            echo "::error::创建：GitHub Settings → Developer settings → Personal access tokens → Fine-grained → 勾选这 6 个仓库 + Actions(read/write) 权限，值填入本仓库 Secret MONITOR_PAT"
+            exit 1
+          fi
           REPOS="inkisle feedharbor gamehall netlab tidebook timemark-vercel"
           TODAY=$(date -u +%Y-%m-%d)
           FAILS=""
